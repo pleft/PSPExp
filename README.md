@@ -16,9 +16,9 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | `host/transport-usb` (libusb, reader thread) | **runs on hardware**: 25 MB/s, 0.25 ms round trip (docs/v01-usb-bringup.md) |
 | `psp/transport-usb` kernel driver `pspexp_usb.prx` | **runs on hardware** |
 | `psp/runtime` runtime app + `psp/boot` loader | **runs on hardware**; 60 fps frame loop paced on PRESENT_DONE |
-| `psp/executor-ge` GE executor (VRAM/RAM textures, vertex ring, GU_SPRITES) | written, **not yet run on hardware** |
+| `psp/executor-ge` GE executor (VRAM/RAM textures, vertex ring, GU_SPRITES) | **runs on hardware**: 60 Hz at 5,000 sprites |
 | `host/executor-sdl` reference renderer (keyboard + game controller input) | done |
-| `examples/sprite-demo` (§16 proof of concept; Null, SDL or USB; survives cable pull) | done on Null/SDL, **not yet run on hardware** |
+| `examples/sprite-demo` (§16 proof of concept; Null, SDL or USB; survives cable pull) | **done on hardware 2026-09-22**: the v0.1 decisive result |
 | `tools/usb-bench` throughput / latency / frame-loop benchmark | done, measured on hardware 2026-09-22 |
 
 ## Build

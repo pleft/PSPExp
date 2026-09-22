@@ -30,6 +30,7 @@ struct PspExpContext {
     PspExpWriter msg;
     uint8_t *rx;
     PspExpLinkState state;
+    int ever_connected;
     PspExpHello hello;
     Resource *res;
     size_t nres, cres;
@@ -188,10 +189,11 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
         ctx_log(ctx, "protocol %u not supported", ctx->hello.protocol);
         return;
     }
-    if (ctx->state == PSPEXP_LINK_CONNECTED) {
+    if (ctx->ever_connected) {
         ctx->stats.reconnects++;
-        ctx_log(ctx, "runtime restarted (reconnect %u)", ctx->stats.reconnects);
+        ctx_log(ctx, "reconnect %u", ctx->stats.reconnects);
     }
+    ctx->ever_connected = 1;
     ctx->in_flight = 0;
     for (i = 0; i < ctx->nres; i++) ctx->res[i].state = PSPEXP_RES_NONE;
 

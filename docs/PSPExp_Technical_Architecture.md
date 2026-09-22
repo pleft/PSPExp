@@ -148,6 +148,8 @@ A plausible total is 35–50 ms, roughly two to three frames, compared with abou
 
 **Measured so far (v0.1 link, 2026-09-22, no GE executor yet):** USB to host and USB to PSP are ≈ 0.15 ms each for input-sized packets and ≈ 2 ms for a 40 KB frame. With one frame in flight, present-to-`PRESENT_DONE` averaged 16.6 ms (max 22.6 ms) at a sustained 60.1 fps: the PSP executed each 500-sprite frame in 0.17 ms and the rest was the wait for the next vblank. The transport is therefore not the dominant term in the latency budget; display pacing is.
 
+**Measured with the GE executor (sprite demo, 2026-09-22):** 60 Hz sustained at 500, 2,000 and 5,000 sprites per frame (4 KB, 16 KB and 40 KB per frame); PSP-side parse-plus-expand cost 0.25 / 0.71 / 1.85 ms (≈ 0.37 µs per sprite); input sample to the vblank that displayed the frame consuming it: one frame period, 16.7 ms. With LCD scan-out and the sampling phase of a real button press, input-to-photon is ≈ 25–41 ms, so the ≤ 50 ms target is met. The proof of concept of §16, including the cable pull, is complete (`docs/v01-usb-bringup.md`).
+
 ---
 
 ## 4. Responsibility Split
@@ -880,6 +882,8 @@ Actual performance targets are established from measurements on physical PSP har
 
 ### v0.1 – Remote GE proof
 
+*Status 2026-09-22: every item below is implemented and has run on a PSP-1000 over USB (`docs/v01-usb-bringup.md`); the sprite benchmark exists as the demo's 500 / 2,000 / 5,000-sprite field sizes rather than a separate tool, and benchmark workload (c) of §17 is still to be run.*
+
 - protocol framing and little-endian packed encoding;
 - USB transport (host and PSP);
 - capability handshake and reconnect;
@@ -978,6 +982,8 @@ The resulting system is a deliberately heterogeneous distributed console:
 The first decisive result is not a complete game. It is a texture uploaded once, rendered by the PSP GE under commands from a host, moved interactively using PSP controls returned to that host, at 60 Hz, with a measured input-to-photon latency under 50 ms, and surviving a cable pull.
 
 If that path is fast, stable, and measurable, the architecture is proven.
+
+**Status 2026-09-22:** achieved on a PSP-1000 over USB (`docs/v01-usb-bringup.md`).
 
 ---
 

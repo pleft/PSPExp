@@ -6,16 +6,17 @@ replaces the 8 MB/s planning assumption in the architecture (section 3.2).
 ## What runs where
 
 ```text
-host: pspexp-bench ── libpspexp ── transport-usb (libusb) ── USB ── pspexp_usb.prx (kernel)
-                                                                       │ byte stream
-                                                                 pspexp_runtime.prx (user)
-                                                                       │ runtime core
-                                                                    screen stats
+host: pspexp-bench / sprite-demo ── libpspexp ── transport-usb (libusb) ── USB ── pspexp_usb.prx (kernel)
+                                                                                      │ byte stream
+                                                                                pspexp_runtime.prx (user)
+                                                                                      │ runtime core
+                                                                               GE executor / status page
 ```
 
-`pspexp_runtime.prx` is the real PSP runtime minus the GE executor: it
-handshakes, validates uploads, expands batches and answers PRESENT_DONE, but
-draws nothing yet. That is enough to measure the link and the round trip.
+`pspexp_runtime.prx` is the PSP runtime: it handshakes, validates uploads,
+expands batches, renders through the GE executor and answers PRESENT_DONE.
+Its status page (USB, link and runtime counters) shows while no host is
+connected; the GE owns the screen once frames arrive.
 
 ## Steps
 
@@ -125,3 +126,31 @@ Notes:
 - The 16.6 ms frame figure is the vblank wait, not the link: the runtime
   presents with `sceDisplayWaitVblankStart`, so a frame that arrives just
   after a vblank waits for the next one. Section 3.3 updated accordingly.
+
+### 2026-09-22 — sprite demo on hardware (GE executor), same setup
+
+The §16 proof of concept ran first try: atlas uploaded once, GE rendering,
+player moved from the PSP's d-pad and analog stick, field size cycled with
+triangle, two cable pulls with automatic reconnect and atlas replay.
+
+| field | bytes/frame | batches | fps | PSP execute (parse + expand + list) | input → PRESENT_DONE |
+|---|---|---|---|---|---|
+| 500 sprites | 4,352 | 4 | 59.9 | 0.25 ms | 16.67 ms |
+| 2,000 sprites | 16,448 | 6 | 59.9 | 0.71 ms | 16.67 ms |
+| 5,000 sprites | 40,384 | 5 | 59.9 | 1.85 ms | 16.67 ms |
+
+Notes:
+
+- 60 Hz held at every field size, including 5,000 sprites (40 KB/frame,
+  2.4 MB/s, a tenth of the link). PSP-side cost is ≈ 0.37 µs per sprite,
+  about 120 cycles at 333 MHz including message parsing, in line with the
+  §5.4 estimate. GE render time is not in `PRESENT_DONE` yet (only on the
+  PSP's status page as `last ge`).
+- `input → PRESENT_DONE` is exactly one frame period because the runtime
+  samples the controller right after each vblank and the host's next frame
+  lands at the following vblank. Adding LCD scan-out (~8 ms) gives
+  ≈ 25 ms input-to-photon for a sample, and a real button press adds 0–16 ms
+  of sampling phase on top: ≈ 25–41 ms, mean ≈ 33 ms, inside the ≤ 50 ms
+  target of §2.2 with margin.
+- Reconnect after a cable pull took under a second; the host log line right
+  after shows a low fps only because the waiting time is averaged in.
