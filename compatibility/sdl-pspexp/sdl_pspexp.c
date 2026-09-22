@@ -162,6 +162,30 @@ static void shim_exit(void);
 
 /* ---- connection ------------------------------------------------------------ */
 
+/* SDL's key names are "Left Ctrl", "Return", ","...; accept the short forms
+ * people type, then SDL's own names (case-insensitive). */
+static SDL_Keycode key_from_name(const char *name)
+{
+    static const struct { const char *alias; SDL_Keycode key; } aliases[] = {
+        { "lctrl", SDLK_LCTRL }, { "rctrl", SDLK_RCTRL }, { "ctrl", SDLK_LCTRL },
+        { "lshift", SDLK_LSHIFT }, { "rshift", SDLK_RSHIFT }, { "shift", SDLK_LSHIFT },
+        { "lalt", SDLK_LALT }, { "ralt", SDLK_RALT }, { "alt", SDLK_LALT },
+        { "lgui", SDLK_LGUI }, { "rgui", SDLK_RGUI }, { "cmd", SDLK_LGUI },
+        { "comma", SDLK_COMMA }, { "period", SDLK_PERIOD }, { "slash", SDLK_SLASH },
+        { "minus", SDLK_MINUS }, { "equals", SDLK_EQUALS }, { "plus", SDLK_PLUS },
+        { "enter", SDLK_RETURN }, { "esc", SDLK_ESCAPE }, { "backspace", SDLK_BACKSPACE },
+        { "pgup", SDLK_PAGEUP }, { "pgdn", SDLK_PAGEDOWN }, { "ins", SDLK_INSERT }, { "del", SDLK_DELETE },
+        { "none", SDLK_UNKNOWN },
+    };
+    size_t i;
+    SDL_Keycode k;
+    for (i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
+        if (!SDL_strcasecmp(name, aliases[i].alias)) return aliases[i].key;
+    k = SDL_GetKeyFromName(name);
+    if (k == SDLK_UNKNOWN) logf_("PSPEXP_KEYS: unknown key name \"%s\"", name);
+    return k;
+}
+
 static void parse_keys(void)
 {
     const char *def = "cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=escape,up=up,down=down,left=left,right=right";
@@ -176,7 +200,7 @@ static void parse_keys(void)
         if (!eq) continue;
         *eq = 0;
         for (i = 0; i < B_COUNT; i++)
-            if (!strcmp(tok, BUTTON_NAMES[i])) S.keys[i] = SDL_GetKeyFromName(eq + 1);
+            if (!strcmp(tok, BUTTON_NAMES[i])) S.keys[i] = key_from_name(eq + 1);
     }
 }
 

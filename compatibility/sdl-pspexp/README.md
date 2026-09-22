@@ -63,7 +63,7 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | variable | meaning |
 |---|---|
 | `PSPEXP=usb\|tcp[:host[:port]]\|sdl\|null` | target (the launcher's `--usb`, `--tcp`, `--null` set it) |
-| `PSPEXP_KEYS=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=escape,up=up,down=down,left=left,right=right` | keyboard keys pressed for PSP buttons (SDL key names); this is the default |
+| `PSPEXP_KEYS=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=escape,up=up,down=down,left=left,right=right` | keyboard keys pressed for PSP buttons; this is the default. SDL key names, plus `lctrl`, `lshift`, `lalt`, `comma`, `period`, `enter`, `esc`, `pgup`, `none` and the like; unknown names are reported at start |
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
 | `PSPEXP_NUB=keys` | the nub presses the four arrow keys of `PSPEXP_KEYS` (for keyboard-only games such as Doom) |
 | `PSPEXP_WINDOW=hide` | hide the program's own window once the PSP is connected |
