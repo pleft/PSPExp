@@ -194,6 +194,8 @@ static uint32_t op_present(void *u)
     return sceKernelGetSystemTimeLow();
 }
 
+static uint32_t op_frame_ge_us(void *u) { return ((PspExpGeExecutor *)u)->stats.last_ge_us; }
+
 /* ---- setup ---------------------------------------------------------------- */
 
 int pspexp_ge_init(PspExpGeExecutor *ge)
@@ -237,6 +239,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->draw_sprites = op_draw_sprites;
     ops->draw_rect = op_draw_rect;
     ops->present = op_present;
+    ops->frame_ge_us = op_frame_ge_us;
 }
 
 void pspexp_ge_bind(PspExpGeExecutor *ge, PspExpRuntime *rt) { ge->rt = rt; }

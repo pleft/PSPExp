@@ -59,6 +59,20 @@ Pull the cable: the PSP returns to its status page (`detach 1`), the host
 prints `link lost; waiting for the PSP...`; re-plug and it prints
 `reconnected; atlas replayed` and the sprite continues from where it was.
 
+## Third run: head-of-line blocking (§17 workload c, §19 question 1)
+
+```sh
+build/host/pspexp-bench --frames-only --frames 600 --upload 256 --upload-kib 512
+build/host/pspexp-bench --frames-only --frames 600 --upload 1024 --upload-kib 256
+```
+
+Section [5] repeats the frame loop while a texture upload stream shares the
+ordered command stream. It reports how many frames arrived later than one
+vblank (a missed present) and later than two, plus `ge` time now carried in
+PRESENT_DONE. The question the numbers answer: does a 512 KB upload ahead of
+a frame cost one vblank at 25 MB/s (accept the single stream for v0.2) or
+more (split into a bulk stream with fences, §19)?
+
 ## Reading the numbers
 
 - `host->psp ... MB/s` is the figure section 3.3 is parameterised on. The

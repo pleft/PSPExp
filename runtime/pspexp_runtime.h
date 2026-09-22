@@ -41,6 +41,8 @@ typedef struct PspExpRuntimeOps {
     void (*draw_rect)(void *user, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
     /* Finish and display the frame; return the clock at the vblank it was shown. */
     uint32_t (*present)(void *user);
+    /* Optional: GE render time of the frame just presented, microseconds. */
+    uint32_t (*frame_ge_us)(void *user);
     /* Optional diagnostics. */
     void (*log)(void *user, const char *msg);
 } PspExpRuntimeOps;

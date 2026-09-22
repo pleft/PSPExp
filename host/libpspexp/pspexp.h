@@ -50,7 +50,8 @@ typedef struct PspExpStats {
     uint32_t last_frame_bytes, last_frame_batches, last_frame_sprites;
     uint32_t last_present_latency_us;   /* host clock: present() to PRESENT_DONE */
     uint32_t last_input_to_present_us;  /* PSP clock: INPUT.timestamp -> PRESENT_DONE.timestamp */
-    uint32_t last_execute_us;           /* PSP-side execute time of the last frame */
+    uint32_t last_execute_us;           /* PSP-side CPU time for the last frame */
+    uint32_t last_ge_us;                /* PSP-side GE render time for the last frame */
     uint32_t inputs_received;
     uint32_t resource_errors, protocol_errors;
 } PspExpStats;

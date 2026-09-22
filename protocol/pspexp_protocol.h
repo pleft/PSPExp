@@ -201,9 +201,12 @@ typedef struct PspExpPresentDone {
     uint32_t timestamp_us;      /* PSP clock at the vblank */
     uint16_t queue_depth;       /* frames still queued after this one */
     uint16_t dropped;           /* frames discarded before execution, cumulative */
-    uint32_t execute_us;        /* parse + expand + GE time for this frame */
+    uint32_t execute_us;        /* parse + expand + display-list build, CPU */
+    uint32_t ge_us;             /* GE render time (list finish to sync), 0 if unknown */
+    uint32_t frame_bytes;       /* bytes of the frame as received */
+    uint8_t  reserved[8];
 } PspExpPresentDone;
-PSPEXP_STATIC_ASSERT(sizeof(PspExpPresentDone) == 16, present_done_size);
+PSPEXP_STATIC_ASSERT(sizeof(PspExpPresentDone) == 32, present_done_size);
 
 typedef struct PspExpMemoryStatus {
     uint32_t vram_free;

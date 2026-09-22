@@ -382,6 +382,8 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
             d.queue_depth = 0;
             d.dropped = 0;
             d.execute_us = exec_us;
+            d.ge_us = rt->ops.frame_ge_us ? rt->ops.frame_ge_us(rt->ops.user) : 0;
+            d.frame_bytes = rt->frame_bytes;
             pspexp_writer_message(&rt->out, PSPEXP_CH_SYSTEM, PSPEXP_OP_PRESENT_DONE, 0, &d, sizeof(d));
         }
         break;

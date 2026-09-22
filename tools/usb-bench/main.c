@@ -135,16 +135,39 @@ static int run_echo(PspExpContext *ctx, Capture *c, uint32_t payload_len, int ro
     return 0;
 }
 
-static int run_frames(PspExpContext *ctx, int frames, int sprites)
+/* frames x sprites, paced one frame in flight. With upload_kbps > 0, a
+ * stream of upload_kib-sized textures is sent alongside at that rate
+ * (section 17 workload c), to measure head-of-line blocking (section 10.3). */
+static int run_frames(PspExpContext *ctx, int frames, int sprites, int upload_kbps, int upload_kib)
 {
     static uint16_t pixels[64 * 64];
     static PspExpFrame atlas_frames[4];
     PspExpTextureDesc desc;
     PspExpSpriteRec *recs = (PspExpSpriteRec *)malloc(sizeof(PspExpSpriteRec) * (size_t)sprites);
-    int f, i, timeouts = 0;
-    uint64_t t0, t1, lat_sum = 0, exec_sum = 0;
+    uint32_t *lat = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)frames);
+    int f, i, timeouts = 0, uploads = 0, over17 = 0, over33 = 0;
+    uint64_t t0, t1, lat_sum = 0, exec_sum = 0, ge_sum = 0;
     uint32_t lat_max = 0;
-    if (!recs) return -1;
+    uint16_t *big = NULL;
+    PspExpFrame big_frame = { 0, 0, 64, 0 };
+    PspExpTextureDesc big_desc;
+    double upload_budget = 0.0, upload_per_frame = 0.0;
+    uint16_t big_id = 100;
+    if (!recs || !lat) { free(recs); free(lat); return -1; }
+    if (upload_kbps > 0) {
+        /* upload_kib KiB of RGB565: width 512, height = KiB * 1024 / 1024 = KiB rows */
+        int h = upload_kib;
+        if (h < 8) h = 8;
+        if (h > 512) h = 512;
+        { int p2 = 8; while (p2 < h) p2 <<= 1; h = p2; }
+        big = (uint16_t *)calloc((size_t)512 * h, 2);
+        memset(&big_desc, 0, sizeof(big_desc));
+        big_desc.width = 512; big_desc.height = (uint16_t)h; big_desc.format = PSPEXP_TEX_5650;
+        big_desc.layout = PSPEXP_LAYOUT_LINEAR; big_desc.priority = PSPEXP_PRIORITY_LOW;
+        big_frame.h = (uint16_t)h;
+        upload_per_frame = (double)upload_kbps * 1024.0 / 60.0;
+        upload_kib = h;   /* actual KiB per upload (512 x h x 2 bytes = h KiB) */
+    }
     for (i = 0; i < 64 * 64; i++) pixels[i] = pspexp_color_5650((uint8_t)(i & 255), (uint8_t)(i >> 4), 128);
     for (i = 0; i < 4; i++) { atlas_frames[i].u0 = (uint16_t)(i % 2 * 32); atlas_frames[i].v0 = (uint16_t)(i / 2 * 32); atlas_frames[i].w = 32; atlas_frames[i].h = 32; }
     memset(&desc, 0, sizeof(desc));
@@ -156,6 +179,19 @@ static int run_frames(PspExpContext *ctx, int frames, int sprites)
     for (f = 0; f < frames; f++) {
         const PspExpStats *st;
         int w;
+        if (big) {
+            upload_budget += upload_per_frame;
+            if (upload_budget >= (double)upload_kib * 1024.0) {
+                upload_budget -= (double)upload_kib * 1024.0;
+                /* Two rotating handles: release the older, upload the newer. */
+                pspexp_release(ctx, (uint16_t)(big_id ^ 1));
+                if (pspexp_upload_texture(ctx, big_id, &big_desc, big, (uint32_t)(512 * big_desc.height * 2), &big_frame, 1) < 0) {
+                    printf("  upload failed\n"); break;
+                }
+                big_id ^= 1;
+                uploads++;
+            }
+        }
         pspexp_begin_frame(ctx);
         pspexp_set_clip(ctx, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
         pspexp_draw_rect(ctx, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT, pspexp_color_5650(20, 30, 60));
@@ -166,37 +202,52 @@ static int run_frames(PspExpContext *ctx, int frames, int sprites)
         if (w < 0) { printf("  link lost\n"); free(recs); return -1; }
         if (w > 0) timeouts++;
         st = pspexp_stats(ctx);
+        lat[f] = st->last_present_latency_us;
         lat_sum += st->last_present_latency_us;
         exec_sum += st->last_execute_us;
+        ge_sum += st->last_ge_us;
         if (st->last_present_latency_us > lat_max) lat_max = st->last_present_latency_us;
+        if (st->last_present_latency_us > 17500) over17++;
+        if (st->last_present_latency_us > 34000) over33++;
     }
     t1 = pspexp_time_us();
     {
         const PspExpStats *st = pspexp_stats(ctx);
-        printf("  frames %d x %d sprites: %.1f fps, %u B/frame, present->PRESENT_DONE mean %llu us max %u us, psp execute mean %llu us, timeouts %d, inputs %u\n",
-               frames, sprites, (double)frames * 1e6 / (double)(t1 - t0), st->last_frame_bytes,
-               (unsigned long long)(lat_sum / (uint64_t)frames), lat_max, (unsigned long long)(exec_sum / (uint64_t)frames),
+        int n = f > 0 ? f : 1;
+        qsort(lat, (size_t)n, sizeof(uint32_t), cmp_u32);
+        printf("  frames %d x %d sprites: %.1f fps, %u B/frame, present->PRESENT_DONE mean %llu us p95 %u us max %u us, psp cpu %llu us ge %llu us, timeouts %d, inputs %u\n",
+               n, sprites, (double)n * 1e6 / (double)(t1 - t0), st->last_frame_bytes,
+               (unsigned long long)(lat_sum / (uint64_t)n), lat[(n * 95) / 100], lat_max,
+               (unsigned long long)(exec_sum / (uint64_t)n), (unsigned long long)(ge_sum / (uint64_t)n),
                timeouts, st->inputs_received);
+        if (big)
+            printf("  with %d KiB/s of %d KiB uploads (%d sent): frames later than one vblank %d (%.1f%%), later than two %d, resource errors %u\n",
+                   upload_kbps, upload_kib, uploads, over17, 100.0 * over17 / n, over33, st->resource_errors);
     }
     pspexp_release(ctx, 1);
+    if (big) { pspexp_release(ctx, 100); pspexp_release(ctx, 101); }
     pspexp_pump(ctx, 10);
-    free(recs);
+    free(recs); free(lat); free(big);
     return 0;
 }
 
 static void usage(void)
 {
-    printf("usage: pspexp-bench [--null] [--mb N] [--echo N] [--frames N] [--sprites N] [--pid 0x1CA] [--verbose]\n"
-           "  --null      loopback through the Null executor instead of USB\n"
-           "  --mb N      bytes per throughput run in MiB (default 4)\n"
-           "  --echo N    round trips per echo size (default 200)\n"
-           "  --frames N  frames in the frame loop (default 300)\n"
-           "  --sprites N sprites per frame (default 500)\n");
+    printf("usage: pspexp-bench [--null] [--mb N] [--echo N] [--frames N] [--sprites N] [--upload KBPS] [--upload-kib N] [--frames-only] [--pid 0x1CA] [--verbose]\n"
+           "  --null        loopback through the Null executor instead of USB\n"
+           "  --mb N        bytes per throughput run in MiB (default 4)\n"
+           "  --echo N      round trips per echo size (default 200)\n"
+           "  --frames N    frames in the frame loop (default 300)\n"
+           "  --sprites N   sprites per frame (default 500)\n"
+           "  --upload KBPS concurrent texture upload stream during the frame loop (section 17 workload c; 0 = off)\n"
+           "  --upload-kib N size of each upload in KiB, rounded to a power of two (default 256)\n"
+           "  --frames-only skip the throughput and echo sections\n");
 }
 
 int main(int argc, char **argv)
 {
     int use_null = 0, verbose = 0, echo_rounds = 200, frames = 300, sprites = 500, i;
+    int upload_kbps = 0, upload_kib = 256, frames_only = 0;
     uint64_t mb = 4;
     uint16_t pid = 0;
     PspExpTransport *t = NULL;
@@ -216,6 +267,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--sprites") && i + 1 < argc) sprites = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--pid") && i + 1 < argc) pid = (uint16_t)strtoul(argv[++i], NULL, 0);
+        else if (!strcmp(argv[i], "--upload") && i + 1 < argc) upload_kbps = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--upload-kib") && i + 1 < argc) upload_kib = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--frames-only")) frames_only = 1;
         else { usage(); return 1; }
     }
     (void)verbose; (void)pid; (void)err;
@@ -248,20 +302,26 @@ int main(int argc, char **argv)
            h->executor, h->runtime_version, h->display_width, h->display_height, h->refresh_hz,
            h->vram_budget / 1024, h->ram_budget / 1024, h->texture_formats, h->max_batch_records, h->features);
 
-    printf("\n[1] host -> psp throughput, %llu MiB per run\n", (unsigned long long)mb);
-    for (i = 0; i < (int)(sizeof(blocks) / sizeof(blocks[0])); i++)
-        if (run_downlink(ctx, &cap, blocks[i], mb << 20) < 0) break;
+    if (!frames_only) {
+        printf("\n[1] host -> psp throughput, %llu MiB per run\n", (unsigned long long)mb);
+        for (i = 0; i < (int)(sizeof(blocks) / sizeof(blocks[0])); i++)
+            if (run_downlink(ctx, &cap, blocks[i], mb << 20) < 0) break;
 
-    printf("\n[2] psp -> host throughput, %llu MiB per run\n", (unsigned long long)mb);
-    for (i = 0; i < (int)(sizeof(blocks) / sizeof(blocks[0])); i++)
-        if (run_uplink(ctx, &cap, blocks[i], mb << 20) < 0) break;
+        printf("\n[2] psp -> host throughput, %llu MiB per run\n", (unsigned long long)mb);
+        for (i = 0; i < (int)(sizeof(blocks) / sizeof(blocks[0])); i++)
+            if (run_uplink(ctx, &cap, blocks[i], mb << 20) < 0) break;
 
-    printf("\n[3] round-trip latency\n");
-    for (i = 0; i < (int)(sizeof(echo_sizes) / sizeof(echo_sizes[0])); i++)
-        if (run_echo(ctx, &cap, echo_sizes[i], echo_rounds) < 0) break;
+        printf("\n[3] round-trip latency\n");
+        for (i = 0; i < (int)(sizeof(echo_sizes) / sizeof(echo_sizes[0])); i++)
+            if (run_echo(ctx, &cap, echo_sizes[i], echo_rounds) < 0) break;
+    }
 
     printf("\n[4] frame loop through libPSPExp (one frame in flight)\n");
-    run_frames(ctx, frames, sprites);
+    run_frames(ctx, frames, sprites, 0, 0);
+    if (upload_kbps > 0) {
+        printf("\n[5] frame loop with a concurrent upload stream (workload c)\n");
+        run_frames(ctx, frames, sprites, upload_kbps, upload_kib);
+    }
 
     {
         const PspExpStats *st = pspexp_stats(ctx);
