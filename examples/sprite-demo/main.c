@@ -23,6 +23,7 @@
 #ifdef PSPEXP_HAVE_SDL
 #include "../../host/executor-sdl/pspexp_sdl.h"
 #endif
+#include "../../host/transport-tcp/pspexp_tcp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,19 +116,23 @@ static void log_fn(void *u, const char *msg) { (void)u; fprintf(stderr, "[pspexp
 
 static void usage(void)
 {
-    printf("usage: pspexp-sprite-demo [--null|--sdl|--usb] [--clut] [--field N] [--frames N] [--scale N] [--verbose]\n"
+    printf("usage: pspexp-sprite-demo [--null|--sdl|--usb|--tcp [host[:port]]] [--clut] [--field N] [--frames N] [--scale N] [--verbose]\n"
            "  --clut       upload the atlas as CLUT8 with a 5551 palette instead of direct 5551\n"
            "  --null       Null executor (no rendering), useful with --frames\n"
            "  --sdl        SDL executor window (default when built with SDL and no PSP is wanted)\n"
            "  --usb        real PSP over USB (default when built with libusb)\n"
            "  --field N    background sprites (default 500, max %d)\n"
-           "  --frames N   exit after N frames (default: run until quit)\n", MAX_FIELD);
+           "  --frames N   exit after N frames (default: run until quit)\n"
+           "  --shot N     ask the executor for a screenshot every N frames (pspexp-shot-<i>.bmp)\n", MAX_FIELD);
 }
 
 int main(int argc, char **argv)
 {
-    enum { MODE_USB, MODE_SDL, MODE_NULL } mode;
-    int field = 500, max_frames = 0, scale = 2, verbose = 0, use_clut = 0, i;
+    enum { MODE_USB, MODE_SDL, MODE_NULL, MODE_TCP } mode;
+    PspExpTcpOptions tcp_opt;
+    static char tcp_host[256];
+    int field = 500, max_frames = 0, scale = 2, verbose = 0, use_clut = 0, shot_every = 0, i;
+    uint16_t shot_index = 0;
     PspExpTransport *t = NULL;
     PspExpNullExecutor *nul = NULL;
 #ifdef PSPEXP_HAVE_SDL
@@ -161,8 +166,20 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--null")) mode = MODE_NULL;
         else if (!strcmp(argv[i], "--sdl")) mode = MODE_SDL;
         else if (!strcmp(argv[i], "--usb")) mode = MODE_USB;
+        else if (!strcmp(argv[i], "--tcp")) {
+            mode = MODE_TCP;
+            pspexp_tcp_options_default(&tcp_opt);
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                char *colon;
+                strncpy(tcp_host, argv[++i], sizeof(tcp_host) - 1);
+                colon = strrchr(tcp_host, ':');
+                if (colon) { *colon = 0; tcp_opt.port = (uint16_t)atoi(colon + 1); }
+                if (tcp_host[0]) tcp_opt.host = tcp_host;
+            }
+        }
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
         else if (!strcmp(argv[i], "--clut")) use_clut = 1;
+        else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--field") && i + 1 < argc) field = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) max_frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
@@ -197,6 +214,11 @@ int main(int argc, char **argv)
 #else
         fprintf(stderr, "built without SDL\n"); return 1;
 #endif
+    case MODE_TCP:
+        printf("connecting to %s:%u over TCP...\n", tcp_opt.host, tcp_opt.port);
+        t = pspexp_tcp_wait(&tcp_opt, -1, err, sizeof(err));
+        if (!t) { fprintf(stderr, "%s\n", err); return 1; }
+        break;
     case MODE_USB:
 #ifdef PSPEXP_HAVE_USB
         pspexp_usb_options_default(&usb_opt);
@@ -312,6 +334,7 @@ int main(int argc, char **argv)
             break;
         }
         frames++; report_frames++;
+        if (shot_every > 0 && frames % (uint32_t)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
 
         /* ---- pacing and link maintenance ---- */
         n = pspexp_wait_present(ctx, 1000);
@@ -319,11 +342,14 @@ int main(int argc, char **argv)
 #ifdef PSPEXP_HAVE_SDL
             if (sdl && pspexp_sdl_quit_requested(sdl)) break;
 #endif
-            if (mode != MODE_USB) break;
-#ifdef PSPEXP_HAVE_USB
+            if (mode != MODE_USB && mode != MODE_TCP) break;
             printf("link lost; waiting for the PSP...\n");
-            t = pspexp_usb_wait(&usb_opt, -1, err, sizeof(err));
+            if (mode == MODE_TCP) t = pspexp_tcp_wait(&tcp_opt, -1, err, sizeof(err));
+#ifdef PSPEXP_HAVE_USB
+            else t = pspexp_usb_wait(&usb_opt, -1, err, sizeof(err));
+#endif
             if (!t) { fprintf(stderr, "%s\n", err); break; }
+#if 1
             pspexp_set_transport(ctx, t);
             if (pspexp_connect(ctx, 5000) < 0) { fprintf(stderr, "reconnect: no HELLO\n"); continue; }
             printf("reconnected; atlas replayed\n");

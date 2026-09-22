@@ -13,6 +13,7 @@
 #ifdef PSPEXP_HAVE_USB
 #include "../../host/transport-usb/pspexp_usb.h"
 #endif
+#include "../../host/transport-tcp/pspexp_tcp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -233,8 +234,9 @@ static int run_frames(PspExpContext *ctx, int frames, int sprites, int upload_kb
 
 static void usage(void)
 {
-    printf("usage: pspexp-bench [--null] [--mb N] [--echo N] [--frames N] [--sprites N] [--upload KBPS] [--upload-kib N] [--frames-only] [--pid 0x1CA] [--verbose]\n"
+    printf("usage: pspexp-bench [--null] [--tcp [host[:port]]] [--mb N] [--echo N] [--frames N] [--sprites N] [--upload KBPS] [--upload-kib N] [--frames-only] [--pid 0x1CA] [--verbose]\n"
            "  --null        loopback through the Null executor instead of USB\n"
+           "  --tcp [h[:p]] connect over TCP (PSP over Wi-Fi, or the runtime under PPSSPP; default 127.0.0.1:3838)\n"
            "  --mb N        bytes per throughput run in MiB (default 4)\n"
            "  --echo N      round trips per echo size (default 200)\n"
            "  --frames N    frames in the frame loop (default 300)\n"
@@ -247,7 +249,8 @@ static void usage(void)
 int main(int argc, char **argv)
 {
     int use_null = 0, verbose = 0, echo_rounds = 200, frames = 300, sprites = 500, i;
-    int upload_kbps = 0, upload_kib = 256, frames_only = 0;
+    int upload_kbps = 0, upload_kib = 256, frames_only = 0, use_tcp = 0;
+    const char *tcp_target = NULL;
     uint64_t mb = 4;
     uint16_t pid = 0;
     PspExpTransport *t = NULL;
@@ -259,8 +262,10 @@ int main(int argc, char **argv)
     static const uint32_t echo_sizes[] = { 16, 4096, 40000 };
     char err[256];
 
+    setvbuf(stdout, NULL, _IONBF, 0);
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--null")) use_null = 1;
+        else if (!strcmp(argv[i], "--tcp")) { use_tcp = 1; if (i + 1 < argc && argv[i + 1][0] != '-') tcp_target = argv[++i]; }
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
         else if (!strcmp(argv[i], "--mb") && i + 1 < argc) mb = (uint64_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--echo") && i + 1 < argc) echo_rounds = atoi(argv[++i]);
@@ -277,6 +282,22 @@ int main(int argc, char **argv)
     if (use_null) {
         nul = pspexp_null_create(NULL);
         t = pspexp_null_transport(nul);
+    } else if (use_tcp) {
+        PspExpTcpOptions o;
+        static char hostbuf[256];
+        pspexp_tcp_options_default(&o);
+        if (tcp_target) {
+            char *colon;
+            strncpy(hostbuf, tcp_target, sizeof(hostbuf) - 1);
+            colon = strrchr(hostbuf, ':');
+            if (colon) { *colon = 0; o.port = (uint16_t)atoi(colon + 1); }
+            if (hostbuf[0]) o.host = hostbuf;
+        }
+        o.verbose = verbose;
+        printf("connecting to %s:%u over TCP...\n", o.host, o.port);
+        t = pspexp_tcp_wait(&o, 30000, err, sizeof(err));
+        if (!t) { fprintf(stderr, "%s\n", err); return 1; }
+        printf("link synchronised (tcp)\n");
     } else {
 #ifdef PSPEXP_HAVE_USB
         PspExpUsbOptions o;
@@ -329,7 +350,7 @@ int main(int argc, char **argv)
                (unsigned long long)st->bytes_sent, (unsigned long long)st->bytes_received,
                st->resource_errors, st->protocol_errors);
 #ifdef PSPEXP_HAVE_USB
-        if (!use_null) {
+        if (!use_null && !use_tcp) {
             const PspExpUsbStats *us = pspexp_usb_stats(t);
             printf("usb: %u transfers out, %u in, %u splits, %u idle read timeouts\n",
                    us->transfers_out, us->transfers_in, us->splits, us->read_timeouts);

@@ -53,6 +53,7 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_BENCH_REPORT: return "BENCH_REPORT";
     case PSPEXP_OP_BENCH_ECHO: return "BENCH_ECHO";
     case PSPEXP_OP_BENCH_UPLINK: return "BENCH_UPLINK";
+    case PSPEXP_OP_DEBUG_SCREENSHOT: return "DEBUG_SCREENSHOT";
     default: return "?";
     }
 }

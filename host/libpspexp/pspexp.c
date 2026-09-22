@@ -142,6 +142,14 @@ void pspexp_set_transport(PspExpContext *ctx, PspExpTransport *transport)
     link_lost(ctx);
 }
 
+int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index)
+{
+    PspExpScreenshot sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.index = index;
+    return pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_DEBUG_SCREENSHOT, &sc, sizeof(sc));
+}
+
 int pspexp_send_raw(PspExpContext *ctx, uint8_t channel, uint16_t opcode, const void *payload, size_t len)
 {
     pspexp_writer_reset(&ctx->msg);

@@ -456,6 +456,14 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpBenchUplink) == 16, bench_uplink_size);
 
 /* BENCH_ECHO: the runtime returns the message unchanged (same payload). */
 
+/* DEBUG_SCREENSHOT: the executor saves the frame currently displayed as
+ * pspexp-shot-<index>.bmp (PSP: next to the EBOOT; SDL: working directory). */
+typedef struct PspExpScreenshot {
+    uint16_t index;
+    uint8_t  reserved[14];
+} PspExpScreenshot;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpScreenshot) == 16, screenshot_size);
+
 /* ---- Texture helpers (pspexp_texture.c) ------------------------------- */
 
 /* Bits per pixel for the uncompressed formats; 0 for DXT. */

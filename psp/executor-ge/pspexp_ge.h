@@ -32,7 +32,11 @@ typedef struct PspExpGeExecutor {
     PspExpGeVramBlock vram[PSPEXP_GE_VRAM_BLOCKS];
     PspExpRuntime *rt;
     PspExpGeStats stats;
+    uint32_t displayed_offset;   /* VRAM offset of the framebuffer on screen */
 } PspExpGeExecutor;
+
+/* Copies the displayed framebuffer (480x272 RGB565) into `out` (row stride 480). */
+void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out);
 
 /* Initialises the GU (framebuffers at VRAM 0 and 0x44000, no depth buffer). */
 int  pspexp_ge_init(PspExpGeExecutor *ge);

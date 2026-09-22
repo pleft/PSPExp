@@ -237,9 +237,19 @@ static uint32_t op_present(void *u)
     ge->stats.last_ge_us = sceKernelGetSystemTimeLow() - t0;
     sceDisplayWaitVblankStart();
     sceGuSwapBuffers();
+    /* the buffer just drawn is now on screen: draw buffers alternate 0 / FB_BYTES */
+    ge->displayed_offset = ge->displayed_offset == 0 ? FB_BYTES : 0;
     ge->in_frame = 0;
     ge->stats.frames++;
     return sceKernelGetSystemTimeLow();
+}
+
+void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out)
+{
+    const uint16_t *fb = (const uint16_t *)UNCACHED((unsigned char *)sceGeEdramGetAddr() + ge->displayed_offset);
+    int y;
+    for (y = 0; y < PSPEXP_DISPLAY_HEIGHT; y++)
+        memcpy(out + (size_t)y * PSPEXP_DISPLAY_WIDTH, fb + (size_t)y * PSPEXP_DISPLAY_STRIDE, PSPEXP_DISPLAY_WIDTH * 2);
 }
 
 static uint32_t op_frame_ge_us(void *u) { return ((PspExpGeExecutor *)u)->stats.last_ge_us; }
@@ -251,6 +261,7 @@ int pspexp_ge_init(PspExpGeExecutor *ge)
     memset(&ge->stats, 0, sizeof(ge->stats));
     memset(ge->vram, 0, sizeof(ge->vram));
     ge->ring_cur = 0; ge->ring_used = 0; ge->in_frame = 0; ge->cur_atlas = NULL; ge->tex_enabled = 0;
+    ge->displayed_offset = FB_BYTES;   /* sceGuDispBuffer below */
     sceGuInit();
     sceGuStart(GU_DIRECT, ge->list);
     sceGuDrawBuffer(GU_PSM_5650, (void *)0, PSPEXP_DISPLAY_STRIDE);

@@ -514,6 +514,13 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
     case PSPEXP_OP_BENCH_ECHO: case PSPEXP_OP_BENCH_UPLINK:
         handle_bench(rt, m);
         return;
+    case PSPEXP_OP_DEBUG_SCREENSHOT: {
+        const PspExpScreenshot *sc;
+        if (pspexp_message_expect(m, sizeof(*sc)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        sc = (const PspExpScreenshot *)m->payload;
+        if (rt->ops.screenshot) rt->ops.screenshot(rt->ops.user, sc->index);
+        return;
+    }
     default:
         break;
     }

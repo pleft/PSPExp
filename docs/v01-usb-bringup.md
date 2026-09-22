@@ -82,6 +82,32 @@ PRESENT_DONE. The question the numbers answer: does a 512 KB upload ahead of
 a frame cost one vblank at 25 MB/s (accept the single stream for v0.2) or
 more (split into a bulk stream with fences, §19)?
 
+## Without hardware: the PSP runtime under PPSSPP
+
+`scripts/run-ppsspp.sh` installs `dist/PSPExp` into PPSSPP's memory stick
+(`~/.config/ppsspp/PSP/GAME/PSPExp`) and boots it. The USB driver cannot load
+in the emulator, so the runtime falls back to its TCP transport: it joins
+the emulated access point and listens on port 3838, which PPSSPP exposes on
+the host without an offset. Then:
+
+```sh
+build/host/pspexp-bench --tcp 127.0.0.1:3838
+build/host/pspexp-sprite-demo --tcp 127.0.0.1:3838 --clut --shot 120
+PSPEXP=tcp:127.0.0.1:3838 PSPEXP_SHOT_EVERY=300 ../WarCraft/build/host-stratagus/stratagus -d ../WarCraft/dist/War1gus
+```
+
+`--shot N` / `PSPEXP_SHOT_EVERY=N` send `DEBUG_SCREENSHOT` every N frames;
+the runtime writes the displayed framebuffer to `pspexp-shot-<i>.bmp` next
+to the EBOOT (on the emulated stick, so readable from the host; on hardware,
+on the memory stick). The runtime also appends `pspexp-rt.log` there with
+link state changes. PPSSPP needs `EnableWlan = True` in its `ppsspp.ini`.
+
+Emulator timings are not PSP timings (section 11): the bench reports
+~17 MB/s and 12 ms echo medians through PPSSPP's network layer, against
+25 MB/s and 0.25 ms over real USB. What the emulator does verify is the GE
+executor, CLUT binding, the vertex formats, the audio thread and the whole
+runtime code path, with the emulator's GE debugger available.
+
 ## Reading the numbers
 
 - `host->psp ... MB/s` is the figure section 3.3 is parameterised on. The

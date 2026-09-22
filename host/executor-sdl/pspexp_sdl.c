@@ -267,6 +267,21 @@ static uint32_t op_present(void *u)
 
 static void op_log(void *u, const char *msg) { (void)u; fprintf(stderr, "sdl-executor: %s\n", msg); }
 
+static void op_screenshot(void *u, uint16_t index)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    char name[64];
+    int w = 0, h = 0;
+    SDL_Surface *surf;
+    SDL_GetRendererOutputSize(x->ren, &w, &h);
+    if (w <= 0 || h <= 0) return;
+    surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surf) return;
+    snprintf(name, sizeof(name), "pspexp-shot-%u.bmp", (unsigned)index);
+    if (SDL_RenderReadPixels(x->ren, NULL, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) == 0) SDL_SaveBMP(surf, name);
+    SDL_FreeSurface(surf);
+}
+
 static void audio_callback(void *u, Uint8 *stream, int len)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
@@ -457,6 +472,7 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.audio_lock = op_audio_lock;
     ops.audio_unlock = op_audio_unlock;
     ops.log = op_log;
+    ops.screenshot = op_screenshot;
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);
     if (pspexp_runtime_init(&x->rt, &ops, &cfg) < 0) { snprintf(err, errlen, "runtime init failed"); pspexp_sdl_destroy(x); return NULL; }
     x->transport.name = "sdl";

@@ -31,6 +31,7 @@ target_include_directories(pspexp_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 add_library(pspexp_runtime STATIC
   runtime/pspexp_cache.c
   runtime/pspexp_mixer.c
+  runtime/pspexp_bmp.c
   runtime/pspexp_runtime.c)
 target_link_libraries(pspexp_runtime PUBLIC pspexp_protocol)
 
@@ -63,6 +64,10 @@ if(PSPEXP_BUILD_USB)
   endif()
 endif()
 
+# --- TCP transport (Wi-Fi to the PSP, or the PSP runtime under PPSSPP) -------
+add_library(pspexp_tcp STATIC host/transport-tcp/pspexp_tcp.c)
+target_link_libraries(pspexp_tcp PUBLIC pspexp)
+
 # --- SDL executor -----------------------------------------------------------
 option(PSPEXP_BUILD_SDL "Build the SDL executor" ON)
 set(PSPEXP_HAVE_SDL OFF)
@@ -83,14 +88,14 @@ endif()
 
 # --- tools and examples -----------------------------------------------------
 add_executable(pspexp-bench tools/usb-bench/main.c)
-target_link_libraries(pspexp-bench PRIVATE pspexp pspexp_null)
+target_link_libraries(pspexp-bench PRIVATE pspexp pspexp_null pspexp_tcp)
 if(PSPEXP_HAVE_USB)
   target_link_libraries(pspexp-bench PRIVATE pspexp_usb)
   target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
 endif()
 
 add_executable(pspexp-sprite-demo examples/sprite-demo/main.c)
-target_link_libraries(pspexp-sprite-demo PRIVATE pspexp pspexp_null)
+target_link_libraries(pspexp-sprite-demo PRIVATE pspexp pspexp_null pspexp_tcp)
 if(PSPEXP_HAVE_USB)
   target_link_libraries(pspexp-sprite-demo PRIVATE pspexp_usb)
   target_compile_definitions(pspexp-sprite-demo PRIVATE PSPEXP_HAVE_USB=1)

@@ -52,7 +52,8 @@ enum PspExpOpcode {
     PSPEXP_OP_BENCH_END      = 0x0503,  /* host -> PSP, no payload */
     PSPEXP_OP_BENCH_REPORT   = 0x0504,  /* PSP -> host, PspExpBenchReport */
     PSPEXP_OP_BENCH_ECHO     = 0x0505,  /* either, payload returned unchanged */
-    PSPEXP_OP_BENCH_UPLINK   = 0x0506   /* host -> PSP, PspExpBenchUplink */
+    PSPEXP_OP_BENCH_UPLINK   = 0x0506,  /* host -> PSP, PspExpBenchUplink */
+    PSPEXP_OP_DEBUG_SCREENSHOT = 0x0507 /* host -> PSP, PspExpScreenshot: dump the displayed frame to a file */
 };
 
 #define PSPEXP_OPCODE_CHANNEL(op) ((uint8_t)((op) >> 8))

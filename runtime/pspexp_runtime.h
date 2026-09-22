@@ -63,6 +63,7 @@ typedef struct PspExpRuntimeOps {
     void (*audio_unlock)(void *user);
     /* Optional diagnostics. */
     void (*log)(void *user, const char *msg);
+    void (*screenshot)(void *user, uint16_t index);
 } PspExpRuntimeOps;
 
 typedef struct PspExpRuntimeConfig {

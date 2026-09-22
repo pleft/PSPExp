@@ -147,6 +147,9 @@ const PspExpStats *pspexp_stats(const PspExpContext *ctx);
  * old one and keeps resources for replay. Follow with pspexp_connect(). */
 void pspexp_set_transport(PspExpContext *ctx, PspExpTransport *transport);
 
+/* Ask the executor to save the displayed frame as pspexp-shot-<index>.bmp. */
+int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index);
+
 /* Raw access for tools and tests. */
 int pspexp_send_raw(PspExpContext *ctx, uint8_t channel, uint16_t opcode, const void *payload, size_t len);
 PspExpTransport *pspexp_transport(PspExpContext *ctx);

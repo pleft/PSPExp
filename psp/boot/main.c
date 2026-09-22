@@ -38,7 +38,10 @@ static int boot_main(SceSize args, void *argp)
     slash = strrchr(dir, '/');
     if (!slash) { pspDebugScreenPrintf("bad path %s\n", dir); goto fail; }
     slash[1] = 0;
-    if (load_start(dir, USB_MODULE, 0, NULL) < 0) goto fail;
+    if (load_start(dir, USB_MODULE, 0, NULL) < 0) {
+        pspDebugScreenPrintf("USB driver not available (emulator?), continuing with TCP only\n");
+        sceKernelDelayThread(500000);
+    }
     if (load_start(dir, RUNTIME_MODULE, args, argp) < 0) goto fail;
     sceKernelSelfStopUnloadModule(1, 0, NULL);
     return 0;

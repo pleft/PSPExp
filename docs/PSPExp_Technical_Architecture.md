@@ -923,7 +923,7 @@ A native PSP build of Stratagus/Warcraft already runs fluidly on the target PSP-
 
 ### v0.3 – Rich presentation
 
-*Status 2026-09-22: cached SFX, the streamed PCM channel with jitter buffer and `AUDIO_STATUS`, host-side text, palettes/CLUT, and the per-batch palette selection were pulled forward for v0.2 and are implemented (audio not yet run on hardware). Priority-guided placement, static vertex buffers, eviction policy, the TCP transport and detailed profiling remain.*
+*Status 2026-09-22: cached SFX, the streamed PCM channel with jitter buffer and `AUDIO_STATUS`, host-side text, palettes/CLUT, the per-batch palette selection, host-side eviction (time-based, in the Stratagus backend) and the TCP transport with the PPSSPP configuration were pulled forward for v0.2 and are implemented; the PSP runtime, GE executor and audio thread have been exercised under PPSSPP (audio and CLUT not yet on hardware). Priority-guided placement, static vertex buffers and detailed profiling remain.*
 
 - cached SFX with PSP-side mixing;
 - streamed audio with jitter buffer and `AUDIO_STATUS`;

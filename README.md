@@ -24,6 +24,7 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | host-baked text: built-in 6x8 CLUT4 font, `pspexp_draw_text` (v0.3 item pulled forward) | done, shown in the demo HUD |
 | per-batch palette, flip, 4444 alpha tints, translucent rects, lines, quad batches (v0.2 needs) | done, tested |
 | audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** |
+| TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **renders Warcraft, menus included, with audio, through the SDL executor at 60 fps**; hardware run pending |
 
 ## Build
@@ -47,6 +48,17 @@ The tool prints host→PSP and PSP→host throughput for several block sizes,
 round-trip latency for 16 B, 4 KiB and 40 KB messages, and a 300-frame loop
 with 500 sprites paced on PRESENT_DONE. `pspexp-bench --null` runs the same
 against the in-process Null executor as a CPU baseline.
+
+## Without a PSP: the runtime under PPSSPP
+
+```sh
+scripts/run-ppsspp.sh                                   # boots dist/PSPExp in the emulator (needs EnableWlan = True)
+build/host/pspexp-sprite-demo --tcp 127.0.0.1:3838 --clut --shot 120
+```
+
+The real PSP runtime (GE executor, CLUTs, audio thread) runs in the emulator
+and listens over TCP; screenshots land next to the EBOOT on the emulated
+memory stick. See `docs/v01-usb-bringup.md`.
 
 ## Sprite demo (the §16 proof of concept)
 

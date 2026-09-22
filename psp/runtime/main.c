@@ -15,7 +15,77 @@
 #include "../executor-ge/pspexp_ge.h"
 #include "pspexp_audio_psp.h"
 #include "../transport-usb/pspexp_usb_driver.h"
+#include "../transport-tcp/pspexp_tcp_psp.h"
 #include "../../protocol/pspexp_usb_link.h"
+
+/* The link in use: USB when the cable is synchronised, else TCP. */
+enum { LINK_NONE, LINK_USB, LINK_TCP };
+static int g_link = LINK_NONE;
+static int g_tcp_available;
+
+/* Status trace appended to pspexp-rt.log next to the EBOOT (readable from
+ * the host when running under PPSSPP; a few lines per session on hardware). */
+static char g_trace_path[256];
+static void trace(const char *msg)
+{
+    char line[200];
+    int n = snprintf(line, sizeof(line), "%u [pspexp-rt] %s\n", (unsigned)(sceKernelGetSystemTimeLow() / 1000), msg);
+    SceUID fd;
+    if (n <= 0 || !g_trace_path[0]) return;
+    fd = sceIoOpen(g_trace_path, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0777);
+    if (fd < 0) return;
+    sceIoWrite(fd, line, (SceSize)n);
+    sceIoClose(fd);
+}
+static void trace_init(const char *argv0)
+{
+    const char *slash = argv0 ? strrchr(argv0, '/') : NULL;
+    if (!slash) { strcpy(g_trace_path, "ms0:/pspexp-rt.log"); return; }
+    snprintf(g_trace_path, sizeof(g_trace_path), "%.*s/pspexp-rt.log", (int)(slash - argv0), argv0);
+}
+
+static int link_connected(void)
+{
+    if (g_link == LINK_USB) return pspexpUsbConnected();
+    if (g_link == LINK_TCP) return pspexp_tcp_psp_connected();
+    return 0;
+}
+static unsigned link_generation(void)
+{
+    /* USB and TCP generations are folded so a switch between links looks like a new one */
+    return (pspexpUsbGeneration() << 16) ^ pspexp_tcp_psp_generation() ^ (g_link == LINK_TCP ? 0x8000u : 0u);
+}
+static int link_read(void *buf, int len, unsigned timeout_us)
+{
+    if (g_link == LINK_USB) return pspexpUsbRead(buf, len, timeout_us);
+    if (g_link == LINK_TCP) return pspexp_tcp_psp_read(buf, len, timeout_us);
+    return -1;
+}
+static int link_write(const void *data, int len)
+{
+    if (g_link == LINK_USB) return pspexpUsbWrite(data, len);
+    if (g_link == LINK_TCP) return pspexp_tcp_psp_write(data, len);
+    return -1;
+}
+/* Pick a link: USB first, then TCP; waits briefly. */
+static void link_wait(void)
+{
+    static char last_status[96];
+    if (pspexpUsbConnected()) { g_link = LINK_USB; return; }
+    if (g_tcp_available) {
+        pspexp_tcp_psp_poll();
+        if (strcmp(last_status, pspexp_tcp_psp_status()) != 0) {
+            strncpy(last_status, pspexp_tcp_psp_status(), sizeof(last_status) - 1);
+            trace(last_status);
+        }
+        if (pspexp_tcp_psp_connected()) { g_link = LINK_TCP; return; }
+    }
+    g_link = LINK_NONE;
+    /* Idle: give lower-priority threads (network) time, and do not spin when
+     * the USB driver is absent (emulator). */
+    if (pspexpUsbAttached()) pspexpUsbWaitConnect(50000);
+    else sceKernelDelayThread(20000);
+}
 
 PSP_MODULE_INFO("PSPExpRuntime", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -38,6 +108,33 @@ static int callback_thread(SceSize args, void *argp)
 }
 
 static uint32_t op_now(void *u) { return sceKernelGetSystemTimeLow(); }
+
+#include "../../runtime/pspexp_bmp.h"
+static void op_screenshot(void *u, uint16_t index)
+{
+    static uint16_t row16[PSPEXP_DISPLAY_WIDTH * PSPEXP_DISPLAY_HEIGHT];
+    static uint8_t row[PSPEXP_DISPLAY_WIDTH * 3 + 4];
+    uint8_t hdr[54];
+    char path[256];
+    const char *slash = strrchr(g_trace_path, '/');
+    SceUID fd;
+    int y;
+    (void)u;
+    if (!slash) return;
+    snprintf(path, sizeof(path), "%.*s/pspexp-shot-%u.bmp", (int)(slash - g_trace_path), g_trace_path, (unsigned)index);
+    pspexp_ge_read_display(&g_ge, row16);
+    fd = sceIoOpen(path, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+    if (fd < 0) { trace("screenshot: cannot open file"); return; }
+    pspexp_bmp_header(hdr, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    sceIoWrite(fd, hdr, sizeof(hdr));
+    memset(row, 0, sizeof(row));
+    for (y = PSPEXP_DISPLAY_HEIGHT - 1; y >= 0; y--) {   /* bottom-up */
+        pspexp_bmp_row_5650(row, row16 + (size_t)y * PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_WIDTH);
+        sceIoWrite(fd, row, pspexp_bmp_stride(PSPEXP_DISPLAY_WIDTH));
+    }
+    sceIoClose(fd);
+    trace("screenshot written");
+}
 static void op_log(void *u, const char *msg)
 {
     strncpy(g_log[g_log_n % 4], msg, sizeof(g_log[0]) - 1);
@@ -51,8 +148,10 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
     int i;
     pspexpUsbGetStats(&us);
     pspDebugScreenSetXY(0, 0);
-    printf("PSPExp runtime v0.1  %s  (HOME to exit)                   \n",
-           connected ? "CONNECTED" : (pspexpUsbAttached() ? "attached, waiting for host sync" : "waiting for USB cable"));
+    printf("PSPExp runtime v0.2  %s  (HOME to exit)                   \n",
+           connected ? (g_link == LINK_TCP ? "CONNECTED (TCP)" : "CONNECTED (USB)")
+                     : (pspexpUsbAttached() ? "attached, waiting for host sync" : "waiting for USB cable or TCP"));
+    printf("%-78s\n", g_tcp_available ? pspexp_tcp_psp_status() : "tcp: unavailable");
     printf("usb: packet %u  attach %u detach %u sync %u  rx %u B / %u xfers  tx %u B / %u xfers  tmo %u err %u/%u   \n",
            (unsigned)us.packet_size, (unsigned)us.attaches, (unsigned)us.detaches, (unsigned)us.resyncs,
            (unsigned)us.rx_bytes, (unsigned)us.rx_transfers, (unsigned)us.tx_bytes, (unsigned)us.tx_transfers,
@@ -116,12 +215,20 @@ int main(int argc, char *argv[])
     printf("PSPExp runtime starting\n");
     rc = pspexpUsbStart();
     printf("pspexpUsbStart: 0x%08X\n", rc);
+    trace_init(argc > 0 ? argv[0] : NULL);
+    trace("runtime starting");
+    pspexp_tcp_psp_set_trace(trace);
+    { char b[64]; snprintf(b, sizeof(b), "pspexpUsbStart: 0x%08X", (unsigned)rc); trace(b); }
+    g_tcp_available = pspexp_tcp_psp_init() == 0;
+    printf("%s\n", pspexp_tcp_psp_status());
+    trace(pspexp_tcp_psp_status());
 
     memset(&ops, 0, sizeof(ops));
     pspexp_ge_init(&g_ge);
     pspexp_ge_ops(&g_ge, &ops);
     pspexp_audio_psp_ops(&ops);
     ops.now_us = op_now;
+    ops.screenshot = op_screenshot;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 
@@ -140,16 +247,17 @@ int main(int argc, char *argv[])
     while (g_running) {
         uint32_t now = sceKernelGetSystemTimeLow();
 
-        if (!pspexpUsbConnected()) {
+        if (!link_connected()) {
             if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); }
             if (now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
-            pspexpUsbWaitConnect(100000);
+            link_wait();
             continue;
         }
-        if (!connected || gen != pspexpUsbGeneration()) {
-            gen = pspexpUsbGeneration();
+        if (!connected || gen != link_generation()) {
+            gen = link_generation();
             connected = 1;
             pspexp_runtime_connect(&rt);      /* queues HELLO */
+            trace(g_link == LINK_TCP ? "link up (tcp), HELLO queued" : "link up (usb), HELLO queued");
         }
 
         /* Output first so HELLO / replies go out promptly. */
@@ -157,15 +265,16 @@ int main(int argc, char *argv[])
             size_t len;
             const void *out = pspexp_runtime_out_peek(&rt, &len);
             if (len == 0) break;
-            if (pspexpUsbWrite(out, (int)len) < 0) { connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); break; }
+            if (link_write(out, (int)len) < 0) { trace("link write failed"); connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); break; }
             pspexp_runtime_out_consume(&rt);
             rt.stats.messages_out++;
         }
         if (!connected) continue;
 
-        rc = pspexpUsbRead(rxbuf, sizeof(rxbuf), 2000);
+        rc = link_read(rxbuf, sizeof(rxbuf), 2000);
         if (rc > 0) {
             if (pspexp_runtime_feed(&rt, rxbuf, (size_t)rc) < 0) {
+                trace("inbound stream corrupt");
                 /* Stream corrupt: drop state and wait for the host to resync. */
                 pspexp_runtime_disconnect(&rt);
                 show_status_page();
@@ -173,6 +282,7 @@ int main(int argc, char *argv[])
                 continue;
             }
         } else if (rc < 0) {
+            trace("link read failed");
             connected = 0;
             pspexp_runtime_disconnect(&rt);
             show_status_page();
