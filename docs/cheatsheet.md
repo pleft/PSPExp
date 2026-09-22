@@ -43,6 +43,7 @@ cable pull, so pull the cable to read it after a session.
 | Warcraft on the PSP, main menu | `cd ../WarCraft && PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` |
 | Warcraft straight into a map | `... -r maps/4-middle-ground.smp` |
 | Warcraft with the Mac window hidden (PSP is the only display) | add `PSPEXP_WINDOW=hide` before the command |
+| Warcraft on a headless host (no display, no sound card: Raspberry Pi, Omega2+) | `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy PSPEXP_WINDOW=hide PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` |
 | Warcraft without a PSP (executor window) | `PSPEXP=sdl build/host-stratagus/stratagus -d dist/War1gus` |
 | PSP runtime in PPSSPP, then any host program with `--tcp 127.0.0.1:3838` / `PSPEXP=tcp:127.0.0.1:3838` | `scripts/run-ppsspp.sh` |
 

@@ -87,6 +87,15 @@ void pspexp_mixer_render(PspExpMixer *m, int16_t *out, uint32_t frames)
 {
     uint32_t f;
     int i;
+    /* Rate adaptation: the host's audio clock and ours drift (and a host
+     * without a sound card delivers a few percent slow). Track the buffer
+     * level: below half the target, repeat every 32nd stream frame (3%
+     * slower consumption); above twice the target, skip every 32nd. */
+    int stretch = 0, shrink = 0;
+    if (m->stream_playing) {
+        if (m->buffered < m->target_frames / 2) stretch = 1;
+        else if (m->buffered > m->target_frames * 2) shrink = 1;
+    }
     /* Mix in 32-bit; start from the stream, then add voices. */
     for (f = 0; f < frames; f++) {
         int32_t l = 0, r = 0;
@@ -94,8 +103,19 @@ void pspexp_mixer_render(PspExpMixer *m, int16_t *out, uint32_t frames)
             if (m->buffered > 0) {
                 l = m->ring[(size_t)m->head * 2];
                 r = m->ring[(size_t)m->head * 2 + 1];
-                m->head = (m->head + 1) % m->ring_frames;
-                m->buffered--;
+                m->adapt_phase++;
+                if (stretch && (m->adapt_phase & 31) == 0) {
+                    /* hold this frame: do not advance */
+                    m->stretched++;
+                } else {
+                    m->head = (m->head + 1) % m->ring_frames;
+                    m->buffered--;
+                    if (shrink && (m->adapt_phase & 31) == 0 && m->buffered > 1) {
+                        m->head = (m->head + 1) % m->ring_frames;
+                        m->buffered--;
+                        m->skipped++;
+                    }
+                }
             } else {
                 m->underruns++;
                 m->stream_playing = 0;   /* refill to the target before resuming */

@@ -103,6 +103,19 @@ PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus     # PSP renders, des
 PSPEXP=sdl build/host-stratagus/stratagus -d dist/War1gus     # no PSP: second window shows the PSPExp render
 ```
 
+Headless hosts (section 13: Raspberry Pi, GameShell, Omega2+): the engine
+still needs an SDL window and audio device objects, so run it on SDL's dummy
+drivers; the backend adds a software-renderer fallback for that case and
+`PSPEXP_WINDOW=hide` skips the host present entirely:
+
+```sh
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy PSPEXP_WINDOW=hide PSPEXP=usb \
+  build/host-stratagus/stratagus -d dist/War1gus
+```
+
+Input then comes only from the PSP (its samples become the engine's mouse
+and keyboard events) and sound only from the PSP.
+
 The backend prints one line every two seconds: fps, bytes per frame,
 batches, sprites, input-to-present latency, PSP CPU and GE time, uploads,
 errors, and audio frames sent / buffered on the PSP / underruns. The native PSP build of the same game (`build-psp.sh`) is the control

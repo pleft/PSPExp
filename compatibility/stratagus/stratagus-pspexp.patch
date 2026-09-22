@@ -1714,7 +1714,7 @@ index 0000000..3934a91
 +
 +//@}
 diff --git a/src/video/sdl.cpp b/src/video/sdl.cpp
-index 451d809..df6edc6 100644
+index 451d809..ff47522 100644
 --- a/src/video/sdl.cpp
 +++ b/src/video/sdl.cpp
 @@ -45,6 +45,9 @@
@@ -1727,7 +1727,21 @@ index 451d809..df6edc6 100644
  #include "widgets.h"
  
  #include <climits>
-@@ -538,6 +541,9 @@ void InitVideoSdl()
+@@ -432,6 +435,13 @@ void InitVideoSdl()
+ 	if (!TheRenderer) {
+ 		TheRenderer = SDL_CreateRenderer(TheWindow, -1, rendererFlags);
+ 	}
++#ifdef USE_PSPEXP
++	if (!TheRenderer) {
++		// headless host (SDL_VIDEODRIVER=dummy): no accelerated renderer, the
++		// software one is enough since the PSP is the display
++		TheRenderer = SDL_CreateRenderer(TheWindow, -1, SDL_RENDERER_SOFTWARE);
++	}
++#endif
+ 	SDL_RendererInfo rendererInfo;
+ 	if (!SDL_GetRendererInfo(TheRenderer, &rendererInfo)) {
+ 		printf("[Renderer] %s\n", rendererInfo.name);
+@@ -538,6 +548,9 @@ void InitVideoSdl()
  #ifdef __PSP__
  	PspInitPad();
  #endif
@@ -1737,7 +1751,7 @@ index 451d809..df6edc6 100644
  }
  
  /**
-@@ -902,6 +908,9 @@ void WaitEventsOneFrame()
+@@ -902,6 +915,9 @@ void WaitEventsOneFrame()
  
  #ifdef __PSP__
  	PspUpdatePointer();
@@ -1747,7 +1761,7 @@ index 451d809..df6edc6 100644
  #endif
  	InputMouseTimeout(*GetCallbacks(), ticks);
  	InputKeyTimeout(*GetCallbacks(), ticks);
-@@ -1040,6 +1049,21 @@ void RealizeVideoMemory()
+@@ -1040,6 +1056,21 @@ void RealizeVideoMemory()
  	}
  #else
  	if (NumRects) {

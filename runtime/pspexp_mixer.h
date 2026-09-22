@@ -30,6 +30,7 @@ typedef struct PspExpMixer {
     uint32_t target_frames;      /* jitter buffer depth before the stream starts */
     int      stream_playing;
     uint32_t underruns, received, dropped, voices_played;
+    uint32_t adapt_phase, stretched, skipped;   /* rate adaptation counters */
 } PspExpMixer;
 
 int  pspexp_mixer_init(PspExpMixer *m, uint32_t rate, uint32_t ring_frames, uint32_t target_frames);

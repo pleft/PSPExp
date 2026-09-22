@@ -355,6 +355,24 @@ int main(void)
         pspexp_pump(ctx, 0);
         CHECK_EQ(pspexp_audio_status(ctx)->buffered_frames, 0);
         CHECK(pspexp_audio_status(ctx)->received_frames >= 4410);
+        /* Rate adaptation: a slow source keeps the buffer under half the
+         * target, so rendering consumes fewer frames than it outputs. */
+        {
+            PspExpMixer *mx = &pspexp_null_runtime(nul)->mixer;
+            uint32_t before;
+            pspexp_mixer_stream_write(mx, music, 4410);   /* target reached: playing */
+            pspexp_mixer_render(mx, out, 512);            /* 3898 left: above half */
+            before = mx->buffered;
+            pspexp_mixer_render(mx, out, 512);            /* still above half (3386) */
+            CHECK_EQ(before - mx->buffered, 512);
+            pspexp_mixer_render(mx, out, 512);
+            pspexp_mixer_render(mx, out, 512);            /* now 1338 < 2205: stretching */
+            before = mx->buffered;
+            pspexp_mixer_render(mx, out, 512);
+            CHECK(before - mx->buffered < 512);
+            CHECK(mx->stretched > 0);
+            pspexp_mixer_stream_reset(mx);
+        }
     }
 
     /* Benchmark messages on the DEBUG channel. */
