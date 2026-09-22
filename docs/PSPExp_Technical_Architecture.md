@@ -899,7 +899,7 @@ Actual performance targets are established from measurements on physical PSP har
 
 ### v0.2 – Real engine integration
 
-*Status 2026-09-22: the Stratagus backend exists (`compatibility/stratagus`). Stratagus is a pure software renderer, so the backend hooks the leaf blits (`CGraphic::DrawSub*`, `DrawFrame*X`, the glyph blit, the `CVideo` primitives, the fog shroud and the minimap blit) and mirrors them into quad batches with per-batch palettes; the software path stays live for a side-by-side desktop view. Warcraft renders through the SDL executor at 60 fps with about 34 batches and 330 sprites per frame in 7.6 KB. The hardware run against the native PSP build is the next measurement.*
+*Status 2026-09-22: the Stratagus backend exists (`compatibility/stratagus`). Stratagus is a pure software renderer, so the backend hooks the leaf blits (`CGraphic::DrawSub*`, `DrawFrame*X`, the glyph blit, the `CVideo` primitives, the fog shroud and the minimap blit) and mirrors them into quad batches with per-batch palettes; the software path stays live for a side-by-side desktop view. Warcraft renders through the SDL executor at 60 fps with about 34 batches and 330 sprites per frame in 7.6 KB; the guichan menus are mirrored too, and the game's audio reaches the PSP as the streamed-PCM mode of §8 (SDL_mixer's post-mix output, 176 KB/s, 100 ms jitter buffer). The hardware run against the native PSP build is the next measurement.*
 
 Use Stratagus as the first serious engine experiment, via an engine-specific renderer backend (Stratagus draws into SDL surfaces and is therefore out of scope for `sdl-pspexp`; see §12):
 
@@ -922,6 +922,8 @@ Stratagus is also a natural fit for the resource model: 8-bit palettised sprites
 A native PSP build of Stratagus/Warcraft already runs fluidly on the target PSP-1000 and provides a **control implementation** for rendering behaviour, performance, and native input-to-display latency. The PSPExp implementation can therefore be compared directly against execution of the same engine natively on the same hardware — the same scenes, the same assets, the same input — which makes this milestone unusually valuable: every latency, throughput and visual-fidelity figure from §17 has a native baseline to be judged against.
 
 ### v0.3 – Rich presentation
+
+*Status 2026-09-22: cached SFX, the streamed PCM channel with jitter buffer and `AUDIO_STATUS`, host-side text, palettes/CLUT, and the per-batch palette selection were pulled forward for v0.2 and are implemented (audio not yet run on hardware). Priority-guided placement, static vertex buffers, eviction policy, the TCP transport and detailed profiling remain.*
 
 - cached SFX with PSP-side mixing;
 - streamed audio with jitter buffer and `AUDIO_STATUS`;

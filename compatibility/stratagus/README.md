@@ -23,6 +23,8 @@ src/video/linedraw.cpp         31 CVideo primitive wrappers -> rects, lines, cir
 src/map/fow.cpp                DrawFullShroudOfFog -> translucent fill
 src/map/minimap.cpp            minimap blit -> texture quad; re-upload after Update()
 src/video/sdl.cpp              Init at end of InitVideoSdl, Present in RealizeVideoMemory, PumpInput
+src/ui/widgets.cpp             GUI graphics object replaced by the mirroring subclass
+src/sound/sound_server.cpp     AudioInstall after Mix_OpenAudio
 CMakeLists.txt                 WITH_PSPEXP / PSPEXP_DIR: add_subdirectory(PSPExp), link, -DUSE_PSPEXP
 ```
 
@@ -48,10 +50,24 @@ palette and vertex format go out as one `DRAW_QUAD_BATCH` (16 bytes per
 sprite). Frame-table sprites (8 bytes) are a later optimisation for the
 tileset and unit sheets.
 
-Not yet mirrored: guichan widgets that blit through `gcn::SDLGraphics`
-(menus), the enhanced/bilinear fog modes (War1gus uses the legacy tiled mode),
-`Video.DrawEllipseClip` (approximated as a circle), and eviction of textures
-the PSP no longer needs (everything uploaded stays resident).
+Menus: guichan draws through a `gcn::SDLGraphics` subclass installed by
+`initGuichan` (`src/ui/widgets.cpp`) that mirrors `drawImage`,
+`drawSDLSurface`, `fillRectangle`, `drawRectangle`, `drawLine` and
+`drawPoint` with the widget clip rectangle; text goes through the engine's
+own glyph blit. The whole game, from the title screen on, is on the PSP.
+
+Audio: Stratagus mixes inside SDL_mixer, so `InitSound` installs a post-mix
+tap (`Mix_SetPostMix`). The final 44.1 kHz stereo mix is copied into a ring
+on the audio thread, silenced locally, and streamed from the main thread as
+`AUDIO_STREAM` messages (about 176 KB/s). The PSP plays it through the
+runtime mixer with a 100 ms jitter buffer and reports `AUDIO_STATUS`.
+Cached sound effects (`PLAY_SOUND`) exist in the protocol but the backend
+uses the stream for everything; that is section 8's "pre-mixed on the host"
+mode and costs nothing in engine changes.
+
+Not yet mirrored: the enhanced/bilinear fog modes (War1gus uses the legacy
+tiled mode), `Video.DrawEllipseClip` (approximated as a circle), and eviction
+of textures the PSP no longer needs (everything uploaded stays resident).
 
 ## Running
 
@@ -79,6 +95,6 @@ PSPEXP=sdl build/host-stratagus/stratagus -d dist/War1gus     # no PSP: second w
 ```
 
 The backend prints one line every two seconds: fps, bytes per frame,
-batches, sprites, input-to-present latency, PSP CPU and GE time, uploads and
-errors. The native PSP build of the same game (`build-psp.sh`) is the control
+batches, sprites, input-to-present latency, PSP CPU and GE time, uploads,
+errors, and audio frames sent / buffered on the PSP / underruns. The native PSP build of the same game (`build-psp.sh`) is the control
 measurement the architecture asks for in section 18.

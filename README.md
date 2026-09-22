@@ -23,7 +23,8 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | CLUT4/CLUT8 textures with palette resources (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** (`sprite-demo --clut`) |
 | host-baked text: built-in 6x8 CLUT4 font, `pspexp_draw_text` (v0.3 item pulled forward) | done, shown in the demo HUD |
 | per-batch palette, flip, 4444 alpha tints, translucent rects, lines, quad batches (v0.2 needs) | done, tested |
-| **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **renders Warcraft through the SDL executor at 60 fps**; hardware run pending |
+| audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** |
+| **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **renders Warcraft, menus included, with audio, through the SDL executor at 60 fps**; hardware run pending |
 
 ## Build
 
@@ -73,7 +74,8 @@ cd ../WarCraft
 PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus -r "maps/4-middle-ground.smp"
 ```
 
-The game runs on the Mac; the PSP renders it and its controls play it.
+The game runs on the Mac; the PSP renders it, plays its sound, and its
+controls play it, from the title screen on.
 
 ## Layout
 

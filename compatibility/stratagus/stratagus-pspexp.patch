@@ -53,10 +53,10 @@ index 08e53cd..4fe1958 100644
  
 diff --git a/src/include/pspexp_video.h b/src/include/pspexp_video.h
 new file mode 100644
-index 0000000..ef3ce37
+index 0000000..9bc9754
 --- /dev/null
 +++ b/src/include/pspexp_video.h
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,95 @@
 +//       _________ __                 __
 +//      /   _____//  |_____________ _/  |______     ____  __ __  ______
 +//      \_____  \\   __\_  __ \__  \\   __\__  \   / ___\|  |  \/  ___/
@@ -107,8 +107,18 @@ index 0000000..ef3ce37
 +
 +#include <SDL.h>
 +
++namespace gcn { class SDLGraphics; }
++
 +namespace PspExpVideo
 +{
++/// A guisan graphics object that mirrors menu drawing into PSPExp commands.
++/// Falls back to a plain gcn::SDLGraphics when the backend is off.
++gcn::SDLGraphics *CreateGuiGraphics();
++
++/// Audio: install a post-mix tap on SDL_mixer's output (called from
++/// InitSound). The mixed stereo stream goes to the PSP; the local device
++/// is silenced.
++void AudioInstall();
 +/// Read PSPEXP and connect. Returns true when the backend is active.
 +bool Init();
 +bool Active();
@@ -167,7 +177,7 @@ index 5ddfadd..9995340 100644
          // Blitting a uniform translucent tile over the screen is simply a darkening of the
          // destination, and this runs for nearly every tile on screen - ~500 SDL alpha blits per
 diff --git a/src/map/minimap.cpp b/src/map/minimap.cpp
-index be50b5c..9dcbe81 100644
+index be50b5c..ff81541 100644
 --- a/src/map/minimap.cpp
 +++ b/src/map/minimap.cpp
 @@ -36,6 +36,9 @@
@@ -190,16 +200,72 @@ index be50b5c..9dcbe81 100644
  }
  
  /**
-@@ -443,6 +449,9 @@ static void DrawEvents()
+@@ -443,6 +449,13 @@ static void DrawEvents()
  void CMinimap::Draw() const
  {
  	SDL_Rect drect = {Sint16(X), Sint16(Y), 0, 0};
 +#ifdef USE_PSPEXP
 +	PspExpVideo::DrawSurface(MinimapSurface, 0, 0, MinimapSurface->w, MinimapSurface->h, X, Y, false, 255, false);
++	if (const char *dump = getenv("PSPEXP_DUMP_MINIMAP")) {   /// debugging aid
++		static int dumped = 0;
++		if (dumped++ == 120) SDL_SaveBMP(MinimapSurface, dump);
++	}
 +#endif
  	SDL_BlitSurface(MinimapSurface, nullptr, TheScreen, &drect);
  
  	DrawEvents();
+diff --git a/src/sound/sound_server.cpp b/src/sound/sound_server.cpp
+index 25cff67..3459785 100644
+--- a/src/sound/sound_server.cpp
++++ b/src/sound/sound_server.cpp
+@@ -40,6 +40,9 @@
+ #include "stratagus.h"
+ 
+ #include "sound_server.h"
++#ifdef USE_PSPEXP
++#include "pspexp_video.h"
++#endif
+ 
+ #ifdef USE_FLUIDSYNTH
+ #include "fluidsynth.h"
+@@ -771,6 +774,11 @@ bool InitSound()
+ 	}
+ 	SDL_SOUND_FINISHED = SDL_RegisterEvents(1);
+ 	SoundInitialized = true;
++#ifdef USE_PSPEXP
++	if (PspExpVideo::Active()) {
++		PspExpVideo::AudioInstall();
++	}
++#endif
+ 	Mix_AllocateChannels(MaxChannels);
+ 	Mix_ChannelFinished(ChannelFinished);
+ 
+diff --git a/src/ui/widgets.cpp b/src/ui/widgets.cpp
+index 4646eaa..10c1a9d 100644
+--- a/src/ui/widgets.cpp
++++ b/src/ui/widgets.cpp
+@@ -44,6 +44,9 @@
+ #include "editor.h"
+ #include "sound.h"
+ #include "util.h"
++#ifdef USE_PSPEXP
++#include "pspexp_video.h"
++#endif
+ 
+ #include <guisan/text.hpp>
+ 
+@@ -176,7 +179,11 @@ static void MenuHandleKeyRepeat(unsigned key, unsigned keychar)
+ */
+ void initGuichan()
+ {
++#ifdef USE_PSPEXP
++	auto *graphics = PspExpVideo::CreateGuiGraphics();
++#else
+ 	auto *graphics = new gcn::SDLGraphics();
++#endif
+ 
+ 	// Set the target for the graphics object to be the screen.
+ 	// In other words, we will draw to the screen.
 diff --git a/src/video/font.cpp b/src/video/font.cpp
 index 87bd688..2ef20f7 100644
 --- a/src/video/font.cpp
@@ -532,10 +598,10 @@ index 2c59b59..7464f61 100644
  
 diff --git a/src/video/pspexp_video.cpp b/src/video/pspexp_video.cpp
 new file mode 100644
-index 0000000..5efa332
+index 0000000..e5bcb16
 --- /dev/null
 +++ b/src/video/pspexp_video.cpp
-@@ -0,0 +1,820 @@
+@@ -0,0 +1,1003 @@
 +//       _________ __                 __
 +//      /   _____//  |_____________ _/  |______     ____  __ __  ______
 +//      \_____  \\   __\_  __ \__  \\   __\__  \   / ___\|  |  \/  ___/
@@ -572,6 +638,11 @@ index 0000000..5efa332
 +#include "pspexp_video.h"
 +#include "video.h"
 +#include "intern_video.h"
++#include "widgets.h"
++
++#include <SDL_mixer.h>
++#include <guisan/sdl/sdlgraphics.hpp>
++#include <guisan/sdl/sdlimage.hpp>
 +
 +#include "host/libpspexp/pspexp.h"
 +#include "host/executor-null/pspexp_null.h"
@@ -646,6 +717,18 @@ index 0000000..5efa332
 +// pending quad batch
 +std::vector<PspExpQuadRec> quads;
 +uint16_t quadTex = 0, quadPal = PSPEXP_PALETTE_DEFAULT, quadFmt = PSPEXP_VTX_SPRITE_2D_5650;
++
++// an explicit clip rectangle (the GUI's) that overrides the engine's ClipX1..
++bool overrideClip = false;
++SDL_Rect overrideRect = {0, 0, 0, 0};
++
++// audio tap: SDL_mixer's post-mix callback fills a ring on its thread, the
++// main thread streams it to the PSP
++SDL_mutex *audioMutex = nullptr;
++std::vector<int16_t> audioRing;      /// stereo frames
++size_t audioHead = 0, audioTail = 0, audioBuffered = 0;
++bool audioInstalled = false;
++unsigned audioFramesSent = 0;
 +
 +// statistics for the log line
 +Uint32 lastReport = 0;
@@ -925,7 +1008,9 @@ index 0000000..5efa332
 +void applyClip(bool clip)
 +{
 +	SDL_Rect want;
-+	if (clip) {
++	if (overrideClip) {
++		want = overrideRect;
++	} else if (clip) {
 +		want = {ClipX1, ClipY1, ClipX2 - ClipX1 + 1, ClipY2 - ClipY1 + 1};
 +	} else {
 +		want = {0, 0, Video.Width, Video.Height};
@@ -1073,11 +1158,169 @@ index 0000000..5efa332
 +	pushMouseMotion();
 +}
 +
++/*----------------------------------------------------------------------------
++--  Audio tap
++----------------------------------------------------------------------------*/
++
++void audioPostMix(void *, Uint8 *stream, int len)
++{
++	// SDL_mixer's thread: copy the final mix into the ring, then silence the
++	// local device (the PSP plays it).
++	const size_t frames = size_t(len) / 4;
++	const int16_t *src = reinterpret_cast<const int16_t *>(stream);
++	SDL_LockMutex(audioMutex);
++	const size_t capacity = audioRing.size() / 2;
++	for (size_t f = 0; f < frames && audioBuffered < capacity; ++f) {
++		audioRing[audioTail * 2] = src[f * 2];
++		audioRing[audioTail * 2 + 1] = src[f * 2 + 1];
++		audioTail = (audioTail + 1) % capacity;
++		++audioBuffered;
++	}
++	SDL_UnlockMutex(audioMutex);
++	memset(stream, 0, size_t(len));
++}
++
++void drainAudio()
++{
++	if (!audioInstalled || !linkUp()) {
++		return;
++	}
++	static std::vector<int16_t> chunk;
++	SDL_LockMutex(audioMutex);
++	const size_t capacity = audioRing.size() / 2;
++	size_t n = audioBuffered;
++	chunk.resize(n * 2);
++	for (size_t f = 0; f < n; ++f) {
++		chunk[f * 2] = audioRing[audioHead * 2];
++		chunk[f * 2 + 1] = audioRing[audioHead * 2 + 1];
++		audioHead = (audioHead + 1) % capacity;
++	}
++	audioBuffered = 0;
++	SDL_UnlockMutex(audioMutex);
++	// at most 4096 frames (16 KB) per message
++	for (size_t off = 0; off < n; off += 4096) {
++		const size_t m = std::min<size_t>(4096, n - off);
++		pspexp_audio_stream(ctx, chunk.data() + off * 2, uint32_t(m));
++		audioFramesSent += unsigned(m);
++	}
++}
++
++/*----------------------------------------------------------------------------
++--  GUI graphics: guisan draws menus with its own clip stack and offsets
++----------------------------------------------------------------------------*/
++
++class GuiGraphics : public gcn::SDLGraphics
++{
++public:
++	using gcn::SDLGraphics::drawImage;
++
++	void drawImage(const gcn::Image *image, int srcX, int srcY, int dstX, int dstY, int width, int height) override
++	{
++		if (Active() && !mClipStack.empty()) {
++			const gcn::ClipRectangle &top = mClipStack.top();
++			const auto *img = dynamic_cast<const gcn::SDLImage *>(image);
++			if (img && img->getSurface()) {
++				ScopedClip clip(top);
++				DrawSurface(img->getSurface(), srcX, srcY, width, height, dstX + top.xOffset, dstY + top.yOffset, true, 255, false);
++			}
++		}
++		gcn::SDLGraphics::drawImage(image, srcX, srcY, dstX, dstY, width, height);
++	}
++
++	void drawSDLSurface(SDL_Surface *surface, SDL_Rect source, SDL_Rect destination) override
++	{
++		if (Active() && !mClipStack.empty()) {
++			const gcn::ClipRectangle &top = mClipStack.top();
++			ScopedClip clip(top);
++			DrawSurface(surface, source.x, source.y, source.w, source.h, destination.x + top.xOffset, destination.y + top.yOffset, true, 255, false);
++		}
++		gcn::SDLGraphics::drawSDLSurface(surface, source, destination);
++	}
++
++	void fillRectangle(const gcn::Rectangle &rectangle) override
++	{
++		if (Active() && !mClipStack.empty()) {
++			const gcn::ClipRectangle &top = mClipStack.top();
++			ScopedClip clip(top);
++			FillRect(color(), rectangle.x + top.xOffset, rectangle.y + top.yOffset, rectangle.width, rectangle.height, true, alpha());
++		}
++		gcn::SDLGraphics::fillRectangle(rectangle);
++	}
++
++	void drawRectangle(const gcn::Rectangle &rectangle) override
++	{
++		if (Active() && !mClipStack.empty()) {
++			const gcn::ClipRectangle &top = mClipStack.top();
++			ScopedClip clip(top);
++			DrawRectOutline(color(), rectangle.x + top.xOffset, rectangle.y + top.yOffset, rectangle.width, rectangle.height, true, alpha());
++		}
++		gcn::SDLGraphics::drawRectangle(rectangle);
++	}
++
++	void drawLine(int x1, int y1, int x2, int y2) override
++	{
++		if (Active() && !mClipStack.empty()) {
++			const gcn::ClipRectangle &top = mClipStack.top();
++			ScopedClip clip(top);
++			DrawLine(color(), x1 + top.xOffset, y1 + top.yOffset, x2 + top.xOffset, y2 + top.yOffset, true, alpha());
++		}
++		gcn::SDLGraphics::drawLine(x1, y1, x2, y2);
++	}
++
++	void drawPoint(int x, int y) override
++	{
++		if (Active() && !mClipStack.empty()) {
++			const gcn::ClipRectangle &top = mClipStack.top();
++			ScopedClip clip(top);
++			FillRect(color(), x + top.xOffset, y + top.yOffset, 1, 1, true, alpha());
++		}
++		gcn::SDLGraphics::drawPoint(x, y);
++	}
++
++private:
++	struct ScopedClip {
++		explicit ScopedClip(const gcn::ClipRectangle &r)
++		{
++			overrideClip = true;
++			overrideRect = {r.x, r.y, r.width, r.height};
++		}
++		~ScopedClip() { overrideClip = false; }
++	};
++	Uint32 color() const { return SDL_MapRGB(TheScreen->format, Uint8(mColor.r), Uint8(mColor.g), Uint8(mColor.b)); }
++	int alpha() const { return mAlpha ? mColor.a : 255; }
++};
++
 +} // anonymous namespace
 +
 +/*----------------------------------------------------------------------------
 +--  Public interface
 +----------------------------------------------------------------------------*/
++
++gcn::SDLGraphics *CreateGuiGraphics()
++{
++	return new GuiGraphics();
++}
++
++void AudioInstall()
++{
++	if (audioInstalled) {
++		return;
++	}
++	int freq = 0, channels = 0;
++	Uint16 format = 0;
++	if (!Mix_QuerySpec(&freq, &format, &channels)) {
++		return;
++	}
++	if (freq != 44100 || format != AUDIO_S16SYS || channels != 2) {
++		fprintf(stderr, "[pspexp] audio device is %d Hz format %#x x%d, not 44.1 kHz s16 stereo: not mirrored\n", freq, format, channels);
++		return;
++	}
++	audioMutex = SDL_CreateMutex();
++	audioRing.assign(size_t(freq) * 2, 0);   /// one second
++	Mix_SetPostMix(audioPostMix, nullptr);
++	audioInstalled = true;
++	fprintf(stderr, "[pspexp] audio mirrored to the PSP (44.1 kHz stereo stream)\n");
++}
 +
 +bool Init()
 +{
@@ -1140,6 +1383,7 @@ index 0000000..5efa332
 +	pointerY = Video.Height / 2.0f;
 +	lastReport = SDL_GetTicks();
 +	fprintf(stderr, "[pspexp] backend active (%s), %dx%d\n", env, Video.Width, Video.Height);
++	AudioInstall();   /// no-op until the mixer is open; InitSound calls it too
 +	return true;
 +}
 +
@@ -1183,6 +1427,7 @@ index 0000000..5efa332
 +	}
 +	beginFrameIfNeeded();
 +	flushQuads();
++	drainAudio();
 +	// One frame in flight: the previous PRESENT_DONE has normally arrived
 +	// while the game logic ran; otherwise wait for it here.
 +	pspexp_wait_present(ctx, 40);
@@ -1197,10 +1442,13 @@ index 0000000..5efa332
 +	const Uint32 now = SDL_GetTicks();
 +	if (now - lastReport >= 2000) {
 +		const PspExpStats *st = pspexp_stats(ctx);
-+		fprintf(stderr, "[pspexp] %.1f fps  %u B/frame  %u batches  %u sprites  input->present %u us  psp cpu %u us  ge %u us  uploads %u  errors %u\n",
++		const PspExpAudioStatus *au = pspexp_audio_status(ctx);
++		fprintf(stderr, "[pspexp] %.1f fps  %u B/frame  %u batches  %u sprites  input->present %u us  psp cpu %u us  ge %u us  uploads %u  errors %u  audio sent %u buffered %u underruns %u\n",
 +		        framesSinceReport * 1000.0 / double(now - lastReport), st->last_frame_bytes, st->last_frame_batches,
 +		        st->last_frame_sprites, st->last_input_to_present_us, st->last_execute_us, st->last_ge_us,
-+		        uploadsSinceReport, st->resource_errors + st->protocol_errors);
++		        uploadsSinceReport, st->resource_errors + st->protocol_errors,
++		        audioFramesSent, au->buffered_frames, au->underruns);
++		audioFramesSent = 0;
 +		lastReport = now;
 +		framesSinceReport = 0;
 +		uploadsSinceReport = 0;
@@ -1217,6 +1465,7 @@ index 0000000..5efa332
 +		return;
 +	}
 +	pspexp_pump(ctx, 0);
++	drainAudio();
 +	translateInput(*pspexp_input(ctx));
 +}
 +
