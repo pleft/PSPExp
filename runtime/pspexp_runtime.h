@@ -18,6 +18,7 @@
 #include "../protocol/serialization/pspexp_reader.h"
 #include "../protocol/serialization/pspexp_writer.h"
 #include "pspexp_cache.h"
+#include "pspexp_mixer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +52,15 @@ typedef struct PspExpRuntimeOps {
     uint32_t (*present)(void *user);
     /* Optional: GE render time of the frame just presented, microseconds. */
     uint32_t (*frame_ge_us)(void *user);
+    /* Optional audio output. audio_start is called once the host asked for
+     * audio (HELLO_ACK.audio_rate): the executor starts rendering from the
+     * mixer on its own audio thread, calling audio_lock/unlock around every
+     * pspexp_mixer_render. The runtime takes the same lock when it changes
+     * the mixer. audio_stop is called on disconnect. */
+    int  (*audio_start)(void *user, PspExpMixer *mixer, uint32_t rate);
+    void (*audio_stop)(void *user);
+    void (*audio_lock)(void *user);
+    void (*audio_unlock)(void *user);
     /* Optional diagnostics. */
     void (*log)(void *user, const char *msg);
 } PspExpRuntimeOps;
@@ -71,6 +81,7 @@ typedef struct PspExpRuntimeConfig {
 typedef struct PspExpRuntimeStats {
     uint32_t frames, batches, sprites, tiles, rects, lines;
     uint32_t uploads, releases, resource_errors, protocol_errors, misses, palettes;
+    uint32_t sounds, plays, stream_frames;
     uint32_t last_frame_bytes, last_execute_us;
     uint64_t bytes_in, bytes_out;
     uint32_t messages_in, messages_out;
@@ -96,6 +107,10 @@ typedef struct PspExpRuntime {
     uint32_t uplink_block, uplink_remaining;
     uint8_t *scratch;            /* expansion scratch when vertex_alloc is NULL */
     size_t   scratch_cap;
+    /* audio */
+    PspExpMixer mixer;
+    int      audio_active;
+    uint32_t audio_status_us;
 } PspExpRuntime;
 
 int  pspexp_runtime_init(PspExpRuntime *rt, const PspExpRuntimeOps *ops, const PspExpRuntimeConfig *cfg);

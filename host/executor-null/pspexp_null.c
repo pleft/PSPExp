@@ -11,6 +11,7 @@ struct PspExpNullExecutor {
     size_t out_off;          /* bytes of the pending output already handed out */
     int paced;
     uint64_t next_vblank_us;
+    PspExpMixer *mixer;
 };
 
 static uint32_t op_now(void *u) { (void)u; return (uint32_t)pspexp_time_us(); }
@@ -57,6 +58,15 @@ static uint32_t op_present(void *u)
     return (uint32_t)now;
 }
 static void op_log(void *u, const char *msg) { (void)u; fprintf(stderr, "null-executor: %s\n", msg); }
+static int  op_audio_start(void *u, PspExpMixer *m, uint32_t rate) { (void)rate; ((PspExpNullExecutor *)u)->mixer = m; return 0; }
+static void op_audio_stop(void *u) { ((PspExpNullExecutor *)u)->mixer = NULL; }
+
+uint32_t pspexp_null_render_audio(PspExpNullExecutor *x, int16_t *stereo, uint32_t frames)
+{
+    if (!x->mixer) return 0;
+    pspexp_mixer_render(x->mixer, stereo, frames);
+    return frames;
+}
 
 static int tr_send(PspExpTransport *t, const void *data, size_t len)
 {
@@ -102,6 +112,8 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.draw_rect = op_draw_rect;
     ops.draw_line = op_draw_line;
     ops.present = op_present;
+    ops.audio_start = op_audio_start;
+    ops.audio_stop = op_audio_stop;
     ops.log = op_log;
     if (pspexp_runtime_init(&x->rt, &ops, &c) < 0) { free(x); return NULL; }
     x->transport.name = "null";

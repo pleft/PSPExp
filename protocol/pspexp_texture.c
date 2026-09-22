@@ -67,6 +67,20 @@ int pspexp_texture_validate(const PspExpTextureUpload *t, uint16_t supported_for
     return PSPEXP_RERR_NONE;
 }
 
+uint32_t pspexp_sound_data_length(uint8_t channels, uint32_t frames)
+{
+    if ((channels != 1 && channels != 2) || frames == 0 || frames > (1u << 24)) return 0;
+    return frames * channels * 2u;
+}
+
+int pspexp_sound_validate(const PspExpSoundUpload *s, uint32_t payload_length)
+{
+    uint32_t len = pspexp_sound_data_length(s->channels, s->frames);
+    if (len == 0) return PSPEXP_RERR_BAD_FORMAT;
+    if (payload_length != PSPEXP_ALIGN_UP(len)) return PSPEXP_RERR_BAD_LENGTH;
+    return PSPEXP_RERR_NONE;
+}
+
 uint32_t pspexp_palette_data_length(uint8_t format, uint16_t entries)
 {
     uint32_t bpp = format <= PSPEXP_TEX_8888 ? pspexp_texture_bits_per_pixel(format) : 0;

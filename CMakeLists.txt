@@ -30,6 +30,7 @@ target_include_directories(pspexp_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # --- runtime core: shared with the PSP build ----------------------------
 add_library(pspexp_runtime STATIC
   runtime/pspexp_cache.c
+  runtime/pspexp_mixer.c
   runtime/pspexp_runtime.c)
 target_link_libraries(pspexp_runtime PUBLIC pspexp_protocol)
 

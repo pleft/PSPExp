@@ -310,6 +310,53 @@ int main(void)
         pspexp_pump(ctx, 0);
     }
 
+    /* Audio: a cached sound plays through the shared mixer; the stream starts
+     * after its jitter buffer fills; status reports arrive. */
+    {
+        static int16_t tone[441];       /* 10 ms mono */
+        static int16_t music[4410 * 2]; /* 100 ms stereo */
+        static int16_t out[512 * 2];
+        int silent = 1, nonzero = 0;
+        uint32_t k;
+        for (i = 0; i < 441; i++) tone[i] = (int16_t)((i & 8) ? 8000 : -8000);
+        for (i = 0; i < 4410 * 2; i++) music[i] = (int16_t)((i & 4) ? 3000 : -3000);
+        CHECK(pspexp_null_runtime(nul)->audio_active);
+        CHECK_EQ(pspexp_upload_sound(ctx, 70, tone, 441, 1), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_resource_state(ctx, 70, NULL), PSPEXP_RES_RESIDENT);
+        CHECK_EQ(pspexp_play_sound(ctx, 70, 255, 0, 0), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_null_runtime(nul)->stats.plays, 1);
+        CHECK_EQ(pspexp_null_render_audio(nul, out, 512), 512);
+        for (k = 0; k < 512 * 2; k++) if (out[k] != 0) nonzero++;
+        CHECK(nonzero > 400);   /* 441 frames of tone on both channels, then silence */
+        CHECK_EQ(out[511 * 2], 0);
+        /* Stream: nothing plays until ~100 ms is buffered (4410 frames at 44.1 kHz). */
+        CHECK_EQ(pspexp_audio_stream(ctx, music, 2000), 0);
+        pspexp_pump(ctx, 0);
+        pspexp_null_render_audio(nul, out, 512);
+        for (k = 0; k < 512 * 2; k++) if (out[k] != 0) silent = 0;
+        CHECK(silent);
+        CHECK_EQ(pspexp_audio_stream(ctx, music + 2000 * 2, 2410), 0);
+        pspexp_pump(ctx, 0);
+        pspexp_null_render_audio(nul, out, 512);
+        nonzero = 0;
+        for (k = 0; k < 512 * 2; k++) if (out[k] != 0) nonzero++;
+        CHECK(nonzero > 900);
+        /* Playing an unknown sound is a miss; releasing the sound stops its voice. */
+        CHECK_EQ(pspexp_play_sound(ctx, 71, 255, 0, 0), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_play_sound(ctx, 70, 200, -128, 1), 0);
+        pspexp_release(ctx, 70);
+        pspexp_pump(ctx, 0);
+        pspexp_null_render_audio(nul, out, 512);
+        CHECK_EQ(pspexp_null_runtime(nul)->cache.ram_count, 0 + 0);   /* sound freed (palette 40/42 released above) */
+        CHECK_EQ(pspexp_audio_stream_reset(ctx), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_audio_status(ctx)->buffered_frames, 0);
+        CHECK(pspexp_audio_status(ctx)->received_frames >= 4410);
+    }
+
     /* Benchmark messages on the DEBUG channel. */
     {
         PspExpBenchStart bs; PspExpBenchUplink up; uint8_t blob[1000];

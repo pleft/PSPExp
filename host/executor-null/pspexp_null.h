@@ -32,6 +32,10 @@ const PspExpNullStats *pspexp_null_stats(const PspExpNullExecutor *n);
 void pspexp_null_simulate_reconnect(PspExpNullExecutor *n);
 /* Inject a controller sample as if sampled on the PSP. */
 void pspexp_null_push_input(PspExpNullExecutor *n, uint32_t buttons, uint8_t analog_x, uint8_t analog_y);
+/* Audio: the Null executor keeps the mixer the runtime started and renders
+ * it only when asked, so tests can inspect the output. Returns frames
+ * rendered (0 when audio is not active). */
+uint32_t pspexp_null_render_audio(PspExpNullExecutor *n, int16_t *stereo, uint32_t frames);
 /* When non-zero, present() sleeps to emulate a 60 Hz display (default 0). */
 void pspexp_null_set_paced(PspExpNullExecutor *n, int paced);
 

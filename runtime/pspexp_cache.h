@@ -16,7 +16,8 @@ extern "C" {
 
 enum PspExpResourceKind {
     PSPEXP_KIND_TEXTURE = 0,
-    PSPEXP_KIND_PALETTE = 1
+    PSPEXP_KIND_PALETTE = 1,
+    PSPEXP_KIND_SOUND   = 2    /* width = channels, frame_count unused, height unused; user = PCM copy */
 };
 
 typedef struct PspExpCacheEntry {
@@ -48,7 +49,9 @@ PspExpCacheEntry *pspexp_cache_find(PspExpCache *c, uint16_t id);
  * Returns NULL and sets *reason (PSPEXP_RERR_*) on failure. */
 PspExpCacheEntry *pspexp_cache_insert(PspExpCache *c, const PspExpTextureUpload *t,
                                       const PspExpFrame *frames, int *reason);
-/* Palettes always live in main RAM. */
+/* Sounds and palettes always live in main RAM. */
+PspExpCacheEntry *pspexp_cache_insert_sound(PspExpCache *c, const PspExpSoundUpload *snd,
+                                            uint32_t bytes, int *reason);
 PspExpCacheEntry *pspexp_cache_insert_palette(PspExpCache *c, const PspExpPaletteUpload *p,
                                               uint32_t bytes, int *reason);
 void pspexp_cache_remove(PspExpCache *c, PspExpCacheEntry *e);

@@ -13,6 +13,7 @@
 #include <string.h>
 #include "../../runtime/pspexp_runtime.h"
 #include "../executor-ge/pspexp_ge.h"
+#include "pspexp_audio_psp.h"
 #include "../transport-usb/pspexp_usb_driver.h"
 #include "../../protocol/pspexp_usb_link.h"
 
@@ -73,6 +74,10 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
     printf("bench: active %d  %u msgs  %u B  uplink left %u  protocol errors %u              \n",
            rt->bench_active, (unsigned)rt->bench_msgs, (unsigned)rt->bench_bytes, (unsigned)rt->uplink_remaining,
            (unsigned)rt->stats.protocol_errors);
+    printf("audio: %s  sounds %u plays %u  stream %u frames  buffered %u  underruns %u dropped %u     \n",
+           rt->audio_active ? "on" : "off", (unsigned)rt->stats.sounds, (unsigned)rt->stats.plays,
+           (unsigned)rt->stats.stream_frames, (unsigned)rt->mixer.buffered, (unsigned)rt->mixer.underruns,
+           (unsigned)rt->mixer.dropped);
     printf("input seq %u                                              \n", (unsigned)rt->input_seq);
     printf("\nlog:\n");
     for (i = 0; i < 4; i++) {
@@ -115,6 +120,7 @@ int main(int argc, char *argv[])
     memset(&ops, 0, sizeof(ops));
     pspexp_ge_init(&g_ge);
     pspexp_ge_ops(&g_ge, &ops);
+    pspexp_audio_psp_ops(&ops);
     ops.now_us = op_now;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */

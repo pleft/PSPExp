@@ -366,6 +366,52 @@ typedef struct PspExpResourceError {   /* RESOURCE_ERROR, RESOURCE_MISS */
 } PspExpResourceError;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpResourceError) == 16, resource_error_size);
 
+/* ---- AUDIO channel payloads (section 8) -------------------------------- */
+
+/* Cached sound effect: followed by frames x channels s16 samples, already
+ * at the negotiated output rate (the host resamples), padded to 16 bytes. */
+typedef struct PspExpSoundUpload {
+    uint16_t id;
+    uint8_t  channels;          /* 1 or 2 */
+    uint8_t  reserved0;
+    uint32_t frames;
+    uint32_t sample_rate;       /* informational; must equal HELLO_ACK.audio_rate */
+    uint8_t  reserved[4];
+} PspExpSoundUpload;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpSoundUpload) == 16, sound_upload_size);
+
+typedef struct PspExpPlaySound {
+    uint16_t id;
+    uint8_t  volume;            /* 0..255 */
+    int8_t   pan;               /* -128 left .. 127 right */
+    uint8_t  loop;
+    uint8_t  reserved[11];
+} PspExpPlaySound;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpPlaySound) == 16, play_sound_size);
+
+typedef struct PspExpStopSound {
+    uint16_t id;                /* stops every voice playing this sound; 0xFFFF = all */
+    uint8_t  reserved[14];
+} PspExpStopSound;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpStopSound) == 16, stop_sound_size);
+
+/* Streamed audio: followed by `frames` s16 stereo frames at the negotiated rate. */
+typedef struct PspExpAudioStream {
+    uint32_t frames;
+    uint8_t  reserved[12];
+} PspExpAudioStream;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpAudioStream) == 16, audio_stream_size);
+
+typedef struct PspExpAudioStatus {
+    uint32_t buffered_frames;   /* stream frames waiting to play */
+    uint32_t underruns;         /* cumulative */
+    uint32_t received_frames;   /* cumulative */
+    uint32_t dropped_frames;    /* cumulative, buffer overflow */
+} PspExpAudioStatus;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpAudioStatus) == 16, audio_status_size);
+
+#define PSPEXP_AUDIO_MAX_VOICES 8
+
 /* ---- INPUT channel payload -------------------------------------------- */
 
 typedef struct PspExpInput {
@@ -424,6 +470,10 @@ int pspexp_texture_validate(const PspExpTextureUpload *t, uint16_t supported_for
 /* Pointer to the frame table inside an upload payload (payload points just
  * after the PspExpTextureUpload header). */
 const void *pspexp_texture_frames(const PspExpTextureUpload *t, const void *payload);
+
+/* Byte length of a sound's PCM; 0 if the parameters are invalid. */
+uint32_t pspexp_sound_data_length(uint8_t channels, uint32_t frames);
+int pspexp_sound_validate(const PspExpSoundUpload *s, uint32_t payload_length);
 
 /* Byte length of a palette's entries; 0 if the format or count is invalid. */
 uint32_t pspexp_palette_data_length(uint8_t format, uint16_t entries);

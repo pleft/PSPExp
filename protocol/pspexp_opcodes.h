@@ -35,7 +35,13 @@ enum PspExpOpcode {
     PSPEXP_OP_RESOURCE_MISS           = 0x0207,  /* PSP -> host, PspExpResourceError */
     PSPEXP_OP_RESOURCE_UPLOAD_PALETTE = 0x0208,  /* host -> PSP, PspExpPaletteUpload + entries */
 
-    /* AUDIO (0x03xx): v0.3 */
+    /* AUDIO (0x03xx) */
+    PSPEXP_OP_RESOURCE_UPLOAD_SOUND = 0x0301,  /* host -> PSP, PspExpSoundUpload + s16 PCM */
+    PSPEXP_OP_PLAY_SOUND            = 0x0302,  /* host -> PSP, PspExpPlaySound */
+    PSPEXP_OP_STOP_SOUND            = 0x0303,  /* host -> PSP, PspExpStopSound */
+    PSPEXP_OP_AUDIO_STREAM          = 0x0304,  /* host -> PSP, PspExpAudioStream + s16 stereo PCM */
+    PSPEXP_OP_AUDIO_STATUS          = 0x0305,  /* PSP -> host, PspExpAudioStatus */
+    PSPEXP_OP_AUDIO_STREAM_RESET    = 0x0306,  /* host -> PSP, no payload: drop buffered stream */
 
     /* INPUT (0x04xx) */
     PSPEXP_OP_INPUT_SAMPLE   = 0x0401,  /* PSP -> host, PspExpInput */

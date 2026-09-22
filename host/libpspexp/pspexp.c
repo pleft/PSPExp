@@ -1,5 +1,6 @@
 #include "pspexp.h"
 #include "../../protocol/serialization/pspexp_writer.h"
+#include "../../runtime/pspexp_cache.h"   /* PSPEXP_KIND_* for replay ordering */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -43,6 +44,7 @@ struct PspExpContext {
     int in_flight;
     FrameRecord ring[SEND_RING];
     PspExpMemoryStatus mem;
+    PspExpAudioStatus audio;
     PspExpStats stats;
     PspExpLogFn log; void *log_user;
     PspExpMessageHook hook; void *hook_user;
@@ -63,6 +65,8 @@ void pspexp_config_default(PspExpConfig *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
     cfg->input_rate = 60;
+    cfg->audio_rate = 44100;
+    cfg->audio_channels = 2;
     cfg->max_batch_records = PSPEXP_BATCH_MAX_RECORDS;
     cfg->max_in_flight = 1;
     cfg->retain_uploads = 1;
@@ -109,6 +113,7 @@ const PspExpHello *pspexp_caps(const PspExpContext *ctx) { return &ctx->hello; }
 const PspExpInput *pspexp_input(const PspExpContext *ctx) { return &ctx->input; }
 const PspExpStats *pspexp_stats(const PspExpContext *ctx) { return &ctx->stats; }
 const PspExpMemoryStatus *pspexp_memory_status(const PspExpContext *ctx) { return &ctx->mem; }
+const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx) { return &ctx->audio; }
 PspExpTransport *pspexp_transport(PspExpContext *ctx) { return ctx->t; }
 int pspexp_frames_in_flight(const PspExpContext *ctx) { return ctx->in_flight; }
 
@@ -219,7 +224,7 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
             for (i = 0; i < ctx->nres; i++) {
                 Resource *r = &ctx->res[i];
                 if (!r->retained) continue;
-                if ((pass == 0) != (r->kind == 1 /* PSPEXP_KIND_PALETTE */)) continue;
+                if ((pass == 0) != (r->kind == PSPEXP_KIND_PALETTE)) continue;
                 if (pspexp_send_raw(ctx, PSPEXP_CH_RESOURCE, r->opcode, r->retained, r->retained_len) < 0) return;
                 r->state = PSPEXP_RES_PENDING;
             }
@@ -289,6 +294,10 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
     case PSPEXP_OP_MEMORY_STATUS:
         if (pspexp_message_expect(m, sizeof(PspExpMemoryStatus)) < 0) break;
         memcpy(&ctx->mem, m->payload, sizeof(ctx->mem));
+        break;
+    case PSPEXP_OP_AUDIO_STATUS:
+        if (pspexp_message_expect(m, sizeof(PspExpAudioStatus)) < 0) break;
+        memcpy(&ctx->audio, m->payload, sizeof(ctx->audio));
         break;
     case PSPEXP_OP_ERROR: {
         const PspExpError *e;
@@ -400,7 +409,7 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
     r = add_res(ctx, id);
     if (!r) return -1;
     if (r->retained) { free(r->retained); r->retained = NULL; }
-    r->kind = 0;
+    r->kind = PSPEXP_KIND_TEXTURE;
     r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE;
     if (ctx->cfg.retain_uploads) {
         r->retained = (uint8_t *)malloc(sizeof(t) + payload_len);
@@ -440,7 +449,7 @@ int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint1
     r = add_res(ctx, id);
     if (!r) return -1;
     if (r->retained) { free(r->retained); r->retained = NULL; }
-    r->kind = 1;
+    r->kind = PSPEXP_KIND_PALETTE;
     r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_PALETTE;
     if (ctx->cfg.retain_uploads) {
         uint32_t len = (uint32_t)(sizeof(pu) + PSPEXP_ALIGN_UP(bytes));
@@ -450,6 +459,80 @@ int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint1
     r->state = PSPEXP_RES_PENDING;
     if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+int pspexp_upload_sound(PspExpContext *ctx, uint16_t id, const int16_t *pcm, uint32_t frames, uint8_t channels)
+{
+    PspExpSoundUpload su;
+    uint32_t bytes = pspexp_sound_data_length(channels, frames);
+    uint8_t *p;
+    Resource *r;
+    if (bytes == 0) { ctx_log(ctx, "sound %u rejected locally: %u frames x %u channels", id, frames, channels); return -PSPEXP_RERR_BAD_FORMAT; }
+    memset(&su, 0, sizeof(su));
+    su.id = id;
+    su.channels = channels;
+    su.frames = frames;
+    su.sample_rate = ctx->cfg.audio_rate;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_AUDIO, PSPEXP_OP_RESOURCE_UPLOAD_SOUND, 0) < 0) return -1;
+    p = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(su) + PSPEXP_ALIGN_UP(bytes));
+    if (!p) return -1;
+    memcpy(p, &su, sizeof(su));
+    memcpy(p + sizeof(su), pcm, bytes);
+    if (pspexp_writer_end(&ctx->msg) < 0) return -1;
+    r = add_res(ctx, id);
+    if (!r) return -1;
+    if (r->retained) { free(r->retained); r->retained = NULL; }
+    r->kind = PSPEXP_KIND_SOUND;
+    r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_SOUND;
+    if (ctx->cfg.retain_uploads) {
+        uint32_t len = (uint32_t)(sizeof(su) + PSPEXP_ALIGN_UP(bytes));
+        r->retained = (uint8_t *)malloc(len);
+        if (r->retained) { memcpy(r->retained, p, len); r->retained_len = len; }
+    }
+    r->state = PSPEXP_RES_PENDING;
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+int pspexp_play_sound(PspExpContext *ctx, uint16_t id, uint8_t volume, int8_t pan, uint8_t loop)
+{
+    PspExpPlaySound ps;
+    memset(&ps, 0, sizeof(ps));
+    ps.id = id; ps.volume = volume; ps.pan = pan; ps.loop = loop;
+    return pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_PLAY_SOUND, &ps, sizeof(ps));
+}
+
+int pspexp_stop_sound(PspExpContext *ctx, uint16_t id)
+{
+    PspExpStopSound ss;
+    memset(&ss, 0, sizeof(ss));
+    ss.id = id;
+    return pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_STOP_SOUND, &ss, sizeof(ss));
+}
+
+int pspexp_audio_stream(PspExpContext *ctx, const int16_t *stereo, uint32_t frames)
+{
+    PspExpAudioStream as;
+    uint8_t *p;
+    if (frames == 0) return 0;
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return -1;
+    memset(&as, 0, sizeof(as));
+    as.frames = frames;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STREAM, 0) < 0) return -1;
+    p = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(as) + PSPEXP_ALIGN_UP(frames * 4u));
+    if (!p) return -1;
+    memcpy(p, &as, sizeof(as));
+    memcpy(p + sizeof(as), stereo, (size_t)frames * 4u);
+    if (pspexp_writer_end(&ctx->msg) < 0) return -1;
+    ctx->stats.audio_frames_sent += frames;
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+int pspexp_audio_stream_reset(PspExpContext *ctx)
+{
+    return pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STREAM_RESET, NULL, 0);
 }
 
 int pspexp_release(PspExpContext *ctx, uint16_t id)

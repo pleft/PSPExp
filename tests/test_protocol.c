@@ -198,6 +198,18 @@ static void test_texture_validation(void)
         CHECK_EQ(pspexp_palette_validate(&pu, 48), PSPEXP_RERR_BAD_PALETTE);
     }
 
+    {
+        PspExpSoundUpload su;
+        memset(&su, 0, sizeof(su));
+        su.channels = 1; su.frames = 1000;
+        CHECK_EQ(pspexp_sound_data_length(1, 1000), 2000);
+        CHECK_EQ(pspexp_sound_data_length(2, 1000), 4000);
+        CHECK_EQ(pspexp_sound_data_length(3, 1000), 0);
+        CHECK_EQ(pspexp_sound_validate(&su, 2000), PSPEXP_RERR_NONE);
+        CHECK_EQ(pspexp_sound_validate(&su, 2016), PSPEXP_RERR_BAD_LENGTH);
+        CHECK_EQ(sizeof(PspExpAudioStatus), 16);
+    }
+
     CHECK_EQ(pspexp_texture_data_length(512, 512, PSPEXP_TEX_8888), 512 * 512 * 4);
     CHECK_EQ(pspexp_texture_data_length(256, 128, PSPEXP_TEX_T8), 256 * 128);
     CHECK_EQ(pspexp_texture_data_length(256, 128, PSPEXP_TEX_T4), 256 * 128 / 2);

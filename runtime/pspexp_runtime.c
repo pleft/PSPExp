@@ -49,11 +49,29 @@ int pspexp_runtime_init(PspExpRuntime *rt, const PspExpRuntimeOps *ops, const Ps
     return 0;
 }
 
+static void audio_lock(PspExpRuntime *rt) { if (rt->audio_active && rt->ops.audio_lock) rt->ops.audio_lock(rt->ops.user); }
+static void audio_unlock(PspExpRuntime *rt) { if (rt->audio_active && rt->ops.audio_unlock) rt->ops.audio_unlock(rt->ops.user); }
+
 static void destroy_entry(PspExpRuntime *rt, PspExpCacheEntry *e)
 {
     if (e->kind == PSPEXP_KIND_PALETTE) { if (rt->ops.palette_destroy) rt->ops.palette_destroy(rt->ops.user, e); }
+    else if (e->kind == PSPEXP_KIND_SOUND) {
+        audio_lock(rt);
+        if (rt->audio_active) pspexp_mixer_stop_sound(&rt->mixer, e->id);
+        audio_unlock(rt);
+        free(e->user);
+        e->user = NULL;
+    }
     else if (rt->ops.texture_destroy) rt->ops.texture_destroy(rt->ops.user, e);
     pspexp_cache_remove(&rt->cache, e);
+}
+
+static void audio_shutdown(PspExpRuntime *rt)
+{
+    if (!rt->audio_active) return;
+    if (rt->ops.audio_stop) rt->ops.audio_stop(rt->ops.user);
+    rt->audio_active = 0;
+    pspexp_mixer_free(&rt->mixer);
 }
 
 static void release_all(PspExpRuntime *rt)
@@ -64,6 +82,7 @@ static void release_all(PspExpRuntime *rt)
         if (!e->used) continue;
         destroy_entry(rt, e);
     }
+    audio_shutdown(rt);
     rt->connected = 0;
     rt->in_frame = 0;
     rt->bench_active = 0;
@@ -379,6 +398,87 @@ static void handle_bench(PspExpRuntime *rt, const PspExpMessage *m)
     }
 }
 
+static void send_audio_status(PspExpRuntime *rt)
+{
+    PspExpAudioStatus st;
+    memset(&st, 0, sizeof(st));
+    if (rt->audio_active) { audio_lock(rt); pspexp_mixer_status(&rt->mixer, &st); audio_unlock(rt); }
+    pspexp_writer_message(&rt->out, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STATUS, 0, &st, sizeof(st));
+    rt->audio_status_us = now_us(rt);
+}
+
+static void handle_audio(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    switch (m->header->opcode) {
+    case PSPEXP_OP_RESOURCE_UPLOAD_SOUND: {
+        const PspExpSoundUpload *su;
+        PspExpCacheEntry *e;
+        int reason;
+        uint32_t bytes;
+        if (pspexp_message_expect(m, sizeof(*su)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        su = (const PspExpSoundUpload *)m->payload;
+        reason = pspexp_sound_validate(su, m->length - (uint32_t)sizeof(*su));
+        if (reason != PSPEXP_RERR_NONE) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, su->id, (uint16_t)reason, 0); return; }
+        bytes = pspexp_sound_data_length(su->channels, su->frames);
+        e = pspexp_cache_insert_sound(&rt->cache, su, bytes, &reason);
+        if (!e) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, su->id, (uint16_t)reason, 0); return; }
+        e->user = malloc(bytes);
+        if (!e->user) { pspexp_cache_remove(&rt->cache, e); send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, su->id, PSPEXP_RERR_OUT_OF_MEMORY, 0); return; }
+        memcpy(e->user, m->payload + sizeof(*su), bytes);
+        e->frame_count = 0;
+        e->height = 0;
+        /* frames kept in `bytes / (channels * 2)` */
+        rt->stats.sounds++;
+        send_ready(rt, PSPEXP_OP_RESOURCE_READY, e->id, e->tier);
+        break;
+    }
+    case PSPEXP_OP_PLAY_SOUND: {
+        const PspExpPlaySound *ps;
+        PspExpCacheEntry *e;
+        if (pspexp_message_expect(m, sizeof(*ps)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        ps = (const PspExpPlaySound *)m->payload;
+        e = pspexp_cache_find(&rt->cache, ps->id);
+        if (!e) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, ps->id, PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); return; }
+        if (e->kind != PSPEXP_KIND_SOUND) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, ps->id, PSPEXP_RERR_WRONG_KIND, 0); return; }
+        rt->stats.plays++;
+        if (rt->audio_active) {
+            audio_lock(rt);
+            pspexp_mixer_play(&rt->mixer, e->id, (const int16_t *)e->user, e->bytes / ((uint32_t)e->width * 2u),
+                              (uint8_t)e->width, ps->volume, ps->pan, ps->loop);
+            audio_unlock(rt);
+        }
+        break;
+    }
+    case PSPEXP_OP_STOP_SOUND: {
+        const PspExpStopSound *ss;
+        if (pspexp_message_expect(m, sizeof(*ss)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        ss = (const PspExpStopSound *)m->payload;
+        if (rt->audio_active) { audio_lock(rt); pspexp_mixer_stop_sound(&rt->mixer, ss->id); audio_unlock(rt); }
+        break;
+    }
+    case PSPEXP_OP_AUDIO_STREAM: {
+        const PspExpAudioStream *as;
+        if (pspexp_message_expect(m, sizeof(*as)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        as = (const PspExpAudioStream *)m->payload;
+        if (m->length < sizeof(*as) + as->frames * 4u) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        rt->stats.stream_frames += as->frames;
+        if (rt->audio_active) {
+            audio_lock(rt);
+            pspexp_mixer_stream_write(&rt->mixer, (const int16_t *)(m->payload + sizeof(*as)), as->frames);
+            audio_unlock(rt);
+        }
+        if (now_us(rt) - rt->audio_status_us >= 250000u) send_audio_status(rt);
+        break;
+    }
+    case PSPEXP_OP_AUDIO_STREAM_RESET:
+        if (rt->audio_active) { audio_lock(rt); pspexp_mixer_stream_reset(&rt->mixer); audio_unlock(rt); }
+        send_audio_status(rt);
+        break;
+    default:
+        send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0);
+    }
+}
+
 static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
 {
     const uint16_t op = m->header->opcode;
@@ -391,7 +491,14 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (pspexp_message_expect(m, sizeof(PspExpHelloAck)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         memcpy(&rt->ack, m->payload, sizeof(rt->ack));
         rt->connected = 1;
-        rt_log(rt, "connected: input %u Hz", rt->ack.input_rate);
+        rt_log(rt, "connected: input %u Hz, audio %u Hz", rt->ack.input_rate, rt->ack.audio_rate);
+        if (rt->ack.audio_rate >= 8000 && rt->ack.audio_rate <= 48000 && rt->ops.audio_start && !rt->audio_active) {
+            /* 32768-frame ring, start playing once 100 ms is buffered */
+            if (pspexp_mixer_init(&rt->mixer, rt->ack.audio_rate, 32768, rt->ack.audio_rate / 10) == 0) {
+                if (rt->ops.audio_start(rt->ops.user, &rt->mixer, rt->ack.audio_rate) == 0) rt->audio_active = 1;
+                else pspexp_mixer_free(&rt->mixer);
+            }
+        }
         return;
     case PSPEXP_OP_DISCONNECT:
         rt_log(rt, "host disconnected");
@@ -419,6 +526,10 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         break;
     case PSPEXP_OP_RESOURCE_UPLOAD_PALETTE:
         handle_palette_upload(rt, m);
+        break;
+    case PSPEXP_OP_RESOURCE_UPLOAD_SOUND: case PSPEXP_OP_PLAY_SOUND: case PSPEXP_OP_STOP_SOUND:
+    case PSPEXP_OP_AUDIO_STREAM: case PSPEXP_OP_AUDIO_STREAM_RESET:
+        handle_audio(rt, m);
         break;
     case PSPEXP_OP_RESOURCE_RELEASE: {
         const PspExpResourceId *r;

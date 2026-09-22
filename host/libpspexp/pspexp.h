@@ -54,6 +54,7 @@ typedef struct PspExpStats {
     uint32_t last_ge_us;                /* PSP-side GE render time for the last frame */
     uint32_t inputs_received;
     uint32_t resource_errors, protocol_errors;
+    uint32_t audio_frames_sent;
 } PspExpStats;
 
 typedef struct PspExpTextureDesc {
@@ -91,6 +92,16 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
  * (5650, 5551, 4444 or 8888), `bytes` = entries x bytes per colour. */
 int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint16_t entries,
                           const void *colors, uint32_t bytes);
+/* Cached sound effect (section 8): s16 PCM, `channels` 1 or 2, already at
+ * the negotiated output rate (see pspexp_caps / PspExpConfig.audio_rate). */
+int pspexp_upload_sound(PspExpContext *ctx, uint16_t id, const int16_t *pcm, uint32_t frames, uint8_t channels);
+int pspexp_play_sound(PspExpContext *ctx, uint16_t id, uint8_t volume, int8_t pan, uint8_t loop);
+int pspexp_stop_sound(PspExpContext *ctx, uint16_t id);   /* 0xFFFF = every voice */
+/* Streamed audio: s16 stereo frames at the negotiated rate. The runtime
+ * starts playing once ~100 ms is buffered and reports AUDIO_STATUS. */
+int pspexp_audio_stream(PspExpContext *ctx, const int16_t *stereo, uint32_t frames);
+int pspexp_audio_stream_reset(PspExpContext *ctx);
+const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx);
 int pspexp_release(PspExpContext *ctx, uint16_t id);
 int pspexp_hint(PspExpContext *ctx, uint16_t id, uint8_t priority);
 PspExpResourceState pspexp_resource_state(const PspExpContext *ctx, uint16_t id, uint8_t *tier);

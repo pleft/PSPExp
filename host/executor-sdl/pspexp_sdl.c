@@ -17,6 +17,8 @@ struct PspExpSdlExecutor {
     int pump_events;
     Uint32 subsystems;
     uint64_t next_input_us;
+    SDL_AudioDeviceID audio;
+    PspExpMixer *mixer;
 };
 
 static uint32_t op_now(void *u) { (void)u; return (uint32_t)pspexp_time_us(); }
@@ -265,6 +267,45 @@ static uint32_t op_present(void *u)
 
 static void op_log(void *u, const char *msg) { (void)u; fprintf(stderr, "sdl-executor: %s\n", msg); }
 
+static void audio_callback(void *u, Uint8 *stream, int len)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    if (x->mixer) pspexp_mixer_render(x->mixer, (int16_t *)stream, (uint32_t)len / 4u);
+    else memset(stream, 0, (size_t)len);
+}
+
+static int op_audio_start(void *u, PspExpMixer *m, uint32_t rate)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    SDL_AudioSpec want, have;
+    if (!(SDL_WasInit(SDL_INIT_AUDIO))) {
+        if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) return -1;
+        x->subsystems |= SDL_INIT_AUDIO;
+    }
+    SDL_zero(want);
+    want.freq = (int)rate;
+    want.format = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples = 1024;
+    want.callback = audio_callback;
+    want.userdata = x;
+    x->audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!x->audio) { fprintf(stderr, "sdl-executor: audio: %s\n", SDL_GetError()); return -1; }
+    x->mixer = m;
+    SDL_PauseAudioDevice(x->audio, 0);
+    return 0;
+}
+
+static void op_audio_stop(void *u)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    if (x->audio) { SDL_CloseAudioDevice(x->audio); x->audio = 0; }
+    x->mixer = NULL;
+}
+
+static void op_audio_lock(void *u) { PspExpSdlExecutor *x = (PspExpSdlExecutor *)u; if (x->audio) SDL_LockAudioDevice(x->audio); }
+static void op_audio_unlock(void *u) { PspExpSdlExecutor *x = (PspExpSdlExecutor *)u; if (x->audio) SDL_UnlockAudioDevice(x->audio); }
+
 /* ---- input ---------------------------------------------------------------- */
 
 static void sample_input(PspExpSdlExecutor *x)
@@ -411,6 +452,10 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.draw_rect = op_draw_rect;
     ops.draw_line = op_draw_line;
     ops.present = op_present;
+    ops.audio_start = op_audio_start;
+    ops.audio_stop = op_audio_stop;
+    ops.audio_lock = op_audio_lock;
+    ops.audio_unlock = op_audio_unlock;
     ops.log = op_log;
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);
     if (pspexp_runtime_init(&x->rt, &ops, &cfg) < 0) { snprintf(err, errlen, "runtime init failed"); pspexp_sdl_destroy(x); return NULL; }

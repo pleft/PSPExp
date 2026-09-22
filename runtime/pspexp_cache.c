@@ -80,6 +80,28 @@ PspExpCacheEntry *pspexp_cache_insert_palette(PspExpCache *c, const PspExpPalett
     return e;
 }
 
+PspExpCacheEntry *pspexp_cache_insert_sound(PspExpCache *c, const PspExpSoundUpload *snd,
+                                            uint32_t bytes, int *reason)
+{
+    int i;
+    PspExpCacheEntry *e = NULL;
+    if (pspexp_cache_find(c, snd->id)) { *reason = PSPEXP_RERR_DUPLICATE_ID; return NULL; }
+    for (i = 0; i < PSPEXP_CACHE_MAX; i++)
+        if (!c->entries[i].used) { e = &c->entries[i]; break; }
+    if (!e) { *reason = PSPEXP_RERR_TABLE_FULL; return NULL; }
+    if (c->ram_used + bytes > c->ram_budget) { *reason = PSPEXP_RERR_OUT_OF_MEMORY; return NULL; }
+    memset(e, 0, sizeof(*e));
+    e->used = 1;
+    e->id = snd->id;
+    e->kind = PSPEXP_KIND_SOUND;
+    e->tier = PSPEXP_TIER_RAM;
+    e->width = snd->channels;
+    e->bytes = bytes;
+    c->ram_used += bytes; c->ram_count++;
+    *reason = PSPEXP_RERR_NONE;
+    return e;
+}
+
 void pspexp_cache_remove(PspExpCache *c, PspExpCacheEntry *e)
 {
     if (!e->used) return;
