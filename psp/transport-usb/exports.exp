@@ -1,0 +1,22 @@
+PSP_BEGIN_EXPORTS
+
+PSP_EXPORT_START(syslib, 0, 0x8000)
+PSP_EXPORT_FUNC(module_start)
+PSP_EXPORT_FUNC(module_stop)
+PSP_EXPORT_VAR(module_info)
+PSP_EXPORT_END
+
+# User-mode accessible library (0x4001), like PSPLink's USBHostFS.
+PSP_EXPORT_START(PSPExpUSB, 0, 0x4001)
+PSP_EXPORT_FUNC(pspexpUsbStart)
+PSP_EXPORT_FUNC(pspexpUsbStop)
+PSP_EXPORT_FUNC(pspexpUsbAttached)
+PSP_EXPORT_FUNC(pspexpUsbConnected)
+PSP_EXPORT_FUNC(pspexpUsbWaitConnect)
+PSP_EXPORT_FUNC(pspexpUsbGeneration)
+PSP_EXPORT_FUNC(pspexpUsbRead)
+PSP_EXPORT_FUNC(pspexpUsbWrite)
+PSP_EXPORT_FUNC(pspexpUsbGetStats)
+PSP_EXPORT_END
+
+PSP_END_EXPORTS

@@ -1,0 +1,90 @@
+#include "pspexp_cache.h"
+#include <stdlib.h>
+#include <string.h>
+
+void pspexp_cache_init(PspExpCache *c, uint32_t vram_budget, uint32_t ram_budget)
+{
+    memset(c, 0, sizeof(*c));
+    c->vram_budget = vram_budget;
+    c->ram_budget = ram_budget;
+}
+
+PspExpCacheEntry *pspexp_cache_find(PspExpCache *c, uint16_t id)
+{
+    int i;
+    for (i = 0; i < PSPEXP_CACHE_MAX; i++)
+        if (c->entries[i].used && c->entries[i].id == id) return &c->entries[i];
+    return NULL;
+}
+
+PspExpCacheEntry *pspexp_cache_insert(PspExpCache *c, const PspExpTextureUpload *t,
+                                      const PspExpFrame *frames, int *reason)
+{
+    int i;
+    PspExpCacheEntry *e = NULL;
+    uint8_t tier;
+
+    if (pspexp_cache_find(c, t->id)) { *reason = PSPEXP_RERR_DUPLICATE_ID; return NULL; }
+    for (i = 0; i < PSPEXP_CACHE_MAX; i++)
+        if (!c->entries[i].used) { e = &c->entries[i]; break; }
+    if (!e) { *reason = PSPEXP_RERR_TABLE_FULL; return NULL; }
+
+    if (c->vram_used + t->data_length <= c->vram_budget) tier = PSPEXP_TIER_VRAM;
+    else if (c->ram_used + t->data_length <= c->ram_budget) tier = PSPEXP_TIER_RAM;
+    else { *reason = PSPEXP_RERR_OUT_OF_MEMORY; return NULL; }
+
+    memset(e, 0, sizeof(*e));
+    if (t->frame_count) {
+        e->frames = (PspExpFrame *)malloc((size_t)t->frame_count * sizeof(PspExpFrame));
+        if (!e->frames) { *reason = PSPEXP_RERR_OUT_OF_MEMORY; return NULL; }
+        memcpy(e->frames, frames, (size_t)t->frame_count * sizeof(PspExpFrame));
+    }
+    e->used = 1;
+    e->id = t->id;
+    e->tier = tier;
+    e->format = t->format;
+    e->layout = t->layout;
+    e->priority = t->priority;
+    e->width = t->width;
+    e->height = t->height;
+    e->bytes = t->data_length;
+    e->frame_count = t->frame_count;
+    if (tier == PSPEXP_TIER_VRAM) { c->vram_used += e->bytes; c->vram_count++; }
+    else { c->ram_used += e->bytes; c->ram_count++; }
+    *reason = PSPEXP_RERR_NONE;
+    return e;
+}
+
+void pspexp_cache_remove(PspExpCache *c, PspExpCacheEntry *e)
+{
+    if (!e->used) return;
+    if (e->tier == PSPEXP_TIER_VRAM) { c->vram_used -= e->bytes; c->vram_count--; }
+    else { c->ram_used -= e->bytes; c->ram_count--; }
+    free(e->frames);
+    memset(e, 0, sizeof(*e));
+}
+
+int pspexp_cache_retier(PspExpCache *c, PspExpCacheEntry *e, uint8_t tier)
+{
+    if (!e->used || e->tier == tier) return 0;
+    if (tier == PSPEXP_TIER_VRAM) {
+        if (c->vram_used + e->bytes > c->vram_budget) return -1;
+        c->ram_used -= e->bytes; c->ram_count--;
+        c->vram_used += e->bytes; c->vram_count++;
+    } else {
+        if (c->ram_used + e->bytes > c->ram_budget) return -1;
+        c->vram_used -= e->bytes; c->vram_count--;
+        c->ram_used += e->bytes; c->ram_count++;
+    }
+    e->tier = tier;
+    return 0;
+}
+
+void pspexp_cache_status(const PspExpCache *c, PspExpMemoryStatus *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->vram_free = c->vram_budget - c->vram_used;
+    out->ram_free = c->ram_budget - c->ram_used;
+    out->vram_count = c->vram_count;
+    out->ram_count = c->ram_count;
+}

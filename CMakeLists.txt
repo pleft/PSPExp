@@ -1,0 +1,112 @@
+# PSPExp host build: protocol, runtime core, libPSPExp, executors, transports,
+# tools and tests. The PSP side is built with the PSPSDK Makefiles under psp/
+# (see scripts/build.sh).
+cmake_minimum_required(VERSION 3.16)
+project(PSPExp C)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wno-unused-parameter)
+if(APPLE OR UNIX)
+  add_compile_definitions(_DARWIN_C_SOURCE _DEFAULT_SOURCE _POSIX_C_SOURCE=200809L)
+endif()
+
+option(PSPEXP_BUILD_USB "Build the libusb host transport" ON)
+option(PSPEXP_BUILD_TESTS "Build unit tests" ON)
+
+# --- protocol: plain C99, shared with the PSP build ---------------------
+add_library(pspexp_protocol STATIC
+  protocol/pspexp_batch.c
+  protocol/pspexp_texture.c
+  protocol/pspexp_names.c
+  protocol/serialization/pspexp_writer.c
+  protocol/serialization/pspexp_reader.c)
+target_include_directories(pspexp_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# --- runtime core: shared with the PSP build ----------------------------
+add_library(pspexp_runtime STATIC
+  runtime/pspexp_cache.c
+  runtime/pspexp_runtime.c)
+target_link_libraries(pspexp_runtime PUBLIC pspexp_protocol)
+
+# --- host library --------------------------------------------------------
+add_library(pspexp STATIC
+  host/libpspexp/pspexp.c
+  host/libpspexp/pspexp_time.c)
+target_link_libraries(pspexp PUBLIC pspexp_protocol)
+
+add_library(pspexp_null STATIC host/executor-null/pspexp_null.c)
+target_link_libraries(pspexp_null PUBLIC pspexp pspexp_runtime)
+
+set(PSPEXP_HAVE_USB OFF)
+if(PSPEXP_BUILD_USB)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(LIBUSB libusb-1.0)
+  endif()
+  if(LIBUSB_FOUND)
+    add_library(pspexp_usb STATIC host/transport-usb/pspexp_usb.c)
+    target_link_libraries(pspexp_usb PUBLIC pspexp ${LIBUSB_LINK_LIBRARIES})
+    target_include_directories(pspexp_usb PUBLIC ${LIBUSB_INCLUDE_DIRS})
+    target_compile_options(pspexp_usb PUBLIC ${LIBUSB_CFLAGS_OTHER})
+    find_package(Threads REQUIRED)
+    target_link_libraries(pspexp_usb PUBLIC Threads::Threads)
+    set(PSPEXP_HAVE_USB ON)
+  else()
+    message(STATUS "libusb-1.0 not found: USB transport disabled")
+  endif()
+endif()
+
+# --- SDL executor -----------------------------------------------------------
+option(PSPEXP_BUILD_SDL "Build the SDL executor" ON)
+set(PSPEXP_HAVE_SDL OFF)
+if(PSPEXP_BUILD_SDL)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(SDL2 sdl2)
+  endif()
+  if(SDL2_FOUND)
+    add_library(pspexp_sdl STATIC host/executor-sdl/pspexp_sdl.c)
+    target_link_libraries(pspexp_sdl PUBLIC pspexp pspexp_runtime ${SDL2_LINK_LIBRARIES})
+    target_include_directories(pspexp_sdl PUBLIC ${SDL2_INCLUDE_DIRS})
+    target_compile_options(pspexp_sdl PUBLIC ${SDL2_CFLAGS_OTHER})
+    set(PSPEXP_HAVE_SDL ON)
+  else()
+    message(STATUS "SDL2 not found: SDL executor disabled")
+  endif()
+endif()
+
+# --- tools and examples -----------------------------------------------------
+add_executable(pspexp-bench tools/usb-bench/main.c)
+target_link_libraries(pspexp-bench PRIVATE pspexp pspexp_null)
+if(PSPEXP_HAVE_USB)
+  target_link_libraries(pspexp-bench PRIVATE pspexp_usb)
+  target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
+endif()
+
+add_executable(pspexp-sprite-demo examples/sprite-demo/main.c)
+target_link_libraries(pspexp-sprite-demo PRIVATE pspexp pspexp_null)
+if(PSPEXP_HAVE_USB)
+  target_link_libraries(pspexp-sprite-demo PRIVATE pspexp_usb)
+  target_compile_definitions(pspexp-sprite-demo PRIVATE PSPEXP_HAVE_USB=1)
+endif()
+if(PSPEXP_HAVE_SDL)
+  target_link_libraries(pspexp-sprite-demo PRIVATE pspexp_sdl)
+  target_compile_definitions(pspexp-sprite-demo PRIVATE PSPEXP_HAVE_SDL=1)
+endif()
+
+# --- tests ----------------------------------------------------------------
+if(PSPEXP_BUILD_TESTS)
+  enable_testing()
+  add_executable(test_protocol tests/test_protocol.c)
+  target_link_libraries(test_protocol PRIVATE pspexp_protocol)
+  add_test(NAME protocol COMMAND test_protocol)
+  add_executable(test_runtime tests/test_runtime.c)
+  target_link_libraries(test_runtime PRIVATE pspexp pspexp_null)
+  add_test(NAME runtime COMMAND test_runtime)
+  add_test(NAME bench_loopback COMMAND pspexp-bench --null --mb 1 --echo 20 --frames 30 --sprites 200)
+  add_test(NAME sprite_demo_null COMMAND pspexp-sprite-demo --null --frames 30 --field 2000)
+endif()

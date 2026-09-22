@@ -1,0 +1,310 @@
+#include "pspexp_sdl.h"
+#include "../libpspexp/pspexp_time.h"
+#include <SDL.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+struct PspExpSdlExecutor {
+    PspExpRuntime rt;
+    PspExpTransport transport;
+    SDL_Window *win;
+    SDL_Renderer *ren;
+    SDL_GameController *pad;
+    size_t out_off;
+    int quit;
+    int vsync;
+    uint64_t next_input_us;
+};
+
+static uint32_t op_now(void *u) { (void)u; return (uint32_t)pspexp_time_us(); }
+
+static uint32_t expand_pixel(uint8_t format, const uint8_t *p)
+{
+    uint32_t r, g, b, a;
+    switch (format) {
+    case PSPEXP_TEX_5650: {
+        uint16_t c = (uint16_t)(p[0] | (p[1] << 8));
+        r = c & 0x1F; g = (c >> 5) & 0x3F; b = (c >> 11) & 0x1F;
+        r = (r << 3) | (r >> 2); g = (g << 2) | (g >> 4); b = (b << 3) | (b >> 2); a = 255;
+        break;
+    }
+    case PSPEXP_TEX_5551: {
+        uint16_t c = (uint16_t)(p[0] | (p[1] << 8));
+        r = c & 0x1F; g = (c >> 5) & 0x1F; b = (c >> 10) & 0x1F; a = (c >> 15) ? 255 : 0;
+        r = (r << 3) | (r >> 2); g = (g << 3) | (g >> 2); b = (b << 3) | (b >> 2);
+        break;
+    }
+    case PSPEXP_TEX_4444: {
+        uint16_t c = (uint16_t)(p[0] | (p[1] << 8));
+        r = c & 0xF; g = (c >> 4) & 0xF; b = (c >> 8) & 0xF; a = (c >> 12) & 0xF;
+        r |= r << 4; g |= g << 4; b |= b << 4; a |= a << 4;
+        break;
+    }
+    default: /* 8888: bytes R G B A */
+        r = p[0]; g = p[1]; b = p[2]; a = p[3];
+        break;
+    }
+    return r | (g << 8) | (b << 16) | (a << 24);   /* SDL_PIXELFORMAT_ABGR8888 */
+}
+
+static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    const uint32_t bpp = pspexp_texture_bits_per_pixel(e->format) / 8;
+    const uint32_t row = e->width * bpp;
+    uint8_t *linear = NULL;
+    const uint8_t *src = (const uint8_t *)pixels;
+    uint32_t *argb;
+    SDL_Texture *tex;
+    uint32_t i, n = (uint32_t)e->width * e->height;
+
+    if (bpp == 0) return PSPEXP_RERR_BAD_FORMAT;
+    if (e->layout == PSPEXP_LAYOUT_SWIZZLED) {
+        linear = (uint8_t *)malloc(e->bytes);
+        if (!linear) return PSPEXP_RERR_OUT_OF_MEMORY;
+        pspexp_unswizzle(linear, pixels, row, e->height);
+        src = linear;
+    }
+    argb = (uint32_t *)malloc((size_t)n * 4);
+    if (!argb) { free(linear); return PSPEXP_RERR_OUT_OF_MEMORY; }
+    for (i = 0; i < n; i++) argb[i] = expand_pixel(e->format, src + (size_t)i * bpp);
+    tex = SDL_CreateTexture(x->ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, e->width, e->height);
+    if (!tex) { free(argb); free(linear); return PSPEXP_RERR_OUT_OF_MEMORY; }
+    SDL_UpdateTexture(tex, NULL, argb, e->width * 4);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    free(argb);
+    free(linear);
+    e->user = tex;
+    return PSPEXP_RERR_NONE;
+}
+
+static void op_texture_destroy(void *u, PspExpCacheEntry *e)
+{
+    (void)u;
+    if (e->user) SDL_DestroyTexture((SDL_Texture *)e->user);
+    e->user = NULL;
+}
+
+static void op_frame_begin(void *u, uint32_t seq)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    (void)seq;
+    SDL_RenderSetClipRect(x->ren, NULL);
+}
+
+static void op_set_clip(void *u, int16_t cx, int16_t cy, int16_t w, int16_t h)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    SDL_Rect r = { cx, cy, w, h };
+    if (w <= 0 || h <= 0) { r.x = r.y = 0; r.w = r.h = 1; }
+    SDL_RenderSetClipRect(x->ren, &r);
+}
+
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, const PspExpVertex2D *v, uint32_t count)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    SDL_Texture *tex = (SDL_Texture *)atlas->user;
+    uint32_t i;
+    uint16_t last_color = 0xFFFF;
+    if (!tex) return;
+    SDL_SetTextureColorMod(tex, 255, 255, 255);
+    for (i = 0; i < count; i++) {
+        const PspExpVertex2D *a = &v[2 * i], *b = &v[2 * i + 1];
+        SDL_Rect src = { a->u, a->v, b->u - a->u, b->v - a->v };
+        SDL_Rect dst = { a->x, a->y, b->x - a->x, b->y - a->y };
+        if (a->color != last_color) {
+            uint8_t r, g, bb;
+            pspexp_color_unpack_5650(a->color, &r, &g, &bb);
+            SDL_SetTextureColorMod(tex, r, g, bb);
+            last_color = a->color;
+        }
+        SDL_RenderCopy(x->ren, tex, &src, &dst);
+    }
+}
+
+static void op_draw_rect(void *u, int16_t rx, int16_t ry, int16_t w, int16_t h, uint16_t color)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    SDL_Rect r = { rx, ry, w, h };
+    uint8_t cr, cg, cb;
+    pspexp_color_unpack_5650(color, &cr, &cg, &cb);
+    SDL_SetRenderDrawColor(x->ren, cr, cg, cb, 255);
+    SDL_RenderFillRect(x->ren, &r);
+}
+
+static uint32_t op_present(void *u)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    SDL_RenderPresent(x->ren);
+    if (!x->vsync) pspexp_sleep_us(16000);
+    return (uint32_t)pspexp_time_us();
+}
+
+static void op_log(void *u, const char *msg) { (void)u; fprintf(stderr, "sdl-executor: %s\n", msg); }
+
+/* ---- input ---------------------------------------------------------------- */
+
+static void sample_input(PspExpSdlExecutor *x)
+{
+    const Uint8 *k = SDL_GetKeyboardState(NULL);
+    uint32_t b = 0;
+    int ax = 128, ay = 128;
+    if (k[SDL_SCANCODE_UP]) b |= PSPEXP_BUTTON_UP;
+    if (k[SDL_SCANCODE_DOWN]) b |= PSPEXP_BUTTON_DOWN;
+    if (k[SDL_SCANCODE_LEFT]) b |= PSPEXP_BUTTON_LEFT;
+    if (k[SDL_SCANCODE_RIGHT]) b |= PSPEXP_BUTTON_RIGHT;
+    if (k[SDL_SCANCODE_Z]) b |= PSPEXP_BUTTON_CROSS;
+    if (k[SDL_SCANCODE_X]) b |= PSPEXP_BUTTON_CIRCLE;
+    if (k[SDL_SCANCODE_A]) b |= PSPEXP_BUTTON_SQUARE;
+    if (k[SDL_SCANCODE_S]) b |= PSPEXP_BUTTON_TRIANGLE;
+    if (k[SDL_SCANCODE_Q]) b |= PSPEXP_BUTTON_LTRIGGER;
+    if (k[SDL_SCANCODE_W]) b |= PSPEXP_BUTTON_RTRIGGER;
+    if (k[SDL_SCANCODE_RETURN]) b |= PSPEXP_BUTTON_START;
+    if (k[SDL_SCANCODE_RSHIFT] || k[SDL_SCANCODE_BACKSPACE]) b |= PSPEXP_BUTTON_SELECT;
+    if (k[SDL_SCANCODE_J]) ax = 0;
+    if (k[SDL_SCANCODE_L]) ax = 255;
+    if (k[SDL_SCANCODE_I]) ay = 0;
+    if (k[SDL_SCANCODE_K]) ay = 255;
+    if (x->pad) {
+        int lx, ly;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_DPAD_UP)) b |= PSPEXP_BUTTON_UP;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) b |= PSPEXP_BUTTON_DOWN;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) b |= PSPEXP_BUTTON_LEFT;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) b |= PSPEXP_BUTTON_RIGHT;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_A)) b |= PSPEXP_BUTTON_CROSS;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_B)) b |= PSPEXP_BUTTON_CIRCLE;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_X)) b |= PSPEXP_BUTTON_SQUARE;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_Y)) b |= PSPEXP_BUTTON_TRIANGLE;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) b |= PSPEXP_BUTTON_LTRIGGER;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) b |= PSPEXP_BUTTON_RTRIGGER;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_START)) b |= PSPEXP_BUTTON_START;
+        if (SDL_GameControllerGetButton(x->pad, SDL_CONTROLLER_BUTTON_BACK)) b |= PSPEXP_BUTTON_SELECT;
+        lx = SDL_GameControllerGetAxis(x->pad, SDL_CONTROLLER_AXIS_LEFTX);
+        ly = SDL_GameControllerGetAxis(x->pad, SDL_CONTROLLER_AXIS_LEFTY);
+        if (abs(lx) > 4000) ax = (lx + 32768) / 257;
+        if (abs(ly) > 4000) ay = (ly + 32768) / 257;
+    }
+    pspexp_runtime_push_input(&x->rt, b, (uint8_t)ax, (uint8_t)ay);
+}
+
+static void pump_events(PspExpSdlExecutor *x)
+{
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+        if (ev.type == SDL_QUIT) x->quit = 1;
+        else if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) x->quit = 1;
+        else if (ev.type == SDL_CONTROLLERDEVICEADDED && !x->pad) x->pad = SDL_GameControllerOpen(ev.cdevice.which);
+        else if (ev.type == SDL_CONTROLLERDEVICEREMOVED && x->pad) { SDL_GameControllerClose(x->pad); x->pad = NULL; }
+    }
+}
+
+/* ---- transport ------------------------------------------------------------ */
+
+static int tr_send(PspExpTransport *t, const void *data, size_t len)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)t->user;
+    if (x->quit) return -1;
+    return pspexp_runtime_feed(&x->rt, data, len);
+}
+
+static long tr_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)t->user;
+    size_t len, n;
+    const uint8_t *out;
+    uint64_t now;
+    pump_events(x);
+    if (x->quit) return -1;
+    now = pspexp_time_us();
+    if (now >= x->next_input_us) {
+        uint32_t rate = x->rt.connected && x->rt.ack.input_rate ? x->rt.ack.input_rate : 60;
+        sample_input(x);
+        x->next_input_us = now + 1000000u / rate;
+    }
+    out = (const uint8_t *)pspexp_runtime_out_peek(&x->rt, &len);
+    if (len <= x->out_off) {
+        x->out_off = 0;
+        pspexp_runtime_out_consume(&x->rt);
+        if (timeout_ms > 0) pspexp_sleep_us(1000);
+        return 0;
+    }
+    n = len - x->out_off;
+    if (n > cap) n = cap;
+    memcpy(buf, out + x->out_off, n);
+    x->out_off += n;
+    if (x->out_off >= len) { x->out_off = 0; pspexp_runtime_out_consume(&x->rt); }
+    return (long)n;
+}
+
+static void tr_close(PspExpTransport *t) { (void)t; }
+
+void pspexp_sdl_options_default(PspExpSdlOptions *o)
+{
+    memset(o, 0, sizeof(*o));
+    o->scale = 2;
+    o->vsync = 1;
+    o->title = "PSPExp SDL executor";
+}
+
+PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_t errlen)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)calloc(1, sizeof(*x));
+    PspExpSdlOptions opt;
+    PspExpRuntimeOps ops;
+    PspExpRuntimeConfig cfg;
+    Uint32 flags;
+    if (!x) { snprintf(err, errlen, "out of memory"); return NULL; }
+    if (o) opt = *o; else pspexp_sdl_options_default(&opt);
+    if (opt.scale < 1) opt.scale = 1;
+    x->vsync = opt.vsync;
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
+        snprintf(err, errlen, "SDL_Init: %s", SDL_GetError()); free(x); return NULL;
+    }
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+    x->win = SDL_CreateWindow(opt.title ? opt.title : "PSPExp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                              PSPEXP_DISPLAY_WIDTH * opt.scale, PSPEXP_DISPLAY_HEIGHT * opt.scale, SDL_WINDOW_ALLOW_HIGHDPI);
+    if (!x->win) { snprintf(err, errlen, "SDL_CreateWindow: %s", SDL_GetError()); SDL_Quit(); free(x); return NULL; }
+    flags = SDL_RENDERER_ACCELERATED | (opt.vsync ? SDL_RENDERER_PRESENTVSYNC : 0);
+    x->ren = SDL_CreateRenderer(x->win, -1, flags);
+    if (!x->ren) x->ren = SDL_CreateRenderer(x->win, -1, 0);
+    if (!x->ren) { snprintf(err, errlen, "SDL_CreateRenderer: %s", SDL_GetError()); SDL_DestroyWindow(x->win); SDL_Quit(); free(x); return NULL; }
+    SDL_RenderSetLogicalSize(x->ren, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    if (SDL_NumJoysticks() > 0 && SDL_IsGameController(0)) x->pad = SDL_GameControllerOpen(0);
+
+    memset(&ops, 0, sizeof(ops));
+    ops.user = x;
+    ops.now_us = op_now;
+    ops.texture_create = op_texture_create;
+    ops.texture_destroy = op_texture_destroy;
+    ops.frame_begin = op_frame_begin;
+    ops.set_clip = op_set_clip;
+    ops.draw_sprites = op_draw_sprites;
+    ops.draw_rect = op_draw_rect;
+    ops.present = op_present;
+    ops.log = op_log;
+    pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);
+    if (pspexp_runtime_init(&x->rt, &ops, &cfg) < 0) { snprintf(err, errlen, "runtime init failed"); pspexp_sdl_destroy(x); return NULL; }
+    x->transport.name = "sdl";
+    x->transport.user = x;
+    x->transport.send = tr_send;
+    x->transport.recv = tr_recv;
+    x->transport.close = tr_close;
+    pspexp_runtime_connect(&x->rt);
+    return x;
+}
+
+void pspexp_sdl_destroy(PspExpSdlExecutor *x)
+{
+    if (!x) return;
+    pspexp_runtime_free(&x->rt);
+    if (x->pad) SDL_GameControllerClose(x->pad);
+    if (x->ren) SDL_DestroyRenderer(x->ren);
+    if (x->win) SDL_DestroyWindow(x->win);
+    SDL_Quit();
+    free(x);
+}
+
+PspExpTransport *pspexp_sdl_transport(PspExpSdlExecutor *x) { return &x->transport; }
+PspExpRuntime *pspexp_sdl_runtime(PspExpSdlExecutor *x) { return &x->rt; }
+int pspexp_sdl_quit_requested(const PspExpSdlExecutor *x) { return x->quit; }

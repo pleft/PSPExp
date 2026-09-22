@@ -1,0 +1,11 @@
+build/
+dist/
+*.o
+*.elf
+*.prx
+*.a
+PSPExpUSB.S
+PARAM.SFO
+psp/boot/EBOOT.PBP
+psp/transport-usb/exports.c
+.DS_Store
