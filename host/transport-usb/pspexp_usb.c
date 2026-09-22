@@ -15,9 +15,32 @@ typedef struct Chunk {
     uint8_t data[1];
 } Chunk;
 
+/* One libusb context for the whole process: creating and destroying
+ * contexts while a device comes and goes is where macOS reports the process
+ * killed (a guarded descriptor closed twice inside libusb). */
+static libusb_context *g_ctx;
+
+static void shared_context_exit(void)
+{
+    /* Runs before library destructors (atexit order), so libusb's hotplug
+     * thread is gone when sdl2-compat and friends tear down. Leaving it
+     * alive made macOS kill the process at exit. */
+    if (g_ctx) { libusb_exit(g_ctx); g_ctx = NULL; }
+}
+
+static libusb_context *shared_context(char *err, size_t errlen)
+{
+    if (!g_ctx) {
+        int r = libusb_init(&g_ctx);
+        if (r != 0) { snprintf(err, errlen, "libusb_init: %s", libusb_error_name(r)); g_ctx = NULL; }
+        else atexit(shared_context_exit);
+    }
+    return g_ctx;
+}
+
 typedef struct Usb {
     PspExpTransport t;
-    libusb_context *ctx;
+    libusb_context *ctx;   /* the shared context, not owned */
     libusb_device_handle *h;
     int packet;
     int timeout_ms;
@@ -170,13 +193,12 @@ static void tr_close(PspExpTransport *t)
     if (u->h) {
         libusb_release_interface(u->h, 0);
         libusb_close(u->h);
+        u->h = NULL;
     }
-    if (u->ctx) libusb_exit(u->ctx);
     while (u->qhead) { Chunk *c = u->qhead; u->qhead = c->next; free(c); }
     pthread_mutex_destroy(&u->mu);
     pthread_cond_destroy(&u->cv);
-    free(u);
-    t->user = NULL;
+    free(u);   /* `t` lives inside `u`: nothing may touch it after this */
 }
 
 static void flush_stale(Usb *u)
@@ -235,8 +257,8 @@ PspExpTransport *pspexp_usb_open(const PspExpUsbOptions *o, char *err, size_t er
     u->t.recv = tr_recv;
     u->t.close = tr_close;
 
-    r = libusb_init(&u->ctx);
-    if (r != 0) { snprintf(err, errlen, "libusb_init: %s", libusb_error_name(r)); tr_close(&u->t); return NULL; }
+    u->ctx = shared_context(err, errlen);
+    if (!u->ctx) { tr_close(&u->t); return NULL; }
     u->h = libusb_open_device_with_vid_pid(u->ctx, opt.vid, opt.pid);
     if (!u->h) { snprintf(err, errlen, "no USB device %04x:%04x", opt.vid, opt.pid); tr_close(&u->t); return NULL; }
     libusb_set_auto_detach_kernel_driver(u->h, 1);

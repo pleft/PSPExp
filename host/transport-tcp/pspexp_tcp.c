@@ -89,8 +89,7 @@ static void tr_close(PspExpTransport *t)
     Tcp *c = (Tcp *)t->user;
     if (!c) return;
     if (c->fd >= 0) close(c->fd);
-    free(c);
-    t->user = NULL;
+    free(c);   /* `t` lives inside `c` */
 }
 
 PspExpTransport *pspexp_tcp_open(const PspExpTcpOptions *o, char *err, size_t errlen)

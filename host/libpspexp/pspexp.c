@@ -130,6 +130,7 @@ static void link_lost(PspExpContext *ctx)
 
 static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
 {
+    if (!ctx->t) return -1;
     if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
     ctx->stats.bytes_sent += len;
     return 0;
@@ -137,6 +138,8 @@ static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
 
 void pspexp_set_transport(PspExpContext *ctx, PspExpTransport *transport)
 {
+    /* NULL closes the current transport and leaves the context without a
+     * link (resources kept for replay); a later call installs the new one. */
     if (ctx->t && ctx->t != transport && ctx->t->close) ctx->t->close(ctx->t);
     ctx->t = transport;
     link_lost(ctx);
@@ -331,6 +334,7 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms)
 {
     int count = 0;
     int wait = timeout_ms;
+    if (!ctx->t) { link_lost(ctx); return -1; }
     for (;;) {
         PspExpMessage m;
         int r;

@@ -144,7 +144,8 @@ const PspExpInput *pspexp_input(const PspExpContext *ctx);
 const PspExpStats *pspexp_stats(const PspExpContext *ctx);
 
 /* Replace the transport after the link was lost (cable pulled): closes the
- * old one and keeps resources for replay. Follow with pspexp_connect(). */
+ * old one and keeps resources for replay. Pass NULL to close it right away
+ * while waiting for a device, then the new one. Follow with pspexp_connect(). */
 void pspexp_set_transport(PspExpContext *ctx, PspExpTransport *transport);
 
 /* Ask the executor to save the displayed frame as pspexp-shot-<index>.bmp. */

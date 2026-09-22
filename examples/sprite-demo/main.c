@@ -123,7 +123,8 @@ static void usage(void)
            "  --usb        real PSP over USB (default when built with libusb)\n"
            "  --field N    background sprites (default 500, max %d)\n"
            "  --frames N   exit after N frames (default: run until quit)\n"
-           "  --shot N     ask the executor for a screenshot every N frames (pspexp-shot-<i>.bmp)\n", MAX_FIELD);
+           "  --shot N     ask the executor for a screenshot every N frames (pspexp-shot-<i>.bmp)\n"
+           "  --test-reconnect N  drop and reopen the link every N frames (USB/TCP)\n", MAX_FIELD);
 }
 
 int main(int argc, char **argv)
@@ -131,7 +132,7 @@ int main(int argc, char **argv)
     enum { MODE_USB, MODE_SDL, MODE_NULL, MODE_TCP } mode;
     PspExpTcpOptions tcp_opt;
     static char tcp_host[256];
-    int field = 500, max_frames = 0, scale = 2, verbose = 0, use_clut = 0, shot_every = 0, i;
+    int field = 500, max_frames = 0, scale = 2, verbose = 0, use_clut = 0, shot_every = 0, test_reconnect = 0, i;
     uint16_t shot_index = 0;
     PspExpTransport *t = NULL;
     PspExpNullExecutor *nul = NULL;
@@ -180,6 +181,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
         else if (!strcmp(argv[i], "--clut")) use_clut = 1;
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--test-reconnect") && i + 1 < argc) test_reconnect = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--field") && i + 1 < argc) field = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) max_frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
@@ -338,12 +340,19 @@ int main(int argc, char **argv)
 
         /* ---- pacing and link maintenance ---- */
         n = pspexp_wait_present(ctx, 1000);
+        if (test_reconnect > 0 && frames % (uint32_t)test_reconnect == 0 && (mode == MODE_USB || mode == MODE_TCP)) {
+            /* drop the link on purpose to exercise close / reopen / replay */
+            printf("test: dropping the link\n");
+            pspexp_set_transport(ctx, NULL);
+            n = -1;
+        }
         if (n < 0 || pspexp_link_state(ctx) != PSPEXP_LINK_CONNECTED) {
 #ifdef PSPEXP_HAVE_SDL
             if (sdl && pspexp_sdl_quit_requested(sdl)) break;
 #endif
             if (mode != MODE_USB && mode != MODE_TCP) break;
             printf("link lost; waiting for the PSP...\n");
+            pspexp_set_transport(ctx, NULL);   /* release the dead device now */
             if (mode == MODE_TCP) t = pspexp_tcp_wait(&tcp_opt, -1, err, sizeof(err));
 #ifdef PSPEXP_HAVE_USB
             else t = pspexp_usb_wait(&usb_opt, -1, err, sizeof(err));
