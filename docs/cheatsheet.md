@@ -72,7 +72,7 @@ Doom: `brew install chocolate-doom`, unzip a Freedoom release
 Nub / d-pad move and turn, cross fires, circle uses, square runs, L / R
 strafe, triangle Enter, start Escape (menu), select map. Sound comes out
 of the PSP only (`PSPEXP_LOCAL_AUDIO=1` for both); `PSPEXP_WINDOW=hide`
-hides the Mac window.
+hides the Mac window. Expected stats line: 35 fps, 4 batches, GE ≈ 2.2 ms.
 
 The game sees a game controller named "PSP (PSPExp)" if it initialised
 joysticks, and keyboard events otherwise (defaults: cross=z, circle=x,
