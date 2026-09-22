@@ -138,6 +138,32 @@ Record the results in this file under "Measurements" and update section 3.2
 
 ## Measurements
 
+### 2026-09-22 — head-of-line blocking (workload c) and GE time, PSP-1000 over USB
+
+`pspexp-bench --frames-only --frames 600 --sprites N --upload R --upload-kib S`:
+
+| sprites | upload stream | frames later than 1 vblank | later than 2 | fps | PSP CPU | GE |
+|---|---|---|---|---|---|---|
+| 500 | none | 0 | 0 | 59.9 | 0.25 ms | 1.07 ms |
+| 500 | 512 KiB textures at 256 KiB/s | 1 of 600 (0.2%) | 0 | 59.5 | 0.25 ms | 1.07 ms |
+| 500 | 256 KiB textures at 1 MiB/s | 1 of 600 (0.2%) | 0 | 59.9 | 0.25 ms | 1.07 ms |
+| 5,000 | none | 0 | 0 | 59.9 | 1.7 ms | 9.2 ms |
+| 5,000 | 512 KiB textures at 512 KiB/s | 11 of 600 (1.8%) | 0 | 58.0 | 1.7 ms | 9.2 ms |
+
+Conclusions: §19 question 1 is answered, the single ordered stream is fine
+for v0.2 (a 512 KB upload costs at most one vblank, and rarely). The GE
+fill rate is the real ceiling for sprite count: 5,000 32x32 sprites take
+9.2 ms of GE time per frame, more than the link (2 ms) or the PSP CPU
+(1.7 ms). At 64 x 64-frame textures the GE is not transport-bound at all.
+
+Also fixed on this day from hardware behaviour: the LCD must be set to
+16-bit explicitly by the GE executor (the status page leaves it 32-bit and
+the GU swap does not restore it; the frame showed quartered and tiled
+2 x 2), and a use-after-free in the host transports' close routine that
+killed the host application on cable pull (macOS reported an unfair-lock
+violation inside malloc). Five in-process link drops with atlas replay now
+pass (`pspexp-sprite-demo --usb --test-reconnect 90`).
+
 ### 2026-09-22 — PSP-1000, MacBook Air (macOS), first hardware run
 
 Link came up first try: hi-speed (512-byte packets), sync, HELLO, 4 MiB per run.

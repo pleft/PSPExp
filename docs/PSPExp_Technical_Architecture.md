@@ -956,6 +956,8 @@ Items deliberately left undecided until measurements exist. None of them is in v
 
 1. **Head-of-line blocking from resource uploads** (§10.3). Measure with benchmark workload (c). If frame delay behind uploads is visible in practice despite prefetch, split into a bulk-resource stream plus a latency-sensitive graphics stream with explicit fences.
 2. ~~**Real USB throughput** (§3.2).~~ Measured 2026-09-22: ≈ 25 MB/s for large transfers, 13 MB/s at 4 KiB transfers, 0.25 ms round trip. Question 1 becomes less pressing: a 512 KB upload blocks the stream for ≈ 20 ms, about one frame, not four.
+
+~~1. **Head-of-line blocking**~~ Measured 2026-09-22 with workload (c): 512 KB uploads at 256 KB/s alongside 500-sprite frames delayed 1 frame in 600 past its vblank; 5,000-sprite frames with 512 KB/s of uploads, 1.8%, none by two vblanks. The single ordered stream stays. A new finding replaces it as the binding limit for sprite count: GE fill time, 9.2 ms per frame at 5,000 32 x 32 sprites.
 3. **Placement policy** (§6.3). Whether priority-then-upload-order is good enough, or the runtime needs an LRU between tiers.
 4. Whether a triangle-based batch for rotation/skew earns its place before v0.3.
 5. The right jitter-buffer depth for streamed audio over Wi-Fi versus USB.

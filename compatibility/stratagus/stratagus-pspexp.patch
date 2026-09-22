@@ -594,10 +594,10 @@ index 2c59b59..7464f61 100644
  
 diff --git a/src/video/pspexp_video.cpp b/src/video/pspexp_video.cpp
 new file mode 100644
-index 0000000..9e495c2
+index 0000000..3934a91
 --- /dev/null
 +++ b/src/video/pspexp_video.cpp
-@@ -0,0 +1,1109 @@
+@@ -0,0 +1,1115 @@
 +//       _________ __                 __
 +//      /   _____//  |_____________ _/  |______     ____  __ __  ______
 +//      \_____  \\   __\_  __ \__  \\   __\__  \   / ___\|  |  \/  ___/
@@ -1093,6 +1093,12 @@ index 0000000..9e495c2
 +{
 +	if (mode != Mode::Usb && mode != Mode::Tcp) {
 +		return;
++	}
++	if (transport) {
++		// release the dead device right away; the context keeps the resources
++		pspexp_set_transport(ctx, nullptr);
++		transport = nullptr;
++		log("link lost; waiting for the PSP");
 +	}
 +	const Uint32 now = SDL_GetTicks();
 +	if (now - lastReconnectTry < 1000) {
