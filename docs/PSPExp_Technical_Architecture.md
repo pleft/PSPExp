@@ -993,6 +993,31 @@ If that path is fast, stable, and measurable, the architecture is proven.
 
 ---
 
+## 20a. Results (2026-09-22)
+
+What the first day of implementation measured, against the estimates this document was written with. Details and raw numbers are in `docs/v01-usb-bringup.md`; commands in `docs/cheatsheet.md`.
+
+| quantity | estimate in this document | measured on a PSP-1000 |
+|---|---|---|
+| USB throughput, large transfers | 8 MB/s (planning assumption) | 25–26 MB/s host→PSP, 23–24 MB/s PSP→host |
+| USB throughput, 4 KiB transfers | — | 13 MB/s (per-transfer cost ≈ 0.1–0.15 ms each way) |
+| round trip, 16 B / 40 KB | 1–2 ms / 1–5 ms one way | 0.25 ms / 3.9 ms |
+| 512 KB texture on the stream | ≈ 64 ms, four frames | ≈ 20 ms; delays 1 frame in 600 at 256 KB/s of uploads |
+| PSP cost per sprite (parse + expand + list) | 50–80 cycles | ≈ 120 cycles, 0.37 µs |
+| 5,000 sprites per frame | transport-bound (40 KB) | GE-bound: 9.2 ms of GE fill, 2 ms of transfer |
+| input to present | 35–50 ms input-to-photon | one frame period from sample to vblank (16.7 ms), ≈ 25–41 ms to photon |
+| Warcraft (v0.2) | native build ≈ 15 ms/frame on the PSP | 60 fps, PSP CPU 0.5–0.8 ms + GE 0.3–0.5 ms per frame, 4.5–9.5 KB per frame, audio streamed with no underruns |
+
+What changed against the plan:
+
+- The transport is not the scarcest resource for 2D games at this resolution; the GE fill rate is, above a few thousand sprites. Principle 4 still holds for uploads, which is where the bytes are.
+- CLUT textures, host-baked text, per-batch palette selection, alpha tints, translucent primitives, quad batches, streamed audio, a TCP transport and the PPSSPP configuration were all pulled forward from v0.3 into v0.2, because the Stratagus backend needed them. Frame-record sprites remain the fast path, but the quad record is what an engine with arbitrary blits actually uses.
+- Two hardware-only facts were learned the hard way and are now in the executor: the LCD pixel format must be set explicitly by the GE executor (the debug status page leaves it 32-bit), and the host must never touch a transport after closing it (a cable pull turned that into a killed process).
+- Reconnection works as designed (§9.2): the host replays palettes, then textures and sounds; the game resumes.
+- A headless host works with SDL's dummy drivers; a Raspberry Pi build script exists (`scripts/build-pi.sh`), untested on a Pi.
+
+Open, deliberately: Wi-Fi on real hardware (the TCP transport is proven only under PPSSPP), priority-guided placement between tiers, static vertex buffers, and the v0.4 `SDL_Renderer` driver.
+
 ## 21. Architectural Principles
 
 The project should preserve the following principles as it evolves:

@@ -89,6 +89,12 @@ PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus -r "maps/4-middle-grou
 The game runs on the Mac; the PSP renders it, plays its sound, and its
 controls play it, from the title screen on.
 
+## Raspberry Pi as the host
+
+`scripts/build-pi.sh` (untested on a Pi yet) installs the Debian packages,
+builds the host tools and Stratagus with the backend, adds a udev rule for
+the PSP, and prints the headless run command.
+
 ## Layout
 
 ```text
