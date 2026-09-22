@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-#define PSPEXP_CACHE_MAX 256
+#define PSPEXP_CACHE_MAX 1024
 
 enum PspExpResourceKind {
     PSPEXP_KIND_TEXTURE = 0,
