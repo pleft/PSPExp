@@ -1073,6 +1073,20 @@ HOOK(int, SDL_RenderDrawPoints, (SDL_Renderer *r, const SDL_Point *points, int c
     return REAL(SDL_RenderDrawPoints)(r, points, count);
 }
 
+/* Input and audio must not wait for the next present: a menu that redraws
+ * once a second would lose every press and let the audio pile up. Games
+ * poll events every loop iteration, so the link is serviced from there. */
+static void service_link(void)
+{
+    static Uint32 last;
+    Uint32 now = SDL_GetTicks();
+    if (!S.active || !link_up() || now == last) return;
+    last = now;
+    pspexp_pump(S.ctx, 0);
+    feed_input();
+    audio_drain();
+}
+
 static void end_frame(void)
 {
     if (!S.active) return;
@@ -1112,6 +1126,32 @@ HOOK(void, SDL_RenderPresent, (SDL_Renderer *r))
     REAL(SDL_RenderPresent)(r);
     if (r == S.ren) end_frame();
 }
+
+/* ---- hooks: event polling ------------------------------------------------------ */
+
+HOOK(int, SDL_PollEvent, (SDL_Event *ev))
+{
+    service_link();
+    return REAL(SDL_PollEvent)(ev);
+}
+
+static int wait_event_impl(SDL_Event *ev, int timeout)
+{
+    /* wait in short steps so the PSP's input still arrives while the game blocks */
+    Uint32 start = SDL_GetTicks();
+    for (;;) {
+        int step, rc;
+        service_link();
+        step = timeout < 0 ? 20 : (int)(timeout - (SDL_GetTicks() - start));
+        if (timeout >= 0 && step <= 0) return REAL(SDL_PollEvent)(ev);
+        if (step > 20) step = 20;
+        rc = REAL(SDL_WaitEventTimeout)(ev, step);
+        if (rc) return rc;
+    }
+}
+
+HOOK(int, SDL_WaitEventTimeout, (SDL_Event *ev, int timeout)) { return wait_event_impl(ev, timeout); }
+HOOK(int, SDL_WaitEvent, (SDL_Event *ev)) { return wait_event_impl(ev, -1); }
 
 /* ---- hooks: window surface (programs without a renderer) --------------------- */
 
