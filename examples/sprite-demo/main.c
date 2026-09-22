@@ -37,6 +37,9 @@
 typedef struct Star { int16_t x, y; int8_t dx, dy; uint16_t color; } Star;
 
 static uint16_t g_atlas[ATLAS_W * ATLAS_H];
+static uint8_t  g_atlas_idx[ATLAS_W * ATLAS_H];   /* --clut: index per texel */
+static uint16_t g_palette[256];
+static int      g_palette_n;
 static PspExpFrame g_frames[6];
 static Star g_field[MAX_FIELD];
 static PspExpSpriteRec g_recs[MAX_FIELD];
@@ -46,12 +49,21 @@ static uint16_t rgba5551(int r, int g, int b, int a)
     return (uint16_t)(((a ? 1 : 0) << 15) | ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3));
 }
 
-static void put(int x, int y, uint16_t c) { g_atlas[y * ATLAS_W + x] = c; }
+static void put(int x, int y, uint16_t c)
+{
+    int i;
+    g_atlas[y * ATLAS_W + x] = c;
+    for (i = 0; i < g_palette_n; i++) if (g_palette[i] == c) break;
+    if (i == g_palette_n && g_palette_n < 256) g_palette[g_palette_n++] = c;
+    g_atlas_idx[y * ATLAS_W + x] = (uint8_t)i;
+}
 
 static void build_atlas(void)
 {
     int x, y, i;
     memset(g_atlas, 0, sizeof(g_atlas));
+    memset(g_atlas_idx, 0, sizeof(g_atlas_idx));
+    g_palette[0] = 0; g_palette_n = 1;               /* index 0: transparent */
     for (i = 0; i < 4; i++) {
         int ox = i * 32;
         for (y = 0; y < 32; y++)
@@ -100,7 +112,8 @@ static void log_fn(void *u, const char *msg) { (void)u; fprintf(stderr, "[pspexp
 
 static void usage(void)
 {
-    printf("usage: pspexp-sprite-demo [--null|--sdl|--usb] [--field N] [--frames N] [--scale N] [--verbose]\n"
+    printf("usage: pspexp-sprite-demo [--null|--sdl|--usb] [--clut] [--field N] [--frames N] [--scale N] [--verbose]\n"
+           "  --clut       upload the atlas as CLUT8 with a 5551 palette instead of direct 5551\n"
            "  --null       Null executor (no rendering), useful with --frames\n"
            "  --sdl        SDL executor window (default when built with SDL and no PSP is wanted)\n"
            "  --usb        real PSP over USB (default when built with libusb)\n"
@@ -111,7 +124,7 @@ static void usage(void)
 int main(int argc, char **argv)
 {
     enum { MODE_USB, MODE_SDL, MODE_NULL } mode;
-    int field = 500, max_frames = 0, scale = 2, verbose = 0, i;
+    int field = 500, max_frames = 0, scale = 2, verbose = 0, use_clut = 0, i;
     PspExpTransport *t = NULL;
     PspExpNullExecutor *nul = NULL;
 #ifdef PSPEXP_HAVE_SDL
@@ -143,6 +156,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--sdl")) mode = MODE_SDL;
         else if (!strcmp(argv[i], "--usb")) mode = MODE_USB;
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
+        else if (!strcmp(argv[i], "--clut")) use_clut = 1;
         else if (!strcmp(argv[i], "--field") && i + 1 < argc) field = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) max_frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
@@ -195,11 +209,26 @@ int main(int argc, char **argv)
     if (pspexp_connect(ctx, 5000) < 0) { fprintf(stderr, "no HELLO within 5 s\n"); return 1; }
 
     memset(&desc, 0, sizeof(desc));
-    desc.width = ATLAS_W; desc.height = ATLAS_H; desc.format = PSPEXP_TEX_5551;
-    desc.layout = PSPEXP_LAYOUT_LINEAR; desc.priority = PSPEXP_PRIORITY_HIGH;
-    if (pspexp_upload_texture(ctx, ATLAS_ID, &desc, g_atlas, sizeof(g_atlas), g_frames, 6) < 0) {
-        fprintf(stderr, "atlas upload rejected\n");
-        return 1;
+    desc.width = ATLAS_W; desc.height = ATLAS_H; desc.priority = PSPEXP_PRIORITY_HIGH;
+    if (use_clut) {
+        static uint8_t swz[ATLAS_W * ATLAS_H];
+        if (pspexp_upload_palette(ctx, ATLAS_ID + 1, PSPEXP_TEX_5551, 256, g_palette, sizeof(g_palette)) < 0) {
+            fprintf(stderr, "palette upload rejected\n");
+            return 1;
+        }
+        pspexp_swizzle(swz, g_atlas_idx, ATLAS_W, ATLAS_H);
+        desc.format = PSPEXP_TEX_T8; desc.layout = PSPEXP_LAYOUT_SWIZZLED; desc.palette = ATLAS_ID + 1;
+        if (pspexp_upload_texture(ctx, ATLAS_ID, &desc, swz, sizeof(swz), g_frames, 6) < 0) {
+            fprintf(stderr, "atlas upload rejected\n");
+            return 1;
+        }
+        printf("atlas: CLUT8 swizzled, %d palette entries\n", g_palette_n);
+    } else {
+        desc.format = PSPEXP_TEX_5551; desc.layout = PSPEXP_LAYOUT_LINEAR;
+        if (pspexp_upload_texture(ctx, ATLAS_ID, &desc, g_atlas, sizeof(g_atlas), g_frames, 6) < 0) {
+            fprintf(stderr, "atlas upload rejected\n");
+            return 1;
+        }
     }
 
     last_report = pspexp_time_us();

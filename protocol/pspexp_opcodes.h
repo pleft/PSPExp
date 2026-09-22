@@ -32,6 +32,7 @@ enum PspExpOpcode {
     PSPEXP_OP_RESOURCE_ERROR          = 0x0205,  /* PSP -> host, PspExpResourceError */
     PSPEXP_OP_RESOURCE_TIER           = 0x0206,  /* PSP -> host, PspExpResourceReady */
     PSPEXP_OP_RESOURCE_MISS           = 0x0207,  /* PSP -> host, PspExpResourceError */
+    PSPEXP_OP_RESOURCE_UPLOAD_PALETTE = 0x0208,  /* host -> PSP, PspExpPaletteUpload + entries */
 
     /* AUDIO (0x03xx): v0.3 */
 

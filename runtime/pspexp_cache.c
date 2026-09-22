@@ -49,8 +49,33 @@ PspExpCacheEntry *pspexp_cache_insert(PspExpCache *c, const PspExpTextureUpload 
     e->height = t->height;
     e->bytes = t->data_length;
     e->frame_count = t->frame_count;
+    e->palette = t->palette;
+    e->kind = PSPEXP_KIND_TEXTURE;
     if (tier == PSPEXP_TIER_VRAM) { c->vram_used += e->bytes; c->vram_count++; }
     else { c->ram_used += e->bytes; c->ram_count++; }
+    *reason = PSPEXP_RERR_NONE;
+    return e;
+}
+
+PspExpCacheEntry *pspexp_cache_insert_palette(PspExpCache *c, const PspExpPaletteUpload *p,
+                                              uint32_t bytes, int *reason)
+{
+    int i;
+    PspExpCacheEntry *e = NULL;
+    if (pspexp_cache_find(c, p->id)) { *reason = PSPEXP_RERR_DUPLICATE_ID; return NULL; }
+    for (i = 0; i < PSPEXP_CACHE_MAX; i++)
+        if (!c->entries[i].used) { e = &c->entries[i]; break; }
+    if (!e) { *reason = PSPEXP_RERR_TABLE_FULL; return NULL; }
+    if (c->ram_used + bytes > c->ram_budget) { *reason = PSPEXP_RERR_OUT_OF_MEMORY; return NULL; }
+    memset(e, 0, sizeof(*e));
+    e->used = 1;
+    e->id = p->id;
+    e->kind = PSPEXP_KIND_PALETTE;
+    e->tier = PSPEXP_TIER_RAM;
+    e->format = p->format;
+    e->width = p->entries;
+    e->bytes = bytes;
+    c->ram_used += bytes; c->ram_count++;
     *reason = PSPEXP_RERR_NONE;
     return e;
 }

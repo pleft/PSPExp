@@ -14,17 +14,23 @@ extern "C" {
 
 #define PSPEXP_CACHE_MAX 256
 
+enum PspExpResourceKind {
+    PSPEXP_KIND_TEXTURE = 0,
+    PSPEXP_KIND_PALETTE = 1
+};
+
 typedef struct PspExpCacheEntry {
     uint16_t id;
     uint8_t  used;
     uint8_t  tier;          /* PspExpTier */
-    uint8_t  format;
+    uint8_t  format;        /* texture format, or palette entry format */
     uint8_t  layout;
     uint8_t  priority;
-    uint8_t  reserved;
-    uint16_t width, height;
-    uint32_t bytes;         /* pixel bytes charged to the tier */
+    uint8_t  kind;          /* PspExpResourceKind */
+    uint16_t width, height; /* palette: width = entry count */
+    uint32_t bytes;         /* bytes charged to the tier */
     uint16_t frame_count;
+    uint16_t palette;       /* texture: palette handle for T4/T8 */
     PspExpFrame *frames;    /* owned copy of the frame table */
     void    *user;          /* executor-specific (SDL_Texture*, VRAM pointer, ...) */
 } PspExpCacheEntry;
@@ -42,6 +48,9 @@ PspExpCacheEntry *pspexp_cache_find(PspExpCache *c, uint16_t id);
  * Returns NULL and sets *reason (PSPEXP_RERR_*) on failure. */
 PspExpCacheEntry *pspexp_cache_insert(PspExpCache *c, const PspExpTextureUpload *t,
                                       const PspExpFrame *frames, int *reason);
+/* Palettes always live in main RAM. */
+PspExpCacheEntry *pspexp_cache_insert_palette(PspExpCache *c, const PspExpPaletteUpload *p,
+                                              uint32_t bytes, int *reason);
 void pspexp_cache_remove(PspExpCache *c, PspExpCacheEntry *e);
 /* Move an entry's accounting to another tier (the executor found VRAM
  * fragmented). -1 if the target tier's budget cannot take it. */

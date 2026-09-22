@@ -104,11 +104,12 @@ static void test_expansion(void)
 
 static void test_texture_validation(void)
 {
-    uint8_t buf[16 + 64 * 64 * 2 + 32] __attribute__((aligned(16)));
+    uint8_t buf[sizeof(PspExpTextureUpload) + 64 * 64 * 2 + 32] __attribute__((aligned(16)));
     PspExpTextureUpload *t = (PspExpTextureUpload *)buf;
-    PspExpFrame *frames = (PspExpFrame *)(buf + 16 + 64 * 64 * 2);
+    PspExpFrame *frames = (PspExpFrame *)(buf + sizeof(PspExpTextureUpload) + 64 * 64 * 2);
     uint32_t payload;
 
+    CHECK_EQ(sizeof(PspExpTextureUpload), 32);
     memset(buf, 0, sizeof(buf));
     t->id = 1; t->width = 64; t->height = 64; t->format = PSPEXP_TEX_5650; t->layout = PSPEXP_LAYOUT_LINEAR;
     t->frame_count = 2; t->data_length = 64 * 64 * 2;
@@ -118,7 +119,7 @@ static void test_texture_validation(void)
     CHECK_EQ(payload, 64 * 64 * 2 + 16);
     CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_NONE);
 
-    t->format = PSPEXP_TEX_T8;
+    t->format = PSPEXP_TEX_DXT1;   /* not advertised by v0.1 executors */
     CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_BAD_FORMAT);
     t->format = PSPEXP_TEX_5650;
     t->width = 48;
@@ -136,13 +137,45 @@ static void test_texture_validation(void)
     CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_NONE);
     t->height = 4; t->data_length = 64 * 4 * 2;
     /* The frame table moves with the (padded) pixel data. */
-    frames = (PspExpFrame *)pspexp_texture_frames(t, buf + 16);
+    frames = (PspExpFrame *)pspexp_texture_frames(t, buf + sizeof(PspExpTextureUpload));
     frames[0].u0 = 0; frames[0].v0 = 0; frames[0].w = 64; frames[0].h = 4;
     frames[1].u0 = 32; frames[1].v0 = 0; frames[1].w = 32; frames[1].h = 4;
     payload = pspexp_texture_payload_length(t->data_length, t->frame_count);
     CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_BAD_LAYOUT);
     t->layout = PSPEXP_LAYOUT_LINEAR;
     CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_NONE);
+
+    /* Indexed formats: swizzle needs 16-byte rows (T8: width >= 16, T4: width >= 32). */
+    t->format = PSPEXP_TEX_T8; t->width = 64; t->height = 64; t->data_length = 64 * 64; t->layout = PSPEXP_LAYOUT_SWIZZLED;
+    frames = (PspExpFrame *)pspexp_texture_frames(t, buf + sizeof(PspExpTextureUpload));
+    frames[0].u0 = 0; frames[0].v0 = 0; frames[0].w = 64; frames[0].h = 64;
+    frames[1].u0 = 32; frames[1].v0 = 32; frames[1].w = 32; frames[1].h = 32;
+    payload = pspexp_texture_payload_length(t->data_length, t->frame_count);
+    CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_NONE);
+    t->format = PSPEXP_TEX_T4; t->width = 16; t->data_length = 16 * 64 / 2;
+    frames = (PspExpFrame *)pspexp_texture_frames(t, buf + sizeof(PspExpTextureUpload));
+    frames[0].u0 = 0; frames[0].v0 = 0; frames[0].w = 16; frames[0].h = 64;
+    frames[1].u0 = 8; frames[1].v0 = 32; frames[1].w = 8; frames[1].h = 32;
+    payload = pspexp_texture_payload_length(t->data_length, t->frame_count);
+    CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_BAD_LAYOUT);
+    t->layout = PSPEXP_LAYOUT_LINEAR;
+    CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01, payload), PSPEXP_RERR_NONE);
+    CHECK_EQ(pspexp_texture_validate(t, PSPEXP_TEX_FORMATS_V01 & ~PSPEXP_TEX_BIT(PSPEXP_TEX_T4), payload), PSPEXP_RERR_BAD_FORMAT);
+
+    /* Palettes. */
+    {
+        PspExpPaletteUpload pu;
+        memset(&pu, 0, sizeof(pu));
+        pu.format = PSPEXP_TEX_5551; pu.entries = 256;
+        CHECK_EQ(pspexp_palette_data_length(PSPEXP_TEX_5551, 256), 512);
+        CHECK_EQ(pspexp_palette_data_length(PSPEXP_TEX_8888, 16), 64);
+        CHECK_EQ(pspexp_palette_data_length(PSPEXP_TEX_T8, 256), 0);
+        CHECK_EQ(pspexp_palette_data_length(PSPEXP_TEX_5551, 100), 0);
+        CHECK_EQ(pspexp_palette_validate(&pu, 512), PSPEXP_RERR_NONE);
+        CHECK_EQ(pspexp_palette_validate(&pu, 528), PSPEXP_RERR_BAD_LENGTH);
+        pu.entries = 17;
+        CHECK_EQ(pspexp_palette_validate(&pu, 48), PSPEXP_RERR_BAD_PALETTE);
+    }
 
     CHECK_EQ(pspexp_texture_data_length(512, 512, PSPEXP_TEX_8888), 512 * 512 * 4);
     CHECK_EQ(pspexp_texture_data_length(256, 128, PSPEXP_TEX_T8), 256 * 128);

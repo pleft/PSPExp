@@ -104,6 +104,25 @@ static void op_texture_destroy(void *u, PspExpCacheEntry *e)
     if (ge->cur_atlas == e) ge->cur_atlas = NULL;
 }
 
+static int op_palette_create(void *u, PspExpCacheEntry *e, const void *entries)
+{
+    void *p = memalign(16, e->bytes);
+    (void)u;
+    if (!p) return PSPEXP_RERR_OUT_OF_MEMORY;
+    memcpy(p, entries, e->bytes);
+    sceKernelDcacheWritebackRange(p, e->bytes);
+    e->user = p;
+    return PSPEXP_RERR_NONE;
+}
+
+static void op_palette_destroy(void *u, PspExpCacheEntry *e)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    free(e->user);
+    e->user = NULL;
+    if (ge->cur_palette == e) ge->cur_palette = NULL;
+}
+
 static void op_frame_begin(void *u, uint32_t seq)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
@@ -113,6 +132,7 @@ static void op_frame_begin(void *u, uint32_t seq)
     ge->ring_cur ^= 1;
     ge->ring_used = 0;
     ge->cur_atlas = NULL;
+    ge->cur_palette = NULL;
     ge->tex_enabled = 0;
     ge->in_frame = 1;
     sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
@@ -141,12 +161,18 @@ static PspExpVertex2D *op_vertex_alloc(void *u, uint32_t vertex_count)
     return (PspExpVertex2D *)p;
 }
 
-static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, const PspExpVertex2D *v, uint32_t count)
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, const PspExpVertex2D *v, uint32_t count)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     GeTexture *t = (GeTexture *)atlas->user;
     if (!t) return;
     sceKernelDcacheWritebackRange((void *)v, count * 2u * sizeof(PspExpVertex2D));
+    if (palette && (palette != ge->cur_palette || atlas != ge->cur_atlas)) {
+        /* CLUT bound per draw: index mask 0xF for T4, 0xFF for T8; blocks of 8 entries. */
+        sceGuClutMode(palette->format, 0, atlas->format == PSPEXP_TEX_T4 ? 0x0F : 0xFF, 0);
+        sceGuClutLoad((int)(palette->width / 8), palette->user);
+        ge->cur_palette = palette;
+    }
     if (atlas != ge->cur_atlas) {
         sceGuTexMode(atlas->format, 0, 0, atlas->layout == PSPEXP_LAYOUT_SWIZZLED);
         sceGuTexImage(0, atlas->width, atlas->height, atlas->width, t->ptr);
@@ -233,6 +259,8 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->user = ge;
     ops->texture_create = op_texture_create;
     ops->texture_destroy = op_texture_destroy;
+    ops->palette_create = op_palette_create;
+    ops->palette_destroy = op_palette_destroy;
     ops->frame_begin = op_frame_begin;
     ops->set_clip = op_set_clip;
     ops->vertex_alloc = op_vertex_alloc;

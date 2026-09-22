@@ -38,6 +38,7 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_RESOURCE_ERROR: return "RESOURCE_ERROR";
     case PSPEXP_OP_RESOURCE_TIER: return "RESOURCE_TIER";
     case PSPEXP_OP_RESOURCE_MISS: return "RESOURCE_MISS";
+    case PSPEXP_OP_RESOURCE_UPLOAD_PALETTE: return "RESOURCE_UPLOAD_PALETTE";
     case PSPEXP_OP_INPUT_SAMPLE: return "INPUT_SAMPLE";
     case PSPEXP_OP_BENCH_START: return "BENCH_START";
     case PSPEXP_OP_BENCH_DATA: return "BENCH_DATA";
@@ -62,6 +63,8 @@ const char *pspexp_resource_error_name(uint16_t reason)
     case PSPEXP_RERR_DUPLICATE_ID: return "DUPLICATE_ID";
     case PSPEXP_RERR_UNKNOWN_ID: return "UNKNOWN_ID";
     case PSPEXP_RERR_TABLE_FULL: return "TABLE_FULL";
+    case PSPEXP_RERR_BAD_PALETTE: return "BAD_PALETTE";
+    case PSPEXP_RERR_WRONG_KIND: return "WRONG_KIND";
     default: return "?";
     }
 }

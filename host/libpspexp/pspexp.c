@@ -12,6 +12,8 @@ typedef struct Resource {
     uint16_t id;
     uint8_t  state;     /* PspExpResourceState */
     uint8_t  tier;
+    uint8_t  kind;      /* PspExpResourceKind: palettes replay before textures */
+    uint16_t opcode;    /* upload opcode for replay */
     uint8_t *retained;  /* upload payload copy for replay after reconnect */
     uint32_t retained_len;
 } Resource;
@@ -209,12 +211,18 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
             ctx->hello.executor, ctx->hello.display_width, ctx->hello.display_height,
             ctx->hello.vram_budget / 1024, ctx->hello.ram_budget / 1024, ctx->hello.texture_formats);
 
-    /* Replay the working set (section 9.2). */
-    for (i = 0; i < ctx->nres; i++) {
-        Resource *r = &ctx->res[i];
-        if (!r->retained) continue;
-        if (pspexp_send_raw(ctx, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE, r->retained, r->retained_len) < 0) return;
-        r->state = PSPEXP_RES_PENDING;
+    /* Replay the working set (section 9.2): palettes first, since indexed
+     * textures require theirs to be resident at upload. */
+    {
+        int pass;
+        for (pass = 0; pass < 2; pass++)
+            for (i = 0; i < ctx->nres; i++) {
+                Resource *r = &ctx->res[i];
+                if (!r->retained) continue;
+                if ((pass == 0) != (r->kind == 1 /* PSPEXP_KIND_PALETTE */)) continue;
+                if (pspexp_send_raw(ctx, PSPEXP_CH_RESOURCE, r->opcode, r->retained, r->retained_len) < 0) return;
+                r->state = PSPEXP_RES_PENDING;
+            }
     }
 }
 
@@ -355,6 +363,7 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
     t.priority = desc->priority;
     t.frame_count = frame_count;
     t.data_length = pixel_bytes;
+    t.palette = desc->palette;
     payload_len = pspexp_texture_payload_length(pixel_bytes, frame_count);
 
     /* Host-side construction rules (section 5.4): frames no wider than 64 px. */
@@ -380,15 +389,66 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
         return -reason;
     }
 
+    if (PSPEXP_TEX_IS_INDEXED(desc->format)) {
+        uint8_t pt = 0;
+        if (pspexp_resource_state(ctx, desc->palette, &pt) == PSPEXP_RES_NONE) {
+            ctx_log(ctx, "texture %u: palette %u was not uploaded", id, desc->palette);
+            return -PSPEXP_RERR_BAD_PALETTE;
+        }
+    }
+
     r = add_res(ctx, id);
     if (!r) return -1;
     if (r->retained) { free(r->retained); r->retained = NULL; }
+    r->kind = 0;
+    r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE;
     if (ctx->cfg.retain_uploads) {
         r->retained = (uint8_t *)malloc(sizeof(t) + payload_len);
         if (r->retained) { memcpy(r->retained, p, sizeof(t) + payload_len); r->retained_len = (uint32_t)(sizeof(t) + payload_len); }
     }
     r->state = PSPEXP_RES_PENDING;
     if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;   /* sent on connect */
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint16_t entries,
+                          const void *colors, uint32_t bytes)
+{
+    PspExpPaletteUpload pu;
+    uint32_t need = pspexp_palette_data_length(format, entries);
+    uint8_t *p;
+    Resource *r;
+    int reason;
+    if (need == 0 || bytes != need) {
+        ctx_log(ctx, "palette %u rejected locally: %u entries of format %u need %u bytes, got %u", id, entries, format, need, bytes);
+        return -PSPEXP_RERR_BAD_PALETTE;
+    }
+    memset(&pu, 0, sizeof(pu));
+    pu.id = id;
+    pu.format = format;
+    pu.entries = entries;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_UPLOAD_PALETTE, 0) < 0) return -1;
+    p = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(pu) + PSPEXP_ALIGN_UP(bytes));
+    if (!p) return -1;
+    memcpy(p, &pu, sizeof(pu));
+    memcpy(p + sizeof(pu), colors, bytes);
+    if (pspexp_writer_end(&ctx->msg) < 0) return -1;
+    reason = pspexp_palette_validate((const PspExpPaletteUpload *)p, PSPEXP_ALIGN_UP(bytes));
+    if (reason != PSPEXP_RERR_NONE) return -reason;
+
+    r = add_res(ctx, id);
+    if (!r) return -1;
+    if (r->retained) { free(r->retained); r->retained = NULL; }
+    r->kind = 1;
+    r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_PALETTE;
+    if (ctx->cfg.retain_uploads) {
+        uint32_t len = (uint32_t)(sizeof(pu) + PSPEXP_ALIGN_UP(bytes));
+        r->retained = (uint8_t *)malloc(len);
+        if (r->retained) { memcpy(r->retained, p, len); r->retained_len = len; }
+    }
+    r->state = PSPEXP_RES_PENDING;
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
 }
 

@@ -28,6 +28,7 @@ typedef struct PspExpGeExecutor {
     int in_frame;
     int tex_enabled;
     PspExpCacheEntry *cur_atlas;
+    PspExpCacheEntry *cur_palette;
     PspExpGeVramBlock vram[PSPEXP_GE_VRAM_BLOCKS];
     PspExpRuntime *rt;
     PspExpGeStats stats;

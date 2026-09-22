@@ -23,10 +23,18 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
 static void op_texture_destroy(void *u, PspExpCacheEntry *e) { (void)e; ((PspExpNullExecutor *)u)->stats.textures_destroyed++; }
 static void op_frame_begin(void *u, uint32_t seq) { (void)seq; ((PspExpNullExecutor *)u)->stats.frames++; }
 static void op_set_clip(void *u, int16_t x, int16_t y, int16_t w, int16_t h) { (void)x; (void)y; (void)w; (void)h; ((PspExpNullExecutor *)u)->stats.clips++; }
-static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, const PspExpVertex2D *v, uint32_t n)
+static int op_palette_create(void *u, PspExpCacheEntry *e, const void *entries)
+{
+    (void)e; (void)entries;
+    ((PspExpNullExecutor *)u)->stats.palettes_created++;
+    return PSPEXP_RERR_NONE;
+}
+static void op_palette_destroy(void *u, PspExpCacheEntry *e) { (void)u; (void)e; }
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, const PspExpVertex2D *v, uint32_t n)
 {
     PspExpNullExecutor *x = (PspExpNullExecutor *)u;
     (void)atlas; (void)v;
+    if (palette) x->stats.indexed_draws++;
     x->stats.sprite_draws++;
     x->stats.sprites += n;
     x->stats.vertices_expanded += 2 * n;
@@ -83,6 +91,8 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.now_us = op_now;
     ops.texture_create = op_texture_create;
     ops.texture_destroy = op_texture_destroy;
+    ops.palette_create = op_palette_create;
+    ops.palette_destroy = op_palette_destroy;
     ops.frame_begin = op_frame_begin;
     ops.set_clip = op_set_clip;
     ops.draw_sprites = op_draw_sprites;

@@ -61,6 +61,7 @@ typedef struct PspExpTextureDesc {
     uint8_t  format;    /* PspExpTextureFormat */
     uint8_t  layout;    /* PspExpTextureLayout */
     uint8_t  priority;  /* PspExpPriority */
+    uint16_t palette;   /* palette handle for T4/T8 (upload it first) */
 } PspExpTextureDesc;
 
 /* Called for every message received; return 1 to stop default handling. */
@@ -86,6 +87,10 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms);
 int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
                           const void *pixels, uint32_t pixel_bytes,
                           const PspExpFrame *frames, uint16_t frame_count);
+/* Palette for indexed textures: `entries` colours (16 or 256) in `format`
+ * (5650, 5551, 4444 or 8888), `bytes` = entries x bytes per colour. */
+int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint16_t entries,
+                          const void *colors, uint32_t bytes);
 int pspexp_release(PspExpContext *ctx, uint16_t id);
 int pspexp_hint(PspExpContext *ctx, uint16_t id, uint8_t priority);
 PspExpResourceState pspexp_resource_state(const PspExpContext *ctx, uint16_t id, uint8_t *tier);

@@ -32,12 +32,17 @@ typedef struct PspExpRuntimeOps {
      * the call. Return 0 or a PSPEXP_RERR_* reason. */
     int  (*texture_create)(void *user, PspExpCacheEntry *e, const void *pixels);
     void (*texture_destroy)(void *user, PspExpCacheEntry *e);
+    /* Optional: palette entries in e->format, e->width entries. */
+    int  (*palette_create)(void *user, PspExpCacheEntry *e, const void *entries);
+    void (*palette_destroy)(void *user, PspExpCacheEntry *e);
     void (*frame_begin)(void *user, uint32_t frame_seq);
     void (*set_clip)(void *user, int16_t x, int16_t y, int16_t w, int16_t h);
     /* Space for `vertex_count` vertices the runtime will expand a batch into.
      * On the PSP this is the GE vertex ring. NULL drops the batch. */
     PspExpVertex2D *(*vertex_alloc)(void *user, uint32_t vertex_count);
-    void (*draw_sprites)(void *user, PspExpCacheEntry *atlas, const PspExpVertex2D *v, uint32_t sprite_count);
+    /* `palette` is the resident palette for an indexed atlas, NULL otherwise. */
+    void (*draw_sprites)(void *user, PspExpCacheEntry *atlas, PspExpCacheEntry *palette,
+                         const PspExpVertex2D *v, uint32_t sprite_count);
     void (*draw_rect)(void *user, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
     /* Finish and display the frame; return the clock at the vblank it was shown. */
     uint32_t (*present)(void *user);
@@ -62,7 +67,7 @@ typedef struct PspExpRuntimeConfig {
 
 typedef struct PspExpRuntimeStats {
     uint32_t frames, batches, sprites, tiles, rects;
-    uint32_t uploads, releases, resource_errors, protocol_errors, misses;
+    uint32_t uploads, releases, resource_errors, protocol_errors, misses, palettes;
     uint32_t last_frame_bytes, last_execute_us;
     uint64_t bytes_in, bytes_out;
     uint32_t messages_in, messages_out;

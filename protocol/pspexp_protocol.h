@@ -89,9 +89,14 @@ enum PspExpTextureFormat {
     PSPEXP_TEX_COUNT = 11
 };
 #define PSPEXP_TEX_BIT(fmt) ((uint16_t)(1u << (fmt)))
-/* Formats every v0.1 executor implements. */
+/* Formats every executor implements: the four direct formats plus CLUT4/CLUT8. */
 #define PSPEXP_TEX_FORMATS_V01 (PSPEXP_TEX_BIT(PSPEXP_TEX_5650) | PSPEXP_TEX_BIT(PSPEXP_TEX_5551) | \
-                                PSPEXP_TEX_BIT(PSPEXP_TEX_4444) | PSPEXP_TEX_BIT(PSPEXP_TEX_8888))
+                                PSPEXP_TEX_BIT(PSPEXP_TEX_4444) | PSPEXP_TEX_BIT(PSPEXP_TEX_8888) | \
+                                PSPEXP_TEX_BIT(PSPEXP_TEX_T4)   | PSPEXP_TEX_BIT(PSPEXP_TEX_T8))
+#define PSPEXP_TEX_IS_INDEXED(fmt) ((fmt) == PSPEXP_TEX_T4 || (fmt) == PSPEXP_TEX_T8)
+/* Palette (CLUT) entry formats are the direct texture formats 5650..8888. */
+#define PSPEXP_PALETTE_ENTRIES_T4  16
+#define PSPEXP_PALETTE_ENTRIES_T8  256
 
 enum PspExpTextureLayout {
     PSPEXP_LAYOUT_LINEAR   = 0,
@@ -146,7 +151,9 @@ enum PspExpResourceErrorReason {
     PSPEXP_RERR_DUPLICATE_ID    = 7,  /* handle already resident */
     PSPEXP_RERR_UNKNOWN_ID      = 8,  /* release/hint/draw of a handle that is not resident */
     PSPEXP_RERR_TABLE_FULL      = 9,  /* executor's handle table is full */
-    PSPEXP_RERR_COUNT           = 10
+    PSPEXP_RERR_BAD_PALETTE     = 10, /* indexed texture without a suitable resident palette, or bad palette upload */
+    PSPEXP_RERR_WRONG_KIND      = 11, /* handle exists but is not a texture / palette */
+    PSPEXP_RERR_COUNT           = 12
 };
 
 /* ---- SYSTEM channel payloads ------------------------------------------ */
@@ -298,8 +305,21 @@ typedef struct PspExpTextureUpload {
     uint8_t  reserved0;
     uint16_t frame_count;
     uint32_t data_length;
+    uint16_t palette;           /* palette handle for T4/T8, must already be resident */
+    uint8_t  reserved[14];
 } PspExpTextureUpload;
-PSPEXP_STATIC_ASSERT(sizeof(PspExpTextureUpload) == 16, texture_upload_size);
+PSPEXP_STATIC_ASSERT(sizeof(PspExpTextureUpload) == 32, texture_upload_size);
+
+/* RESOURCE_UPLOAD_PALETTE: followed by `entries` colours in `format`
+ * (2 or 4 bytes each), padded to 16 bytes. */
+typedef struct PspExpPaletteUpload {
+    uint16_t id;
+    uint8_t  format;            /* PSPEXP_TEX_5650 .. PSPEXP_TEX_8888 */
+    uint8_t  reserved0;
+    uint16_t entries;           /* 16 or 256 */
+    uint8_t  reserved[10];
+} PspExpPaletteUpload;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpPaletteUpload) == 16, palette_upload_size);
 
 typedef struct PspExpResourceId {      /* RESOURCE_RELEASE */
     uint16_t id;
@@ -387,6 +407,11 @@ int pspexp_texture_validate(const PspExpTextureUpload *t, uint16_t supported_for
 /* Pointer to the frame table inside an upload payload (payload points just
  * after the PspExpTextureUpload header). */
 const void *pspexp_texture_frames(const PspExpTextureUpload *t, const void *payload);
+
+/* Byte length of a palette's entries; 0 if the format or count is invalid. */
+uint32_t pspexp_palette_data_length(uint8_t format, uint16_t entries);
+/* Validates a palette upload. Returns PSPEXP_RERR_NONE or a reason. */
+int pspexp_palette_validate(const PspExpPaletteUpload *p, uint32_t payload_length);
 
 /* PSP texture swizzle (16-byte by 8-row blocks). width_bytes must be a
  * multiple of 16 and height a multiple of 8. in/out must not overlap. */

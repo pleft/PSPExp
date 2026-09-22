@@ -67,6 +67,22 @@ int pspexp_texture_validate(const PspExpTextureUpload *t, uint16_t supported_for
     return PSPEXP_RERR_NONE;
 }
 
+uint32_t pspexp_palette_data_length(uint8_t format, uint16_t entries)
+{
+    uint32_t bpp = format <= PSPEXP_TEX_8888 ? pspexp_texture_bits_per_pixel(format) : 0;
+    if (bpp == 0) return 0;
+    if (entries != PSPEXP_PALETTE_ENTRIES_T4 && entries != PSPEXP_PALETTE_ENTRIES_T8) return 0;
+    return (uint32_t)entries * bpp / 8;
+}
+
+int pspexp_palette_validate(const PspExpPaletteUpload *p, uint32_t payload_length)
+{
+    uint32_t len = pspexp_palette_data_length(p->format, p->entries);
+    if (len == 0) return PSPEXP_RERR_BAD_PALETTE;
+    if (payload_length != PSPEXP_ALIGN_UP(len)) return PSPEXP_RERR_BAD_LENGTH;
+    return PSPEXP_RERR_NONE;
+}
+
 const void *pspexp_texture_frames(const PspExpTextureUpload *t, const void *payload)
 {
     return (const uint8_t *)payload + PSPEXP_ALIGN_UP(t->data_length);

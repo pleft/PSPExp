@@ -198,6 +198,67 @@ int main(void)
     CHECK_EQ(pspexp_wait_present(ctx, 100), 0);
     CHECK_EQ(pspexp_null_runtime(nul)->stats.misses, 2);   /* no new miss after replay */
 
+    /* Indexed textures: palette first, then a CLUT8 atlas; palette swap and release. */
+    {
+        static uint16_t pal[256];
+        static uint8_t idx[64 * 64];
+        PspExpTextureDesc cd;
+        uint32_t misses = pspexp_null_runtime(nul)->stats.misses;
+        uint32_t rerr = pspexp_null_runtime(nul)->stats.resource_errors;
+        for (i = 0; i < 256; i++) pal[i] = (uint16_t)(0x8000 | i);
+        memset(&cd, 0, sizeof(cd));
+        cd.width = 64; cd.height = 64; cd.format = PSPEXP_TEX_T8; cd.layout = PSPEXP_LAYOUT_SWIZZLED; cd.palette = 40;
+        /* Texture before its palette is rejected on the host. */
+        CHECK_EQ(pspexp_upload_texture(ctx, 41, &cd, idx, sizeof(idx), g_frames, 4), -PSPEXP_RERR_BAD_PALETTE);
+        CHECK_EQ(pspexp_upload_palette(ctx, 40, PSPEXP_TEX_5551, 256, pal, 100), -PSPEXP_RERR_BAD_PALETTE);
+        CHECK_EQ(pspexp_upload_palette(ctx, 40, PSPEXP_TEX_5551, 256, pal, sizeof(pal)), 0);
+        CHECK_EQ(pspexp_upload_texture(ctx, 41, &cd, idx, sizeof(idx), g_frames, 4), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_resource_state(ctx, 40, &tier), PSPEXP_RES_RESIDENT);
+        CHECK_EQ(tier, PSPEXP_TIER_RAM);
+        CHECK_EQ(pspexp_resource_state(ctx, 41, &tier), PSPEXP_RES_RESIDENT);
+        CHECK_EQ(tier, PSPEXP_TIER_VRAM);
+        CHECK_EQ(pspexp_null_stats(nul)->palettes_created, 1);
+        pspexp_begin_frame(ctx);
+        pspexp_draw_sprite(ctx, 41, 0, 0, 1, PSPEXP_COLOR_NONE);
+        pspexp_present(ctx);
+        pspexp_wait_present(ctx, 100);
+        CHECK_EQ(pspexp_null_stats(nul)->indexed_draws, 1);
+        /* A 16-entry palette cannot serve a T8 texture. */
+        CHECK_EQ(pspexp_upload_palette(ctx, 42, PSPEXP_TEX_5650, 16, pal, 32), 0);
+        cd.palette = 42;
+        CHECK_EQ(pspexp_upload_texture(ctx, 43, &cd, idx, sizeof(idx), g_frames, 4), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_resource_state(ctx, 43, NULL), PSPEXP_RES_FAILED);
+        CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr + 1);
+        /* Drawing with a palette handle as the atlas is a kind error; releasing the
+         * palette makes later draws miss it. */
+        pspexp_begin_frame(ctx);
+        pspexp_draw_sprite(ctx, 40, 0, 0, 0, 0);
+        pspexp_present(ctx);
+        pspexp_wait_present(ctx, 100);
+        CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr + 2);
+        CHECK_EQ(pspexp_release(ctx, 40), 0);
+        pspexp_begin_frame(ctx);
+        pspexp_draw_sprite(ctx, 41, 0, 0, 0, 0);
+        pspexp_present(ctx);
+        pspexp_wait_present(ctx, 100);
+        CHECK_EQ(pspexp_null_runtime(nul)->stats.misses, misses + 1);
+        /* Reconnect replays the palette before the texture. */
+        CHECK_EQ(pspexp_upload_palette(ctx, 40, PSPEXP_TEX_5551, 256, pal, sizeof(pal)), 0);
+        pspexp_null_simulate_reconnect(nul);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_resource_state(ctx, 40, NULL), PSPEXP_RES_RESIDENT);
+        CHECK_EQ(pspexp_resource_state(ctx, 41, NULL), PSPEXP_RES_RESIDENT);
+        pspexp_begin_frame(ctx);
+        pspexp_draw_sprite(ctx, 41, 0, 0, 3, 0);
+        pspexp_present(ctx);
+        pspexp_wait_present(ctx, 100);
+        CHECK_EQ(pspexp_null_stats(nul)->indexed_draws, 2);
+        pspexp_release(ctx, 41); pspexp_release(ctx, 40); pspexp_release(ctx, 42);
+        pspexp_pump(ctx, 0);
+    }
+
     /* Benchmark messages on the DEBUG channel. */
     {
         PspExpBenchStart bs; PspExpBenchUplink up; uint8_t blob[1000];

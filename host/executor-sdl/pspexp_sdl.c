@@ -19,6 +19,18 @@ struct PspExpSdlExecutor {
 
 static uint32_t op_now(void *u) { (void)u; return (uint32_t)pspexp_time_us(); }
 
+/* Indexed textures are expanded through their palette when first drawn, and
+ * again whenever the palette resource changes (a palette swap on the PSP is
+ * a draw-time binding, so it must be here too). */
+typedef struct SdlPalette { uint32_t colors[256]; uint32_t generation; } SdlPalette;
+typedef struct SdlTexture {
+    SDL_Texture *tex;
+    uint8_t *indices;            /* linear index data for T4/T8, else NULL */
+    const SdlPalette *built_with;
+    uint32_t built_generation;
+} SdlTexture;
+static uint32_t g_palette_generation;
+
 static uint32_t expand_pixel(uint8_t format, const uint8_t *p)
 {
     uint32_t r, g, b, a;
@@ -48,42 +60,95 @@ static uint32_t expand_pixel(uint8_t format, const uint8_t *p)
     return r | (g << 8) | (b << 16) | (a << 24);   /* SDL_PIXELFORMAT_ABGR8888 */
 }
 
+static SDL_Texture *make_texture(PspExpSdlExecutor *x, const PspExpCacheEntry *e, const uint32_t *argb)
+{
+    SDL_Texture *tex = SDL_CreateTexture(x->ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, e->width, e->height);
+    if (!tex) return NULL;
+    SDL_UpdateTexture(tex, NULL, argb, e->width * 4);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    return tex;
+}
+
 static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
-    const uint32_t bpp = pspexp_texture_bits_per_pixel(e->format) / 8;
-    const uint32_t row = e->width * bpp;
+    const uint32_t bits = pspexp_texture_bits_per_pixel(e->format);
+    const uint32_t row = e->width * bits / 8;
     uint8_t *linear = NULL;
     const uint8_t *src = (const uint8_t *)pixels;
-    uint32_t *argb;
-    SDL_Texture *tex;
+    SdlTexture *st;
     uint32_t i, n = (uint32_t)e->width * e->height;
 
-    if (bpp == 0) return PSPEXP_RERR_BAD_FORMAT;
+    if (bits == 0) return PSPEXP_RERR_BAD_FORMAT;
+    st = (SdlTexture *)calloc(1, sizeof(*st));
+    if (!st) return PSPEXP_RERR_OUT_OF_MEMORY;
     if (e->layout == PSPEXP_LAYOUT_SWIZZLED) {
         linear = (uint8_t *)malloc(e->bytes);
-        if (!linear) return PSPEXP_RERR_OUT_OF_MEMORY;
+        if (!linear) { free(st); return PSPEXP_RERR_OUT_OF_MEMORY; }
         pspexp_unswizzle(linear, pixels, row, e->height);
         src = linear;
     }
-    argb = (uint32_t *)malloc((size_t)n * 4);
-    if (!argb) { free(linear); return PSPEXP_RERR_OUT_OF_MEMORY; }
-    for (i = 0; i < n; i++) argb[i] = expand_pixel(e->format, src + (size_t)i * bpp);
-    tex = SDL_CreateTexture(x->ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, e->width, e->height);
-    if (!tex) { free(argb); free(linear); return PSPEXP_RERR_OUT_OF_MEMORY; }
-    SDL_UpdateTexture(tex, NULL, argb, e->width * 4);
-    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-    free(argb);
+    if (PSPEXP_TEX_IS_INDEXED(e->format)) {
+        /* Keep one index per texel; the palette is applied at draw time. */
+        st->indices = (uint8_t *)malloc(n);
+        if (!st->indices) { free(linear); free(st); return PSPEXP_RERR_OUT_OF_MEMORY; }
+        if (e->format == PSPEXP_TEX_T8) memcpy(st->indices, src, n);
+        else for (i = 0; i < n; i++) st->indices[i] = (uint8_t)((src[i / 2] >> ((i & 1) * 4)) & 0xF);  /* T4: low nibble first */
+    } else {
+        uint32_t *argb = (uint32_t *)malloc((size_t)n * 4);
+        if (!argb) { free(linear); free(st); return PSPEXP_RERR_OUT_OF_MEMORY; }
+        for (i = 0; i < n; i++) argb[i] = expand_pixel(e->format, src + (size_t)i * (bits / 8));
+        st->tex = make_texture(x, e, argb);
+        free(argb);
+        if (!st->tex) { free(linear); free(st); return PSPEXP_RERR_OUT_OF_MEMORY; }
+    }
     free(linear);
-    e->user = tex;
+    e->user = st;
     return PSPEXP_RERR_NONE;
 }
 
 static void op_texture_destroy(void *u, PspExpCacheEntry *e)
 {
+    SdlTexture *st = (SdlTexture *)e->user;
     (void)u;
-    if (e->user) SDL_DestroyTexture((SDL_Texture *)e->user);
+    if (!st) return;
+    if (st->tex) SDL_DestroyTexture(st->tex);
+    free(st->indices);
+    free(st);
     e->user = NULL;
+}
+
+static int op_palette_create(void *u, PspExpCacheEntry *e, const void *entries)
+{
+    SdlPalette *p = (SdlPalette *)calloc(1, sizeof(*p));
+    const uint8_t *src = (const uint8_t *)entries;
+    uint32_t i, bpp = pspexp_texture_bits_per_pixel(e->format) / 8;
+    (void)u;
+    if (!p) return PSPEXP_RERR_OUT_OF_MEMORY;
+    for (i = 0; i < e->width && i < 256; i++) p->colors[i] = expand_pixel(e->format, src + (size_t)i * bpp);
+    p->generation = ++g_palette_generation;
+    e->user = p;
+    return PSPEXP_RERR_NONE;
+}
+
+static void op_palette_destroy(void *u, PspExpCacheEntry *e) { (void)u; free(e->user); e->user = NULL; }
+
+/* (Re)build an indexed texture's SDL texture through `pal` when needed. */
+static SDL_Texture *indexed_texture(PspExpSdlExecutor *x, PspExpCacheEntry *e, const SdlPalette *pal)
+{
+    SdlTexture *st = (SdlTexture *)e->user;
+    uint32_t *argb, i, n = (uint32_t)e->width * e->height;
+    if (!st || !st->indices || !pal) return NULL;
+    if (st->tex && st->built_with == pal && st->built_generation == pal->generation) return st->tex;
+    argb = (uint32_t *)malloc((size_t)n * 4);
+    if (!argb) return NULL;
+    for (i = 0; i < n; i++) argb[i] = pal->colors[st->indices[i]];
+    if (st->tex) SDL_DestroyTexture(st->tex);
+    st->tex = make_texture(x, e, argb);
+    free(argb);
+    st->built_with = pal;
+    st->built_generation = pal->generation;
+    return st->tex;
 }
 
 static void op_frame_begin(void *u, uint32_t seq)
@@ -101,12 +166,15 @@ static void op_set_clip(void *u, int16_t cx, int16_t cy, int16_t w, int16_t h)
     SDL_RenderSetClipRect(x->ren, &r);
 }
 
-static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, const PspExpVertex2D *v, uint32_t count)
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, const PspExpVertex2D *v, uint32_t count)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
-    SDL_Texture *tex = (SDL_Texture *)atlas->user;
+    SdlTexture *st = (SdlTexture *)atlas->user;
+    SDL_Texture *tex;
     uint32_t i;
     uint16_t last_color = 0xFFFF;
+    if (!st) return;
+    tex = palette ? indexed_texture(x, atlas, (const SdlPalette *)palette->user) : st->tex;
     if (!tex) return;
     SDL_SetTextureColorMod(tex, 255, 255, 255);
     for (i = 0; i < count; i++) {
@@ -277,6 +345,8 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.now_us = op_now;
     ops.texture_create = op_texture_create;
     ops.texture_destroy = op_texture_destroy;
+    ops.palette_create = op_palette_create;
+    ops.palette_destroy = op_palette_destroy;
     ops.frame_begin = op_frame_begin;
     ops.set_clip = op_set_clip;
     ops.draw_sprites = op_draw_sprites;

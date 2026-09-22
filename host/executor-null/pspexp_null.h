@@ -18,6 +18,7 @@ typedef struct PspExpNullStats {
     uint32_t textures_created, textures_destroyed;
     uint32_t frames, clips, sprite_draws, sprites, rects;
     uint32_t vertices_expanded;
+    uint32_t palettes_created, indexed_draws;
 } PspExpNullStats;
 
 /* `cfg` may be NULL for defaults. */
