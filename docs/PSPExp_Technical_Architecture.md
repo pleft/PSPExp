@@ -899,6 +899,8 @@ Actual performance targets are established from measurements on physical PSP har
 
 ### v0.2 – Real engine integration
 
+*Status 2026-09-22: the Stratagus backend exists (`compatibility/stratagus`). Stratagus is a pure software renderer, so the backend hooks the leaf blits (`CGraphic::DrawSub*`, `DrawFrame*X`, the glyph blit, the `CVideo` primitives, the fog shroud and the minimap blit) and mirrors them into quad batches with per-batch palettes; the software path stays live for a side-by-side desktop view. Warcraft renders through the SDL executor at 60 fps with about 34 batches and 330 sprites per frame in 7.6 KB. The hardware run against the native PSP build is the next measurement.*
+
 Use Stratagus as the first serious engine experiment, via an engine-specific renderer backend (Stratagus draws into SDL surfaces and is therefore out of scope for `sdl-pspexp`; see §12):
 
 ```text

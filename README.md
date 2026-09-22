@@ -22,6 +22,8 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | `tools/usb-bench` throughput / latency / frame-loop benchmark, concurrent-upload workload | done, measured on hardware 2026-09-22 |
 | CLUT4/CLUT8 textures with palette resources (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** (`sprite-demo --clut`) |
 | host-baked text: built-in 6x8 CLUT4 font, `pspexp_draw_text` (v0.3 item pulled forward) | done, shown in the demo HUD |
+| per-batch palette, flip, 4444 alpha tints, translucent rects, lines, quad batches (v0.2 needs) | done, tested |
+| **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **renders Warcraft through the SDL executor at 60 fps**; hardware run pending |
 
 ## Build
 
@@ -61,6 +63,18 @@ built-in font: a CLUT4 glyph atlas drawn as sprite batches. Pull the cable:
 the demo waits, then replays palettes and atlases and resumes. It prints fps,
 bytes per frame and the input-to-present latency once a second.
 
+## v0.2: Warcraft on the PSP through PSPExp
+
+`compatibility/stratagus/README.md` describes the Stratagus renderer backend
+and how to build the engine with it. Then, with the PSP running `dist/PSPExp`:
+
+```sh
+cd ../WarCraft
+PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus -r "maps/4-middle-ground.smp"
+```
+
+The game runs on the Mac; the PSP renders it and its controls play it.
+
 ## Layout
 
 ```text
@@ -72,6 +86,7 @@ host/transport-usb/  libusb transport
 psp/transport-usb/   kernel USB driver (pspexp_usb.prx) + user stubs
 psp/runtime/         PSP runtime application (pspexp_runtime.prx)
 psp/boot/            EBOOT loader
+compatibility/stratagus/  Stratagus renderer backend: patch + notes (v0.2)
 tools/usb-bench/     transport benchmark
 tests/               unit tests (ctest)
 docs/                architecture

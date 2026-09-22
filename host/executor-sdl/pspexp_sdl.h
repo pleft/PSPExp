@@ -20,6 +20,10 @@ typedef struct PspExpSdlOptions {
     int scale;        /* window scale factor (default 2) */
     int vsync;        /* default 1 */
     const char *title;
+    /* 0 when the host application owns the SDL event loop (it must pump
+     * events itself; the executor then only reads keyboard state and
+     * never sees a window-close). Default 1. */
+    int pump_events;
 } PspExpSdlOptions;
 
 void pspexp_sdl_options_default(PspExpSdlOptions *o);

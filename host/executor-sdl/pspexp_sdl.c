@@ -14,6 +14,8 @@ struct PspExpSdlExecutor {
     size_t out_off;
     int quit;
     int vsync;
+    int pump_events;
+    Uint32 subsystems;
     uint64_t next_input_us;
 };
 
@@ -23,13 +25,15 @@ static uint32_t op_now(void *u) { (void)u; return (uint32_t)pspexp_time_us(); }
  * again whenever the palette resource changes (a palette swap on the PSP is
  * a draw-time binding, so it must be here too). */
 typedef struct SdlPalette { uint32_t colors[256]; uint32_t generation; } SdlPalette;
+#define SDL_TEX_VARIANTS 8
+typedef struct SdlTexVariant { SDL_Texture *tex; const SdlPalette *palette; uint32_t generation; uint32_t last_use; } SdlTexVariant;
 typedef struct SdlTexture {
-    SDL_Texture *tex;
+    SDL_Texture *tex;            /* direct-format texture, or NULL for indexed */
     uint8_t *indices;            /* linear index data for T4/T8, else NULL */
-    const SdlPalette *built_with;
-    uint32_t built_generation;
+    SdlTexVariant variants[SDL_TEX_VARIANTS];   /* indexed: one expansion per palette in use */
 } SdlTexture;
 static uint32_t g_palette_generation;
+static uint32_t g_use_counter;
 
 static uint32_t expand_pixel(uint8_t format, const uint8_t *p)
 {
@@ -110,9 +114,11 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
 static void op_texture_destroy(void *u, PspExpCacheEntry *e)
 {
     SdlTexture *st = (SdlTexture *)e->user;
+    int i;
     (void)u;
     if (!st) return;
     if (st->tex) SDL_DestroyTexture(st->tex);
+    for (i = 0; i < SDL_TEX_VARIANTS; i++) if (st->variants[i].tex) SDL_DestroyTexture(st->variants[i].tex);
     free(st->indices);
     free(st);
     e->user = NULL;
@@ -133,22 +139,35 @@ static int op_palette_create(void *u, PspExpCacheEntry *e, const void *entries)
 
 static void op_palette_destroy(void *u, PspExpCacheEntry *e) { (void)u; free(e->user); e->user = NULL; }
 
-/* (Re)build an indexed texture's SDL texture through `pal` when needed. */
+/* The SDL texture for an indexed atlas expanded through `pal`: one cached
+ * expansion per palette variant in use (player colours, font colours), the
+ * least recently used one recycled when all slots are taken. */
 static SDL_Texture *indexed_texture(PspExpSdlExecutor *x, PspExpCacheEntry *e, const SdlPalette *pal)
 {
     SdlTexture *st = (SdlTexture *)e->user;
     uint32_t *argb, i, n = (uint32_t)e->width * e->height;
+    SdlTexVariant *slot = NULL;
     if (!st || !st->indices || !pal) return NULL;
-    if (st->tex && st->built_with == pal && st->built_generation == pal->generation) return st->tex;
+    g_use_counter++;
+    for (i = 0; i < SDL_TEX_VARIANTS; i++) {
+        SdlTexVariant *v = &st->variants[i];
+        if (v->tex && v->palette == pal && v->generation == pal->generation) { v->last_use = g_use_counter; return v->tex; }
+    }
+    for (i = 0; i < SDL_TEX_VARIANTS; i++) {
+        SdlTexVariant *v = &st->variants[i];
+        if (!v->tex) { slot = v; break; }
+        if (!slot || v->last_use < slot->last_use) slot = v;
+    }
     argb = (uint32_t *)malloc((size_t)n * 4);
     if (!argb) return NULL;
     for (i = 0; i < n; i++) argb[i] = pal->colors[st->indices[i]];
-    if (st->tex) SDL_DestroyTexture(st->tex);
-    st->tex = make_texture(x, e, argb);
+    if (slot->tex) SDL_DestroyTexture(slot->tex);
+    slot->tex = make_texture(x, e, argb);
     free(argb);
-    st->built_with = pal;
-    st->built_generation = pal->generation;
-    return st->tex;
+    slot->palette = pal;
+    slot->generation = pal->generation;
+    slot->last_use = g_use_counter;
+    return slot->tex;
 }
 
 static void op_frame_begin(void *u, uint32_t seq)
@@ -225,6 +244,20 @@ static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1
 static uint32_t op_present(void *u)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    /* PSPEXP_SDL_SHOT=<file.bmp>: save every 30th frame (for headless checks). */
+    static const char *shot = NULL;
+    static int shot_checked = 0, frames = 0;
+    if (!shot_checked) { shot = getenv("PSPEXP_SDL_SHOT"); shot_checked = 1; }
+    if (shot && (frames++ % 30) == 0) {
+        int w = 0, h = 0;
+        SDL_GetRendererOutputSize(x->ren, &w, &h);
+        if (w > 0 && h > 0) {
+            SDL_Surface *surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+            if (surf && SDL_RenderReadPixels(x->ren, NULL, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) == 0)
+                SDL_SaveBMP(surf, shot);
+            if (surf) SDL_FreeSurface(surf);
+        }
+    }
     SDL_RenderPresent(x->ren);
     if (!x->vsync) pspexp_sleep_us(16000);
     return (uint32_t)pspexp_time_us();
@@ -303,7 +336,7 @@ static long tr_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
     size_t len, n;
     const uint8_t *out;
     uint64_t now;
-    pump_events(x);
+    if (x->pump_events) pump_events(x);
     if (x->quit) return -1;
     now = pspexp_time_us();
     if (now >= x->next_input_us) {
@@ -334,6 +367,7 @@ void pspexp_sdl_options_default(PspExpSdlOptions *o)
     o->scale = 2;
     o->vsync = 1;
     o->title = "PSPExp SDL executor";
+    o->pump_events = 1;
 }
 
 PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_t errlen)
@@ -347,17 +381,20 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     if (o) opt = *o; else pspexp_sdl_options_default(&opt);
     if (opt.scale < 1) opt.scale = 1;
     x->vsync = opt.vsync;
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
+    x->pump_events = opt.pump_events;
+    /* Initialise only what is not already up, and later quit only that. */
+    x->subsystems = (SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) & ~SDL_WasInit(0);
+    if (x->subsystems && SDL_InitSubSystem(x->subsystems) != 0) {
         snprintf(err, errlen, "SDL_Init: %s", SDL_GetError()); free(x); return NULL;
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     x->win = SDL_CreateWindow(opt.title ? opt.title : "PSPExp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               PSPEXP_DISPLAY_WIDTH * opt.scale, PSPEXP_DISPLAY_HEIGHT * opt.scale, SDL_WINDOW_ALLOW_HIGHDPI);
-    if (!x->win) { snprintf(err, errlen, "SDL_CreateWindow: %s", SDL_GetError()); SDL_Quit(); free(x); return NULL; }
+    if (!x->win) { snprintf(err, errlen, "SDL_CreateWindow: %s", SDL_GetError()); if (x->subsystems) SDL_QuitSubSystem(x->subsystems); free(x); return NULL; }
     flags = SDL_RENDERER_ACCELERATED | (opt.vsync ? SDL_RENDERER_PRESENTVSYNC : 0);
     x->ren = SDL_CreateRenderer(x->win, -1, flags);
     if (!x->ren) x->ren = SDL_CreateRenderer(x->win, -1, 0);
-    if (!x->ren) { snprintf(err, errlen, "SDL_CreateRenderer: %s", SDL_GetError()); SDL_DestroyWindow(x->win); SDL_Quit(); free(x); return NULL; }
+    if (!x->ren) { snprintf(err, errlen, "SDL_CreateRenderer: %s", SDL_GetError()); SDL_DestroyWindow(x->win); if (x->subsystems) SDL_QuitSubSystem(x->subsystems); free(x); return NULL; }
     SDL_RenderSetLogicalSize(x->ren, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
     if (SDL_NumJoysticks() > 0 && SDL_IsGameController(0)) x->pad = SDL_GameControllerOpen(0);
 
@@ -393,7 +430,7 @@ void pspexp_sdl_destroy(PspExpSdlExecutor *x)
     if (x->pad) SDL_GameControllerClose(x->pad);
     if (x->ren) SDL_DestroyRenderer(x->ren);
     if (x->win) SDL_DestroyWindow(x->win);
-    SDL_Quit();
+    if (x->subsystems) SDL_QuitSubSystem(x->subsystems);
     free(x);
 }
 

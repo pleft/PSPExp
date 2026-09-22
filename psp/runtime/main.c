@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
     show_status_page();   /* GU init took the display; status page while idle */
 
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_PSP);
-    cfg.ram_budget = 6u * 1024u * 1024u;
+    cfg.ram_budget = 12u * 1024u * 1024u;   /* a game's working set; the runtime itself is small */
     cfg.usb_chunk = PSPEXP_USB_CHUNK;
     cfg.in_capacity = 512u * 1024u;
     cfg.out_capacity = 64u * 1024u;
