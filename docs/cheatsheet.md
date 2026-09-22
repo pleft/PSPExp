@@ -42,6 +42,7 @@ cable pull, so pull the cable to read it after a session.
 | ask the PSP to dump its framebuffer every N frames | `... --shot 120` (demo) or `PSPEXP_SHOT_EVERY=300` (Warcraft) |
 | Warcraft on the PSP, main menu | `cd ../WarCraft && PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` |
 | Warcraft straight into a map | `... -r maps/4-middle-ground.smp` |
+| Warcraft with the Mac window hidden (PSP is the only display) | add `PSPEXP_WINDOW=hide` before the command |
 | Warcraft without a PSP (executor window) | `PSPEXP=sdl build/host-stratagus/stratagus -d dist/War1gus` |
 | PSP runtime in PPSSPP, then any host program with `--tcp 127.0.0.1:3838` / `PSPEXP=tcp:127.0.0.1:3838` | `scripts/run-ppsspp.sh` |
 

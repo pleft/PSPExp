@@ -1714,7 +1714,7 @@ index 0000000..3934a91
 +
 +//@}
 diff --git a/src/video/sdl.cpp b/src/video/sdl.cpp
-index 451d809..52d0ce7 100644
+index 451d809..df6edc6 100644
 --- a/src/video/sdl.cpp
 +++ b/src/video/sdl.cpp
 @@ -45,6 +45,9 @@
@@ -1747,12 +1747,24 @@ index 451d809..52d0ce7 100644
  #endif
  	InputMouseTimeout(*GetCallbacks(), ticks);
  	InputKeyTimeout(*GetCallbacks(), ticks);
-@@ -1040,6 +1049,9 @@ void RealizeVideoMemory()
+@@ -1040,6 +1049,21 @@ void RealizeVideoMemory()
  	}
  #else
  	if (NumRects) {
 +#ifdef USE_PSPEXP
 +		PspExpVideo::Present();
++		// PSPEXP_WINDOW=hide: the PSP is the only display; keep the window
++		// (the engine's input and GUI need it) but hidden and never presented
++		static const bool hideWindow = PspExpVideo::Active() && getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
++		if (hideWindow) {
++			static bool hidden = false;
++			if (!hidden) { SDL_HideWindow(TheWindow); hidden = true; }
++			NumRects = 0;
++			if (!Preference.HardwareCursor) {
++				HideCursor();
++			}
++			return;
++		}
 +#endif
  		//SDL_UpdateWindowSurfaceRects(TheWindow, Rects, NumRects);
  		SDL_UpdateTexture(TheTexture, nullptr, TheScreen->pixels, TheScreen->pitch);
