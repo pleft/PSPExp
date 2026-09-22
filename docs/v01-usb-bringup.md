@@ -59,6 +59,15 @@ Pull the cable: the PSP returns to its status page (`detach 1`), the host
 prints `link lost; waiting for the PSP...`; re-plug and it prints
 `reconnected; atlas replayed` and the sprite continues from where it was.
 
+## Also on the second run: CLUT8 and text
+
+`build/host/pspexp-sprite-demo --clut` draws the same scene from a swizzled
+CLUT8 atlas with a 256-entry 5551 palette, and the HUD lines at the top and
+bottom are the built-in CLUT4 font. Both exercise `sceGuClutMode` /
+`sceGuClutLoad` in the GE executor for the first time on hardware; a wrong
+palette binding shows as wrong colours or invisible glyphs, a wrong swizzle
+as scrambled 16x8 blocks.
+
 ## Third run: head-of-line blocking (§17 workload c, §19 question 1)
 
 ```sh

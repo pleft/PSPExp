@@ -19,7 +19,9 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | `psp/executor-ge` GE executor (VRAM/RAM textures, vertex ring, GU_SPRITES) | **runs on hardware**: 60 Hz at 5,000 sprites |
 | `host/executor-sdl` reference renderer (keyboard + game controller input) | done |
 | `examples/sprite-demo` (§16 proof of concept; Null, SDL or USB; survives cable pull) | **done on hardware 2026-09-22**: the v0.1 decisive result |
-| `tools/usb-bench` throughput / latency / frame-loop benchmark | done, measured on hardware 2026-09-22 |
+| `tools/usb-bench` throughput / latency / frame-loop benchmark, concurrent-upload workload | done, measured on hardware 2026-09-22 |
+| CLUT4/CLUT8 textures with palette resources (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** (`sprite-demo --clut`) |
+| host-baked text: built-in 6x8 CLUT4 font, `pspexp_draw_text` (v0.3 item pulled forward) | done, shown in the demo HUD |
 
 ## Build
 
@@ -53,9 +55,11 @@ build/host/pspexp-sprite-demo --null --frames 300
 
 One atlas is uploaded once; the host owns the player object and moves it from
 the PSP's own controls over a field of background sprites (`--field N`, or
-triangle to cycle 100/500/2000/5000). Pull the cable: the demo waits, then
-replays the atlas and resumes. It prints fps, bytes per frame and the
-input-to-present latency once a second.
+triangle to cycle 100/500/2000/5000). `--clut` uploads the atlas as a
+swizzled CLUT8 texture with a 5551 palette instead. The HUD text is the
+built-in font: a CLUT4 glyph atlas drawn as sprite batches. Pull the cable:
+the demo waits, then replays palettes and atlases and resumes. It prints fps,
+bytes per frame and the input-to-present latency once a second.
 
 ## Layout
 
