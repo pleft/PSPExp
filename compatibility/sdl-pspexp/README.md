@@ -37,7 +37,8 @@ scripts/pspexp-run build/host/sdl-game --surface     # window-surface path
 |---|---|
 | `SDL_CreateWindow`, `SDL_CreateRenderer`, `SDL_CreateWindowAndRenderer` | connect to the PSP (once) |
 | `SDL_RenderSetLogicalSize`, `SDL_RenderSetViewport`, `SDL_RenderSetClipRect` | the logical size (or window size) is fitted into 480x272 with letterboxing; viewport offsets and clip rectangles are applied |
-| `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture` | a shadow copy in RGBA8888, uploaded as 4444 textures in pages of up to 512x512, re-uploaded when the program changes it (streaming textures cost one upload per frame) |
+| `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture`, `SDL_SetTextureBlendMode` | a shadow copy in RGBA8888, uploaded in pages of up to 512x512 (256x128 for streaming textures): 5650 when the blend mode is NONE, 4444 otherwise; re-uploaded when the program changes it (streaming textures cost one upload per frame) |
+| `SDL_SetRenderTarget`, `SDL_RenderSetScale` | drawing into a render-target texture is recorded (copies and fills, up to 256 per target) and replayed, scaled and clipped, when the target is copied to the screen: the integer-upscaling pattern of pixel-art ports |
 | `SDL_SetTextureColorMod`, `SDL_SetTextureAlphaMod` | per-quad tint (5650 when opaque, 4444 when translucent) |
 | `SDL_RenderCopy`, `SDL_RenderCopyEx`, `SDL_RenderCopyF`, `SDL_RenderCopyExF` | scaled quads (`PSPEXP_BATCH_SCALED`); horizontal and vertical flips; **rotation is ignored** (drawn unrotated) |
 | `SDL_RenderClear` | a full-screen rect, including the letterbox bars |
@@ -48,9 +49,9 @@ scripts/pspexp-run build/host/sdl-game --surface     # window-surface path
 | `SDL_OpenAudio`, `SDL_OpenAudioDevice` (callback or `SDL_QueueAudio`) | the mixed output is converted to 44.1 kHz stereo and streamed (`AUDIO_STREAM`); the host device keeps playing unless `PSPEXP_LOCAL_AUDIO=0` |
 | PSP controls | a virtual game controller ("PSP (PSPExp)": a/b/x/y = cross/circle/square/triangle, shoulders, start/back, d-pad, left stick = nub) when the program initialised joysticks, plus keyboard events per `PSPEXP_KEYS` |
 
-Not mirrored: render targets (`SDL_SetRenderTarget` to a texture: drawing
-into it is skipped, the texture is drawn as last uploaded), rotation,
-`SDL_RenderGeometry`, OpenGL / Vulkan drawing, and SDL 1.2 programs.
+Not mirrored: rotation, `SDL_RenderGeometry`, lines drawn into a render
+target, reading a render target back (`SDL_RenderReadPixels`), OpenGL /
+Vulkan drawing, and SDL 1.2 programs.
 
 The PSP is double-buffered: a program that never clears and redraws only
 the parts that changed (relying on the previous frame staying put) shows
@@ -64,6 +65,8 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | `PSPEXP=usb\|tcp[:host[:port]]\|sdl\|null` | target (the launcher's `--usb`, `--tcp`, `--null` set it) |
 | `PSPEXP_KEYS=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=escape,up=up,down=down,left=left,right=right` | keyboard keys pressed for PSP buttons (SDL key names); this is the default |
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
+| `PSPEXP_NUB=keys` | the nub presses the four arrow keys of `PSPEXP_KEYS` (for keyboard-only games such as Doom) |
+| `PSPEXP_WINDOW=hide` | hide the program's own window once the PSP is connected |
 | `PSPEXP_LOCAL_AUDIO=0` | silence the host's audio device |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
@@ -81,8 +84,19 @@ demo's 128x32 bar). A renderer-less program streams its whole surface:
 270 KB per frame, about 16 MB/s at 60 fps, which USB carries but leaves
 little headroom; expect 30-60 fps depending on the program.
 
+## Doom
+
+`scripts/pspexp-doom` runs Chocolate Doom (`brew install chocolate-doom`)
+with Freedoom's WAD (unzip a release from https://freedoom.github.io/ into
+`../doom/`, or pass a WAD path) and the PSP controls mapped to Doom's keys:
+nub and d-pad move and turn, cross fires, circle uses, square runs, L / R
+strafe, triangle is Enter, start is Escape, select is the map. Doom's
+320x200 frame is one streaming texture, four pages of 5650, 160 KB per
+frame at 35 fps (5.6 MB/s), letterboxed to 362x272.
+
 ## Headless test
 
 `tests/run_sdl_pspexp.sh` (run by `ctest`) runs the test game through the
-shim with SDL's dummy drivers and the Null executor in both paths and checks
-that every frame was mirrored.
+shim with SDL's dummy drivers and the Null executor in the renderer,
+window-surface and render-target paths and checks that every frame was
+mirrored.

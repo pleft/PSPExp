@@ -49,6 +49,7 @@ cable pull, so pull the cable to read it after a session.
 | **any unmodified SDL2 program on the PSP** (v0.4) | `scripts/pspexp-run <program> [args]` |
 | the SDL2 test game on the PSP (renderer path / window-surface path) | `scripts/pspexp-run build/host/sdl-game` / `... --surface` |
 | an SDL2 program without a PSP (executor window) | `PSPEXP=sdl scripts/pspexp-run <program>` |
+| **Doom on the PSP** (Chocolate Doom + Freedoom, PSP controls mapped) | `scripts/pspexp-doom` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,
@@ -65,6 +66,13 @@ PSPEXP_KEYS=cross=space,circle=lctrl scripts/pspexp-run /path/to/game   # remap 
 PSPEXP_NUB=mouse scripts/pspexp-run /path/to/game                        # nub = mouse, cross/circle = clicks
 PSPEXP_LOCAL_AUDIO=0 scripts/pspexp-run /path/to/game                    # sound only on the PSP
 ```
+
+Doom: `brew install chocolate-doom`, unzip a Freedoom release
+(https://freedoom.github.io/) into `../doom/`, then `scripts/pspexp-doom`.
+Nub / d-pad move and turn, cross fires, circle uses, square runs, L / R
+strafe, triangle Enter, start Escape (menu), select map. Sound comes out
+of the PSP only (`PSPEXP_LOCAL_AUDIO=1` for both); `PSPEXP_WINDOW=hide`
+hides the Mac window.
 
 The game sees a game controller named "PSP (PSPExp)" if it initialised
 joysticks, and keyboard events otherwise (defaults: cross=z, circle=x,

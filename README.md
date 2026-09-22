@@ -104,7 +104,18 @@ scripts/pspexp-run /path/to/any/sdl2/game     # yours
 ```
 
 `compatibility/sdl-pspexp/README.md` lists what is mirrored (and what is
-not: rotation, render targets, OpenGL) and the environment variables.
+not: rotation, OpenGL) and the environment variables. Render targets are
+replayed, so pixel-art ports that upscale through one work too.
+
+Doom is the showcase: `brew install chocolate-doom`, unzip a Freedoom
+release into `../doom/`, and
+
+```sh
+scripts/pspexp-doom
+```
+
+puts Chocolate Doom on the PSP with its controls mapped (nub and d-pad
+move, cross fires, circle uses, L / R strafe, start is the menu).
 
 ## Raspberry Pi as the host
 

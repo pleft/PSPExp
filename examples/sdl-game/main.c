@@ -6,8 +6,10 @@
  * frame, a paddle you move with the keyboard or a game controller, and a
  * tone through SDL_QueueAudio.
  *
- *   sdl-game [--frames N] [--size WxH] [--surface]
+ *   sdl-game [--frames N] [--size WxH] [--surface] [--target]
  *
+ * --target draws the scene into a render-target texture and copies that to
+ * the window (the integer-upscaling pattern of pixel-art ports).
  * --surface uses no renderer at all: it blits into the window surface and
  * calls SDL_UpdateWindowSurface, the pattern of older 2D ports, which the
  * shim handles by streaming the surface.
@@ -120,7 +122,8 @@ static int surface_main(SDL_Window *win, int max_frames)
 
 int main(int argc, char **argv)
 {
-    int max_frames = 0, win_w = 640, win_h = 480, i, frames = 0, surface_mode = 0;
+    int max_frames = 0, win_w = 640, win_h = 480, i, frames = 0, surface_mode = 0, target_mode = 0;
+    SDL_Texture *target = NULL;
     SDL_Window *win;
     SDL_Renderer *ren;
     SDL_Texture *tiles, *sprites[3], *stream;
@@ -137,6 +140,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) max_frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--size") && i + 1 < argc) sscanf(argv[++i], "%dx%d", &win_w, &win_h);
         else if (!strcmp(argv[i], "--surface")) surface_mode = 1;
+        else if (!strcmp(argv[i], "--target")) target_mode = 1;
     }
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) { fprintf(stderr, "%s\n", SDL_GetError()); return 1; }
     win = SDL_CreateWindow("sdl-game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, win_w, win_h, 0);
@@ -150,6 +154,7 @@ int main(int argc, char **argv)
     sprites[1] = make_sprite(ren, 48, 70, 200, 90);
     sprites[2] = make_sprite(ren, 48, 80, 120, 250);
     stream = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, 128, 32);
+    if (target_mode) target = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, LOGICAL_W / 2, LOGICAL_H / 2);
 
     SDL_zero(want);
     want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024;
@@ -209,6 +214,7 @@ int main(int argc, char **argv)
             }
         }
 
+        if (target) { SDL_SetRenderTarget(ren, target); SDL_RenderSetScale(ren, 0.5f, 0.5f); }
         SDL_SetRenderDrawColor(ren, 10, 10, 30, 255);
         SDL_RenderClear(ren);
         {
@@ -239,6 +245,11 @@ int main(int argc, char **argv)
             SDL_SetRenderDrawColor(ren, 255, 60, 60, 120);
             SDL_RenderDrawLine(ren, (int)paddle_x, LOGICAL_H - 60, (int)paddle_x, 0);
             SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+        }
+        if (target) {
+            SDL_RenderSetScale(ren, 1.0f, 1.0f);
+            SDL_SetRenderTarget(ren, NULL);
+            SDL_RenderCopy(ren, target, NULL, NULL);
         }
         SDL_RenderPresent(ren);
         frames++;

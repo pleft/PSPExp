@@ -15,14 +15,18 @@
  * Coordinates: the renderer's logical size (or window size) is fitted into
  * 480 x 272 with letterboxing. Textures are shadowed in RGBA8888 so that
  * SDL_UpdateTexture / SDL_LockTexture changes can be re-uploaded (4444, in
- * pages of <= 512 x 512). Render targets are not mirrored. SDL_RenderGeometry
- * and rotation in SDL_RenderCopyEx are ignored (drawn unrotated).
+ * pages of <= 512 x 512; 5650 when the texture's blend mode is NONE, 4444
+ * otherwise). Drawing into a render target is recorded and replayed, scaled,
+ * when the target is copied to the screen (the integer-upscaling pattern of
+ * pixel-art ports). SDL_RenderGeometry and rotation in SDL_RenderCopyEx are
+ * ignored (drawn unrotated).
  *
  * Environment:
  *   PSPEXP=usb | tcp[:host[:port]] | sdl | null   (default usb; sdl = the
  *          PSPExp SDL executor in a second window, for checking the stream)
  *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons
- *   PSPEXP_NUB=joystick | mouse               (default joystick)
+ *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows)
+ *   PSPEXP_WINDOW=hide                        hide the program's own window
  *   PSPEXP_LOCAL_AUDIO=0                      silence the host's audio device
  *   PSPEXP_SHOT_EVERY=N                       PSP framebuffer dumps
  */
@@ -70,11 +74,24 @@ static void *real_symbol(const char *name)
 
 typedef struct Page { uint16_t tex; int x0, y0, w, h, texw, texh; } Page;
 
+/* A draw recorded into a render target, in the target's pixel space; replayed
+ * (scaled into the destination) when the target is copied to the screen. */
+typedef struct TargetOp {
+    SDL_Texture *tex;          /* NULL: a fill with `color` */
+    SDL_Rect src, dst;
+    int flip;
+    Uint8 r, g, b, a;
+} TargetOp;
+#define TARGET_OPS_MAX 256
+
 typedef struct Tex {
     SDL_Texture *sdl;
     int w, h;
     uint32_t *rgba;            /* shadow, RGBA8888 (R in the low byte) */
     int dirty, unsupported, streaming;   /* streaming: re-uploaded often, kept in PSP RAM */
+    int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
+    TargetOp *ops; int nops;
+    SDL_BlendMode blend;       /* NONE: uploaded as 5650 (full colour), else 4444 */
     Page pages[16];
     int npages;
     Uint8 r, g, b, a;          /* colour / alpha mod */
@@ -99,6 +116,8 @@ static struct {
     float sx, sy; int ox, oy;          /* logical -> PSP */
     SDL_Rect viewport; int has_viewport;
     SDL_Rect clip; int has_clip;
+    float rsx, rsy;                    /* SDL_RenderSetScale */
+    struct { SDL_Rect viewport; int has_viewport; SDL_Rect clip; int has_clip; float rsx, rsy; } backup;   /* around render targets */
     int frame_open, clip_sent; SDL_Rect clip_last;
     Uint8 dr, dg, db, da; SDL_BlendMode dblend;
     SDL_Texture *target;
@@ -110,7 +129,7 @@ static struct {
     SDL_mutex *amu; int16_t *aring; size_t acap, ahead, atail, abuf; int local_audio;
     SDL_AudioSpec dev_spec[8]; SDL_AudioStream *dev_stream[8]; SDL_AudioCallback dev_cb[8]; void *dev_ud[8];
     /* input */
-    int nub_mouse; uint32_t prev_buttons; float px, py; Uint32 ptick;
+    int nub_mouse, nub_keys, hide_window; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     SDL_Keycode keys[16];
     int vjoy;                          /* virtual joystick device index, -1 none */
     SDL_Joystick *vjoy_handle;
@@ -170,8 +189,11 @@ static void connect_once(void)
     S.next_handle = 1;
     S.local_audio = !(getenv("PSPEXP_LOCAL_AUDIO") && !strcmp(getenv("PSPEXP_LOCAL_AUDIO"), "0"));
     S.nub_mouse = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "mouse");
+    S.nub_keys = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "keys");
+    S.hide_window = getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
     S.shot_every = getenv("PSPEXP_SHOT_EVERY") ? (unsigned)atoi(getenv("PSPEXP_SHOT_EVERY")) : 0;
     S.vjoy = -1;
+    S.rsx = S.rsy = 1.0f;
     parse_keys();
     {
         const char *skip = getenv("PSPEXP_DEBUG_SKIP");
@@ -268,6 +290,7 @@ static void update_scale(void)
     S.sx = S.sy = s;
     S.ox = (int)((480 - lw * s) / 2);
     S.oy = (int)((272 - lh * s) / 2);
+    logf_("geometry: window %dx%d, logical %dx%d -> scale %.3f, offset %d,%d", S.win_w, S.win_h, S.log_w, S.log_h, s, S.ox, S.oy);
 }
 
 static int16_t X(float x) { return (int16_t)lroundf(S.ox + (x + (S.has_viewport ? S.viewport.x : 0)) * S.sx); }
@@ -298,6 +321,24 @@ static void apply_clip(void)
     pspexp_set_clip(S.ctx, (int16_t)want.x, (int16_t)want.y, (int16_t)want.w, (int16_t)want.h);
     S.clip_last = want;
     S.clip_sent = 1;
+}
+
+static Tex *find_tex(SDL_Texture *t);
+static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy, float dw, float dh, int flip);
+static Tex *target_tex(void) { return S.target ? find_tex(S.target) : NULL; }
+
+static void record_op(SDL_Texture *tex, const SDL_Rect *src, const SDL_Rect *dst, int flip, Uint8 r, Uint8 g, Uint8 b, Uint8 a)
+{
+    Tex *t = target_tex();
+    TargetOp *op;
+    if (!t || !t->is_target) return;
+    if (!t->ops) t->ops = (TargetOp *)calloc(TARGET_OPS_MAX, sizeof(TargetOp));
+    if (!t->ops || t->nops == TARGET_OPS_MAX) return;
+    op = &t->ops[t->nops++];
+    op->tex = tex;
+    op->src = src ? *src : (SDL_Rect){ 0, 0, 0, 0 };
+    op->dst = dst ? *dst : (SDL_Rect){ 0, 0, t->w, t->h };
+    op->flip = flip; op->r = r; op->g = g; op->b = b; op->a = a;
 }
 
 static int drawing(void)
@@ -346,7 +387,7 @@ static int upload_tex(Tex *x)
 {
     int y0, x0;
     /* streamed surfaces use 256 x 128 pages so the padding stays small */
-    int pw = x == S.surface_tex ? 256 : 512, ph = x == S.surface_tex ? 128 : 512;
+    int pw = x->streaming ? 256 : 512, ph = x->streaming ? 128 : 512;   /* small pages: less padding per frame */
     release_pages(x);
     for (y0 = 0; y0 < x->h; y0 += ph) {
         for (x0 = 0; x0 < x->w; x0 += pw) {
@@ -354,7 +395,7 @@ static int upload_tex(Tex *x)
             PspExpTextureDesc d;
             PspExpFrame f;
             uint16_t *buf;
-            int y;
+            int y, opaque = x->blend == SDL_BLENDMODE_NONE;
             if (x->npages == 16) { x->unsupported = 1; return -1; }
             p = &x->pages[x->npages];
             p->x0 = x0; p->y0 = y0;
@@ -370,11 +411,12 @@ static int upload_tex(Tex *x)
                 int xx;
                 for (xx = 0; xx < p->w; xx++) {
                     uint32_t c = src[xx];
-                    dst[xx] = pspexp_color_4444((uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16), (uint8_t)(c >> 24));
+                    dst[xx] = opaque ? pspexp_color_5650((uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16))
+                                     : pspexp_color_4444((uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16), (uint8_t)(c >> 24));
                 }
             }
             memset(&d, 0, sizeof(d));
-            d.width = (uint16_t)p->texw; d.height = (uint16_t)p->texh; d.format = PSPEXP_TEX_4444;
+            d.width = (uint16_t)p->texw; d.height = (uint16_t)p->texh; d.format = opaque ? PSPEXP_TEX_5650 : PSPEXP_TEX_4444;
             d.layout = PSPEXP_LAYOUT_LINEAR; d.priority = x->streaming ? PSPEXP_PRIORITY_LOW : PSPEXP_PRIORITY_NORMAL;
             f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(p->texw < 64 ? p->texw : 64); f.h = (uint16_t)p->texh;
             p->tex = alloc_handle();
@@ -410,6 +452,40 @@ static uint16_t tint_for(const Tex *x, uint16_t *fmt)
     return pspexp_color_5650(x->r, x->g, x->b);
 }
 
+static void mirror_fill(float x, float y, float w, float h);
+
+/* Copy of a render target: replay what was drawn into it, mapped through
+ * src (target space) -> (dx, dy, dw, dh) (logical space), clipped to it. */
+static void replay_target(Tex *t, const SDL_Rect *src, float dx, float dy, float dw, float dh)
+{
+    SDL_Rect s = src ? *src : (SDL_Rect){ 0, 0, t->w, t->h };
+    SDL_Rect saved_clip = S.clip; int saved_has = S.has_clip;
+    SDL_Rect want = { (int)dx, (int)dy, (int)dw, (int)dh };
+    Uint8 sr = S.dr, sg = S.dg, sb = S.db, sa = S.da; SDL_BlendMode sblend = S.dblend;
+    float kx, ky;
+    int i;
+    if (s.w <= 0 || s.h <= 0 || !t->ops) return;
+    kx = dw / (float)s.w; ky = dh / (float)s.h;
+    if (S.has_clip) SDL_IntersectRect(&S.clip, &want, &want);
+    S.clip = want; S.has_clip = 1;
+    for (i = 0; i < t->nops; i++) {
+        const TargetOp *op = &t->ops[i];
+        /* mirror_copy / mirror_fill multiply by the render scale again: pre-divide */
+        float ox = (dx + (op->dst.x - s.x) * kx) / S.rsx, oy = (dy + (op->dst.y - s.y) * ky) / S.rsy;
+        float ow = op->dst.w * kx / S.rsx, oh = op->dst.h * ky / S.rsy;
+        if (!op->tex) {
+            S.dr = op->r; S.dg = op->g; S.db = op->b; S.da = op->a; S.dblend = op->a < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE;
+            mirror_fill(ox, oy, ow, oh);
+        } else {
+            Tex *x = find_tex(op->tex);
+            if (!x) continue;
+            mirror_copy(op->tex, op->src.w ? &op->src : NULL, ox, oy, ow, oh, op->flip);
+        }
+    }
+    S.dr = sr; S.dg = sg; S.db = sb; S.da = sa; S.dblend = sblend;
+    S.clip = saved_clip; S.has_clip = saved_has;
+}
+
 static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy, float dw, float dh, int flip)
 {
     Tex *x = find_tex(t);
@@ -417,6 +493,13 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
     int i;
     SDL_Rect s;
     if (!x || x->unsupported || S.skip_quads) return;
+    dx *= S.rsx; dy *= S.rsy; dw *= S.rsx; dh *= S.rsy;
+    if (S.target) {   /* drawing into a render target: remember it */
+        SDL_Rect d = { (int)dx, (int)dy, (int)dw, (int)dh };
+        record_op(t, src, &d, flip, 255, 255, 255, 255);
+        return;
+    }
+    if (x->is_target) { replay_target(x, src, dx, dy, dw, dh); return; }
     if (!drawing()) return;
     if (x->dirty && upload_tex(x) < 0) return;
     s = src ? *src : (SDL_Rect){ 0, 0, x->w, x->h };
@@ -450,7 +533,10 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
 
 static void mirror_fill(float x, float y, float w, float h)
 {
-    if (S.skip_rects || !drawing()) return;
+    if (S.skip_rects) return;
+    x *= S.rsx; y *= S.rsy; w *= S.rsx; h *= S.rsy;
+    if (S.target) { SDL_Rect d = { (int)x, (int)y, (int)w, (int)h }; record_op(NULL, NULL, &d, 0, S.dr, S.dg, S.db, draw_alpha()); return; }
+    if (!drawing()) return;
     flush_quads();
     pspexp_fill_rect(S.ctx, X(x), Y(y), W(w), H(h), draw_color5650(), draw_alpha());
 }
@@ -458,6 +544,7 @@ static void mirror_fill(float x, float y, float w, float h)
 static void mirror_line(float x0, float y0, float x1, float y1)
 {
     if (S.skip_lines || !drawing()) return;
+    x0 *= S.rsx; y0 *= S.rsy; x1 *= S.rsx; y1 *= S.rsy;
     flush_quads();
     pspexp_draw_line(S.ctx, X(x0), Y(y0), X(x1), Y(y1), draw_color5650(), draw_alpha());
 }
@@ -599,6 +686,21 @@ static void feed_input(void)
         if (pressed & BUTTON_BITS[i]) push_key(S.keys[i], 1);
         if (released & BUTTON_BITS[i]) push_key(S.keys[i], 0);
     }
+    if (S.nub_keys) {
+        /* The nub as the four arrow keys, with hysteresis so a held diagonal stays held. */
+        int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
+        uint32_t dirs = 0, changed;
+        if (ax < -50 || (ax < -30 && (S.nub_dirs & PSPEXP_BUTTON_LEFT))) dirs |= PSPEXP_BUTTON_LEFT;
+        if (ax > 50 || (ax > 30 && (S.nub_dirs & PSPEXP_BUTTON_RIGHT))) dirs |= PSPEXP_BUTTON_RIGHT;
+        if (ay < -50 || (ay < -30 && (S.nub_dirs & PSPEXP_BUTTON_UP))) dirs |= PSPEXP_BUTTON_UP;
+        if (ay > 50 || (ay > 30 && (S.nub_dirs & PSPEXP_BUTTON_DOWN))) dirs |= PSPEXP_BUTTON_DOWN;
+        changed = dirs ^ S.nub_dirs;
+        S.nub_dirs = dirs;
+        if (changed & PSPEXP_BUTTON_LEFT) push_key(S.keys[B_LEFT], (dirs & PSPEXP_BUTTON_LEFT) != 0);
+        if (changed & PSPEXP_BUTTON_RIGHT) push_key(S.keys[B_RIGHT], (dirs & PSPEXP_BUTTON_RIGHT) != 0);
+        if (changed & PSPEXP_BUTTON_UP) push_key(S.keys[B_UP], (dirs & PSPEXP_BUTTON_UP) != 0);
+        if (changed & PSPEXP_BUTTON_DOWN) push_key(S.keys[B_DOWN], (dirs & PSPEXP_BUTTON_DOWN) != 0);
+    }
     if (S.nub_mouse) {
         Uint32 now = SDL_GetTicks();
         float dt = (now - S.ptick > 100 ? 100 : now - S.ptick) / 1000.0f;
@@ -638,6 +740,7 @@ HOOK(SDL_Renderer *, SDL_CreateRenderer, (SDL_Window *win, int index, Uint32 fla
         if (!S.win) { S.win = win; SDL_GetWindowSize(win, &S.win_w, &S.win_h); }
         connect_once();
         update_scale();
+        if (S.hide_window && S.active) { SDL_SetWindowFullscreen(win, 0); SDL_HideWindow(win); }
     }
     return r;
 }
@@ -649,6 +752,7 @@ HOOK(int, SDL_CreateWindowAndRenderer, (int w, int h, Uint32 flags, SDL_Window *
         S.win = *win; S.ren = *ren; S.win_w = w; S.win_h = h;
         connect_once();
         update_scale();
+        if (S.hide_window && S.active) { SDL_SetWindowFullscreen(*win, 0); SDL_HideWindow(*win); }
     }
     return rc;
 }
@@ -667,6 +771,13 @@ HOOK(int, SDL_RenderSetViewport, (SDL_Renderer *r, const SDL_Rect *rect))
     return rc;
 }
 
+HOOK(int, SDL_RenderSetScale, (SDL_Renderer *r, float sx, float sy))
+{
+    int rc = REAL(SDL_RenderSetScale)(r, sx, sy);
+    if (r == S.ren) { S.rsx = sx > 0 ? sx : 1.0f; S.rsy = sy > 0 ? sy : 1.0f; }
+    return rc;
+}
+
 HOOK(int, SDL_RenderSetClipRect, (SDL_Renderer *r, const SDL_Rect *rect))
 {
     int rc = REAL(SDL_RenderSetClipRect)(r, rect);
@@ -677,7 +788,21 @@ HOOK(int, SDL_RenderSetClipRect, (SDL_Renderer *r, const SDL_Rect *rect))
 HOOK(int, SDL_SetRenderTarget, (SDL_Renderer *r, SDL_Texture *t))
 {
     int rc = REAL(SDL_SetRenderTarget)(r, t);
-    if (r == S.ren) { flush_quads(); S.target = t; }
+    if (r == S.ren && t != S.target) {
+        flush_quads();
+        if (t && !S.target) {   /* SDL resets viewport, clip and scale for the target and restores them after */
+            S.backup.viewport = S.viewport; S.backup.has_viewport = S.has_viewport;
+            S.backup.clip = S.clip; S.backup.has_clip = S.has_clip;
+            S.backup.rsx = S.rsx; S.backup.rsy = S.rsy;
+            S.has_viewport = 0; S.has_clip = 0; S.rsx = S.rsy = 1.0f;
+        } else if (!t && S.target) {
+            S.viewport = S.backup.viewport; S.has_viewport = S.backup.has_viewport;
+            S.clip = S.backup.clip; S.has_clip = S.backup.has_clip;
+            S.rsx = S.backup.rsx; S.rsy = S.backup.rsy;
+        }
+        S.target = t;
+        if (t) { Tex *x = find_tex(t); if (x && x->is_target) x->nops = 0; }   /* a new pass replaces the last */
+    }
     return rc;
 }
 
@@ -700,8 +825,9 @@ HOOK(SDL_Texture *, SDL_CreateTexture, (SDL_Renderer *r, Uint32 format, int acce
     SDL_Texture *t = REAL(SDL_CreateTexture)(r, format, access, w, h);
     if (t && r == S.ren) {
         Tex *x = add_tex(t, w, h);
-        if (x && access == SDL_TEXTUREACCESS_TARGET) x->unsupported = 1;
+        if (x && access == SDL_TEXTUREACCESS_TARGET) x->is_target = 1;
         if (x && access == SDL_TEXTUREACCESS_STREAMING) x->streaming = 1;
+        if (x) x->blend = SDL_BLENDMODE_NONE;   /* SDL's default for SDL_CreateTexture */
     }
     return t;
 }
@@ -720,9 +846,17 @@ HOOK(SDL_Texture *, SDL_CreateTextureFromSurface, (SDL_Renderer *r, SDL_Surface 
                 SDL_FreeSurface(conv);
             }
             x->dirty = 1;
+            SDL_GetTextureBlendMode(t, &x->blend);   /* BLEND when the surface had alpha or a colour key */
         }
     }
     return t;
+}
+
+HOOK(int, SDL_SetTextureBlendMode, (SDL_Texture *t, SDL_BlendMode mode))
+{
+    Tex *x = find_tex(t);
+    if (x && x->blend != mode) { x->blend = mode; x->dirty = 1; }   /* format changes: re-upload */
+    return REAL(SDL_SetTextureBlendMode)(t, mode);
 }
 
 HOOK(void, SDL_DestroyTexture, (SDL_Texture *t))
@@ -734,6 +868,7 @@ HOOK(void, SDL_DestroyTexture, (SDL_Texture *t))
             *pp = x->next;
             if (link_up()) release_pages(x);
             free(x->rgba);
+            free(x->ops);
             free(x);
             break;
         }
@@ -795,7 +930,10 @@ HOOK(int, SDL_SetTextureAlphaMod, (SDL_Texture *t, Uint8 alpha))
 
 HOOK(int, SDL_RenderClear, (SDL_Renderer *r))
 {
-    if (r == S.ren && link_up() && !S.target && !S.skip_clear) {
+    if (r == S.ren && S.target) {
+        Tex *x = target_tex();
+        if (x && x->is_target) { x->nops = 0; record_op(NULL, NULL, NULL, 0, S.dr, S.dg, S.db, 255); }
+    } else if (r == S.ren && link_up() && !S.target && !S.skip_clear) {
         begin_frame();
         flush_quads();
         /* clear covers the whole PSP screen including the letterbox bars */
@@ -806,11 +944,18 @@ HOOK(int, SDL_RenderClear, (SDL_Renderer *r))
     return REAL(SDL_RenderClear)(r);
 }
 
+static SDL_Rect full_dst(void)
+{
+    Tex *t = target_tex();
+    if (t) return (SDL_Rect){ 0, 0, t->w, t->h };
+    return (SDL_Rect){ 0, 0, S.log_w > 0 ? S.log_w : S.win_w, S.log_h > 0 ? S.log_h : S.win_h };
+}
+
 HOOK(int, SDL_RenderCopy, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src, const SDL_Rect *dst))
 {
     if (r == S.ren) {
         Tex *x = find_tex(t);
-        SDL_Rect d = dst ? *dst : (SDL_Rect){ 0, 0, S.log_w > 0 ? S.log_w : S.win_w, S.log_h > 0 ? S.log_h : S.win_h };
+        SDL_Rect d = dst ? *dst : full_dst();
         if (x) mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0);
     }
     return REAL(SDL_RenderCopy)(r, t, src, dst);
@@ -820,7 +965,7 @@ HOOK(int, SDL_RenderCopyEx, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *sr
 {
     if (r == S.ren) {
         Tex *x = find_tex(t);
-        SDL_Rect d = dst ? *dst : (SDL_Rect){ 0, 0, S.log_w > 0 ? S.log_w : S.win_w, S.log_h > 0 ? S.log_h : S.win_h };
+        SDL_Rect d = dst ? *dst : full_dst();
         if (x) mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, (int)flip);
     }
     return REAL(SDL_RenderCopyEx)(r, t, src, dst, angle, center, flip);
@@ -829,7 +974,7 @@ HOOK(int, SDL_RenderCopyEx, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *sr
 HOOK(int, SDL_RenderCopyF, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src, const SDL_FRect *dst))
 {
     if (r == S.ren && dst) mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, 0);
-    else if (r == S.ren) mirror_copy(t, src, 0, 0, (float)(S.log_w > 0 ? S.log_w : S.win_w), (float)(S.log_h > 0 ? S.log_h : S.win_h), 0);
+    else if (r == S.ren) { SDL_Rect d = full_dst(); mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); }
     return REAL(SDL_RenderCopyF)(r, t, src, dst);
 }
 
@@ -843,7 +988,7 @@ HOOK(int, SDL_RenderFillRect, (SDL_Renderer *r, const SDL_Rect *rect))
 {
     if (r == S.ren) {
         if (rect) mirror_fill((float)rect->x, (float)rect->y, (float)rect->w, (float)rect->h);
-        else mirror_fill(0, 0, (float)(S.log_w > 0 ? S.log_w : S.win_w), (float)(S.log_h > 0 ? S.log_h : S.win_h));
+        else { SDL_Rect d = full_dst(); mirror_fill((float)d.x, (float)d.y, (float)d.w, (float)d.h); }
     }
     return REAL(SDL_RenderFillRect)(r, rect);
 }
