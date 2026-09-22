@@ -65,9 +65,18 @@ Cached sound effects (`PLAY_SOUND`) exist in the protocol but the backend
 uses the stream for everything; that is section 8's "pre-mixed on the host"
 mode and costs nothing in engine changes.
 
+Eviction: every second the backend releases surfaces the game has not drawn
+for 15 s (the engine keeps them; the next draw re-uploads). The minimap is
+re-uploaded only when its pixels change. In-game the PSP holds about 19
+surfaces / 0.5 MiB for Warcraft; palette variants (up to 64 per graphic)
+stop being uploaded once colour cycling has been seen once.
+
+Verified without hardware: with `PSPEXP=tcp:127.0.0.1:3838` and the PSP
+runtime under PPSSPP (`scripts/run-ppsspp.sh`), the emulated GE renders the
+game; `PSPEXP_SHOT_EVERY=N` saves its framebuffer every N frames.
+
 Not yet mirrored: the enhanced/bilinear fog modes (War1gus uses the legacy
-tiled mode), `Video.DrawEllipseClip` (approximated as a circle), and eviction
-of textures the PSP no longer needs (everything uploaded stays resident).
+tiled mode) and `Video.DrawEllipseClip` (approximated as a circle).
 
 ## Running
 
