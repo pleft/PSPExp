@@ -51,6 +51,9 @@ Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,
 errors, audio frames sent / buffered / underruns.
 
+Pointer speed: `PSPEXP_POINTER_SPEED=150` (pixels per second at full nub
+deflection; default 200, the native port used 260). L holds slow, R fast.
+
 ## Sprite demo controls (PSP)
 
 d-pad or nub: move · cross: shape · circle: tint · square: field on/off ·

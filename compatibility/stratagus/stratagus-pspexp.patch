@@ -597,10 +597,10 @@ index 2c59b59..7464f61 100644
  
 diff --git a/src/video/pspexp_video.cpp b/src/video/pspexp_video.cpp
 new file mode 100644
-index 0000000..2060128
+index 0000000..eba23cc
 --- /dev/null
 +++ b/src/video/pspexp_video.cpp
-@@ -0,0 +1,1123 @@
+@@ -0,0 +1,1127 @@
 +//       _________ __                 __
 +//      /   _____//  |_____________ _/  |______     ____  __ __  ______
 +//      \_____  \\   __\_  __ \__  \\   __\__  \   / ___\|  |  \/  ___/
@@ -1136,7 +1136,7 @@ index 0000000..2060128
 +float pointerX = 0, pointerY = 0;
 +Uint32 pointerTicks = 0;
 +bool slowPointer = false, fastPointer = false;
-+constexpr float PointerSpeed = 260.0f;   /// pixels per second at full deflection
++float PointerSpeed = 200.0f;             /// pixels per second at full deflection (PSPEXP_POINTER_SPEED)
 +constexpr int DeadZone = 35;             /// of 127
 +
 +void pushKey(SDL_Keycode sym, bool down)
@@ -1466,6 +1466,10 @@ index 0000000..2060128
 +	}
 +	pointerX = Video.Width / 2.0f;
 +	pointerY = Video.Height / 2.0f;
++	if (const char *sp = getenv("PSPEXP_POINTER_SPEED")) {
++		const float v = float(atof(sp));
++		if (v >= 20.0f && v <= 2000.0f) PointerSpeed = v;
++	}
 +	lastReport = SDL_GetTicks();
 +	fprintf(stderr, "[pspexp] backend active (%s), %dx%d\n", env, Video.Width, Video.Height);
 +	AudioInstall();   /// no-op until the mixer is open; InitSound calls it too
