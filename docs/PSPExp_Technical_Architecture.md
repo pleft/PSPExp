@@ -938,7 +938,7 @@ A native PSP build of Stratagus/Warcraft already runs fluidly on the target PSP-
 
 ### v0.4 – SDL compatibility
 
-Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications. *Done 2026-09-22 as an interposition library instead of a render driver (§12); verified against the PSP runtime under PPSSPP with framebuffer dumps, headless test in `ctest`.*
+Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications. *Done 2026-09-22 as an interposition library instead of a render driver (§12); runs on the PSP-1000 over USB at 60 fps (§20a), headless test in `ctest`.*
 
 ### Later research
 
@@ -1009,6 +1009,7 @@ What the first day of implementation measured, against the estimates this docume
 | 5,000 sprites per frame | transport-bound (40 KB) | GE-bound: 9.2 ms of GE fill, 2 ms of transfer |
 | input to present | 35–50 ms input-to-photon | one frame period from sample to vblank (16.7 ms), ≈ 25–41 ms to photon |
 | Warcraft (v0.2) | native build ≈ 15 ms/frame on the PSP | 60 fps, PSP CPU 0.5–0.8 ms + GE 0.3–0.5 ms per frame, 4.5–9.5 KB per frame, audio streamed with no underruns |
+| an unmodified SDL2 program (v0.4, `sdl-pspexp`, test game: 95 scaled sprites + primitives + a streaming texture) | — | 60 fps, 3.7 KB per frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, 120 uploads/s (the streaming texture), audio streamed with no underruns |
 
 What changed against the plan:
 
