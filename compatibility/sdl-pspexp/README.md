@@ -94,6 +94,19 @@ strafe, triangle is Enter, start is Escape, select is the map. Doom's
 320x200 frame is one streaming texture, four swizzled pages of 5650 in
 VRAM, 160 KB per frame at 35 fps (5.6 MB/s), letterboxed to 362x272.
 
+## OpenTyrian
+
+`scripts/pspexp-tyrian` runs OpenTyrian built from source
+(`git clone https://github.com/opentyrian/opentyrian ../tyrian/opentyrian
+&& make -C ../tyrian/opentyrian`) with the freeware Tyrian 2.1 data
+(https://camanis.net/tyrian/tyrian21.zip unzipped into `../tyrian/data/`).
+Nub and d-pad move, cross fires, circle / L and square / R are the
+sidekicks, triangle is Enter, start is Escape, select pauses. The script
+writes `~/.config/opentyrian/opentyrian.cfg` with `scaler None` the first
+time: OpenTyrian's default Scale2x scaler would make the streamed frame
+640x400 (12 pages, 512 KB) instead of 320x200 (4 pages, 160 KB); the PSP
+does the scaling.
+
 ## Headless test
 
 `tests/run_sdl_pspexp.sh` (run by `ctest`) runs the test game through the

@@ -1,0 +1,32 @@
+#!/bin/sh
+# OpenTyrian on the PSP through sdl-pspexp. PSP controls: nub / d-pad move,
+# cross fires, circle / L = left sidekick, square / R = right sidekick,
+# triangle = Enter (change fire mode in game), start = Escape (menus),
+# select = pause.
+#
+#   scripts/pspexp-tyrian [--tcp[:host[:port]]] [opentyrian args...]
+#
+# Build: git clone https://github.com/opentyrian/opentyrian ../tyrian/opentyrian
+#        && make -C ../tyrian/opentyrian; data: unzip the freeware
+#        https://camanis.net/tyrian/tyrian21.zip into ../tyrian/data/.
+# Override with OPENTYRIAN (binary) and TYRIAN_DATA (directory).
+# The scaler is forced off (opentyrian.cfg: scaler = None) so the frame is
+# 320x200, not a 2x software upscale; the PSP scales it.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TARGET=""
+case "$1" in --tcp*|--null|--usb) TARGET="$1"; shift ;; esac
+BIN="${OPENTYRIAN:-$ROOT/../tyrian/opentyrian/opentyrian}"
+DATA="${TYRIAN_DATA:-$ROOT/../tyrian/data/tyrian21}"
+[ -x "$BIN" ] || { echo "opentyrian not found at $BIN (see the comment in this script)" >&2; exit 1; }
+[ -f "$DATA/tyrian.hdt" ] || { echo "Tyrian data not found in $DATA" >&2; exit 1; }
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/opentyrian"
+mkdir -p "$CFG"
+if [ ! -f "$CFG/opentyrian.cfg" ]; then
+	printf 'section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n\n' > "$CFG/opentyrian.cfg"
+elif ! grep -q "item scaler None" "$CFG/opentyrian.cfg"; then
+	echo "note: set 'item scaler None' under 'section video' in $CFG/opentyrian.cfg to keep the frame at 320x200" >&2
+fi
+export PSPEXP_KEYS="${PSPEXP_KEYS:-cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=escape,select=p,up=up,down=down,left=left,right=right}"
+export PSPEXP_NUB="${PSPEXP_NUB:-keys}"
+export PSPEXP_LOCAL_AUDIO="${PSPEXP_LOCAL_AUDIO:-0}"
+exec "$ROOT/scripts/pspexp-run" $TARGET "$BIN" --data="$DATA" --no-joystick "$@"

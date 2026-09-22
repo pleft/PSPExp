@@ -50,6 +50,7 @@ cable pull, so pull the cable to read it after a session.
 | the SDL2 test game on the PSP (renderer path / window-surface path) | `scripts/pspexp-run build/host/sdl-game` / `... --surface` |
 | an SDL2 program without a PSP (executor window) | `PSPEXP=sdl scripts/pspexp-run <program>` |
 | **Doom on the PSP** (Chocolate Doom + Freedoom, PSP controls mapped) | `scripts/pspexp-doom` |
+| **Tyrian on the PSP** (OpenTyrian built in ../tyrian, freeware data) | `scripts/pspexp-tyrian` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,
@@ -73,6 +74,11 @@ Nub / d-pad move and turn, cross fires, circle uses, square runs, L / R
 strafe, triangle Enter, start Escape (menu), select map. Sound comes out
 of the PSP only (`PSPEXP_LOCAL_AUDIO=1` for both); `PSPEXP_WINDOW=hide`
 hides the Mac window. Expected stats line: 35 fps, 4 batches, GE ≈ 2.2 ms.
+
+Tyrian: build OpenTyrian in `../tyrian/opentyrian` and unzip tyrian21.zip
+into `../tyrian/data/` (see `compatibility/sdl-pspexp/README.md`), then
+`scripts/pspexp-tyrian`. Cross fires, circle / L and square / R sidekicks,
+triangle Enter, start Escape, select pause.
 
 The game sees a game controller named "PSP (PSPExp)" if it initialised
 joysticks, and keyboard events otherwise (defaults: cross=z, circle=x,

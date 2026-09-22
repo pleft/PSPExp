@@ -1076,6 +1076,11 @@ HOOK(int, SDL_RenderDrawPoints, (SDL_Renderer *r, const SDL_Point *points, int c
 static void end_frame(void)
 {
     if (!S.active) return;
+    if (S.win) {   /* programs resize their window after creating it (scalers, settings) */
+        int w = 0, h = 0;
+        SDL_GetWindowSize(S.win, &w, &h);
+        if (w > 0 && h > 0 && (w != S.win_w || h != S.win_h)) { S.win_w = w; S.win_h = h; update_scale(); }
+    }
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
     flush_quads();
