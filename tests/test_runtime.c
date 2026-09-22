@@ -2,6 +2,7 @@
  * sprite demo takes, minus rendering. */
 #include "test_util.h"
 #include "../host/libpspexp/pspexp.h"
+#include "../host/libpspexp/pspexp_font.h"
 #include "../host/executor-null/pspexp_null.h"
 #include <string.h>
 
@@ -256,6 +257,26 @@ int main(void)
         pspexp_wait_present(ctx, 100);
         CHECK_EQ(pspexp_null_stats(nul)->indexed_draws, 2);
         pspexp_release(ctx, 41); pspexp_release(ctx, 40); pspexp_release(ctx, 42);
+        pspexp_pump(ctx, 0);
+    }
+
+    /* Host-baked text: the built-in font is a CLUT4 atlas; DRAW_TEXT is a sprite batch. */
+    {
+        PspExpFont font;
+        uint32_t rerr_font_check = pspexp_null_runtime(nul)->stats.resource_errors;
+        uint32_t sprites_before = pspexp_null_runtime(nul)->stats.sprites;
+        CHECK_EQ(pspexp_font_builtin_upload(ctx, 60, 61, &font), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_resource_state(ctx, 60, NULL), PSPEXP_RES_RESIDENT);
+        CHECK_EQ(pspexp_text_width(&font, "GOLD: 1275"), 10 * 6);
+        CHECK_EQ(pspexp_text_width(&font, "AB\nABCD"), 4 * 6);
+        pspexp_begin_frame(ctx);
+        CHECK_EQ(pspexp_draw_text(ctx, &font, 10, 10, "Gold: 1275\nok", 0xFFFF), 11);   /* spaces skipped */
+        pspexp_present(ctx);
+        pspexp_wait_present(ctx, 100);
+        CHECK_EQ(pspexp_null_runtime(nul)->stats.sprites, sprites_before + 11);
+        CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr_font_check);
+        pspexp_release(ctx, 60); pspexp_release(ctx, 61);
         pspexp_pump(ctx, 0);
     }
 

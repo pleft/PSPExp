@@ -36,6 +36,7 @@ target_link_libraries(pspexp_runtime PUBLIC pspexp_protocol)
 # --- host library --------------------------------------------------------
 add_library(pspexp STATIC
   host/libpspexp/pspexp.c
+  host/libpspexp/pspexp_font.c
   host/libpspexp/pspexp_time.c)
 target_link_libraries(pspexp PUBLIC pspexp_protocol)
 

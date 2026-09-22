@@ -15,6 +15,7 @@
  *   start / Return   reset
  */
 #include "../../host/libpspexp/pspexp.h"
+#include "../../host/libpspexp/pspexp_font.h"
 #include "../../host/executor-null/pspexp_null.h"
 #ifdef PSPEXP_HAVE_USB
 #include "../../host/transport-usb/pspexp_usb.h"
@@ -27,6 +28,8 @@
 #include <string.h>
 
 #define ATLAS_ID      1
+#define FONT_ID       10
+#define FONT_PAL_ID   11
 #define ATLAS_W       128
 #define ATLAS_H       64
 #define FRAME_PLAYER0 0     /* four 32x32 player frames */
@@ -135,6 +138,9 @@ int main(int argc, char **argv)
 #endif
     PspExpContext *ctx;
     PspExpTextureDesc desc;
+    PspExpFont font;
+    int have_font = 0;
+    double fps_shown = 0.0;
     char err[256] = "";
     int px = 224, py = 120, pframe = 0, ptint = 0, show_field = 1;
     uint32_t prev_buttons = 0;
@@ -231,6 +237,9 @@ int main(int argc, char **argv)
         }
     }
 
+    if (pspexp_font_builtin_upload(ctx, FONT_ID, FONT_PAL_ID, &font) == 0) have_font = 1;
+    else fprintf(stderr, "font upload rejected\n");
+
     last_report = pspexp_time_us();
     for (;;) {
         const PspExpInput *in;
@@ -275,6 +284,15 @@ int main(int argc, char **argv)
         pspexp_draw_rect(ctx, 8, 252, (int16_t)(px * 200 / 448 + 4), 16, pspexp_color_5650(90, 200, 120));
         for (i = 0; i <= pframe; i++) pspexp_draw_sprite(ctx, ATLAS_ID, (int16_t)(240 + i * 20), 252, FRAME_BLOCK, tints[ptint]);
         for (i = 0; i <= ptint; i++) pspexp_draw_sprite(ctx, ATLAS_ID, (int16_t)(340 + i * 20), 252, FRAME_BLOCK, PSPEXP_COLOR_NONE);
+        if (have_font) {
+            const PspExpStats *st = pspexp_stats(ctx);
+            pspexp_draw_textf(ctx, &font, 4, 4, PSPEXP_COLOR_NONE, "PSPEXP %s  %4.0f FPS  %5u SPRITES  %5u B",
+                              use_clut ? "CLUT8" : "5551", fps_shown, st->last_frame_sprites, st->last_frame_bytes);
+            pspexp_draw_textf(ctx, &font, 4, 14, pspexp_color_5650(160, 200, 255), "INPUT->PRESENT %5u US  CPU %4u US  GE %4u US",
+                              st->last_input_to_present_us, st->last_execute_us, st->last_ge_us);
+            pspexp_draw_text(ctx, &font, 4, 236, "X SHAPE  O TINT  [] FIELD  /\\ SIZE  START RESET",
+                             pspexp_color_5650(200, 200, 120));
+        }
         if (pspexp_present(ctx) < 0 && pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
             fprintf(stderr, "present failed\n");
             break;
@@ -309,6 +327,7 @@ int main(int argc, char **argv)
                    (double)report_frames * 1e6 / (double)(now - last_report), st->last_frame_bytes, st->last_frame_batches,
                    st->last_frame_sprites, st->last_present_latency_us, st->last_input_to_present_us, st->last_execute_us,
                    st->last_ge_us, st->inputs_received, st->reconnects);
+            fps_shown = (double)report_frames * 1e6 / (double)(now - last_report);
             last_report = now; report_frames = 0;
         }
     }
