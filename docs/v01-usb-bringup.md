@@ -156,6 +156,26 @@ fill rate is the real ceiling for sprite count: 5,000 32x32 sprites take
 9.2 ms of GE time per frame, more than the link (2 ms) or the PSP CPU
 (1.7 ms). At 64 x 64-frame textures the GE is not transport-bound at all.
 
+### 2026-09-22 — Warcraft over USB (v0.2), PSP-1000
+
+`PSPEXP=usb stratagus -d dist/War1gus -r maps/4-middle-ground.smp`, 50 s
+in game, backend stats every 2 s:
+
+| metric | value |
+|---|---|
+| frame rate | 59.9 fps (the engine draws every game cycle, 30 Hz logic) |
+| bytes per frame | 4.5–9.5 KB, 38–67 batches, 95–330 sprites |
+| PSP CPU per frame | 0.5–0.8 ms |
+| PSP GE per frame | 0.3–0.5 ms |
+| input sample → PRESENT_DONE | 33.3 ms (two vblanks: the engine's own frame cadence) |
+| resident on the PSP | 27–30 surfaces, 580 KiB |
+| audio | 44.1 kHz stereo stream, 5,120 frames buffered, 0 underruns |
+| errors | 0 |
+
+For comparison the native PSP build of the same game (WarCraft project,
+`psp-fps.txt`) spent 9.9 ms drawing and 4.8 ms presenting per frame at
+26.7 cycles/s. Through PSPExp the PSP spends about 1 ms per frame in total.
+
 Also fixed on this day from hardware behaviour: the LCD must be set to
 16-bit explicitly by the GE executor (the status page leaves it 32-bit and
 the GU swap does not restore it; the frame showed quartered and tiled
