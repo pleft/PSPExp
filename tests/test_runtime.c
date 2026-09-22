@@ -209,6 +209,7 @@ int main(void)
         for (i = 0; i < 256; i++) pal[i] = (uint16_t)(0x8000 | i);
         memset(&cd, 0, sizeof(cd));
         cd.width = 64; cd.height = 64; cd.format = PSPEXP_TEX_T8; cd.layout = PSPEXP_LAYOUT_SWIZZLED; cd.palette = 40;
+        cd.priority = PSPEXP_PRIORITY_NORMAL;
         /* Texture before its palette is rejected on the host. */
         CHECK_EQ(pspexp_upload_texture(ctx, 41, &cd, idx, sizeof(idx), g_frames, 4), -PSPEXP_RERR_BAD_PALETTE);
         CHECK_EQ(pspexp_upload_palette(ctx, 40, PSPEXP_TEX_5551, 256, pal, 100), -PSPEXP_RERR_BAD_PALETTE);
@@ -220,6 +221,13 @@ int main(void)
         CHECK_EQ(pspexp_resource_state(ctx, 41, &tier), PSPEXP_RES_RESIDENT);
         CHECK_EQ(tier, PSPEXP_TIER_VRAM);
         CHECK_EQ(pspexp_null_stats(nul)->palettes_created, 1);
+        /* Low priority (re-uploaded every frame) is placed in RAM even when VRAM has room. */
+        cd.priority = PSPEXP_PRIORITY_LOW;
+        CHECK_EQ(pspexp_upload_texture(ctx, 42, &cd, idx, sizeof(idx), g_frames, 4), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_resource_state(ctx, 42, &tier), PSPEXP_RES_RESIDENT);
+        CHECK_EQ(tier, PSPEXP_TIER_RAM);
+        pspexp_release(ctx, 42);
         pspexp_begin_frame(ctx);
         pspexp_draw_sprite(ctx, 41, 0, 0, 1, PSPEXP_COLOR_NONE);
         pspexp_present(ctx);
@@ -273,12 +281,14 @@ int main(void)
             pspexp_draw_line(ctx, 0, 0, 100, 50, 0xFFFF, 255);
             {
                 PspExpQuadRec q[2] = { { 1, 1, 0, 0, 64, 64, 0xFFFF, 0 }, { 1, 1, 0, 0, 65, 64, 0xFFFF, 0 } };
+                PspExpQuadExRec qe = { 0, 0, 480, 272, 64, 64, 0, 0, 0xFFFF, {0} };   /* stretched, flipped both ways */
                 pspexp_draw_quad_batch(ctx, 41, q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);   /* ok */
                 pspexp_draw_quad_batch(ctx, 41, q + 1, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650); /* u1 past the edge */
+                pspexp_draw_quad_ex_batch(ctx, 41, &qe, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650); /* ok */
             }
             pspexp_present(ctx);
             pspexp_wait_present(ctx, 100);
-            CHECK_EQ(pspexp_null_stats(nul)->flipped_draws, 1);
+            CHECK_EQ(pspexp_null_stats(nul)->flipped_draws, 2);   /* FLIP_X batch and the flipped scaled quad */
             CHECK_EQ(pspexp_null_stats(nul)->alpha_draws, 1);
             CHECK_EQ(pspexp_null_stats(nul)->lines, 1);
             CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr2 + 2);   /* 16-entry palette, quad off the edge */

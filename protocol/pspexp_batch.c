@@ -69,6 +69,18 @@ void pspexp_expand_quads(const PspExpQuadRec *recs, uint32_t count, PspExpVertex
     }
 }
 
+void pspexp_expand_quads_ex(const PspExpQuadExRec *recs, uint32_t count, PspExpVertex2D *out)
+{
+    uint32_t i;
+    for (i = 0; i < count; i++) {
+        const PspExpQuadExRec r = recs[i];
+        PspExpVertex2D *v = out + 2 * i;
+        v[0].u = r.u0; v[0].v = r.v0; v[0].color = r.color; v[0].x = r.x; v[0].y = r.y; v[0].z = 0;
+        v[1].u = r.u1; v[1].v = r.v1; v[1].color = r.color;
+        v[1].x = (int16_t)(r.x + r.w); v[1].y = (int16_t)(r.y + r.h); v[1].z = 0;
+    }
+}
+
 void pspexp_expand_tiles(const PspExpFrame *frames, const PspExpTileBatch *batch,
                          const PspExpTileRec *recs, PspExpVertex2D *out)
 {

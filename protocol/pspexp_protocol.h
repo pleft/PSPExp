@@ -104,7 +104,7 @@ enum PspExpTextureLayout {
 };
 
 enum PspExpPriority {
-    PSPEXP_PRIORITY_LOW    = 0,
+    PSPEXP_PRIORITY_LOW    = 0,   /* placed in RAM, never VRAM: for textures re-uploaded every frame */
     PSPEXP_PRIORITY_NORMAL = 1,
     PSPEXP_PRIORITY_HIGH   = 2
 };
@@ -279,6 +279,7 @@ typedef struct PspExpDrawLine {
 PSPEXP_STATIC_ASSERT(sizeof(PspExpDrawLine) == 16, draw_line_size);
 
 #define PSPEXP_BATCH_FLIP_X      0x0001u   /* mirror every sprite horizontally */
+#define PSPEXP_BATCH_SCALED      0x0002u   /* DRAW_QUAD_BATCH records are PspExpQuadExRec */
 #define PSPEXP_PALETTE_DEFAULT   0xFFFFu   /* use the atlas's own palette */
 
 /* Followed by `count` PspExpSpriteRec (pspexp_batch.h), padded to 16 bytes. */

@@ -672,6 +672,30 @@ void pspexp_draw_quad_batch(PspExpContext *ctx, uint16_t atlas, const PspExpQuad
     }
 }
 
+void pspexp_draw_quad_ex_batch(PspExpContext *ctx, uint16_t atlas, const PspExpQuadExRec *recs, uint32_t count,
+                               uint16_t palette, uint16_t vertex_format)
+{
+    const uint32_t lim = batch_limit(ctx);
+    while (count > 0) {
+        uint32_t n = count > lim ? lim : count;
+        PspExpSpriteBatch *b;
+        if (pspexp_writer_begin(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_DRAW_QUAD_BATCH, 0) < 0) return;
+        b = (PspExpSpriteBatch *)pspexp_writer_reserve(&ctx->frame, sizeof(*b));
+        if (!b) return;
+        b->atlas = atlas;
+        b->count = (uint16_t)n;
+        b->vertex_format = vertex_format;
+        b->flags = PSPEXP_BATCH_SCALED;
+        b->palette = palette;
+        pspexp_writer_append(&ctx->frame, recs, (size_t)n * sizeof(PspExpQuadExRec));
+        pspexp_writer_end(&ctx->frame);
+        ctx->stats.last_frame_batches++;
+        ctx->stats.last_frame_sprites += n;
+        recs += n;
+        count -= n;
+    }
+}
+
 void pspexp_draw_sprite(PspExpContext *ctx, uint16_t atlas, int16_t x, int16_t y, uint16_t frame, uint16_t color)
 {
     PspExpSpriteRec r;

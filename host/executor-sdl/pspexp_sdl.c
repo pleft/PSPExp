@@ -201,9 +201,11 @@ static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *
     SDL_SetTextureAlphaMod(tex, 255);
     for (i = 0; i < count; i++) {
         const PspExpVertex2D *a = &v[2 * i], *b = &v[2 * i + 1];
-        const int flipped = a->u > b->u;
-        SDL_Rect src = { flipped ? b->u : a->u, a->v, flipped ? a->u - b->u : b->u - a->u, b->v - a->v };
+        const int flipped = a->u > b->u, vflipped = a->v > b->v;
+        SDL_Rect src = { flipped ? b->u : a->u, vflipped ? b->v : a->v,
+                         flipped ? a->u - b->u : b->u - a->u, vflipped ? a->v - b->v : b->v - a->v };
         SDL_Rect dst = { a->x, a->y, b->x - a->x, b->y - a->y };
+        const SDL_RendererFlip flip = (SDL_RendererFlip)((flipped ? SDL_FLIP_HORIZONTAL : 0) | (vflipped ? SDL_FLIP_VERTICAL : 0));
         if (a->color != last_color) {
             if (fmt == PSPEXP_VTX_SPRITE_2D_4444) {
                 uint8_t r = (uint8_t)((a->color & 0xF) * 17), g = (uint8_t)(((a->color >> 4) & 0xF) * 17);
@@ -217,7 +219,7 @@ static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *
             }
             last_color = a->color;
         }
-        if (flipped) SDL_RenderCopyEx(x->ren, tex, &src, &dst, 0.0, NULL, SDL_FLIP_HORIZONTAL);
+        if (flip) SDL_RenderCopyEx(x->ren, tex, &src, &dst, 0.0, NULL, flip);
         else SDL_RenderCopy(x->ren, tex, &src, &dst);
     }
 }

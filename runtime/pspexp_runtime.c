@@ -300,27 +300,35 @@ static void handle_quad_batch(PspExpRuntime *rt, const PspExpMessage *m)
 {
     const PspExpSpriteBatch *b;
     const PspExpQuadRec *recs;
+    const PspExpQuadExRec *recs_ex;
     PspExpCacheEntry *atlas, *palette;
     PspExpVertex2D *v;
     uint32_t i;
+    int scaled;
 
     if (pspexp_message_expect(m, sizeof(*b)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
     b = (const PspExpSpriteBatch *)m->payload;
+    scaled = (b->flags & PSPEXP_BATCH_SCALED) != 0;
     if (b->count > rt->cfg.max_batch_records) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, b->count); return; }
-    if (m->length < sizeof(*b) + (uint32_t)b->count * sizeof(PspExpQuadRec)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    if (m->length < sizeof(*b) + (uint32_t)b->count * (scaled ? sizeof(PspExpQuadExRec) : sizeof(PspExpQuadRec))) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
     if (!vertex_format_ok(rt, m, b->vertex_format)) return;
     recs = (const PspExpQuadRec *)(m->payload + sizeof(*b));
+    recs_ex = (const PspExpQuadExRec *)(m->payload + sizeof(*b));
     atlas = batch_atlas(rt, b->atlas, b->palette, &palette);
     if (!atlas) return;
     if (b->count == 0) return;
-    for (i = 0; i < b->count; i++)
-        if (recs[i].u0 > atlas->width || recs[i].u1 > atlas->width || recs[i].v1 > atlas->height || recs[i].v0 > recs[i].v1) {
+    for (i = 0; i < b->count; i++) {
+        uint16_t u0 = scaled ? recs_ex[i].u0 : recs[i].u0, u1 = scaled ? recs_ex[i].u1 : recs[i].u1;
+        uint16_t v0 = scaled ? recs_ex[i].v0 : recs[i].v0, v1 = scaled ? recs_ex[i].v1 : recs[i].v1;
+        if (u0 > atlas->width || u1 > atlas->width || v0 > atlas->height || v1 > atlas->height || (!scaled && v0 > v1)) {
             send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, b->atlas, PSPEXP_RERR_BAD_FRAME_TABLE, rt->frame_seq);
             return;
         }
+    }
     v = vertex_space(rt, 2u * b->count);
     if (!v) return;
-    pspexp_expand_quads(recs, b->count, v);
+    if (scaled) pspexp_expand_quads_ex(recs_ex, b->count, v);
+    else pspexp_expand_quads(recs, b->count, v);
     if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
     rt->stats.batches++;
     rt->stats.sprites += b->count;

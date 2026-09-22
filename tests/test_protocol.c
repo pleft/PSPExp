@@ -112,6 +112,15 @@ static void test_expansion(void)
         CHECK_EQ(qv[2].u, 30); CHECK_EQ(qv[3].u, 10); CHECK_EQ(qv[3].x, 20); CHECK_EQ(qv[3].y, 8);
     }
 
+    {
+        PspExpQuadExRec q = { 10, 20, 64, 32, 8, 8, 0, 16, 0xFFFF, {0} };   /* mirrored, stretched 2x */
+        PspExpVertex2D qv[2];
+        pspexp_expand_quads_ex(&q, 1, qv);
+        CHECK_EQ(qv[0].x, 10); CHECK_EQ(qv[1].x, 74); CHECK_EQ(qv[1].y, 52);
+        CHECK_EQ(qv[0].u, 8); CHECK_EQ(qv[1].u, 0); CHECK_EQ(qv[1].v, 16);
+        CHECK_EQ(sizeof(PspExpQuadExRec), 24);
+    }
+
     /* Mirrored expansion swaps u only. */
     pspexp_expand_sprites_flipped(frames, recs, 2, v);
     CHECK_EQ(v[0].u, 32); CHECK_EQ(v[1].u, 0); CHECK_EQ(v[0].v, 0); CHECK_EQ(v[1].v, 16);

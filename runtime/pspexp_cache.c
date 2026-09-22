@@ -29,7 +29,10 @@ PspExpCacheEntry *pspexp_cache_insert(PspExpCache *c, const PspExpTextureUpload 
         if (!c->entries[i].used) { e = &c->entries[i]; break; }
     if (!e) { *reason = PSPEXP_RERR_TABLE_FULL; return NULL; }
 
-    if (c->vram_used + t->data_length <= c->vram_budget) tier = PSPEXP_TIER_VRAM;
+    /* Low priority means "changes often" (streamed frames, per-frame texture
+     * updates): keep it out of VRAM so the first-fit allocator there does not
+     * fragment; the GE reads main RAM fine for a texture used once. */
+    if (t->priority != PSPEXP_PRIORITY_LOW && c->vram_used + t->data_length <= c->vram_budget) tier = PSPEXP_TIER_VRAM;
     else if (c->ram_used + t->data_length <= c->ram_budget) tier = PSPEXP_TIER_RAM;
     else { *reason = PSPEXP_RERR_OUT_OF_MEMORY; return NULL; }
 

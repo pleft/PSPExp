@@ -47,6 +47,17 @@ typedef struct PspExpQuadRec {
 } PspExpQuadRec;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpQuadRec) == 16, quad_rec_size);
 
+/* Scaled quad (DRAW_QUAD_BATCH with PSPEXP_BATCH_SCALED): the source rect
+ * is stretched to w x h at (x, y). u0 > u1 mirrors horizontally, v0 > v1
+ * vertically. 24 bytes; used by SDL_RenderCopy-style APIs. */
+typedef struct PspExpQuadExRec {
+    int16_t  x, y, w, h;
+    uint16_t u0, v0, u1, v1;
+    uint16_t color;
+    uint8_t  reserved[6];
+} PspExpQuadExRec;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpQuadExRec) == 24, quadex_rec_size);
+
 /* The GE vertex the records expand into:
  * GU_TEXTURE_16BIT | GU_COLOR_5650 | GU_VERTEX_16BIT | GU_TRANSFORM_2D.
  * Member order (texture, colour, position) and 16-bit alignment are what
@@ -80,6 +91,8 @@ void pspexp_expand_sprites_flipped(const PspExpFrame *frames, const PspExpSprite
 
 /* Expand `count` quads into 2*count vertices. */
 void pspexp_expand_quads(const PspExpQuadRec *recs, uint32_t count, PspExpVertex2D *out);
+
+void pspexp_expand_quads_ex(const PspExpQuadExRec *recs, uint32_t count, PspExpVertex2D *out);
 
 /* Expand a tile batch into 2*count vertices. */
 void pspexp_expand_tiles(const PspExpFrame *frames, const PspExpTileBatch *batch,
