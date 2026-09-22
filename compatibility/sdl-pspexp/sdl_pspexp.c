@@ -88,7 +88,7 @@ typedef struct Tex {
     SDL_Texture *sdl;
     int w, h;
     uint32_t *rgba;            /* shadow, RGBA8888 (R in the low byte) */
-    int dirty, unsupported, streaming;   /* streaming: re-uploaded often, kept in PSP RAM */
+    int dirty, unsupported, streaming;   /* streaming: re-uploaded often, small pages */
     int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
     TargetOp *ops; int nops;
     SDL_BlendMode blend;       /* NONE: uploaded as 5650 (full colour), else 4444 */
@@ -439,9 +439,15 @@ static int upload_tex(Tex *x)
                                      : pspexp_color_4444((uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16), (uint8_t)(c >> 24));
                 }
             }
+            /* Swizzled: the GE fetches 16-byte x 8-row blocks, several times
+             * faster than a linear texture (Doom's frame: 10.5 ms -> ~3 ms). */
+            {
+                uint16_t *sw = (uint16_t *)malloc((size_t)p->texw * p->texh * 2);
+                if (sw) { pspexp_swizzle(sw, buf, (uint32_t)p->texw * 2u, (uint32_t)p->texh); free(buf); buf = sw; }
+            }
             memset(&d, 0, sizeof(d));
             d.width = (uint16_t)p->texw; d.height = (uint16_t)p->texh; d.format = opaque ? PSPEXP_TEX_5650 : PSPEXP_TEX_4444;
-            d.layout = PSPEXP_LAYOUT_LINEAR; d.priority = x->streaming ? PSPEXP_PRIORITY_LOW : PSPEXP_PRIORITY_NORMAL;
+            d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;   /* VRAM: the GE reads it far faster than RAM */
             f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(p->texw < 64 ? p->texw : 64); f.h = (uint16_t)p->texh;
             p->tex = alloc_handle();
             if (pspexp_upload_texture(S.ctx, p->tex, &d, buf, (uint32_t)((size_t)p->texw * p->texh * 2), &f, 1) < 0) {

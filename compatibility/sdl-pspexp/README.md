@@ -37,7 +37,7 @@ scripts/pspexp-run build/host/sdl-game --surface     # window-surface path
 |---|---|
 | `SDL_CreateWindow`, `SDL_CreateRenderer`, `SDL_CreateWindowAndRenderer` | connect to the PSP (once) |
 | `SDL_RenderSetLogicalSize`, `SDL_RenderSetViewport`, `SDL_RenderSetClipRect` | the logical size (or window size) is fitted into 480x272 with letterboxing; viewport offsets and clip rectangles are applied |
-| `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture`, `SDL_SetTextureBlendMode` | a shadow copy in RGBA8888, uploaded in pages of up to 512x512 (256x128 for streaming textures): 5650 when the blend mode is NONE, 4444 otherwise; re-uploaded when the program changes it (streaming textures cost one upload per frame) |
+| `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture`, `SDL_SetTextureBlendMode` | a shadow copy in RGBA8888, uploaded swizzled, in pages of up to 512x512 (256x128 for streaming textures): 5650 when the blend mode is NONE, 4444 otherwise; re-uploaded when the program changes it (streaming textures cost one upload per frame) |
 | `SDL_SetRenderTarget`, `SDL_RenderSetScale` | drawing into a render-target texture is recorded (copies and fills, up to 256 per target) and replayed, scaled and clipped, when the target is copied to the screen: the integer-upscaling pattern of pixel-art ports |
 | `SDL_SetTextureColorMod`, `SDL_SetTextureAlphaMod` | per-quad tint (5650 when opaque, 4444 when translucent) |
 | `SDL_RenderCopy`, `SDL_RenderCopyEx`, `SDL_RenderCopyF`, `SDL_RenderCopyExF` | scaled quads (`PSPEXP_BATCH_SCALED`); horizontal and vertical flips; **rotation is ignored** (drawn unrotated) |
@@ -91,8 +91,8 @@ with Freedoom's WAD (unzip a release from https://freedoom.github.io/ into
 `../doom/`, or pass a WAD path) and the PSP controls mapped to Doom's keys:
 nub and d-pad move and turn, cross fires, circle uses, square runs, L / R
 strafe, triangle is Enter, start is Escape, select is the map. Doom's
-320x200 frame is one streaming texture, four pages of 5650, 160 KB per
-frame at 35 fps (5.6 MB/s), letterboxed to 362x272.
+320x200 frame is one streaming texture, four swizzled pages of 5650 in
+VRAM, 160 KB per frame at 35 fps (5.6 MB/s), letterboxed to 362x272.
 
 ## Headless test
 
