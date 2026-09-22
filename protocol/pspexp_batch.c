@@ -46,6 +46,29 @@ void pspexp_expand_sprites_flipped(const PspExpFrame *frames, const PspExpSprite
     }
 }
 
+void pspexp_expand_quads(const PspExpQuadRec *recs, uint32_t count, PspExpVertex2D *out)
+{
+    uint32_t i;
+    for (i = 0; i < count; i++) {
+        const PspExpQuadRec r = recs[i];
+        PspExpVertex2D *v = out + 2 * i;
+        const uint16_t w = (uint16_t)(r.u1 > r.u0 ? r.u1 - r.u0 : r.u0 - r.u1);
+        const uint16_t h = (uint16_t)(r.v1 - r.v0);
+        v[0].u = r.u0;
+        v[0].v = r.v0;
+        v[0].color = r.color;
+        v[0].x = r.x;
+        v[0].y = r.y;
+        v[0].z = 0;
+        v[1].u = r.u1;
+        v[1].v = r.v1;
+        v[1].color = r.color;
+        v[1].x = (int16_t)(r.x + w);
+        v[1].y = (int16_t)(r.y + h);
+        v[1].z = 0;
+    }
+}
+
 void pspexp_expand_tiles(const PspExpFrame *frames, const PspExpTileBatch *batch,
                          const PspExpTileRec *recs, PspExpVertex2D *out)
 {

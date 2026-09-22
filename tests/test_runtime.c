@@ -271,12 +271,17 @@ int main(void)
             pspexp_draw_sprite_batch_ex(ctx, 41, &r, 1, 0, PSPEXP_PALETTE_DEFAULT, 7);          /* bad vertex format */
             pspexp_fill_rect(ctx, 0, 0, 10, 10, 0, 128);
             pspexp_draw_line(ctx, 0, 0, 100, 50, 0xFFFF, 255);
+            {
+                PspExpQuadRec q[2] = { { 1, 1, 0, 0, 64, 64, 0xFFFF, 0 }, { 1, 1, 0, 0, 65, 64, 0xFFFF, 0 } };
+                pspexp_draw_quad_batch(ctx, 41, q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);   /* ok */
+                pspexp_draw_quad_batch(ctx, 41, q + 1, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650); /* u1 past the edge */
+            }
             pspexp_present(ctx);
             pspexp_wait_present(ctx, 100);
             CHECK_EQ(pspexp_null_stats(nul)->flipped_draws, 1);
             CHECK_EQ(pspexp_null_stats(nul)->alpha_draws, 1);
             CHECK_EQ(pspexp_null_stats(nul)->lines, 1);
-            CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr2 + 1);
+            CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr2 + 2);   /* 16-entry palette, quad off the edge */
             CHECK_EQ(pspexp_null_runtime(nul)->stats.misses, miss2 + 1);
             CHECK_EQ(pspexp_null_runtime(nul)->stats.protocol_errors, 2);   /* one earlier, one now */
             pspexp_release(ctx, 44);

@@ -107,6 +107,9 @@ void pspexp_draw_sprite_batch(PspExpContext *ctx, uint16_t atlas, const PspExpSp
 void pspexp_draw_sprite_batch_ex(PspExpContext *ctx, uint16_t atlas, const PspExpSpriteRec *recs, uint32_t count,
                                  uint16_t flags, uint16_t palette, uint16_t vertex_format);
 void pspexp_draw_sprite(PspExpContext *ctx, uint16_t atlas, int16_t x, int16_t y, uint16_t frame, uint16_t color);
+/* Arbitrary source rectangles (16 bytes per quad; frames are 8). */
+void pspexp_draw_quad_batch(PspExpContext *ctx, uint16_t atlas, const PspExpQuadRec *recs, uint32_t count,
+                            uint16_t palette, uint16_t vertex_format);
 void pspexp_draw_tile_batch(PspExpContext *ctx, uint16_t atlas, int16_t origin_x, int16_t origin_y,
                             uint16_t cell_w, uint16_t cell_h, uint16_t columns,
                             const PspExpTileRec *recs, uint32_t count);

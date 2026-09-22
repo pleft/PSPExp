@@ -102,6 +102,16 @@ static void test_expansion(void)
     CHECK_EQ(PSPEXP_GU_VERTEX2D_TYPE, 0x00800112u);
     CHECK_EQ(PSPEXP_GU_VERTEX2D_4444_TYPE, 0x00800116u);
 
+    /* Quads: explicit source rects, mirrored when u0 > u1. */
+    {
+        PspExpQuadRec q[2] = { { 3, 4, 10, 20, 30, 28, 0x1234, 0 }, { 0, 0, 30, 0, 10, 8, 0, 0 } };
+        PspExpVertex2D qv[4];
+        pspexp_expand_quads(q, 2, qv);
+        CHECK_EQ(qv[0].u, 10); CHECK_EQ(qv[0].v, 20); CHECK_EQ(qv[0].x, 3); CHECK_EQ(qv[0].y, 4);
+        CHECK_EQ(qv[1].u, 30); CHECK_EQ(qv[1].v, 28); CHECK_EQ(qv[1].x, 23); CHECK_EQ(qv[1].y, 12);
+        CHECK_EQ(qv[2].u, 30); CHECK_EQ(qv[3].u, 10); CHECK_EQ(qv[3].x, 20); CHECK_EQ(qv[3].y, 8);
+    }
+
     /* Mirrored expansion swaps u only. */
     pspexp_expand_sprites_flipped(frames, recs, 2, v);
     CHECK_EQ(v[0].u, 32); CHECK_EQ(v[1].u, 0); CHECK_EQ(v[0].v, 0); CHECK_EQ(v[1].v, 16);

@@ -37,6 +37,16 @@ typedef struct PspExpTileRec {
 } PspExpTileRec;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpTileRec) == 4, tile_rec_size);
 
+/* One quad in a DRAW_QUAD_BATCH payload: an arbitrary source rectangle,
+ * drawn unscaled at (x, y). u0 > u1 mirrors it horizontally. */
+typedef struct PspExpQuadRec {
+    int16_t  x, y;
+    uint16_t u0, v0, u1, v1;   /* texel corners, exclusive far edge */
+    uint16_t color;
+    uint16_t reserved;
+} PspExpQuadRec;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpQuadRec) == 16, quad_rec_size);
+
 /* The GE vertex the records expand into:
  * GU_TEXTURE_16BIT | GU_COLOR_5650 | GU_VERTEX_16BIT | GU_TRANSFORM_2D.
  * Member order (texture, colour, position) and 16-bit alignment are what
@@ -67,6 +77,9 @@ void pspexp_expand_sprites(const PspExpFrame *frames, const PspExpSpriteRec *rec
 /* Same, mirrored horizontally: u runs from u0+w down to u0 (PSPEXP_BATCH_FLIP_X). */
 void pspexp_expand_sprites_flipped(const PspExpFrame *frames, const PspExpSpriteRec *recs,
                                    uint32_t count, PspExpVertex2D *out);
+
+/* Expand `count` quads into 2*count vertices. */
+void pspexp_expand_quads(const PspExpQuadRec *recs, uint32_t count, PspExpVertex2D *out);
 
 /* Expand a tile batch into 2*count vertices. */
 void pspexp_expand_tiles(const PspExpFrame *frames, const PspExpTileBatch *batch,

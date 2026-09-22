@@ -277,6 +277,36 @@ static void handle_sprite_batch(PspExpRuntime *rt, const PspExpMessage *m)
     rt->stats.sprites += b->count;
 }
 
+static void handle_quad_batch(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    const PspExpSpriteBatch *b;
+    const PspExpQuadRec *recs;
+    PspExpCacheEntry *atlas, *palette;
+    PspExpVertex2D *v;
+    uint32_t i;
+
+    if (pspexp_message_expect(m, sizeof(*b)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    b = (const PspExpSpriteBatch *)m->payload;
+    if (b->count > rt->cfg.max_batch_records) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, b->count); return; }
+    if (m->length < sizeof(*b) + (uint32_t)b->count * sizeof(PspExpQuadRec)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    if (!vertex_format_ok(rt, m, b->vertex_format)) return;
+    recs = (const PspExpQuadRec *)(m->payload + sizeof(*b));
+    atlas = batch_atlas(rt, b->atlas, b->palette, &palette);
+    if (!atlas) return;
+    if (b->count == 0) return;
+    for (i = 0; i < b->count; i++)
+        if (recs[i].u0 > atlas->width || recs[i].u1 > atlas->width || recs[i].v1 > atlas->height || recs[i].v0 > recs[i].v1) {
+            send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, b->atlas, PSPEXP_RERR_BAD_FRAME_TABLE, rt->frame_seq);
+            return;
+        }
+    v = vertex_space(rt, 2u * b->count);
+    if (!v) return;
+    pspexp_expand_quads(recs, b->count, v);
+    if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
+    rt->stats.batches++;
+    rt->stats.sprites += b->count;
+}
+
 static void handle_tile_batch(PspExpRuntime *rt, const PspExpMessage *m)
 {
     const PspExpTileBatch *b;
@@ -424,7 +454,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         break;
     }
     case PSPEXP_OP_SET_CLIP: case PSPEXP_OP_DRAW_SPRITE_BATCH: case PSPEXP_OP_DRAW_TILE_BATCH:
-    case PSPEXP_OP_DRAW_RECT: case PSPEXP_OP_DRAW_LINE: case PSPEXP_OP_PRESENT:
+    case PSPEXP_OP_DRAW_QUAD_BATCH: case PSPEXP_OP_DRAW_RECT: case PSPEXP_OP_DRAW_LINE: case PSPEXP_OP_PRESENT:
         if (!rt->in_frame) { send_error(rt, PSPEXP_ERR_NOT_IN_FRAME, m, 0); return; }
         if (op == PSPEXP_OP_SET_CLIP) {
             const PspExpSetClip *c;
@@ -435,6 +465,8 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
             handle_sprite_batch(rt, m);
         } else if (op == PSPEXP_OP_DRAW_TILE_BATCH) {
             handle_tile_batch(rt, m);
+        } else if (op == PSPEXP_OP_DRAW_QUAD_BATCH) {
+            handle_quad_batch(rt, m);
         } else if (op == PSPEXP_OP_DRAW_RECT) {
             const PspExpDrawRect *r;
             if (pspexp_message_expect(m, sizeof(*r)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }

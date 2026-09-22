@@ -20,7 +20,7 @@ enum PspExpOpcode {
     PSPEXP_OP_SET_CLIP          = 0x0102,  /* PspExpSetClip */
     PSPEXP_OP_DRAW_SPRITE_BATCH = 0x0103,  /* PspExpSpriteBatch + records */
     PSPEXP_OP_DRAW_TILE_BATCH   = 0x0104,  /* PspExpTileBatch + records */
-    PSPEXP_OP_DRAW_QUAD_BATCH   = 0x0105,  /* reserved (arbitrary source rects) */
+    PSPEXP_OP_DRAW_QUAD_BATCH   = 0x0105,  /* PspExpSpriteBatch + PspExpQuadRec records */
     PSPEXP_OP_DRAW_RECT         = 0x0106,  /* PspExpDrawRect */
     PSPEXP_OP_PRESENT           = 0x0107,  /* no payload */
     PSPEXP_OP_DRAW_LINE         = 0x0108,  /* PspExpDrawLine */
