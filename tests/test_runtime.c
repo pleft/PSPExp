@@ -366,7 +366,8 @@ int main(void)
             pspexp_mixer_render(mx, out, 512);            /* still above half (3386) */
             CHECK_EQ(before - mx->buffered, 512);
             pspexp_mixer_render(mx, out, 512);
-            pspexp_mixer_render(mx, out, 512);            /* now 1338 < 2205: stretching */
+            pspexp_mixer_render(mx, out, 512);
+            pspexp_mixer_render(mx, out, 512);            /* now 1850 < 2205: stretching */
             before = mx->buffered;
             pspexp_mixer_render(mx, out, 512);
             CHECK(before - mx->buffered < 512);

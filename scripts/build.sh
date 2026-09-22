@@ -13,7 +13,7 @@ JOBS="${JOBS:-8}"
 cmake -S "$ROOT" -B "$ROOT/build/host" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$ROOT/build/host" -j"$JOBS"
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
-	(cd "$ROOT/build/host" && ctest --output-on-failure)
+	(cd "$ROOT/build/host" && ctest --output-on-failure) || { echo "tests failed" >&2; exit 1; }
 fi
 
 if command -v psp-gcc >/dev/null 2>&1; then
