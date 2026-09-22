@@ -239,6 +239,11 @@ static uint32_t op_present(void *u)
     sceGuSwapBuffers();
     /* the buffer just drawn is now on screen: draw buffers alternate 0 / FB_BYTES */
     ge->displayed_offset = ge->displayed_offset == 0 ? FB_BYTES : 0;
+    /* Set the display format ourselves: the debug status page leaves the
+     * LCD in 32-bit mode, and on hardware the GU swap did not restore 16-bit
+     * (the frame then shows quartered and tiled 2x2). */
+    sceDisplaySetFrameBuf((unsigned char *)sceGeEdramGetAddr() + ge->displayed_offset, PSPEXP_DISPLAY_STRIDE,
+                          PSP_DISPLAY_PIXEL_FORMAT_565, PSP_DISPLAY_SETBUF_NEXTFRAME);
     ge->in_frame = 0;
     ge->stats.frames++;
     return sceKernelGetSystemTimeLow();
@@ -284,6 +289,9 @@ int pspexp_ge_init(PspExpGeExecutor *ge)
     sceGuSync(0, 0);
     sceDisplayWaitVblankStart();
     sceGuDisplay(GU_TRUE);
+    sceDisplaySetMode(0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    sceDisplaySetFrameBuf((unsigned char *)sceGeEdramGetAddr() + FB_BYTES, PSPEXP_DISPLAY_STRIDE,
+                          PSP_DISPLAY_PIXEL_FORMAT_565, PSP_DISPLAY_SETBUF_IMMEDIATE);
     return 0;
 }
 
