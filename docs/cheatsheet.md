@@ -46,6 +46,9 @@ cable pull, so pull the cable to read it after a session.
 | Warcraft on a headless host (no display, no sound card: Raspberry Pi, Omega2+) | `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy PSPEXP_WINDOW=hide PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` |
 | Warcraft without a PSP (executor window) | `PSPEXP=sdl build/host-stratagus/stratagus -d dist/War1gus` |
 | PSP runtime in PPSSPP, then any host program with `--tcp 127.0.0.1:3838` / `PSPEXP=tcp:127.0.0.1:3838` | `scripts/run-ppsspp.sh` |
+| **any unmodified SDL2 program on the PSP** (v0.4) | `scripts/pspexp-run <program> [args]` |
+| the SDL2 test game on the PSP (renderer path / window-surface path) | `scripts/pspexp-run build/host/sdl-game` / `... --surface` |
+| an SDL2 program without a PSP (executor window) | `PSPEXP=sdl scripts/pspexp-run <program>` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,
@@ -53,6 +56,21 @@ errors, audio frames sent / buffered / underruns.
 
 Pointer speed: `PSPEXP_POINTER_SPEED=150` (pixels per second at full nub
 deflection; default 200, the native port used 260). L holds slow, R fast.
+
+## Any SDL2 game (v0.4, `compatibility/sdl-pspexp`)
+
+```sh
+scripts/pspexp-run /path/to/game            # PSP over USB; the game's window stays on the host
+PSPEXP_KEYS=cross=space,circle=lctrl scripts/pspexp-run /path/to/game   # remap PSP buttons to keys
+PSPEXP_NUB=mouse scripts/pspexp-run /path/to/game                        # nub = mouse, cross/circle = clicks
+PSPEXP_LOCAL_AUDIO=0 scripts/pspexp-run /path/to/game                    # sound only on the PSP
+```
+
+The game sees a game controller named "PSP (PSPExp)" if it initialised
+joysticks, and keyboard events otherwise (defaults: cross=z, circle=x,
+square=a, triangle=s, L=q, R=w, start=return, select=escape, d-pad =
+arrows). Rotation, render targets and OpenGL drawing are not mirrored;
+see the README in `compatibility/sdl-pspexp/`.
 
 ## Sprite demo controls (PSP)
 

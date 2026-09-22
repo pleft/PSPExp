@@ -26,6 +26,7 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** |
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
+| **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/pspexp-run`) | done: renderer and window-surface paths, audio, controller/keyboard input; verified on the PSP runtime under PPSSPP, headless test in `ctest` |
 
 ## Build
 
@@ -89,6 +90,22 @@ PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus -r "maps/4-middle-grou
 The game runs on the Mac; the PSP renders it, plays its sound, and its
 controls play it, from the title screen on.
 
+## v0.4: any SDL2 program on the PSP
+
+`compatibility/sdl-pspexp` is a library injected into an unmodified SDL2
+program (`DYLD_INSERT_LIBRARIES` / `LD_PRELOAD`). It mirrors the
+`SDL_Render*` calls (or streams the window surface of a renderer-less
+program) into PSPExp commands, streams the program's audio, and feeds the
+PSP's controls back as a game controller and keyboard events:
+
+```sh
+scripts/pspexp-run build/host/sdl-game        # the bundled SDL2 test game, on the PSP
+scripts/pspexp-run /path/to/any/sdl2/game     # yours
+```
+
+`compatibility/sdl-pspexp/README.md` lists what is mirrored (and what is
+not: rotation, render targets, OpenGL) and the environment variables.
+
 ## Raspberry Pi as the host
 
 `scripts/build-pi.sh` (untested on a Pi yet) installs the Debian packages,
@@ -107,6 +124,8 @@ psp/transport-usb/   kernel USB driver (pspexp_usb.prx) + user stubs
 psp/runtime/         PSP runtime application (pspexp_runtime.prx)
 psp/boot/            EBOOT loader
 compatibility/stratagus/  Stratagus renderer backend: patch + notes (v0.2)
+compatibility/sdl-pspexp/ injected library: any SDL2 program on the PSP (v0.4)
+examples/sdl-game/        plain SDL2 test game for it (renderer and window-surface paths)
 tools/usb-bench/     transport benchmark
 tests/               unit tests (ctest)
 docs/                architecture

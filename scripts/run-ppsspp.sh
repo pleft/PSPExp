@@ -5,13 +5,21 @@
 #   scripts/run-ppsspp.sh            install dist/PSPExp into PPSSPP's memory stick and boot it
 #   scripts/run-ppsspp.sh stop       stop PPSSPP
 #
-# PPSSPP must have networking enabled (ppsspp.ini: EnableWlan = True). Its
-# PortOffset (default 10000) is added to the PSP's listening port, so the
-# host connects to 127.0.0.1:13838:
+# PPSSPP must have networking enabled (ppsspp.ini: EnableWlan = True). The
+# runtime's port 3838 is exposed on the host as is (PortOffset does not
+# apply to listening sockets):
 #
-#   build/host/pspexp-bench --tcp 127.0.0.1:13838
-#   build/host/pspexp-sprite-demo --tcp 127.0.0.1:13838
-#   PSPEXP=tcp:127.0.0.1:13838 ../WarCraft/build/host-stratagus/stratagus -d ../WarCraft/dist/War1gus
+#   build/host/pspexp-bench --tcp 127.0.0.1:3838
+#   build/host/pspexp-sprite-demo --tcp 127.0.0.1:3838 --shot 60
+#   scripts/pspexp-run --tcp:127.0.0.1:3838 build/host/sdl-game
+#
+# Notes: pspexp-shot-N.bmp framebuffer dumps (written next to the EBOOT in
+# the memory stick folder) are only faithful for the FIRST client after the
+# emulator boots; after a disconnect PPSSPP stops copying the GPU frame
+# back to VRAM and the dumps show the stale status page. The JIT with
+# FastMemoryAccess=True occasionally crashes PPSSPP right after a client
+# connects (EmuThread SIGSEGV at the emulated address 0); restart it.
+# Emulator timings (fps, latency) are not representative of the hardware.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PPSSPP="${PPSSPP:-/Applications/PPSSPPSDL.app/Contents/MacOS/PPSSPPSDL}"
@@ -26,4 +34,4 @@ fi
 mkdir -p "$GAME"
 cp "$ROOT/dist/PSPExp/"* "$GAME/"
 "$PPSSPP" "$GAME/EBOOT.PBP" > "$ROOT/build/ppsspp.log" 2>&1 &
-echo "PPSSPP started (log: build/ppsspp.log); the runtime listens on 127.0.0.1:13838"
+echo "PPSSPP started (log: build/ppsspp.log); the runtime listens on 127.0.0.1:3838"
