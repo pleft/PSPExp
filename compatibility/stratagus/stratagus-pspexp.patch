@@ -53,10 +53,10 @@ index 08e53cd..a1d673a 100644
  
 diff --git a/src/include/pspexp_video.h b/src/include/pspexp_video.h
 new file mode 100644
-index 0000000..9479750
+index 0000000..11f1d33
 --- /dev/null
 +++ b/src/include/pspexp_video.h
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,100 @@
 +//       _________ __                 __
 +//      /   _____//  |_____________ _/  |______     ____  __ __  ______
 +//      \_____  \\   __\_  __ \__  \\   __\__  \   / ___\|  |  \/  ___/
@@ -123,6 +123,9 @@ index 0000000..9479750
 +bool Init();
 +bool Active();
 +void Shutdown();
++/// True when the desktop window should stay hidden: PSPEXP_WINDOW=hide, or a
++/// real PSP target (usb / tcp) without PSPEXP_WINDOW=show.
++bool HideWindowByDefault();
 +
 +/// One frame's commands go out; paced on the PSP's PRESENT_DONE.
 +void Present();
@@ -594,10 +597,10 @@ index 2c59b59..7464f61 100644
  
 diff --git a/src/video/pspexp_video.cpp b/src/video/pspexp_video.cpp
 new file mode 100644
-index 0000000..3934a91
+index 0000000..2060128
 --- /dev/null
 +++ b/src/video/pspexp_video.cpp
-@@ -0,0 +1,1115 @@
+@@ -0,0 +1,1123 @@
 +//       _________ __                 __
 +//      /   _____//  |_____________ _/  |______     ____  __ __  ______
 +//      \_____  \\   __\_  __ \__  \\   __\__  \   / ___\|  |  \/  ___/
@@ -1474,6 +1477,14 @@ index 0000000..3934a91
 +	return mode != Mode::Off && ctx != nullptr;
 +}
 +
++bool HideWindowByDefault()
++{
++	const char *w = getenv("PSPEXP_WINDOW");
++	if (w && !strcmp(w, "hide")) return true;
++	if (w && !strcmp(w, "show")) return false;
++	return mode == Mode::Usb || mode == Mode::Tcp;
++}
++
 +void Shutdown()
 +{
 +	if (!ctx) {
@@ -1714,7 +1725,7 @@ index 0000000..3934a91
 +
 +//@}
 diff --git a/src/video/sdl.cpp b/src/video/sdl.cpp
-index 451d809..ff47522 100644
+index 451d809..59cb4a0 100644
 --- a/src/video/sdl.cpp
 +++ b/src/video/sdl.cpp
 @@ -45,6 +45,9 @@
@@ -1761,18 +1772,24 @@ index 451d809..ff47522 100644
  #endif
  	InputMouseTimeout(*GetCallbacks(), ticks);
  	InputKeyTimeout(*GetCallbacks(), ticks);
-@@ -1040,6 +1056,21 @@ void RealizeVideoMemory()
+@@ -1040,6 +1056,27 @@ void RealizeVideoMemory()
  	}
  #else
  	if (NumRects) {
 +#ifdef USE_PSPEXP
 +		PspExpVideo::Present();
-+		// PSPEXP_WINDOW=hide: the PSP is the only display; keep the window
-+		// (the engine's input and GUI need it) but hidden and never presented
-+		static const bool hideWindow = PspExpVideo::Active() && getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
++		// The PSP is the display: keep the window (the engine's input and GUI
++		// need it) but hidden and never presented. Default when a real PSP is
++		// the target (PSPEXP=usb / tcp); PSPEXP_WINDOW=show keeps the desktop
++		// view side by side, PSPEXP_WINDOW=hide forces hiding.
++		static const bool hideWindow = PspExpVideo::Active() && PspExpVideo::HideWindowByDefault();
 +		if (hideWindow) {
 +			static bool hidden = false;
-+			if (!hidden) { SDL_HideWindow(TheWindow); hidden = true; }
++			if (!hidden) {
++				SDL_SetWindowFullscreen(TheWindow, 0);   // a hidden fullscreen window leaves the screen black
++				SDL_HideWindow(TheWindow);
++				hidden = true;
++			}
 +			NumRects = 0;
 +			if (!Preference.HardwareCursor) {
 +				HideCursor();
