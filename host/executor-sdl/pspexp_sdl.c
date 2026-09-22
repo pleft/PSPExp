@@ -166,7 +166,7 @@ static void op_set_clip(void *u, int16_t cx, int16_t cy, int16_t w, int16_t h)
     SDL_RenderSetClipRect(x->ren, &r);
 }
 
-static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, const PspExpVertex2D *v, uint32_t count)
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, uint16_t fmt, const PspExpVertex2D *v, uint32_t count)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
     SdlTexture *st = (SdlTexture *)atlas->user;
@@ -177,28 +177,49 @@ static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *
     tex = palette ? indexed_texture(x, atlas, (const SdlPalette *)palette->user) : st->tex;
     if (!tex) return;
     SDL_SetTextureColorMod(tex, 255, 255, 255);
+    SDL_SetTextureAlphaMod(tex, 255);
     for (i = 0; i < count; i++) {
         const PspExpVertex2D *a = &v[2 * i], *b = &v[2 * i + 1];
-        SDL_Rect src = { a->u, a->v, b->u - a->u, b->v - a->v };
+        const int flipped = a->u > b->u;
+        SDL_Rect src = { flipped ? b->u : a->u, a->v, flipped ? a->u - b->u : b->u - a->u, b->v - a->v };
         SDL_Rect dst = { a->x, a->y, b->x - a->x, b->y - a->y };
         if (a->color != last_color) {
-            uint8_t r, g, bb;
-            pspexp_color_unpack_5650(a->color, &r, &g, &bb);
-            SDL_SetTextureColorMod(tex, r, g, bb);
+            if (fmt == PSPEXP_VTX_SPRITE_2D_4444) {
+                uint8_t r = (uint8_t)((a->color & 0xF) * 17), g = (uint8_t)(((a->color >> 4) & 0xF) * 17);
+                uint8_t bb = (uint8_t)(((a->color >> 8) & 0xF) * 17), al = (uint8_t)(((a->color >> 12) & 0xF) * 17);
+                SDL_SetTextureColorMod(tex, r, g, bb);
+                SDL_SetTextureAlphaMod(tex, al);
+            } else {
+                uint8_t r, g, bb;
+                pspexp_color_unpack_5650(a->color, &r, &g, &bb);
+                SDL_SetTextureColorMod(tex, r, g, bb);
+            }
             last_color = a->color;
         }
-        SDL_RenderCopy(x->ren, tex, &src, &dst);
+        if (flipped) SDL_RenderCopyEx(x->ren, tex, &src, &dst, 0.0, NULL, SDL_FLIP_HORIZONTAL);
+        else SDL_RenderCopy(x->ren, tex, &src, &dst);
     }
 }
 
-static void op_draw_rect(void *u, int16_t rx, int16_t ry, int16_t w, int16_t h, uint16_t color)
+static void op_draw_rect(void *u, int16_t rx, int16_t ry, int16_t w, int16_t h, uint16_t color, uint8_t alpha)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
     SDL_Rect r = { rx, ry, w, h };
     uint8_t cr, cg, cb;
     pspexp_color_unpack_5650(color, &cr, &cg, &cb);
-    SDL_SetRenderDrawColor(x->ren, cr, cg, cb, 255);
+    SDL_SetRenderDrawBlendMode(x->ren, alpha == 255 ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(x->ren, cr, cg, cb, alpha);
     SDL_RenderFillRect(x->ren, &r);
+}
+
+static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    uint8_t cr, cg, cb;
+    pspexp_color_unpack_5650(color, &cr, &cg, &cb);
+    SDL_SetRenderDrawBlendMode(x->ren, alpha == 255 ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(x->ren, cr, cg, cb, alpha);
+    SDL_RenderDrawLine(x->ren, x0, y0, x1, y1);
 }
 
 static uint32_t op_present(void *u)
@@ -351,6 +372,7 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.set_clip = op_set_clip;
     ops.draw_sprites = op_draw_sprites;
     ops.draw_rect = op_draw_rect;
+    ops.draw_line = op_draw_line;
     ops.present = op_present;
     ops.log = op_log;
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);

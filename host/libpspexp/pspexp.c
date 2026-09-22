@@ -526,6 +526,12 @@ static uint32_t batch_limit(const PspExpContext *ctx)
 
 void pspexp_draw_sprite_batch(PspExpContext *ctx, uint16_t atlas, const PspExpSpriteRec *recs, uint32_t count)
 {
+    pspexp_draw_sprite_batch_ex(ctx, atlas, recs, count, 0, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
+}
+
+void pspexp_draw_sprite_batch_ex(PspExpContext *ctx, uint16_t atlas, const PspExpSpriteRec *recs, uint32_t count,
+                                 uint16_t flags, uint16_t palette, uint16_t vertex_format)
+{
     const uint32_t lim = batch_limit(ctx);
     while (count > 0) {
         uint32_t n = count > lim ? lim : count;
@@ -535,7 +541,9 @@ void pspexp_draw_sprite_batch(PspExpContext *ctx, uint16_t atlas, const PspExpSp
         if (!b) return;
         b->atlas = atlas;
         b->count = (uint16_t)n;
-        b->vertex_format = PSPEXP_VTX_SPRITE_2D_5650;
+        b->vertex_format = vertex_format;
+        b->flags = flags;
+        b->palette = palette;
         pspexp_writer_append(&ctx->frame, recs, (size_t)n * sizeof(PspExpSpriteRec));
         pspexp_writer_end(&ctx->frame);
         ctx->stats.last_frame_batches++;
@@ -555,6 +563,13 @@ void pspexp_draw_sprite(PspExpContext *ctx, uint16_t atlas, int16_t x, int16_t y
 void pspexp_draw_tile_batch(PspExpContext *ctx, uint16_t atlas, int16_t origin_x, int16_t origin_y,
                             uint16_t cell_w, uint16_t cell_h, uint16_t columns,
                             const PspExpTileRec *recs, uint32_t count)
+{
+    pspexp_draw_tile_batch_ex(ctx, atlas, origin_x, origin_y, cell_w, cell_h, columns, recs, count, PSPEXP_PALETTE_DEFAULT);
+}
+
+void pspexp_draw_tile_batch_ex(PspExpContext *ctx, uint16_t atlas, int16_t origin_x, int16_t origin_y,
+                               uint16_t cell_w, uint16_t cell_h, uint16_t columns,
+                               const PspExpTileRec *recs, uint32_t count, uint16_t palette)
 {
     const uint32_t lim = batch_limit(ctx);
     uint32_t done = 0;
@@ -576,6 +591,7 @@ void pspexp_draw_tile_batch(PspExpContext *ctx, uint16_t atlas, int16_t origin_x
         b->cell_h = cell_h;
         b->columns = columns;
         b->vertex_format = PSPEXP_VTX_SPRITE_2D_5650;
+        b->palette = palette;
         pspexp_writer_append(&ctx->frame, recs + done, (size_t)n * sizeof(PspExpTileRec));
         pspexp_writer_end(&ctx->frame);
         ctx->stats.last_frame_batches++;
@@ -584,12 +600,25 @@ void pspexp_draw_tile_batch(PspExpContext *ctx, uint16_t atlas, int16_t origin_x
     }
 }
 
-void pspexp_draw_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+void pspexp_fill_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t alpha)
 {
     PspExpDrawRect r;
     memset(&r, 0, sizeof(r));
-    r.x = x; r.y = y; r.w = w; r.h = h; r.color = color;
+    r.x = x; r.y = y; r.w = w; r.h = h; r.color = color; r.alpha = alpha;
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_DRAW_RECT, 0, &r, sizeof(r));
+}
+
+void pspexp_draw_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+{
+    pspexp_fill_rect(ctx, x, y, w, h, color, 255);
+}
+
+void pspexp_draw_line(PspExpContext *ctx, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha)
+{
+    PspExpDrawLine l;
+    memset(&l, 0, sizeof(l));
+    l.x0 = x0; l.y0 = y0; l.x1 = x1; l.y1 = y1; l.color = color; l.alpha = alpha;
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_DRAW_LINE, 0, &l, sizeof(l));
 }
 
 long pspexp_present(PspExpContext *ctx)

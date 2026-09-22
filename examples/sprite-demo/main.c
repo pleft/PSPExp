@@ -142,7 +142,7 @@ int main(int argc, char **argv)
     int have_font = 0;
     double fps_shown = 0.0;
     char err[256] = "";
-    int px = 224, py = 120, pframe = 0, ptint = 0, show_field = 1;
+    int px = 224, py = 120, pframe = 0, ptint = 0, show_field = 1, facing_left = 0;
     uint32_t prev_buttons = 0;
     uint32_t frames = 0;
     uint64_t last_report = 0, report_frames = 0;
@@ -250,8 +250,8 @@ int main(int argc, char **argv)
         in = pspexp_input(ctx);
         pressed = in->buttons & ~prev_buttons;
         prev_buttons = in->buttons;
-        if (in->buttons & PSPEXP_BUTTON_LEFT) px -= 3;
-        if (in->buttons & PSPEXP_BUTTON_RIGHT) px += 3;
+        if (in->buttons & PSPEXP_BUTTON_LEFT) { px -= 3; facing_left = 1; }
+        if (in->buttons & PSPEXP_BUTTON_RIGHT) { px += 3; facing_left = 0; }
         if (in->buttons & PSPEXP_BUTTON_UP) py -= 3;
         if (in->buttons & PSPEXP_BUTTON_DOWN) py += 3;
         if (abs((int)in->analog_x - 128) > 24) px += ((int)in->analog_x - 128) / 32;
@@ -270,15 +270,29 @@ int main(int argc, char **argv)
             s->x = (int16_t)(s->x + s->dx); s->y = (int16_t)(s->y + s->dy);
             if (s->x < 0) s->x = 479; if (s->x > 479) s->x = 0;
             if (s->y < 0) s->y = 247; if (s->y > 247) s->y = 0;
-            g_recs[i].x = s->x; g_recs[i].y = s->y; g_recs[i].frame = FRAME_STAR; g_recs[i].color = s->color;
+            g_recs[i].x = s->x; g_recs[i].y = s->y; g_recs[i].frame = FRAME_STAR;
+            /* 4444 tint: brightness from the star's colour, alpha fading with row (fog-like) */
+            {
+                uint8_t r, g, b;
+                pspexp_color_unpack_5650(s->color, &r, &g, &b);
+                g_recs[i].color = pspexp_color_4444(r, g, b, (uint8_t)(96 + (s->y * 159) / 248));
+            }
         }
 
         /* ---- frame ---- */
         pspexp_begin_frame(ctx);
         pspexp_set_clip(ctx, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
         pspexp_draw_rect(ctx, 0, 0, PSPEXP_DISPLAY_WIDTH, 248, pspexp_color_5650(16, 24, 48));
-        if (show_field && field > 0) pspexp_draw_sprite_batch(ctx, ATLAS_ID, g_recs, (uint32_t)field);
-        pspexp_draw_sprite(ctx, ATLAS_ID, (int16_t)px, (int16_t)py, (uint16_t)(FRAME_PLAYER0 + pframe), tints[ptint]);
+        if (show_field && field > 0)
+            pspexp_draw_sprite_batch_ex(ctx, ATLAS_ID, g_recs, (uint32_t)field, 0, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_4444);
+        {
+            PspExpSpriteRec pr = { (int16_t)px, (int16_t)py, (uint16_t)(FRAME_PLAYER0 + pframe), tints[ptint] };
+            pspexp_draw_sprite_batch_ex(ctx, ATLAS_ID, &pr, 1, facing_left ? PSPEXP_BATCH_FLIP_X : 0,
+                                        PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
+        }
+        /* translucent shadow box and a line from the player to the HUD */
+        pspexp_fill_rect(ctx, (int16_t)(px - 4), (int16_t)(py - 4), 40, 40, 0, 96);
+        pspexp_draw_line(ctx, (int16_t)(px + 16), (int16_t)(py + 16), 240, 248, pspexp_color_5650(255, 255, 0), 160);
         /* HUD: bar, then blocks showing the player frame and tint index */
         pspexp_draw_rect(ctx, 0, 248, PSPEXP_DISPLAY_WIDTH, 24, pspexp_color_5650(40, 40, 56));
         pspexp_draw_rect(ctx, 8, 252, (int16_t)(px * 200 / 448 + 4), 16, pspexp_color_5650(90, 200, 120));

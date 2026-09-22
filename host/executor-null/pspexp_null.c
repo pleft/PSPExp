@@ -30,16 +30,19 @@ static int op_palette_create(void *u, PspExpCacheEntry *e, const void *entries)
     return PSPEXP_RERR_NONE;
 }
 static void op_palette_destroy(void *u, PspExpCacheEntry *e) { (void)u; (void)e; }
-static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, const PspExpVertex2D *v, uint32_t n)
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, uint16_t fmt, const PspExpVertex2D *v, uint32_t n)
 {
     PspExpNullExecutor *x = (PspExpNullExecutor *)u;
-    (void)atlas; (void)v;
+    (void)atlas;
     if (palette) x->stats.indexed_draws++;
+    if (fmt == PSPEXP_VTX_SPRITE_2D_4444) x->stats.alpha_draws++;
+    if (n && v[0].u > v[1].u) x->stats.flipped_draws++;
     x->stats.sprite_draws++;
     x->stats.sprites += n;
     x->stats.vertices_expanded += 2 * n;
 }
-static void op_draw_rect(void *u, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t c) { (void)x; (void)y; (void)w; (void)h; (void)c; ((PspExpNullExecutor *)u)->stats.rects++; }
+static void op_draw_rect(void *u, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t c, uint8_t a) { (void)x; (void)y; (void)w; (void)h; (void)c; (void)a; ((PspExpNullExecutor *)u)->stats.rects++; }
+static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t c, uint8_t a) { (void)x0; (void)y0; (void)x1; (void)y1; (void)c; (void)a; ((PspExpNullExecutor *)u)->stats.lines++; }
 static uint32_t op_present(void *u)
 {
     PspExpNullExecutor *x = (PspExpNullExecutor *)u;
@@ -97,6 +100,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.set_clip = op_set_clip;
     ops.draw_sprites = op_draw_sprites;
     ops.draw_rect = op_draw_rect;
+    ops.draw_line = op_draw_line;
     ops.present = op_present;
     ops.log = op_log;
     if (pspexp_runtime_init(&x->rt, &ops, &c) < 0) { free(x); return NULL; }

@@ -256,6 +256,31 @@ int main(void)
         pspexp_present(ctx);
         pspexp_wait_present(ctx, 100);
         CHECK_EQ(pspexp_null_stats(nul)->indexed_draws, 2);
+        /* Per-batch palette override, flip, alpha format, translucent fills, lines. */
+        {
+            static uint16_t pal2[256];
+            PspExpSpriteRec r = { 5, 5, 0, pspexp_color_4444(255, 255, 255, 128) };
+            uint32_t rerr2 = pspexp_null_runtime(nul)->stats.resource_errors;
+            uint32_t miss2 = pspexp_null_runtime(nul)->stats.misses;
+            CHECK_EQ(pspexp_upload_palette(ctx, 44, PSPEXP_TEX_5551, 256, pal2, sizeof(pal2)), 0);
+            pspexp_pump(ctx, 0);
+            pspexp_begin_frame(ctx);
+            pspexp_draw_sprite_batch_ex(ctx, 41, &r, 1, PSPEXP_BATCH_FLIP_X, 44, PSPEXP_VTX_SPRITE_2D_4444);
+            pspexp_draw_sprite_batch_ex(ctx, 41, &r, 1, 0, 42, PSPEXP_VTX_SPRITE_2D_5650);      /* 16-entry palette: error */
+            pspexp_draw_sprite_batch_ex(ctx, 41, &r, 1, 0, 99, PSPEXP_VTX_SPRITE_2D_5650);      /* unknown palette: miss */
+            pspexp_draw_sprite_batch_ex(ctx, 41, &r, 1, 0, PSPEXP_PALETTE_DEFAULT, 7);          /* bad vertex format */
+            pspexp_fill_rect(ctx, 0, 0, 10, 10, 0, 128);
+            pspexp_draw_line(ctx, 0, 0, 100, 50, 0xFFFF, 255);
+            pspexp_present(ctx);
+            pspexp_wait_present(ctx, 100);
+            CHECK_EQ(pspexp_null_stats(nul)->flipped_draws, 1);
+            CHECK_EQ(pspexp_null_stats(nul)->alpha_draws, 1);
+            CHECK_EQ(pspexp_null_stats(nul)->lines, 1);
+            CHECK_EQ(pspexp_null_runtime(nul)->stats.resource_errors, rerr2 + 1);
+            CHECK_EQ(pspexp_null_runtime(nul)->stats.misses, miss2 + 1);
+            CHECK_EQ(pspexp_null_runtime(nul)->stats.protocol_errors, 2);   /* one earlier, one now */
+            pspexp_release(ctx, 44);
+        }
         pspexp_release(ctx, 41); pspexp_release(ctx, 40); pspexp_release(ctx, 42);
         pspexp_pump(ctx, 0);
     }

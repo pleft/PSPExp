@@ -23,6 +23,7 @@ enum PspExpOpcode {
     PSPEXP_OP_DRAW_QUAD_BATCH   = 0x0105,  /* reserved (arbitrary source rects) */
     PSPEXP_OP_DRAW_RECT         = 0x0106,  /* PspExpDrawRect */
     PSPEXP_OP_PRESENT           = 0x0107,  /* no payload */
+    PSPEXP_OP_DRAW_LINE         = 0x0108,  /* PspExpDrawLine */
 
     /* RESOURCE (0x02xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE = 0x0201,  /* host -> PSP, PspExpTextureUpload + data + frames */

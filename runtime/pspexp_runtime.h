@@ -40,10 +40,13 @@ typedef struct PspExpRuntimeOps {
     /* Space for `vertex_count` vertices the runtime will expand a batch into.
      * On the PSP this is the GE vertex ring. NULL drops the batch. */
     PspExpVertex2D *(*vertex_alloc)(void *user, uint32_t vertex_count);
-    /* `palette` is the resident palette for an indexed atlas, NULL otherwise. */
+    /* `palette` is the resident palette for an indexed atlas, NULL otherwise.
+     * `vertex_format` is a PspExpVertexFormat; the vertices are already expanded
+     * (mirrored when the batch asked for it). */
     void (*draw_sprites)(void *user, PspExpCacheEntry *atlas, PspExpCacheEntry *palette,
-                         const PspExpVertex2D *v, uint32_t sprite_count);
-    void (*draw_rect)(void *user, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+                         uint16_t vertex_format, const PspExpVertex2D *v, uint32_t sprite_count);
+    void (*draw_rect)(void *user, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t alpha);
+    void (*draw_line)(void *user, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha);
     /* Finish and display the frame; return the clock at the vblank it was shown. */
     uint32_t (*present)(void *user);
     /* Optional: GE render time of the frame just presented, microseconds. */
@@ -66,7 +69,7 @@ typedef struct PspExpRuntimeConfig {
 } PspExpRuntimeConfig;
 
 typedef struct PspExpRuntimeStats {
-    uint32_t frames, batches, sprites, tiles, rects;
+    uint32_t frames, batches, sprites, tiles, rects, lines;
     uint32_t uploads, releases, resource_errors, protocol_errors, misses, palettes;
     uint32_t last_frame_bytes, last_execute_us;
     uint64_t bytes_in, bytes_out;

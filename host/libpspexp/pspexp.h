@@ -101,11 +101,21 @@ const PspExpMemoryStatus *pspexp_memory_status(const PspExpContext *ctx);
 void pspexp_begin_frame(PspExpContext *ctx);
 void pspexp_set_clip(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h);
 void pspexp_draw_sprite_batch(PspExpContext *ctx, uint16_t atlas, const PspExpSpriteRec *recs, uint32_t count);
+/* Full form: `flags` = PSPEXP_BATCH_*, `palette` overrides an indexed atlas's
+ * palette (PSPEXP_PALETTE_DEFAULT for none), `vertex_format` selects 5650
+ * tints or 4444 tints with per-sprite alpha. */
+void pspexp_draw_sprite_batch_ex(PspExpContext *ctx, uint16_t atlas, const PspExpSpriteRec *recs, uint32_t count,
+                                 uint16_t flags, uint16_t palette, uint16_t vertex_format);
 void pspexp_draw_sprite(PspExpContext *ctx, uint16_t atlas, int16_t x, int16_t y, uint16_t frame, uint16_t color);
 void pspexp_draw_tile_batch(PspExpContext *ctx, uint16_t atlas, int16_t origin_x, int16_t origin_y,
                             uint16_t cell_w, uint16_t cell_h, uint16_t columns,
                             const PspExpTileRec *recs, uint32_t count);
+void pspexp_draw_tile_batch_ex(PspExpContext *ctx, uint16_t atlas, int16_t origin_x, int16_t origin_y,
+                               uint16_t cell_w, uint16_t cell_h, uint16_t columns,
+                               const PspExpTileRec *recs, uint32_t count, uint16_t palette);
 void pspexp_draw_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void pspexp_fill_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t alpha);
+void pspexp_draw_line(PspExpContext *ctx, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha);
 /* Sends the frame. Returns its frame_seq, or -1 if the transport is gone. */
 long pspexp_present(PspExpContext *ctx);
 

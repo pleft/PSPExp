@@ -53,6 +53,8 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpVertex2D) == 12, vertex2d_size);
  *   GU_TEXTURE_16BIT = 2 << 0, GU_COLOR_5650 = 4 << 2,
  *   GU_VERTEX_16BIT = 2 << 7, GU_TRANSFORM_2D = 1 << 23. */
 #define PSPEXP_GU_VERTEX2D_TYPE ((2u << 0) | (4u << 2) | (2u << 7) | (1u << 23))
+/* The 4444 variant: GU_COLOR_4444 = 5 << 2. */
+#define PSPEXP_GU_VERTEX2D_4444_TYPE ((2u << 0) | (5u << 2) | (2u << 7) | (1u << 23))
 
 /* Conservative record count per draw so no single draw approaches the GE
  * primitive-count field limits, and so the expansion scratch stays bounded. */
@@ -62,6 +64,9 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpVertex2D) == 12, vertex2d_size);
  * at least (max frame index + 1) entries; see pspexp_sprites_max_frame(). */
 void pspexp_expand_sprites(const PspExpFrame *frames, const PspExpSpriteRec *recs,
                            uint32_t count, PspExpVertex2D *out);
+/* Same, mirrored horizontally: u runs from u0+w down to u0 (PSPEXP_BATCH_FLIP_X). */
+void pspexp_expand_sprites_flipped(const PspExpFrame *frames, const PspExpSpriteRec *recs,
+                                   uint32_t count, PspExpVertex2D *out);
 
 /* Expand a tile batch into 2*count vertices. */
 void pspexp_expand_tiles(const PspExpFrame *frames, const PspExpTileBatch *batch,

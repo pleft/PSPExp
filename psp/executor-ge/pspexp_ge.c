@@ -161,7 +161,7 @@ static PspExpVertex2D *op_vertex_alloc(void *u, uint32_t vertex_count)
     return (PspExpVertex2D *)p;
 }
 
-static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, const PspExpVertex2D *v, uint32_t count)
+static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *palette, uint16_t fmt, const PspExpVertex2D *v, uint32_t count)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     GeTexture *t = (GeTexture *)atlas->user;
@@ -185,22 +185,44 @@ static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         ge->tex_enabled = 1;
     }
-    sceGuDrawArray(GU_SPRITES, PSPEXP_GU_VERTEX2D_TYPE, (int)(2u * count), 0, v);
+    sceGuDrawArray(GU_SPRITES, fmt == PSPEXP_VTX_SPRITE_2D_4444 ? PSPEXP_GU_VERTEX2D_4444_TYPE : PSPEXP_GU_VERTEX2D_TYPE,
+                   (int)(2u * count), 0, v);
     ge->stats.batches++;
     ge->stats.last_vertex_bytes = ge->ring_used;
 }
 
-typedef struct RectVertex { uint16_t color; int16_t x, y, z; } RectVertex;
+/* Untextured primitives use an 8888 vertex colour so the alpha survives. */
+typedef struct FlatVertex { uint32_t color; int16_t x, y, z, pad; } FlatVertex;
+#define FLAT_VTYPE (GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D)
 
-static void op_draw_rect(void *u, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+static uint32_t flat_color(uint16_t c5650, uint8_t alpha)
+{
+    uint32_t r = c5650 & 0x1F, g = (c5650 >> 5) & 0x3F, b = (c5650 >> 11) & 0x1F;
+    r = (r << 3) | (r >> 2); g = (g << 2) | (g >> 4); b = (b << 3) | (b >> 2);
+    return r | (g << 8) | (b << 16) | ((uint32_t)alpha << 24);   /* ABGR as the GE wants */
+}
+
+static void op_draw_rect(void *u, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t alpha)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
-    RectVertex *rv = (RectVertex *)sceGuGetMemory(2 * sizeof(RectVertex));
+    FlatVertex *rv = (FlatVertex *)sceGuGetMemory(2 * sizeof(FlatVertex));
     if (!rv) return;
     if (ge->tex_enabled) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
-    rv[0].color = color; rv[0].x = x; rv[0].y = y; rv[0].z = 0;
-    rv[1].color = color; rv[1].x = (int16_t)(x + w); rv[1].y = (int16_t)(y + h); rv[1].z = 0;
-    sceGuDrawArray(GU_SPRITES, GU_COLOR_5650 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, rv);
+    rv[0].color = flat_color(color, alpha); rv[0].x = x; rv[0].y = y; rv[0].z = 0; rv[0].pad = 0;
+    rv[1].color = rv[0].color; rv[1].x = (int16_t)(x + w); rv[1].y = (int16_t)(y + h); rv[1].z = 0; rv[1].pad = 0;
+    sceGuDrawArray(GU_SPRITES, FLAT_VTYPE, 2, 0, rv);
+    ge->stats.rects++;
+}
+
+static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    FlatVertex *lv = (FlatVertex *)sceGuGetMemory(2 * sizeof(FlatVertex));
+    if (!lv) return;
+    if (ge->tex_enabled) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
+    lv[0].color = flat_color(color, alpha); lv[0].x = x0; lv[0].y = y0; lv[0].z = 0; lv[0].pad = 0;
+    lv[1].color = lv[0].color; lv[1].x = x1; lv[1].y = y1; lv[1].z = 0; lv[1].pad = 0;
+    sceGuDrawArray(GU_LINES, FLAT_VTYPE, 2, 0, lv);
     ge->stats.rects++;
 }
 
@@ -266,6 +288,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->vertex_alloc = op_vertex_alloc;
     ops->draw_sprites = op_draw_sprites;
     ops->draw_rect = op_draw_rect;
+    ops->draw_line = op_draw_line;
     ops->present = op_present;
     ops->frame_ge_us = op_frame_ge_us;
 }

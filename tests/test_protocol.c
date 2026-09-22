@@ -100,6 +100,17 @@ static void test_expansion(void)
     CHECK_EQ(tv[3].color, 2);
     CHECK_EQ(pspexp_tiles_max_frame(tiles, 5), 1);
     CHECK_EQ(PSPEXP_GU_VERTEX2D_TYPE, 0x00800112u);
+    CHECK_EQ(PSPEXP_GU_VERTEX2D_4444_TYPE, 0x00800116u);
+
+    /* Mirrored expansion swaps u only. */
+    pspexp_expand_sprites_flipped(frames, recs, 2, v);
+    CHECK_EQ(v[0].u, 32); CHECK_EQ(v[1].u, 0); CHECK_EQ(v[0].v, 0); CHECK_EQ(v[1].v, 16);
+    CHECK_EQ(v[0].x, 10); CHECK_EQ(v[1].x, 42);
+    CHECK_EQ(v[2].u, 40); CHECK_EQ(v[3].u, 32);
+    CHECK_EQ(pspexp_color_4444(255, 0, 0, 255), 0xF00F);
+    CHECK_EQ(pspexp_color_4444(0, 0, 0, 0x80), 0x8000);
+    CHECK_EQ(sizeof(PspExpSpriteBatch), 16);
+    CHECK_EQ(sizeof(PspExpTileBatch), 32);
 }
 
 static void test_texture_validation(void)

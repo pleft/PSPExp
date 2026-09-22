@@ -31,6 +31,7 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_DRAW_QUAD_BATCH: return "DRAW_QUAD_BATCH";
     case PSPEXP_OP_DRAW_RECT: return "DRAW_RECT";
     case PSPEXP_OP_PRESENT: return "PRESENT";
+    case PSPEXP_OP_DRAW_LINE: return "DRAW_LINE";
     case PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE: return "RESOURCE_UPLOAD_TEXTURE";
     case PSPEXP_OP_RESOURCE_RELEASE: return "RESOURCE_RELEASE";
     case PSPEXP_OP_RESOURCE_HINT: return "RESOURCE_HINT";

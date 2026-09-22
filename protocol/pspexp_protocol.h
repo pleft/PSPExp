@@ -116,8 +116,9 @@ enum PspExpTier {
 
 /* Vertex formats a batch may request; advertised as a bit mask in HELLO. */
 enum PspExpVertexFormat {
-    PSPEXP_VTX_SPRITE_2D_5650 = 0,  /* PspExpVertex2D, GU_SPRITES */
-    PSPEXP_VTX_COUNT = 1
+    PSPEXP_VTX_SPRITE_2D_5650 = 0,  /* PspExpVertex2D, colour = RGB 5650 tint (no alpha) */
+    PSPEXP_VTX_SPRITE_2D_4444 = 1,  /* same layout, colour = RGBA 4444 tint with per-sprite alpha */
+    PSPEXP_VTX_COUNT = 2
 };
 #define PSPEXP_VTX_BIT(fmt) ((uint16_t)(1u << (fmt)))
 
@@ -264,16 +265,30 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpSetClip) == 16, set_clip_size);
 typedef struct PspExpDrawRect {
     int16_t  x, y, w, h;
     uint16_t color;             /* RGB 5650 */
-    uint8_t  reserved[6];
+    uint8_t  alpha;             /* 255 = opaque */
+    uint8_t  reserved[5];
 } PspExpDrawRect;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpDrawRect) == 16, draw_rect_size);
+
+typedef struct PspExpDrawLine {
+    int16_t  x0, y0, x1, y1;    /* inclusive end points */
+    uint16_t color;             /* RGB 5650 */
+    uint8_t  alpha;
+    uint8_t  reserved[5];
+} PspExpDrawLine;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpDrawLine) == 16, draw_line_size);
+
+#define PSPEXP_BATCH_FLIP_X      0x0001u   /* mirror every sprite horizontally */
+#define PSPEXP_PALETTE_DEFAULT   0xFFFFu   /* use the atlas's own palette */
 
 /* Followed by `count` PspExpSpriteRec (pspexp_batch.h), padded to 16 bytes. */
 typedef struct PspExpSpriteBatch {
     uint16_t atlas;             /* texture handle */
     uint16_t count;
     uint16_t vertex_format;     /* PspExpVertexFormat */
-    uint8_t  reserved[10];
+    uint16_t flags;             /* PSPEXP_BATCH_* */
+    uint16_t palette;           /* palette override for an indexed atlas, or PSPEXP_PALETTE_DEFAULT */
+    uint8_t  reserved[6];
 } PspExpSpriteBatch;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpSpriteBatch) == 16, sprite_batch_size);
 
@@ -286,8 +301,10 @@ typedef struct PspExpTileBatch {
     uint16_t cell_w, cell_h;
     uint16_t columns;
     uint16_t vertex_format;
+    uint16_t palette;           /* override or PSPEXP_PALETTE_DEFAULT */
+    uint8_t  reserved[14];
 } PspExpTileBatch;
-PSPEXP_STATIC_ASSERT(sizeof(PspExpTileBatch) == 16, tile_batch_size);
+PSPEXP_STATIC_ASSERT(sizeof(PspExpTileBatch) == 32, tile_batch_size);
 
 /* PRESENT has no payload. */
 
@@ -430,7 +447,12 @@ static inline void pspexp_color_unpack_5650(uint16_t c, uint8_t *r, uint8_t *g, 
     *g = (uint8_t)((gg << 2) | (gg >> 4));
     *b = (uint8_t)((bb << 3) | (bb >> 2));
 }
-#define PSPEXP_COLOR_NONE 0xFFFFu   /* white tint: no modulation */
+#define PSPEXP_COLOR_NONE 0xFFFFu   /* white tint: no modulation (both 5650 and 4444) */
+/* RGBA 4444 for the SPRITE_2D_4444 vertex format: R low nibble .. A high nibble. */
+static inline uint16_t pspexp_color_4444(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    return (uint16_t)(((a >> 4) << 12) | ((b >> 4) << 8) | ((g >> 4) << 4) | (r >> 4));
+}
 
 const char *pspexp_channel_name(uint8_t channel);
 const char *pspexp_opcode_name(uint16_t opcode);

@@ -94,7 +94,7 @@ static void send_hello(PspExpRuntime *rt)
     h.input_rate_max = rt->cfg.input_rate_max;
     h.executor = rt->cfg.executor;
     h.texture_formats = rt->cfg.texture_formats;
-    h.vertex_formats = PSPEXP_VTX_BIT(PSPEXP_VTX_SPRITE_2D_5650);
+    h.vertex_formats = PSPEXP_VTX_BIT(PSPEXP_VTX_SPRITE_2D_5650) | PSPEXP_VTX_BIT(PSPEXP_VTX_SPRITE_2D_4444);
     h.texture_max = PSPEXP_TEXTURE_MAX;
     h.max_batch_records = rt->cfg.max_batch_records;
     h.vram_budget = rt->cache.vram_budget;
@@ -219,21 +219,33 @@ static void handle_palette_upload(PspExpRuntime *rt, const PspExpMessage *m)
 
 /* The atlas for a batch, or NULL after reporting why. `*palette` receives the
  * palette for an indexed atlas. */
-static PspExpCacheEntry *batch_atlas(PspExpRuntime *rt, uint16_t id, PspExpCacheEntry **palette)
+static PspExpCacheEntry *batch_atlas(PspExpRuntime *rt, uint16_t id, uint16_t palette_override, PspExpCacheEntry **palette)
 {
     PspExpCacheEntry *atlas = pspexp_cache_find(&rt->cache, id);
     *palette = NULL;
     if (!atlas) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, id, PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); return NULL; }
     if (atlas->kind != PSPEXP_KIND_TEXTURE) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, id, PSPEXP_RERR_WRONG_KIND, rt->frame_seq); return NULL; }
     if (PSPEXP_TEX_IS_INDEXED(atlas->format)) {
-        PspExpCacheEntry *pal = pspexp_cache_find(&rt->cache, atlas->palette);
+        uint16_t pid = palette_override != PSPEXP_PALETTE_DEFAULT ? palette_override : atlas->palette;
+        uint16_t need = atlas->format == PSPEXP_TEX_T4 ? PSPEXP_PALETTE_ENTRIES_T4 : PSPEXP_PALETTE_ENTRIES_T8;
+        PspExpCacheEntry *pal = pspexp_cache_find(&rt->cache, pid);
         if (!pal || pal->kind != PSPEXP_KIND_PALETTE) {
-            send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, atlas->palette, PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq);
+            send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, pid, PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq);
+            return NULL;
+        }
+        if (pal->width < need) {
+            send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, pid, PSPEXP_RERR_BAD_PALETTE, rt->frame_seq);
             return NULL;
         }
         *palette = pal;
     }
     return atlas;
+}
+
+static int vertex_format_ok(PspExpRuntime *rt, const PspExpMessage *m, uint16_t fmt)
+{
+    if (fmt >= PSPEXP_VTX_COUNT) { send_error(rt, PSPEXP_ERR_BAD_VERTEX_FMT, m, fmt); return 0; }
+    return 1;
 }
 
 static void handle_sprite_batch(PspExpRuntime *rt, const PspExpMessage *m)
@@ -247,9 +259,9 @@ static void handle_sprite_batch(PspExpRuntime *rt, const PspExpMessage *m)
     b = (const PspExpSpriteBatch *)m->payload;
     if (b->count > rt->cfg.max_batch_records) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, b->count); return; }
     if (m->length < sizeof(*b) + (uint32_t)b->count * sizeof(PspExpSpriteRec)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
-    if (b->vertex_format != PSPEXP_VTX_SPRITE_2D_5650) { send_error(rt, PSPEXP_ERR_BAD_VERTEX_FMT, m, b->vertex_format); return; }
+    if (!vertex_format_ok(rt, m, b->vertex_format)) return;
     recs = (const PspExpSpriteRec *)(m->payload + sizeof(*b));
-    atlas = batch_atlas(rt, b->atlas, &palette);
+    atlas = batch_atlas(rt, b->atlas, b->palette, &palette);
     if (!atlas) return;
     if (b->count == 0) return;
     if (pspexp_sprites_max_frame(recs, b->count) >= atlas->frame_count) {
@@ -258,8 +270,9 @@ static void handle_sprite_batch(PspExpRuntime *rt, const PspExpMessage *m)
     }
     v = vertex_space(rt, 2u * b->count);
     if (!v) return;
-    pspexp_expand_sprites(atlas->frames, recs, b->count, v);
-    if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, v, b->count);
+    if (b->flags & PSPEXP_BATCH_FLIP_X) pspexp_expand_sprites_flipped(atlas->frames, recs, b->count, v);
+    else pspexp_expand_sprites(atlas->frames, recs, b->count, v);
+    if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
     rt->stats.batches++;
     rt->stats.sprites += b->count;
 }
@@ -275,9 +288,9 @@ static void handle_tile_batch(PspExpRuntime *rt, const PspExpMessage *m)
     b = (const PspExpTileBatch *)m->payload;
     if (b->count > rt->cfg.max_batch_records) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, b->count); return; }
     if (m->length < sizeof(*b) + (uint32_t)b->count * sizeof(PspExpTileRec)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
-    if (b->vertex_format != PSPEXP_VTX_SPRITE_2D_5650) { send_error(rt, PSPEXP_ERR_BAD_VERTEX_FMT, m, b->vertex_format); return; }
+    if (!vertex_format_ok(rt, m, b->vertex_format)) return;
     recs = (const PspExpTileRec *)(m->payload + sizeof(*b));
-    atlas = batch_atlas(rt, b->atlas, &palette);
+    atlas = batch_atlas(rt, b->atlas, b->palette, &palette);
     if (!atlas) return;
     if (b->count == 0) return;
     if (pspexp_tiles_max_frame(recs, b->count) >= atlas->frame_count) {
@@ -287,7 +300,7 @@ static void handle_tile_batch(PspExpRuntime *rt, const PspExpMessage *m)
     v = vertex_space(rt, 2u * b->count);
     if (!v) return;
     pspexp_expand_tiles(atlas->frames, b, recs, v);
-    if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, v, b->count);
+    if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
     rt->stats.batches++;
     rt->stats.tiles += b->count;
 }
@@ -411,7 +424,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         break;
     }
     case PSPEXP_OP_SET_CLIP: case PSPEXP_OP_DRAW_SPRITE_BATCH: case PSPEXP_OP_DRAW_TILE_BATCH:
-    case PSPEXP_OP_DRAW_RECT: case PSPEXP_OP_PRESENT:
+    case PSPEXP_OP_DRAW_RECT: case PSPEXP_OP_DRAW_LINE: case PSPEXP_OP_PRESENT:
         if (!rt->in_frame) { send_error(rt, PSPEXP_ERR_NOT_IN_FRAME, m, 0); return; }
         if (op == PSPEXP_OP_SET_CLIP) {
             const PspExpSetClip *c;
@@ -426,8 +439,14 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
             const PspExpDrawRect *r;
             if (pspexp_message_expect(m, sizeof(*r)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
             r = (const PspExpDrawRect *)m->payload;
-            if (rt->ops.draw_rect) rt->ops.draw_rect(rt->ops.user, r->x, r->y, r->w, r->h, r->color);
+            if (rt->ops.draw_rect) rt->ops.draw_rect(rt->ops.user, r->x, r->y, r->w, r->h, r->color, r->alpha);
             rt->stats.rects++;
+        } else if (op == PSPEXP_OP_DRAW_LINE) {
+            const PspExpDrawLine *l;
+            if (pspexp_message_expect(m, sizeof(*l)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+            l = (const PspExpDrawLine *)m->payload;
+            if (rt->ops.draw_line) rt->ops.draw_line(rt->ops.user, l->x0, l->y0, l->x1, l->y1, l->color, l->alpha);
+            rt->stats.lines++;
         } else {
             PspExpPresentDone d;
             uint32_t exec_us = now_us(rt) - rt->frame_start_us;
