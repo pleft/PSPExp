@@ -90,6 +90,13 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms);
 int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
                           const void *pixels, uint32_t pixel_bytes,
                           const PspExpFrame *frames, uint16_t frame_count);
+/* Two-step upload for callers that produce the pixels themselves: begin
+ * returns where to write pixel_bytes (inside the outgoing message, so no
+ * copy), commit sends it. retain = 0: no replay copy kept for a reconnect
+ * (for textures re-uploaded every frame anyway). NULL / < 0 on error. */
+uint8_t *pspexp_upload_texture_begin(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
+                                     uint32_t pixel_bytes, const PspExpFrame *frames, uint16_t frame_count);
+int pspexp_upload_texture_commit(PspExpContext *ctx, int retain);
 /* Palette for indexed textures: `entries` colours (16 or 256) in `format`
  * (5650, 5551, 4444 or 8888), `bytes` = entries x bytes per colour. */
 int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint16_t entries,

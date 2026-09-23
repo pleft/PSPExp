@@ -40,7 +40,9 @@
 #include "../../host/libpspexp/pspexp.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
+#ifndef PSPEXP_NO_SDL_EXECUTOR
 #include "../../host/executor-sdl/pspexp_sdl.h"
+#endif
 #ifdef PSPEXP_HAVE_USB
 #include "../../host/transport-usb/pspexp_usb.h"
 #endif
@@ -49,7 +51,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(PSPEXP_STATIC_RENAME)
 #include <dlfcn.h>
 #endif
 
@@ -62,6 +64,14 @@
         interpose_##fn __attribute__((section("__DATA,__interpose"))) = { (const void *)&shim_##fn, (const void *)&fn }; \
     static ret shim_##fn params
 #define REAL(fn) fn
+#elif defined(PSPEXP_STATIC_RENAME)
+/* Linked into a static program whose sources (and SDL_mixer's) were compiled
+ * with -include pspexp_sdl_rename.h, which renames every hooked SDL call to
+ * pspexp_<fn> (hosts where injection is impractical: the Omega2's OpenWrt,
+ * whose toolchain has no --wrap). This file is compiled without it, so SDL's
+ * real functions keep their names here. */
+#define HOOK(ret, fn, params) ret pspexp_##fn params
+#define REAL(fn) fn
 #else
 #define HOOK(ret, fn, params) ret fn params
 #define REAL(fn) ((__typeof__(&fn))(uintptr_t)real_symbol(#fn))   /* via uintptr_t: no pedantic object/function cast warning */
@@ -70,6 +80,34 @@ static void *real_symbol(const char *name)
     void *p = dlsym(RTLD_NEXT, name);
     if (!p) { fprintf(stderr, "[sdl-pspexp] cannot find %s\n", name); abort(); }
     return p;
+}
+#endif
+
+/* ---- crash report (Linux MIPS hosts: no debugger on the Omega2) -------------- */
+
+#if defined(__linux__) && defined(__mips__)
+#include <signal.h>
+#include <ucontext.h>
+#include <unistd.h>
+static void crash_report(int sig, siginfo_t *si, void *ctx)
+{
+    const ucontext_t *uc = (const ucontext_t *)ctx;
+    char line[160];
+    int n = snprintf(line, sizeof(line), "[sdl-pspexp] signal %d at pc %#lx, ra %#lx, fault address %p\n", sig,
+                     (unsigned long)uc->uc_mcontext.pc, (unsigned long)uc->uc_mcontext.gregs[31], si->si_addr);
+    if (n > 0) (void)write(2, line, (size_t)n);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+__attribute__((constructor)) static void crash_report_install(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = crash_report;
+    sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
 }
 #endif
 
@@ -107,7 +145,9 @@ static struct {
     PspExpContext *ctx;
     PspExpTransport *transport;
     PspExpNullExecutor *nul;
+#ifndef PSPEXP_NO_SDL_EXECUTOR
     PspExpSdlExecutor *sdlx;
+#endif
     int mode;                          /* 0 usb, 1 tcp, 2 null */
     PspExpTcpOptions tcp;
 #ifdef PSPEXP_HAVE_USB
@@ -238,7 +278,9 @@ static void connect_once(void)
         S.nul = pspexp_null_create(NULL);
         S.transport = pspexp_null_transport(S.nul);
         S.mode = 2;
-    } else if (!strcmp(env, "sdl")) {
+    }
+#ifndef PSPEXP_NO_SDL_EXECUTOR
+    else if (!strcmp(env, "sdl")) {
         /* In-process executor: its own renderer, so the hooks pass its draws through. */
         PspExpSdlOptions o;
         pspexp_sdl_options_default(&o);
@@ -247,7 +289,9 @@ static void connect_once(void)
         S.sdlx = pspexp_sdl_create(&o, err, sizeof(err));
         if (S.sdlx) S.transport = pspexp_sdl_transport(S.sdlx);
         S.mode = 2;
-    } else if (!strncmp(env, "tcp", 3)) {
+    }
+#endif
+    else if (!strncmp(env, "tcp", 3)) {
         static char host[128];
         pspexp_tcp_options_default(&S.tcp);
         if (env[3] == ':') {
@@ -285,6 +329,25 @@ static void connect_once(void)
 }
 
 static int link_up(void) { return S.active && S.ctx && pspexp_link_state(S.ctx) == PSPEXP_LINK_CONNECTED; }
+
+/* Headless host (SDL's dummy / offscreen video): nobody sees the host's own
+ * rendering, and SDL's software renderer scaling every frame to an invisible
+ * window is real work on a small host. Skip it once the PSP is the display
+ * (PSPEXP_HOST_RENDER=1 keeps it). */
+static int host_render(void)
+{
+    static int decided, render;
+    const char *drv;
+    if (!S.active) return 1;
+    if (!decided) {
+        decided = 1;
+        drv = SDL_GetCurrentVideoDriver();
+        render = (getenv("PSPEXP_HOST_RENDER") && atoi(getenv("PSPEXP_HOST_RENDER"))) ||
+                 !(drv && (!strcmp(drv, "dummy") || !strcmp(drv, "offscreen")));
+        if (!render) logf_("headless host: SDL's own rendering skipped (video driver '%s')", drv);
+    }
+    return render;
+}
 
 static void try_reconnect(void)
 {
@@ -413,19 +476,24 @@ static void release_pages(Tex *x)
 
 static int pow2ceil(int v, int minimum) { int p = minimum; while (p < v) p <<= 1; return p; }
 
+/* One pass per page: convert each shadow pixel to 5650 (opaque) or 4444 and
+ * store it at its swizzled position (16-byte x 8-row blocks: the GE reads
+ * these several times faster) directly in the outgoing message. No buffers
+ * are allocated, and textures re-sent every frame keep no replay copy.
+ * On a small host (Omega2: 580 MHz, no FPU) this is most of the shim's cost. */
 static int upload_tex(Tex *x)
 {
     int y0, x0;
-    /* streamed surfaces use 256 x 128 pages so the padding stays small */
     int pw = x->streaming ? 256 : 512, ph = x->streaming ? 128 : 512;   /* small pages: less padding per frame */
+    int opaque = x->blend == SDL_BLENDMODE_NONE;
     release_pages(x);
     for (y0 = 0; y0 < x->h; y0 += ph) {
         for (x0 = 0; x0 < x->w; x0 += pw) {
             Page *p;
             PspExpTextureDesc d;
             PspExpFrame f;
-            uint16_t *buf;
-            int y, opaque = x->blend == SDL_BLENDMODE_NONE;
+            uint16_t *dst;
+            int y, rowblocks;
             if (x->npages == 16) { x->unsupported = 1; return -1; }
             p = &x->pages[x->npages];
             p->x0 = x0; p->y0 = y0;
@@ -433,36 +501,40 @@ static int upload_tex(Tex *x)
             p->h = x->h - y0 < ph ? x->h - y0 : ph;
             p->texw = pow2ceil(p->w, 16);
             p->texh = pow2ceil(p->h, 8);
-            buf = (uint16_t *)calloc((size_t)p->texw * p->texh, 2);
-            if (!buf) return -1;
-            for (y = 0; y < p->h; y++) {
-                const uint32_t *src = x->rgba + (size_t)(y0 + y) * x->w + x0;
-                uint16_t *dst = buf + (size_t)y * p->texw;
-                int xx;
-                for (xx = 0; xx < p->w; xx++) {
-                    uint32_t c = src[xx];
-                    dst[xx] = opaque ? pspexp_color_5650((uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16))
-                                     : pspexp_color_4444((uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16), (uint8_t)(c >> 24));
-                }
-            }
-            /* Swizzled: the GE fetches 16-byte x 8-row blocks, several times
-             * faster than a linear texture (Doom's frame: 10.5 ms -> ~3 ms). */
-            {
-                uint16_t *sw = (uint16_t *)malloc((size_t)p->texw * p->texh * 2);
-                if (sw) { pspexp_swizzle(sw, buf, (uint32_t)p->texw * 2u, (uint32_t)p->texh); free(buf); buf = sw; }
-            }
             memset(&d, 0, sizeof(d));
             d.width = (uint16_t)p->texw; d.height = (uint16_t)p->texh; d.format = opaque ? PSPEXP_TEX_5650 : PSPEXP_TEX_4444;
             d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;   /* VRAM: the GE reads it far faster than RAM */
             f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(p->texw < 64 ? p->texw : 64); f.h = (uint16_t)p->texh;
             p->tex = alloc_handle();
-            if (pspexp_upload_texture(S.ctx, p->tex, &d, buf, (uint32_t)((size_t)p->texw * p->texh * 2), &f, 1) < 0) {
-                free(buf);
+            dst = (uint16_t *)pspexp_upload_texture_begin(S.ctx, p->tex, &d, (uint32_t)((size_t)p->texw * p->texh * 2), &f, 1);
+            if (!dst) { x->unsupported = 1; logf_("texture %dx%d rejected", x->w, x->h); return -1; }
+            rowblocks = p->texw >> 3;   /* 8 pixels per 16-byte block */
+            for (y = 0; y < p->texh; y++) {
+                uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
+                int xx = 0;
+                if (y < p->h) {
+                    const uint32_t *src = x->rgba + (size_t)(y0 + y) * x->w + x0;
+                    if (opaque) {
+                        for (; xx < p->w; xx++) {
+                            uint32_t c = src[xx];   /* ABGR8888: R in the low byte */
+                            band[((xx >> 3) << 6) + (xx & 7)] =
+                                (uint16_t)(((c >> 3) & 0x1Fu) | (((c >> 10) & 0x3Fu) << 5) | (((c >> 19) & 0x1Fu) << 11));
+                        }
+                    } else {
+                        for (; xx < p->w; xx++) {
+                            uint32_t c = src[xx];
+                            band[((xx >> 3) << 6) + (xx & 7)] =
+                                (uint16_t)(((c >> 4) & 0xFu) | (((c >> 12) & 0xFu) << 4) | (((c >> 20) & 0xFu) << 8) | (((c >> 28) & 0xFu) << 12));
+                        }
+                    }
+                }
+                for (; xx < p->texw; xx++) band[((xx >> 3) << 6) + (xx & 7)] = 0;
+            }
+            if (pspexp_upload_texture_commit(S.ctx, !x->streaming) < 0) {
                 x->unsupported = 1;
                 logf_("texture %dx%d rejected", x->w, x->h);
                 return -1;
             }
-            free(buf);
             S.uploads++;
             x->npages++;
         }
@@ -605,6 +677,33 @@ static void audio_tap(int slot, const Uint8 *data, int len)
     SDL_AudioStream *st = S.dev_stream[slot];
     int16_t tmp[8192];
     int got;
+    const SDL_AudioSpec *sp = &S.dev_spec[slot];
+    if (sp->format == AUDIO_S16SYS && sp->channels == 2 && sp->freq == 44100) {
+        /* already the PSP's format: no conversion (SDL's converter is floating
+         * point, emulated in software on FPU-less hosts such as the Omega2) */
+        audio_push((const int16_t *)data, (size_t)len / 4);
+        return;
+    }
+    if (sp->format == AUDIO_S16SYS && (sp->channels == 1 || sp->channels == 2) &&
+        sp->freq > 0 && sp->freq < 44100 && 44100 % sp->freq == 0) {
+        /* integer upsampling by 44100 / freq (2, 4 for 22050, 11025), linear */
+        static int16_t prev[8][2];
+        const int16_t *in = (const int16_t *)data;
+        int k = 44100 / sp->freq, ch = sp->channels, frames = len / (2 * ch), f, j;
+        for (f = 0; f < frames; f++) {
+            int16_t out[2 * 4];
+            int16_t l = in[f * ch], r = ch == 2 ? in[f * ch + 1] : l;
+            int n = 0;
+            for (j = 1; j <= k; j++) {
+                out[2 * n] = (int16_t)(prev[slot][0] + (l - prev[slot][0]) * j / k);
+                out[2 * n + 1] = (int16_t)(prev[slot][1] + (r - prev[slot][1]) * j / k);
+                if (++n == 4) { audio_push(out, 4); n = 0; }
+            }
+            if (n) audio_push(out, (size_t)n);
+            prev[slot][0] = l; prev[slot][1] = r;
+        }
+        return;
+    }
     if (!st) return;
     SDL_AudioStreamPut(st, data, len);
     while ((got = SDL_AudioStreamGet(st, tmp, (int)sizeof(tmp))) > 0) audio_push(tmp, (size_t)got / 4);
@@ -975,6 +1074,7 @@ HOOK(int, SDL_UpdateTexture, (SDL_Texture *t, const SDL_Rect *rect, const void *
         SDL_QueryTexture(t, &format, NULL, NULL, NULL);
         shadow_update(x, rect, format, pixels, pitch);
     }
+    if (!host_render()) return 0;
     return REAL(SDL_UpdateTexture)(t, rect, pixels, pitch);
 }
 
@@ -1031,6 +1131,7 @@ HOOK(int, SDL_RenderClear, (SDL_Renderer *r))
         pspexp_set_clip(S.ctx, 0, 0, 480, 272);
         pspexp_fill_rect(S.ctx, 0, 0, 480, 272, draw_color5650(), 255);
     }
+    if (!host_render()) return 0;
     return REAL(SDL_RenderClear)(r);
 }
 
@@ -1048,6 +1149,7 @@ HOOK(int, SDL_RenderCopy, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src,
         SDL_Rect d = dst ? *dst : full_dst();
         if (x) mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0);
     }
+    if (!host_render()) return 0;
     return REAL(SDL_RenderCopy)(r, t, src, dst);
 }
 
@@ -1058,6 +1160,7 @@ HOOK(int, SDL_RenderCopyEx, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *sr
         SDL_Rect d = dst ? *dst : full_dst();
         if (x) mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, (int)flip);
     }
+    if (!host_render()) return 0;
     return REAL(SDL_RenderCopyEx)(r, t, src, dst, angle, center, flip);
 }
 
@@ -1065,12 +1168,14 @@ HOOK(int, SDL_RenderCopyF, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src
 {
     if (r == S.ren && dst) mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, 0);
     else if (r == S.ren) { SDL_Rect d = full_dst(); mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); }
+    if (!host_render()) return 0;
     return REAL(SDL_RenderCopyF)(r, t, src, dst);
 }
 
 HOOK(int, SDL_RenderCopyExF, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src, const SDL_FRect *dst, double angle, const SDL_FPoint *center, SDL_RendererFlip flip))
 {
     if (r == S.ren && dst) mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, (int)flip);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderCopyExF)(r, t, src, dst, angle, center, flip);
 }
 
@@ -1080,6 +1185,7 @@ HOOK(int, SDL_RenderFillRect, (SDL_Renderer *r, const SDL_Rect *rect))
         if (rect) mirror_fill((float)rect->x, (float)rect->y, (float)rect->w, (float)rect->h);
         else { SDL_Rect d = full_dst(); mirror_fill((float)d.x, (float)d.y, (float)d.w, (float)d.h); }
     }
+    if (!host_render()) return 0;
     return REAL(SDL_RenderFillRect)(r, rect);
 }
 
@@ -1087,12 +1193,14 @@ HOOK(int, SDL_RenderFillRects, (SDL_Renderer *r, const SDL_Rect *rects, int coun
 {
     int i;
     if (r == S.ren && rects) for (i = 0; i < count; i++) mirror_fill((float)rects[i].x, (float)rects[i].y, (float)rects[i].w, (float)rects[i].h);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderFillRects)(r, rects, count);
 }
 
 HOOK(int, SDL_RenderFillRectF, (SDL_Renderer *r, const SDL_FRect *rect))
 {
     if (r == S.ren && rect) mirror_fill(rect->x, rect->y, rect->w, rect->h);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderFillRectF)(r, rect);
 }
 
@@ -1104,12 +1212,14 @@ HOOK(int, SDL_RenderDrawRect, (SDL_Renderer *r, const SDL_Rect *rect))
         mirror_fill((float)rect->x, (float)rect->y, 1, (float)rect->h);
         mirror_fill((float)(rect->x + rect->w - 1), (float)rect->y, 1, (float)rect->h);
     }
+    if (!host_render()) return 0;
     return REAL(SDL_RenderDrawRect)(r, rect);
 }
 
 HOOK(int, SDL_RenderDrawLine, (SDL_Renderer *r, int x1, int y1, int x2, int y2))
 {
     if (r == S.ren) mirror_line((float)x1, (float)y1, (float)x2, (float)y2);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderDrawLine)(r, x1, y1, x2, y2);
 }
 
@@ -1117,12 +1227,14 @@ HOOK(int, SDL_RenderDrawLines, (SDL_Renderer *r, const SDL_Point *points, int co
 {
     int i;
     if (r == S.ren && points) for (i = 1; i < count; i++) mirror_line((float)points[i - 1].x, (float)points[i - 1].y, (float)points[i].x, (float)points[i].y);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderDrawLines)(r, points, count);
 }
 
 HOOK(int, SDL_RenderDrawPoint, (SDL_Renderer *r, int x, int y))
 {
     if (r == S.ren) mirror_fill((float)x, (float)y, 1, 1);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderDrawPoint)(r, x, y);
 }
 
@@ -1130,6 +1242,7 @@ HOOK(int, SDL_RenderDrawPoints, (SDL_Renderer *r, const SDL_Point *points, int c
 {
     int i;
     if (r == S.ren && points) for (i = 0; i < count; i++) mirror_fill((float)points[i].x, (float)points[i].y, 1, 1);
+    if (!host_render()) return 0;
     return REAL(SDL_RenderDrawPoints)(r, points, count);
 }
 
@@ -1183,7 +1296,7 @@ static void end_frame(void)
 
 HOOK(void, SDL_RenderPresent, (SDL_Renderer *r))
 {
-    REAL(SDL_RenderPresent)(r);
+    if (host_render()) REAL(SDL_RenderPresent)(r);
     if (r == S.ren) end_frame();
 }
 
@@ -1394,5 +1507,7 @@ static void shim_exit(void)
         S.ctx = NULL;
     }
     if (S.nul) pspexp_null_destroy(S.nul);
+#ifndef PSPEXP_NO_SDL_EXECUTOR
     if (S.sdlx) pspexp_sdl_destroy(S.sdlx);
+#endif
 }

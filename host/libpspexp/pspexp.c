@@ -28,6 +28,8 @@ typedef struct FrameRecord {
 struct PspExpContext {
     PspExpTransport *t;
     PspExpConfig cfg;
+    uint8_t *pending_upload;            /* between pspexp_upload_texture_begin and _commit */
+    uint32_t pending_upload_len;
     PspExpStream in;
     PspExpWriter frame;
     PspExpWriter msg;
@@ -365,16 +367,16 @@ int pspexp_connect(PspExpContext *ctx, int timeout_ms)
     return 0;
 }
 
-int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
-                          const void *pixels, uint32_t pixel_bytes,
-                          const PspExpFrame *frames, uint16_t frame_count)
+/* Two-step upload: begin reserves the message and returns where the pixel
+ * bytes go (the caller writes them in place: no intermediate buffer), commit
+ * validates, records the resource and sends it. retain = 0 skips the copy
+ * kept for replay after a reconnect (textures re-sent every frame). */
+uint8_t *pspexp_upload_texture_begin(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
+                                     uint32_t pixel_bytes, const PspExpFrame *frames, uint16_t frame_count)
 {
     PspExpTextureUpload t;
-    uint16_t formats = ctx->state == PSPEXP_LINK_CONNECTED ? ctx->hello.texture_formats : PSPEXP_TEX_FORMATS_V01;
     uint32_t payload_len;
-    int reason;
     uint16_t i;
-    Resource *r;
     uint8_t *p;
 
     memset(&t, 0, sizeof(t));
@@ -393,45 +395,76 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
     for (i = 0; i < frame_count; i++)
         if (frames[i].w > PSPEXP_FRAME_MAX_WIDTH) {
             ctx_log(ctx, "texture %u frame %u is %u px wide (max %u)", id, i, frames[i].w, PSPEXP_FRAME_MAX_WIDTH);
-            return -PSPEXP_RERR_BAD_FRAME_TABLE;
+            return NULL;
         }
 
     pspexp_writer_reset(&ctx->msg);
-    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE, 0) < 0) return -1;
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE, 0) < 0) return NULL;
     p = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(t) + payload_len);
-    if (!p) return -1;
+    if (!p) return NULL;
     memcpy(p, &t, sizeof(t));
-    memcpy(p + sizeof(t), pixels, pixel_bytes);
     if (frame_count) memcpy(p + sizeof(t) + PSPEXP_ALIGN_UP(pixel_bytes), frames, (size_t)frame_count * sizeof(PspExpFrame));
+    ctx->pending_upload = p;
+    ctx->pending_upload_len = (uint32_t)(sizeof(t) + payload_len);
+    return p + sizeof(t);
+}
+
+int pspexp_upload_texture_commit(PspExpContext *ctx, int retain)
+{
+    uint16_t formats = ctx->state == PSPEXP_LINK_CONNECTED ? ctx->hello.texture_formats : PSPEXP_TEX_FORMATS_V01;
+    const PspExpTextureUpload *t = (const PspExpTextureUpload *)ctx->pending_upload;
+    uint32_t len = ctx->pending_upload_len;
+    int reason;
+    Resource *r;
+
+    if (!t) return -1;
+    ctx->pending_upload = NULL;
     if (pspexp_writer_end(&ctx->msg) < 0) return -1;
 
     /* Validate exactly as the executor will, so mistakes surface on the desktop. */
-    reason = pspexp_texture_validate((const PspExpTextureUpload *)p, formats, payload_len);
+    reason = pspexp_texture_validate(t, formats, len - (uint32_t)sizeof(*t));
     if (reason != PSPEXP_RERR_NONE) {
-        ctx_log(ctx, "texture %u rejected locally: %s", id, pspexp_resource_error_name((uint16_t)reason));
+        ctx_log(ctx, "texture %u rejected locally: %s", t->id, pspexp_resource_error_name((uint16_t)reason));
         return -reason;
     }
 
-    if (PSPEXP_TEX_IS_INDEXED(desc->format)) {
+    if (PSPEXP_TEX_IS_INDEXED(t->format)) {
         uint8_t pt = 0;
-        if (pspexp_resource_state(ctx, desc->palette, &pt) == PSPEXP_RES_NONE) {
-            ctx_log(ctx, "texture %u: palette %u was not uploaded", id, desc->palette);
+        if (pspexp_resource_state(ctx, t->palette, &pt) == PSPEXP_RES_NONE) {
+            ctx_log(ctx, "texture %u: palette %u was not uploaded", t->id, t->palette);
             return -PSPEXP_RERR_BAD_PALETTE;
         }
     }
 
-    r = add_res(ctx, id);
+    r = add_res(ctx, t->id);
     if (!r) return -1;
     if (r->retained) { free(r->retained); r->retained = NULL; }
     r->kind = PSPEXP_KIND_TEXTURE;
     r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE;
-    if (ctx->cfg.retain_uploads) {
-        r->retained = (uint8_t *)malloc(sizeof(t) + payload_len);
-        if (r->retained) { memcpy(r->retained, p, sizeof(t) + payload_len); r->retained_len = (uint32_t)(sizeof(t) + payload_len); }
+    if (ctx->cfg.retain_uploads && retain) {
+        r->retained = (uint8_t *)malloc(len);
+        if (r->retained) { memcpy(r->retained, t, len); r->retained_len = len; }
     }
     r->state = PSPEXP_RES_PENDING;
-    if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;   /* sent on connect */
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;   /* sent on connect (if retained) */
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
+                          const void *pixels, uint32_t pixel_bytes,
+                          const PspExpFrame *frames, uint16_t frame_count)
+{
+    uint8_t *dst;
+    uint16_t i;
+    for (i = 0; i < frame_count; i++)
+        if (frames[i].w > PSPEXP_FRAME_MAX_WIDTH) {
+            ctx_log(ctx, "texture %u frame %u is %u px wide (max %u)", id, i, frames[i].w, PSPEXP_FRAME_MAX_WIDTH);
+            return -PSPEXP_RERR_BAD_FRAME_TABLE;
+        }
+    dst = pspexp_upload_texture_begin(ctx, id, desc, pixel_bytes, frames, frame_count);
+    if (!dst) return -1;
+    memcpy(dst, pixels, pixel_bytes);
+    return pspexp_upload_texture_commit(ctx, 1);
 }
 
 int pspexp_upload_palette(PspExpContext *ctx, uint16_t id, uint8_t format, uint16_t entries,
