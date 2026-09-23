@@ -1012,6 +1012,7 @@ What the first day of implementation measured, against the estimates this docume
 | an unmodified SDL2 program (v0.4, `sdl-pspexp`, test game: 95 scaled sprites + primitives + a streaming texture) | — | 60 fps, 3.7 KB per frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, 120 uploads/s (the streaming texture), audio streamed with no underruns |
 | Chocolate Doom, unmodified, through `sdl-pspexp` (320x200 frame as a streaming texture) | the surface-streaming case this document ruled out (§12) | 35 fps (Doom's own rate), 160 KB per frame = 5.6 MB/s, GE 2.2 ms swizzled in VRAM (10.5 ms when linear in RAM), PSP CPU 0.06 ms, audio with no underruns |
 | OpenTyrian, unmodified, through `sdl-pspexp` (320x200 frame, scaler off) | — | 35 fps in play, GE 2.3 ms, PSP CPU 0.06 ms, audio steady at ≈100 ms buffered with no underruns; needed input and audio serviced from the event poll (menus present ~1 fps) and host focus loss hidden (the game pauses when unfocused) |
+| Raspberry Pi 400 as the host (Debian 13, headless over SSH), §13 | a small Linux box should do | USB 25 MB/s host→PSP / 22 PSP→host, bench frame loop 60 fps, Doom at 35 fps with GE 2.2 ms: indistinguishable from the Mac. The host's dummy audio driver ran slow and jittery (an underrun per second) until the SDL layer paced the game's callback on its own clock |
 
 What changed against the plan:
 
@@ -1019,7 +1020,7 @@ What changed against the plan:
 - CLUT textures, host-baked text, per-batch palette selection, alpha tints, translucent primitives, quad batches, streamed audio, a TCP transport and the PPSSPP configuration were all pulled forward from v0.3 into v0.2, because the Stratagus backend needed them. Frame-record sprites remain the fast path, but the quad record is what an engine with arbitrary blits actually uses.
 - Two hardware-only facts were learned the hard way and are now in the executor: the LCD pixel format must be set explicitly by the GE executor (the debug status page leaves it 32-bit), and the host must never touch a transport after closing it (a cable pull turned that into a killed process).
 - Reconnection works as designed (§9.2): the host replays palettes, then textures and sounds; the game resumes.
-- A headless host works with SDL's dummy drivers; a Raspberry Pi build script exists (`scripts/build-pi.sh`), untested on a Pi.
+- A headless host works with SDL's dummy drivers; a Raspberry Pi 400 runs everything with the same numbers as the Mac (`scripts/build-pi.sh`).
 
 - v0.4 came the same day: an unmodified SDL2 program runs on the PSP through an injected library (§12), including the surface-blitting programs this document had ruled out, because a 480x272 frame is only 270 KB on a 25 MB/s link.
 

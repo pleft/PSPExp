@@ -4,8 +4,8 @@
 # Freedoom from apt, so the Pi is the headless host and the PSP the screen
 # (section 13). Stratagus / Warcraft is built too when ../WarCraft exists.
 #
-# Untested on a Pi as of 2026-09-23: written from the macOS build; the
-# dependencies are the Debian packages for the same libraries.
+# Tested 2026-09-23 on a Raspberry Pi 400 (Debian 13 arm64): Doom on the
+# PSP from the Pi at 35 fps, USB 25 MB/s, same numbers as from the Mac.
 #
 #   git clone <PSPExp>     ~/PSP/PSPExp
 #   ~/PSP/PSPExp/scripts/build-pi.sh
@@ -48,10 +48,10 @@ PSPExp and plugged into the Pi:
   cd $ROOT
   build/host/pspexp-bench --frames-only --frames 120     # link check
   scripts/pspexp-doom                                    # Doom on the PSP
-  SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy scripts/pspexp-run build/host/sdl-game
+  scripts/pspexp-run build/host/sdl-game                 # the SDL2 test game
 
-Headless (no desktop session): prefix the game with SDL_VIDEODRIVER=dummy
-SDL_AUDIODRIVER=dummy, as in the last line; the PSP is the only screen.
+Over SSH with no desktop session the launcher selects SDL's dummy video and
+audio drivers itself; the PSP is the screen and the speaker.
 MSG
 	exit 0
 fi

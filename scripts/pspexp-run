@@ -21,5 +21,10 @@ case "$(uname -s)" in
 	*)
 		LIB="$ROOT/build/host/libsdl-pspexp.so"
 		[ -f "$LIB" ] || { echo "$LIB not built (scripts/build.sh)" >&2; exit 1; }
+		# Headless host (no X11 / Wayland session, e.g. a Pi over SSH): SDL's dummy
+		# drivers; the PSP is the screen and the speaker (the shim paces the audio).
+		if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+			export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}" SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
+		fi
 		LD_PRELOAD="$LIB" exec "$@" ;;
 esac

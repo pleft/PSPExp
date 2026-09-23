@@ -124,9 +124,14 @@ per frame, GE 2.2 ms, PSP CPU 0.06 ms, audio with no underruns.
 
 ## Raspberry Pi as the host
 
-`scripts/build-pi.sh` (untested on a Pi yet) installs the Debian packages,
-builds the host tools and Stratagus with the backend, adds a udev rule for
-the PSP, and prints the headless run command.
+`scripts/build-pi.sh` installs the Debian packages (including Chocolate
+Doom and Freedoom), builds the host tools and the SDL layer (and Stratagus
+when a WarCraft checkout is next to PSPExp), adds a udev rule for the PSP,
+and prints the run commands. Tested on a Raspberry Pi 400 over SSH with no
+desktop: the USB link measures the same 25 MB/s as on the Mac, and
+`scripts/pspexp-doom` plays Doom on the PSP at 35 fps with clean audio. The
+launcher picks SDL's dummy drivers when there is no display, and the SDL
+layer paces the game's audio itself on such a host.
 
 ## Layout
 

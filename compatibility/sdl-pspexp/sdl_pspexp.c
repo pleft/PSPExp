@@ -64,7 +64,7 @@
 #define REAL(fn) fn
 #else
 #define HOOK(ret, fn, params) ret fn params
-#define REAL(fn) ((__typeof__(&fn))real_symbol(#fn))
+#define REAL(fn) ((__typeof__(&fn))(uintptr_t)real_symbol(#fn))   /* via uintptr_t: no pedantic object/function cast warning */
 static void *real_symbol(const char *name)
 {
     void *p = dlsym(RTLD_NEXT, name);
