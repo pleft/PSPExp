@@ -246,6 +246,12 @@ int main(int argc, char *argv[])
 
     while (g_running) {
         uint32_t now = sceKernelGetSystemTimeLow();
+        static uint32_t last_tick;
+
+        /* Keep Auto Sleep and the backlight timer from firing: the PSP counts
+         * only button presses as activity, and it often sits untouched while
+         * the host drives it (or while it waits for one). */
+        if (now - last_tick > 1000000) { scePowerTick(PSP_POWER_TICK_ALL); last_tick = now; }
 
         if (!link_connected()) {
             if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); }
