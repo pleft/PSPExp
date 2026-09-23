@@ -288,7 +288,8 @@ static void handle_sprite_batch(PspExpRuntime *rt, const PspExpMessage *m)
         return;
     }
     v = vertex_space(rt, 2u * b->count);
-    if (!v) return;
+    if (!v) { rt->stats.frame_dropped += b->count; rt->stats.sprites_dropped += b->count; return; }
+    rt->stats.frame_sprites += b->count;
     if (b->flags & PSPEXP_BATCH_FLIP_X) pspexp_expand_sprites_flipped(atlas->frames, recs, b->count, v);
     else pspexp_expand_sprites(atlas->frames, recs, b->count, v);
     if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
@@ -326,7 +327,8 @@ static void handle_quad_batch(PspExpRuntime *rt, const PspExpMessage *m)
         }
     }
     v = vertex_space(rt, 2u * b->count);
-    if (!v) return;
+    if (!v) { rt->stats.frame_dropped += b->count; rt->stats.sprites_dropped += b->count; return; }
+    rt->stats.frame_sprites += b->count;
     if (scaled) pspexp_expand_quads_ex(recs_ex, b->count, v);
     else pspexp_expand_quads(recs, b->count, v);
     if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
@@ -355,7 +357,8 @@ static void handle_tile_batch(PspExpRuntime *rt, const PspExpMessage *m)
         return;
     }
     v = vertex_space(rt, 2u * b->count);
-    if (!v) return;
+    if (!v) { rt->stats.frame_dropped += b->count; rt->stats.sprites_dropped += b->count; return; }
+    rt->stats.frame_sprites += b->count;
     pspexp_expand_tiles(atlas->frames, b, recs, v);
     if (rt->ops.draw_sprites) rt->ops.draw_sprites(rt->ops.user, atlas, palette, b->vertex_format, v, b->count);
     rt->stats.batches++;
@@ -576,6 +579,8 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         rt->frame_seq = b->frame_seq;
         rt->frame_start_us = now_us(rt);
         rt->frame_bytes = PSPEXP_HEADER_SIZE + m->length;
+        rt->stats.frame_sprites = 0;
+        rt->stats.frame_dropped = 0;
         if (rt->ops.frame_begin) rt->ops.frame_begin(rt->ops.user, b->frame_seq);
         break;
     }
@@ -621,6 +626,8 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
             d.execute_us = exec_us;
             d.ge_us = rt->ops.frame_ge_us ? rt->ops.frame_ge_us(rt->ops.user) : 0;
             d.frame_bytes = rt->frame_bytes;
+            d.sprites_drawn = rt->stats.frame_sprites;
+            d.sprites_dropped = rt->stats.frame_dropped;
             pspexp_writer_message(&rt->out, PSPEXP_CH_SYSTEM, PSPEXP_OP_PRESENT_DONE, 0, &d, sizeof(d));
         }
         break;

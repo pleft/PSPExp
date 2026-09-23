@@ -84,6 +84,8 @@ typedef struct PspExpRuntimeStats {
     uint32_t uploads, releases, resource_errors, protocol_errors, misses, palettes;
     uint32_t sounds, plays, stream_frames;
     uint32_t last_frame_bytes, last_execute_us;
+    uint32_t frame_sprites, frame_dropped;   /* this frame: drawn / dropped for lack of vertex space */
+    uint32_t sprites_dropped;                /* cumulative */
     uint64_t bytes_in, bytes_out;
     uint32_t messages_in, messages_out;
 } PspExpRuntimeStats;

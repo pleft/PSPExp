@@ -212,7 +212,8 @@ typedef struct PspExpPresentDone {
     uint32_t execute_us;        /* parse + expand + display-list build, CPU */
     uint32_t ge_us;             /* GE render time (list finish to sync), 0 if unknown */
     uint32_t frame_bytes;       /* bytes of the frame as received */
-    uint8_t  reserved[8];
+    uint32_t sprites_drawn;     /* sprites that reached the GE this frame (older runtimes: 0) */
+    uint32_t sprites_dropped;   /* sprites dropped this frame: no vertex space (older runtimes: 0) */
 } PspExpPresentDone;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpPresentDone) == 32, present_done_size);
 

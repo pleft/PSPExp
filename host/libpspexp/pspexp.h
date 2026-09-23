@@ -52,6 +52,8 @@ typedef struct PspExpStats {
     uint32_t last_input_to_present_us;  /* PSP clock: INPUT.timestamp -> PRESENT_DONE.timestamp */
     uint32_t last_execute_us;           /* PSP-side CPU time for the last frame */
     uint32_t last_ge_us;                /* PSP-side GE render time for the last frame */
+    uint32_t last_psp_sprites;          /* PSP-side: sprites that reached the GE (0 from older runtimes) */
+    uint32_t last_psp_dropped;          /* PSP-side: sprites dropped for lack of vertex space */
     uint32_t inputs_received;
     uint32_t resource_errors, protocol_errors;
     uint32_t audio_frames_sent;

@@ -372,10 +372,10 @@ int main(int argc, char **argv)
         if (pspexp_time_us() - last_report >= 1000000u) {
             const PspExpStats *st = pspexp_stats(ctx);
             uint64_t now = pspexp_time_us();
-            printf("%5.1f fps  %5u B/frame  %2u batches  %5u sprites  present->done %5u us  input->done %5u us  psp cpu %4u us  ge %4u us  inputs %u  reconnects %u\n",
+            printf("%5.1f fps  %5u B/frame  %2u batches  %5u sprites (psp drew %u, dropped %u)  present->done %5u us  input->done %5u us  psp cpu %4u us  ge %4u us  inputs %u  reconnects %u\n",
                    (double)report_frames * 1e6 / (double)(now - last_report), st->last_frame_bytes, st->last_frame_batches,
-                   st->last_frame_sprites, st->last_present_latency_us, st->last_input_to_present_us, st->last_execute_us,
-                   st->last_ge_us, st->inputs_received, st->reconnects);
+                   st->last_frame_sprites, st->last_psp_sprites, st->last_psp_dropped, st->last_present_latency_us,
+                   st->last_input_to_present_us, st->last_execute_us, st->last_ge_us, st->inputs_received, st->reconnects);
             fps_shown = (double)report_frames * 1e6 / (double)(now - last_report);
             last_report = now; report_frames = 0;
         }

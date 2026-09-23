@@ -260,6 +260,8 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
         ctx->stats.frames_dropped_remote = d->dropped;
         ctx->stats.last_execute_us = d->execute_us;
         ctx->stats.last_ge_us = d->ge_us;
+        ctx->stats.last_psp_sprites = d->sprites_drawn;
+        ctx->stats.last_psp_dropped = d->sprites_dropped;
         ctx->in_flight = (int)(ctx->last_sent_seq - d->frame_seq);
         if (ctx->in_flight < 0) ctx->in_flight = 0;
         rec = record_for(ctx, d->frame_seq);
