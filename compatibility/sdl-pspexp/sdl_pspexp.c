@@ -27,6 +27,7 @@
  *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons
  *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows)
  *   PSPEXP_WINDOW=hide                        hide the program's own window
+ *   PSPEXP_FOCUS=host                         let the game see host focus loss (default: hidden)
  *   PSPEXP_LOCAL_AUDIO=0                      silence the host's audio device
  *   PSPEXP_SHOT_EVERY=N                       PSP framebuffer dumps
  */
@@ -1129,10 +1130,44 @@ HOOK(void, SDL_RenderPresent, (SDL_Renderer *r))
 
 /* ---- hooks: event polling ------------------------------------------------------ */
 
+/* With the PSP as the screen, the host window is usually not the focused
+ * one; games that pause or mute on focus loss would stay paused. Hide focus
+ * loss from them (PSPEXP_FOCUS=host keeps SDL's real focus events). */
+static int hide_focus_loss(void)
+{
+    static int checked, hide;
+    if (!checked) { checked = 1; hide = S.active && !(getenv("PSPEXP_FOCUS") && !strcmp(getenv("PSPEXP_FOCUS"), "host")); }
+    return hide;
+}
+
+static int drop_event(const SDL_Event *ev)
+{
+    if (!hide_focus_loss()) return 0;
+    if (ev->type == SDL_WINDOWEVENT &&
+        (ev->window.event == SDL_WINDOWEVENT_FOCUS_LOST || ev->window.event == SDL_WINDOWEVENT_MINIMIZED ||
+         ev->window.event == SDL_WINDOWEVENT_HIDDEN || ev->window.event == SDL_WINDOWEVENT_LEAVE))
+        return 1;
+    return 0;
+}
+
+static void fake_focus_once(void)
+{
+    static int done;
+    SDL_Event ev;
+    if (done || !hide_focus_loss() || !S.win) return;
+    done = 1;
+    SDL_zero(ev);
+    ev.type = SDL_WINDOWEVENT; ev.window.event = SDL_WINDOWEVENT_FOCUS_GAINED; ev.window.windowID = SDL_GetWindowID(S.win);
+    SDL_PushEvent(&ev);
+}
+
 HOOK(int, SDL_PollEvent, (SDL_Event *ev))
 {
+    int rc;
     service_link();
-    return REAL(SDL_PollEvent)(ev);
+    fake_focus_once();
+    while ((rc = REAL(SDL_PollEvent)(ev)) == 1 && ev && drop_event(ev)) ;
+    return rc;
 }
 
 static int wait_event_impl(SDL_Event *ev, int timeout)
@@ -1146,6 +1181,7 @@ static int wait_event_impl(SDL_Event *ev, int timeout)
         if (timeout >= 0 && step <= 0) return REAL(SDL_PollEvent)(ev);
         if (step > 20) step = 20;
         rc = REAL(SDL_WaitEventTimeout)(ev, step);
+        if (rc && ev && drop_event(ev)) continue;
         if (rc) return rc;
     }
 }

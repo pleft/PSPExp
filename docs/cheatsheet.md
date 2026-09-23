@@ -78,7 +78,7 @@ hides the Mac window. Expected stats line: 35 fps, 4 batches, GE ≈ 2.2 ms.
 Tyrian: build OpenTyrian in `../tyrian/opentyrian` and unzip tyrian21.zip
 into `../tyrian/data/` (see `compatibility/sdl-pspexp/README.md`), then
 `scripts/pspexp-tyrian`. Cross fires, circle / L and square / R sidekicks,
-triangle Enter, start Escape, select pause.
+triangle Enter, start pause, select Escape (quits at the main menu).
 
 The game sees a game controller named "PSP (PSPExp)" if it initialised
 joysticks, and keyboard events otherwise (defaults: cross=z, circle=x,

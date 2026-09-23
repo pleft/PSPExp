@@ -67,6 +67,7 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
 | `PSPEXP_NUB=keys` | the nub presses the four arrow keys of `PSPEXP_KEYS` (for keyboard-only games such as Doom) |
 | `PSPEXP_WINDOW=hide` | hide the program's own window once the PSP is connected |
+| `PSPEXP_FOCUS=host` | let the game see the host window's focus loss; by default the shim hides it (and fakes a focus gain), since games pause or mute when unfocused and the host window rarely is |
 | `PSPEXP_LOCAL_AUDIO=0` | silence the host's audio device |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
@@ -101,7 +102,8 @@ VRAM, 160 KB per frame at 35 fps (5.6 MB/s), letterboxed to 362x272.
 && make -C ../tyrian/opentyrian`) with the freeware Tyrian 2.1 data
 (https://camanis.net/tyrian/tyrian21.zip unzipped into `../tyrian/data/`).
 Nub and d-pad move, cross fires, circle / L and square / R are the
-sidekicks, triangle is Enter, start is Escape, select pauses. The script
+sidekicks, triangle is Enter, start pauses, select is Escape (back; at
+the main menu it quits). The script
 writes `~/.config/opentyrian/opentyrian.cfg` with `scaler None` the first
 time: OpenTyrian's default Scale2x scaler would make the streamed frame
 640x400 (12 pages, 512 KB) instead of 320x200 (4 pages, 160 KB); the PSP
