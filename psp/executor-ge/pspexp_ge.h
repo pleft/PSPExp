@@ -8,7 +8,7 @@
 #include "../../runtime/pspexp_runtime.h"
 
 #define PSPEXP_GE_LIST_WORDS   (64 * 1024)      /* 256 KiB display list */
-#define PSPEXP_GE_RING_HALF    (256 * 1024)     /* vertex ring, per frame */
+#define PSPEXP_GE_RING_HALF    (1024 * 1024)    /* vertex ring, per frame: 24 B per sprite, ~43,000 sprites */
 #define PSPEXP_GE_VRAM_BLOCKS  PSPEXP_CACHE_MAX
 
 typedef struct PspExpGeVramBlock { uint32_t offset, size; uint8_t used; } PspExpGeVramBlock;

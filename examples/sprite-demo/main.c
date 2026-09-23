@@ -36,7 +36,7 @@
 #define FRAME_PLAYER0 0     /* four 32x32 player frames */
 #define FRAME_STAR    4     /* 8x8 */
 #define FRAME_BLOCK   5     /* 16x16 */
-#define MAX_FIELD     8000
+#define MAX_FIELD     40000
 
 typedef struct Star { int16_t x, y; int8_t dx, dy; uint16_t color; } Star;
 
