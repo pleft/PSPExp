@@ -8,13 +8,17 @@
 #   scripts/pspexp-doom [--tcp[:host[:port]]] [wad] [chocolate-doom args...]
 #
 # Default WAD: $DOOMWAD, else ../doom/freedoom-*/freedoom1.wad next to the
-# PSPExp checkout (https://freedoom.github.io/).
+# PSPExp checkout (https://freedoom.github.io/), else Debian's freedoom
+# package (/usr/share/games/doom/freedoom1.wad).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET=""
 case "$1" in --tcp*|--null|--usb) TARGET="$1"; shift ;; esac
 WAD="${DOOMWAD:-}"
 case "$1" in *.wad|*.WAD) WAD="$1"; shift ;; esac
 [ -n "$WAD" ] || WAD="$(ls "$ROOT"/../doom/freedoom-*/freedoom1.wad 2>/dev/null | head -1)"
+[ -n "$WAD" ] || for f in /usr/share/games/doom/freedoom1.wad /usr/local/share/games/doom/freedoom1.wad "$(brew --prefix 2>/dev/null)/share/games/doom/freedoom1.wad"; do
+	[ -f "$f" ] && { WAD="$f"; break; }
+done   # Debian's freedoom package, Homebrew
 [ -f "$WAD" ] || { echo "no WAD: pass one, set DOOMWAD, or unzip Freedoom into ../doom/" >&2; exit 1; }
 command -v chocolate-doom >/dev/null || { echo "chocolate-doom not found (brew install chocolate-doom)" >&2; exit 1; }
 export PSPEXP_KEYS="${PSPEXP_KEYS:-cross=lctrl,circle=space,square=lshift,triangle=return,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right}"
