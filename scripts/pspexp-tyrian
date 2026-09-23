@@ -23,7 +23,7 @@ CFG="${XDG_CONFIG_HOME:-$HOME/.config}/opentyrian"
 mkdir -p "$CFG"
 if [ ! -f "$CFG/opentyrian.cfg" ]; then
 	printf 'section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n\n' > "$CFG/opentyrian.cfg"
-elif ! grep -qE "item scaler +\"?None\"?" "$CFG/opentyrian.cfg"; then
+elif ! grep -qE "item +['\"]?scaler['\"]? +['\"]?None['\"]?" "$CFG/opentyrian.cfg"; then
 	echo "note: set 'item scaler None' under 'section video' in $CFG/opentyrian.cfg to keep the frame at 320x200" >&2
 fi
 export PSPEXP_KEYS="${PSPEXP_KEYS:-cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right}"
