@@ -117,7 +117,8 @@ scripts/pspexp-doom
 puts Chocolate Doom on the PSP with its controls mapped (nub and d-pad
 move, cross fires, circle uses, L / R strafe, start is the menu).
 `scripts/pspexp-tyrian` does the same for OpenTyrian (built from source,
-freeware data; see `compatibility/sdl-pspexp/README.md`). On the
+freeware data; see `compatibility/sdl-pspexp/README.md`); it plays at its
+full 35 fps on the PSP too. On the
 PSP-1000 over USB it runs at Doom's full 35 fps: 160 KB of frame texture
 per frame, GE 2.2 ms, PSP CPU 0.06 ms, audio with no underruns.
 
