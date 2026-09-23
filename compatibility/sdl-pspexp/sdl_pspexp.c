@@ -29,6 +29,8 @@
  *   PSPEXP_WINDOW=hide                        hide the program's own window
  *   PSPEXP_FOCUS=host                         let the game see host focus loss (default: hidden)
  *   PSPEXP_LOCAL_AUDIO=0                      silence the host's audio device
+ *   PSPEXP_AUDIO=psp | host                   pace the game's audio callback ourselves (default when
+ *                                             the host driver is SDL's dummy: headless hosts)
  *   PSPEXP_SHOT_EVERY=N                       PSP framebuffer dumps
  */
 #ifndef _GNU_SOURCE
@@ -129,6 +131,9 @@ static struct {
     /* audio */
     SDL_mutex *amu; int16_t *aring; size_t acap, ahead, atail, abuf; int local_audio;
     SDL_AudioSpec dev_spec[8]; SDL_AudioStream *dev_stream[8]; SDL_AudioCallback dev_cb[8]; void *dev_ud[8];
+    /* self-paced: the game's callback is driven by our own thread on a precise
+     * clock (headless hosts: SDL's dummy driver runs slow and jittery) */
+    int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
     int nub_mouse, nub_keys, hide_window; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     SDL_Keycode keys[16];
@@ -598,7 +603,7 @@ static void audio_push(const int16_t *stereo, size_t frames)
 static void audio_tap(int slot, const Uint8 *data, int len)
 {
     SDL_AudioStream *st = S.dev_stream[slot];
-    static int16_t tmp[8192];
+    int16_t tmp[8192];
     int got;
     if (!st) return;
     SDL_AudioStreamPut(st, data, len);
@@ -608,6 +613,7 @@ static void audio_tap(int slot, const Uint8 *data, int len)
 static void audio_callback_wrapper(void *userdata, Uint8 *stream, int len)
 {
     int slot = (int)(intptr_t)userdata;
+    if (S.dev_selfpaced[slot]) { memset(stream, 0, (size_t)len); return; }   /* our thread feeds the game's callback */
     if (S.dev_cb[slot]) S.dev_cb[slot](S.dev_ud[slot], stream, len);
     else memset(stream, 0, (size_t)len);
     audio_tap(slot, stream, len);
@@ -633,6 +639,59 @@ static void audio_drain(void)
         if (n == 0) break;
         pspexp_audio_stream(S.ctx, chunk, (uint32_t)n);
     }
+}
+
+/* Calls the game's audio callback at exactly the device rate, under the
+ * device lock the game may also take (SDL_LockAudioDevice), while the real
+ * (dummy) device only outputs silence. Started for the first self-paced slot. */
+static int audio_pacer(void *arg)
+{
+    Uint64 f = SDL_GetPerformanceFrequency(), t0 = SDL_GetPerformanceCounter();
+    Uint64 produced[8] = { 0 };
+    Uint8 *buf = NULL; int buflen = 0;
+    (void)arg;
+    while (!S.audio_thread_stop) {
+        int slot;
+        double elapsed = (double)(SDL_GetPerformanceCounter() - t0) / (double)f;
+        for (slot = 1; slot < 8; slot++) {
+            const SDL_AudioSpec *sp = &S.dev_spec[slot];
+            Uint64 target;
+            int bytes;
+            if (!S.dev_selfpaced[slot] || !S.dev_cb[slot] || !sp->freq) continue;
+            if (SDL_GetAudioDeviceStatus(S.dev_id[slot]) != SDL_AUDIO_PLAYING) { produced[slot] = (Uint64)(elapsed * sp->freq); continue; }
+            target = (Uint64)(elapsed * sp->freq);
+            bytes = sp->samples * sp->channels * (int)(SDL_AUDIO_BITSIZE(sp->format) / 8);
+            if (bytes > buflen) { free(buf); buf = (Uint8 *)malloc((size_t)bytes); buflen = bytes; }
+            if (!buf) break;
+            /* never more than ~120 ms ahead (after a stall), never behind */
+            if (produced[slot] + (Uint64)sp->freq / 8 < target) produced[slot] = target - (Uint64)sp->freq / 8;
+            while (produced[slot] < target) {
+                SDL_LockAudioDevice(S.dev_id[slot]);
+                S.dev_cb[slot](S.dev_ud[slot], buf, bytes);
+                SDL_UnlockAudioDevice(S.dev_id[slot]);
+                audio_tap(slot, buf, bytes);
+                produced[slot] += (Uint64)sp->samples;
+            }
+        }
+        SDL_Delay(2);
+    }
+    free(buf);
+    return 0;
+}
+
+static int want_selfpaced(void)
+{
+    const char *drv = SDL_GetCurrentAudioDriver(), *env = getenv("PSPEXP_AUDIO");
+    if (env) return !strcmp(env, "psp");
+    return drv && !strcmp(drv, "dummy");
+}
+
+static void start_selfpaced(int slot, SDL_AudioDeviceID id)
+{
+    S.dev_selfpaced[slot] = 1;
+    S.dev_id[slot] = id;
+    if (!S.audio_thread) S.audio_thread = SDL_CreateThread(audio_pacer, "pspexp-audio", NULL);
+    logf_("audio device %u: callback paced by the shim (host driver '%s')", (unsigned)id, SDL_GetCurrentAudioDriver());
 }
 
 static int setup_stream(int slot, const SDL_AudioSpec *have)
@@ -1289,6 +1348,7 @@ HOOK(SDL_AudioDeviceID, SDL_OpenAudioDevice, (const char *device, int iscapture,
         setup_stream(slot, &have);
         if (obtained) { *obtained = have; obtained->callback = desired->callback; obtained->userdata = desired->userdata; }
         logf_("audio device %u tapped: %d Hz x%d fmt %#x", (unsigned)id, have.freq, have.channels, have.format);
+        if (desired->callback && want_selfpaced()) start_selfpaced(slot, id);
     }
     return id;
 }
@@ -1305,6 +1365,7 @@ HOOK(int, SDL_OpenAudio, (SDL_AudioSpec *desired, SDL_AudioSpec *obtained))
     if (desired->callback) { desired->callback = audio_callback_wrapper; desired->userdata = (void *)(intptr_t)1; }
     rc = REAL(SDL_OpenAudio)(desired, obtained ? obtained : &have);
     if (rc == 0) setup_stream(1, obtained ? obtained : &have);
+    if (rc == 0 && S.dev_cb[1] && want_selfpaced()) start_selfpaced(1, 1);
     desired->callback = S.dev_cb[1]; desired->userdata = S.dev_ud[1];
     if (obtained) { obtained->callback = S.dev_cb[1]; obtained->userdata = S.dev_ud[1]; }
     return rc;
@@ -1326,6 +1387,7 @@ HOOK(int, SDL_QueueAudio, (SDL_AudioDeviceID dev, const void *data, Uint32 len))
 static void shim_exit(void)
 {
     logf_("exit: %lu frames mirrored", S.total_frames);
+    if (S.audio_thread) { S.audio_thread_stop = 1; SDL_WaitThread(S.audio_thread, NULL); S.audio_thread = NULL; }
     if (S.ctx) {
         pspexp_send_raw(S.ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);
         pspexp_destroy(S.ctx);

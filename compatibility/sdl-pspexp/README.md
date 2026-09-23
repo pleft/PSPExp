@@ -69,6 +69,7 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | `PSPEXP_WINDOW=hide` | hide the program's own window once the PSP is connected |
 | `PSPEXP_FOCUS=host` | let the game see the host window's focus loss; by default the shim hides it (and fakes a focus gain), since games pause or mute when unfocused and the host window rarely is |
 | `PSPEXP_LOCAL_AUDIO=0` | silence the host's audio device |
+| `PSPEXP_AUDIO=psp` | drive the game's audio callback from the shim's own thread on a precise clock instead of the host device's cadence; the default when the host audio driver is SDL's `dummy` (headless hosts: the dummy driver runs slow and jittery and the PSP underruns) |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
 
