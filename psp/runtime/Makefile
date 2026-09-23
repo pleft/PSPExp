@@ -6,7 +6,7 @@ OBJS = main.o pspexp_audio_psp.o ge_pspexp_ge.o tcp_pspexp_tcp_psp.o \
        ser_pspexp_writer.o ser_pspexp_reader.o
 
 INCDIR =
-CFLAGS = -O2 -G0 -Wall
+CFLAGS = -O2 -G0 -Wall -MMD -MP
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR = ../transport-usb
@@ -28,3 +28,6 @@ pr_%.o: ../../protocol/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 ser_%.o: ../../protocol/serialization/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# header dependencies (the SDK makefiles track none: a changed header must rebuild its users)
+-include $(OBJS:.o=.d)

@@ -4,7 +4,7 @@ OBJS = main.o exports.o
 
 USE_KERNEL_LIBS = 1
 INCDIR =
-CFLAGS = -Os -mno-gpopt -Wall -fno-builtin-printf
+CFLAGS = -Os -mno-gpopt -Wall -fno-builtin-printf -MMD -MP
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR =
@@ -33,3 +33,6 @@ $(STUB_LIB): $(STUB_OBJS)
 EXTRA_CLEAN = clean_stubs
 clean_stubs:
 	rm -f $(STUB_OBJS) $(STUB_LIB) PSPExpUSB.S
+
+# header dependencies (the SDK makefiles track none: a changed header must rebuild its users)
+-include $(OBJS:.o=.d)

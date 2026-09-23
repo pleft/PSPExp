@@ -4,7 +4,7 @@ TARGET = pspexp_boot
 OBJS = main.o
 
 INCDIR =
-CFLAGS = -O2 -mno-gpopt -Wall
+CFLAGS = -O2 -mno-gpopt -Wall -MMD -MP
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR =
@@ -25,3 +25,6 @@ EBOOT.PBP: $(TARGET).prx
 EXTRA_CLEAN = clean_pbp
 clean_pbp:
 	rm -f PARAM.SFO EBOOT.PBP
+
+# header dependencies (the SDK makefiles track none: a changed header must rebuild its users)
+-include $(OBJS:.o=.d)
