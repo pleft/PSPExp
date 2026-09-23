@@ -133,6 +133,16 @@ desktop: the USB link measures the same 25 MB/s as on the Mac, and
 launcher picks SDL's dummy drivers when there is no display, and the SDL
 layer paces the game's audio itself on such a host.
 
+## Onion Omega2+ as the host
+
+`scripts/build-omega.sh` cross-compiles static soft-float MIPS binaries of
+the bench and the sprite demo on the Mac with Zig (libusb built from
+source), so the Omega needs nothing installed. From an Omega2+ the frame
+loop and the sprite demo run at 60 fps up to 5,000 sprites, with the
+Omega's CPU about 90 % idle. Large transfers reach 21 MB/s; small ones are
+slower than on the Mac or the Pi because each USB transfer costs the Omega
+about four times as much.
+
 ## Layout
 
 ```text

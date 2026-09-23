@@ -1013,6 +1013,7 @@ What the first day of implementation measured, against the estimates this docume
 | Chocolate Doom, unmodified, through `sdl-pspexp` (320x200 frame as a streaming texture) | the surface-streaming case this document ruled out (§12) | 35 fps (Doom's own rate), 160 KB per frame = 5.6 MB/s, GE 2.2 ms swizzled in VRAM (10.5 ms when linear in RAM), PSP CPU 0.06 ms, audio with no underruns |
 | OpenTyrian, unmodified, through `sdl-pspexp` (320x200 frame, scaler off) | — | 35 fps in play, GE 2.3 ms, PSP CPU 0.06 ms, audio steady at ≈100 ms buffered with no underruns; needed input and audio serviced from the event poll (menus present ~1 fps) and host focus loss hidden (the game pauses when unfocused) |
 | Raspberry Pi 400 as the host (Debian 13, headless over SSH), §13 | a small Linux box should do | USB 25 MB/s host→PSP / 22 PSP→host, bench frame loop 60 fps, Doom at 35 fps with GE 2.2 ms: indistinguishable from the Mac. The host's dummy audio driver ran slow and jittery (an underrun per second) until the SDL layer paced the game's callback on its own clock |
+| Onion Omega2+ as the host (MT7688, 580 MHz MIPS, no FPU, 128 MB; static binaries cross-built with Zig), §13 | — | frame loop and sprite demo at 60 fps at 500 / 2,000 / 5,000 sprites, Omega CPU ≈ 9 % for the 5,000-sprite demo; USB 21 MB/s host→PSP and 16–18 PSP→host with 64–256 KB messages, but only 6 / 4 MB/s at 4 KB (per-transfer cost ≈ 0.6 ms vs 0.15 ms on the Mac); echo 0.39 ms (16 B), 6.9 ms (40 KB) |
 
 What changed against the plan:
 
