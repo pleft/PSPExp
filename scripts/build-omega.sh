@@ -65,8 +65,9 @@ T
 PKG_CONFIG_LIBDIR="$OUT/prefix/lib/pkgconfig" PKG_CONFIG_SYSROOT_DIR= \
 cmake -S "$ROOT" -B "$OUT/cmake" -DCMAKE_TOOLCHAIN_FILE="$OUT/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
 	-DPSPEXP_BUILD_TESTS=OFF -DPSPEXP_BUILD_SDL=OFF >/dev/null
-PKG_CONFIG_LIBDIR="$OUT/prefix/lib/pkgconfig" cmake --build "$OUT/cmake" -j8 --target pspexp-bench pspexp-sprite-demo
-cp "$OUT/cmake/pspexp-bench" "$OUT/cmake/pspexp-sprite-demo" "$OUT/bin/"
+PKG_CONFIG_LIBDIR="$OUT/prefix/lib/pkgconfig" cmake --build "$OUT/cmake" -j8 --target pspexp-bench pspexp-sprite-demo pspexp-term
+cp "$OUT/cmake/pspexp-bench" "$OUT/cmake/pspexp-sprite-demo" "$OUT/cmake/pspexp-term" "$OUT/bin/"
+cp "$ROOT/scripts/omega/pspexp-exec" "$ROOT/scripts/omega/pspexp-term.init" "$OUT/bin/"
 "$OUT/zcc" --version >/dev/null 2>&1 || true
 
 if [ "$1" = "doom" ]; then

@@ -51,6 +51,7 @@ cable pull, so pull the cable to read it after a session.
 | an SDL2 program without a PSP (executor window) | `PSPEXP=sdl scripts/pspexp-run <program>` |
 | **Doom on the PSP** (Chocolate Doom + Freedoom, PSP controls mapped) | `scripts/pspexp-doom` |
 | **Tyrian on the PSP** (OpenTyrian built in ../tyrian, freeware data) | `scripts/pspexp-tyrian` |
+| **the PSP as the host's console** (shell, on-screen keyboard; runs at boot on the Omega) | `build/host/pspexp-term` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,

@@ -5,9 +5,9 @@
 #include <ctype.h>
 
 /* Built-in 5x7 glyphs in 6x8 cells, ASCII 32..126. Each glyph is 7 rows of
- * 5 characters; '#' is a set pixel. Lowercase letters share the uppercase
- * glyphs. Unknown characters draw as a box. */
-#define ROWS 7
+ * 5 characters ('#' is a set pixel), plus an optional eighth row that only
+ * the lowercase descenders (g j p q y) use. Unknown characters draw as a box. */
+#define ROWS 8
 #define COLS 5
 #define CELL_W 6
 #define CELL_H 8
@@ -89,14 +89,40 @@ static const Glyph GLYPHS[] = {
     {'|', {"  #  ","  #  ","  #  ","  #  ","  #  ","  #  ","  #  "}},
     {'}', {"##   ","  #  ","  #  ","   # ","  #  ","  #  ","##   "}},
     {'~', {"     ","     "," #  #","# # #","#  # ","     ","     "}},
+    {'a', {"     ","     "," ### ","    #"," ####","#   #"," ####"}},
+    {'b', {"#    ","#    ","# ## ","##  #","#   #","#   #","#### "}},
+    {'c', {"     ","     "," ### ","#    ","#    ","#   #"," ### "}},
+    {'d', {"    #","    #"," ## #","#  ##","#   #","#   #"," ####"}},
+    {'e', {"     ","     "," ### ","#   #","#####","#    "," ### "}},
+    {'f', {"  ## "," #  #"," #   ","###  "," #   "," #   "," #   "}},
+    {'g', {"     ","     "," ####","#   #","#   #"," ####","    #"," ### "}},
+    {'h', {"#    ","#    ","# ## ","##  #","#   #","#   #","#   #"}},
+    {'i', {"  #  ","     "," ##  ","  #  ","  #  ","  #  "," ### "}},
+    {'j', {"   # ","     ","  ## ","   # ","   # ","   # ","#  # "," ##  "}},
+    {'k', {"#    ","#    ","#  # ","# #  ","##   ","# #  ","#  # "}},
+    {'l', {" ##  ","  #  ","  #  ","  #  ","  #  ","  #  "," ### "}},
+    {'m', {"     ","     ","## # ","# # #","# # #","#   #","#   #"}},
+    {'n', {"     ","     ","# ## ","##  #","#   #","#   #","#   #"}},
+    {'o', {"     ","     "," ### ","#   #","#   #","#   #"," ### "}},
+    {'p', {"     ","     ","#### ","#   #","#   #","#### ","#    ","#    "}},
+    {'q', {"     ","     "," ####","#   #","#   #"," ####","    #","    #"}},
+    {'r', {"     ","     ","# ## ","##  #","#    ","#    ","#    "}},
+    {'s', {"     ","     "," ####","#    "," ### ","    #","#### "}},
+    {'t', {" #   "," #   ","###  "," #   "," #   "," #  #","  ## "}},
+    {'u', {"     ","     ","#   #","#   #","#   #","#  ##"," ## #"}},
+    {'v', {"     ","     ","#   #","#   #","#   #"," # # ","  #  "}},
+    {'w', {"     ","     ","#   #","#   #","# # #","# # #"," # # "}},
+    {'x', {"     ","     ","#   #"," # # ","  #  "," # # ","#   #"}},
+    {'y', {"     ","     ","#   #","#   #","#   #"," ####","    #"," ### "}},
+    {'z', {"     ","     ","#####","   # ","  #  "," #   ","#####"}},
 };
 
 static const Glyph *find_glyph(int c)
 {
     size_t i;
-    if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
     for (i = 0; i < sizeof(GLYPHS) / sizeof(GLYPHS[0]); i++)
         if (GLYPHS[i].c == c) return &GLYPHS[i];
+    if (c >= 'a' && c <= 'z') return find_glyph(c - 'a' + 'A');   /* fallback */
     return NULL;
 }
 
@@ -117,7 +143,7 @@ int pspexp_font_builtin_upload(PspExpContext *ctx, uint16_t atlas_id, uint16_t p
         for (r = 0; r < ROWS; r++) {
             int x;
             for (x = 0; x < COLS; x++) {
-                int on = g ? g->rows[r][x] == '#' : (r == 0 || r == ROWS - 1 || x == 0 || x == COLS - 1);
+                int on = g ? (g->rows[r] && g->rows[r][x] == '#') : (r == 0 || r == ROWS - 2 || x == 0 || x == COLS - 1);
                 if (on) {
                     int px = cx + x, py = cy + r;
                     int idx = py * ATLAS_W + px;

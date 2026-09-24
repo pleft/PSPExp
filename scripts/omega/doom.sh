@@ -16,4 +16,6 @@ CFG=./doom-omega.cfg
 [ -f "$CFG" ] || printf 'snd_samplerate 11025\nuse_libsamplerate 0\nsnd_pitchshift 0\n' > "$CFG"
 MUSIC=-nomusic
 [ "${DOOM_MUSIC:-0}" = 1 ] && MUSIC=
-exec ./chocolate-doom $MUSIC -iwad "${DOOMWAD:-/mnt/mmcblk0p1/doom/freedoom1.wad}" -extraconfig "$CFG" -window -nomouse -nograbmouse "$@"
+# from the PSP console, the console hands the PSP over for the game
+EXEC=; [ -x ./pspexp-exec ] && EXEC=./pspexp-exec
+exec $EXEC ./chocolate-doom $MUSIC -iwad "${DOOMWAD:-/mnt/mmcblk0p1/doom/freedoom1.wad}" -extraconfig "$CFG" -window -nomouse -nograbmouse "$@"

@@ -143,6 +143,27 @@ Omega's CPU about 90 % idle. Large transfers reach 21 MB/s; small ones are
 slower than on the Mac or the Pi because each USB transfer costs the Omega
 about four times as much.
 
+## The PSP as a console: `pspexp-term`
+
+`tools/pspexp-term` makes the PSP a host's console: a shell in a
+pseudo-terminal, drawn on the PSP as an 80x34 VT100 / xterm-subset terminal
+(colours, scrollback, alternate screen for `vi` and `top`), typed on with
+an on-screen keyboard. The bell beeps on the PSP and raw 44.1 kHz stereo
+written to `/tmp/pspexp-audio` plays there. On the Omega2+ it starts at boot
+(`/etc/init.d/pspexp-term`) and waits for a PSP on USB; running a game from
+it (`doom`) hands the PSP to the game and takes it back afterwards
+(`pspexp-exec`).
+
+| PSP | console |
+|---|---|
+| select | show / hide the keyboard (80x25 / 80x34) |
+| d-pad | move on the keyboard; arrow keys when it is hidden |
+| cross | type the highlighted key |
+| circle / square / triangle / start | backspace / space / Enter / Tab |
+| L / R held | Shift / Ctrl |
+| nub | arrow keys |
+| R + up / down, left / right | scroll back a line / a page |
+
 ## Layout
 
 ```text

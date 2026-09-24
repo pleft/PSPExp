@@ -1,0 +1,13 @@
+#!/bin/sh
+# Run a PSPExp program (a game) from the PSP console: pspexp-term hands the
+# PSP over (SIGUSR1), the program uses it, and the console takes it back
+# (SIGUSR2) when the program ends, however it ends.
+#   pspexp-exec <program> [args...]
+PIDFILE=${PSPEXP_TERM_PIDFILE:-/tmp/pspexp-term.pid}
+PID=$(cat "$PIDFILE" 2>/dev/null)
+if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then exec "$@"; fi
+kill -USR1 "$PID"
+trap 'kill -USR2 "$PID" 2>/dev/null' EXIT
+trap 'exit 130' INT TERM
+sleep 1
+"$@"
