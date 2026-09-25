@@ -500,6 +500,7 @@ static const int KCOUNT[KROWS] = { 15, 14, 13, 13, 10 };
 
 static int kb_shown = 1, kb_row = 2, kb_col = 1;
 static int sticky_shift, sticky_ctrl;
+static int held_shift, held_ctrl;   /* L / R held: shown on the keyboard too */
 
 static int key_x(int row, int col) { int x = 0, i; for (i = 0; i < col; i++) x += KROWS_[row][i].w * 16; return x; }
 
@@ -609,10 +610,12 @@ static void draw_keyboard(void)
         for (i = 0; i < KCOUNT[r]; i++) {
             const Key *k = &KROWS_[r][i];
             int w = k->w * 16, sel = r == kb_row && i == kb_col;
-            int active = (k->kind == K_SHIFT && sticky_shift) || (k->kind == K_CTRL && sticky_ctrl);
+            int shifted = sticky_shift || held_shift;
+            int active = (k->kind == K_SHIFT && shifted) || (k->kind == K_CTRL && (sticky_ctrl || held_ctrl));
             uint16_t bg = sel ? rgb565(0xe0a020) : active ? rgb565(0x3b78ff) : rgb565(0x3a4450);
             uint16_t fg = sel ? rgb565(0x101010) : rgb565(0xe8e8e8);
-            const char *label = k->label;
+            /* with Shift active the keys show what they will type */
+            const char *label = (shifted && k->sout && k->kind == 0 && k->out && !k->out[1]) ? k->sout : k->label;
             int len = (int)strlen(label);
             pspexp_fill_rect(ctx, (int16_t)(x + 1), (int16_t)(y + 1), (int16_t)(w - 2), KEY_H - 2, bg, 255);
             text(x + (w - len * CELL_W) / 2, y + (KEY_H - CELL_H) / 2 + 1, label, fg);
@@ -795,6 +798,7 @@ static void handle_input(void)
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
+    if (shift != held_shift || ctrl != held_ctrl) { held_shift = shift; held_ctrl = ctrl; if (kb_shown) T.dirty = 1; }
 
     if (pressed & PSPEXP_BUTTON_SELECT) { kb_shown = !kb_shown; term_resize(kb_shown ? ROWS_KB : ROWS_FULL); }
 
