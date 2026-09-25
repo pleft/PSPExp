@@ -33,7 +33,9 @@ gs_stage() {
 	# which keeps a copy here for the next card
 	[ -x "$B/bin/opentyrian" ] && gs_copy "$B/bin/opentyrian" 0755 1000 1000 /home/cpi/pspexp/opentyrian
 
-	# the console at boot: the launcher mirrored, the PSP's buttons as its keypad
+	# the console at boot: the PSPExp launcher as the home view (the menu tree
+	# and skin of launchergo, drawn for the PSP); programs it starts that do
+	# not use the PSP themselves are mirrored, the PSP's buttons as their keypad
 	cat > "$S/pspexp-term.service" <<U
 [Unit]
 Description=PSPExp console on the PSP (pspexp-term)
@@ -43,7 +45,7 @@ After=multi-user.target
 User=cpi
 WorkingDirectory=/home/cpi
 Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash --mirror /dev/fb0 --usb --tcp 192.168.50.2
+ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash --launcher --mirror /dev/fb0 --usb --tcp 192.168.50.2
 Restart=always
 RestartSec=2
 

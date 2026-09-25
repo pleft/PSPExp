@@ -162,7 +162,23 @@ large art, small chrome; instant (all textures cached on the PSP once).
   (< 1 KB). Icons are uploaded once as 4444 textures (56x56, 128x128 for the
   cover) and stay in the PSP's cache; the font atlas is one CLUT4 texture.
 
-### 3.4 Build-up order
+### 3.4 Status (2026-09-26): first prototype
+
+`tools/pspexp-term/launcher.c` (the view) is in, enabled with
+`pspexp-term --launcher [ROOTS] [--skin DIR]` and on by default in the
+GameShell service. Done: the menu reader (roots, folders, plugin.json,
+action.config with the ROM list, skin icons beside the entry or in the skin),
+the TTF -> CLUT4 atlas at three sizes, PNG -> 4444 icons, the rail with the
+lifted selection and eased scroll, the list with cover, detail line, kind
+column, scrollbar and breadcrumb, launching (fork, log in
+/tmp/pspexp-launcher.log, mirror while a non-PSPExp program runs, back when
+it exits), Recent and favourites (`~/.config/pspexp-launcher/`), status strip
+(clock, battery from sysfs, Wi-Fi from /proc/net/wireless, PSP link), hints,
+toasts. Not yet: search, Settings pages, 9-slice cards, the X readback.
+`PSPEXP_TERM_KEYS="right,down,cross,..."` replays buttons for headless runs
+(`--sdl --shot N` under `SDL_VIDEODRIVER=dummy` writes the frames as BMP).
+
+### 3.5 Build-up order
 
 1. Content model: read the menu tree, `plugin.json`, `action.config`, skins;
    unit-test on the Mac against a copy of the image's tree.

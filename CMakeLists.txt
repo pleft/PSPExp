@@ -118,7 +118,7 @@ if(PSPEXP_HAVE_USB)
   target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
 endif()
 
-add_executable(pspexp-term tools/pspexp-term/main.c)
+add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/launcher.c)
 target_link_libraries(pspexp-term PRIVATE pspexp pspexp_null pspexp_tcp)
 if(NOT APPLE)
   target_link_libraries(pspexp-term PRIVATE util m)
