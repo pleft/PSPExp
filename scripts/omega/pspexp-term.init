@@ -3,15 +3,28 @@
 # on-screen keyboard, sound). Waits for the SD card, then runs pspexp-term,
 # which waits for a PSP on USB and reconnects whenever one appears.
 #   /etc/init.d/pspexp-term enable|disable|start|stop
+#
+# The restart is done by the small supervisor loop below rather than by
+# procd's respawn, which this Omega's procd (2018-03-28) did not apply to the
+# service: the console is restarted 2 s after any exit, and a stop (SIGTERM
+# to the loop) is passed on to the console so nothing is left running.
 START=99
 USE_PROCD=1
 DIR=/mnt/mmcblk0p1/pspexp
 
 start_service() {
 	procd_open_instance
-	procd_set_param command /bin/sh -c "while [ ! -x $DIR/pspexp-term ]; do sleep 2; done; cd /root; exec $DIR/pspexp-term --shell /bin/ash"
+	procd_set_param command /bin/sh -c "
+		trap 'kill \$C 2>/dev/null; wait \$C 2>/dev/null; exit 0' TERM INT
+		while [ ! -x $DIR/pspexp-term ]; do sleep 2; done
+		cd /root
+		while :; do
+			$DIR/pspexp-term --shell /bin/ash & C=\$!
+			wait \$C
+			echo 'pspexp-term exited; restarting in 2 s' >&2
+			sleep 2
+		done"
 	procd_set_param env HOME=/root SHELL=/bin/ash PATH=/usr/sbin:/usr/bin:/sbin:/bin:$DIR
-	procd_set_param respawn 3600 5 0
 	procd_set_param stderr 1
 	procd_close_instance
 }
