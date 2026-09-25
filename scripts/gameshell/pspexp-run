@@ -1,0 +1,19 @@
+#!/bin/sh
+# GameShell: run an unmodified SDL2 program with the PSP as its display,
+# speaker and controller. libsdl-pspexp.so is preloaded into the program and
+# pspexp-term hands the PSP over for the program's lifetime (pspexp-exec:
+# SIGUSR1 to release, SIGUSR2 to take it back, however the program ends).
+#   pspexp-run <program> [args...]
+# Environment passed through: PSPEXP_KEYS, PSPEXP_NUB, PSPEXP_WINDOW,
+# PSPEXP_LOCAL_AUDIO (see compatibility/sdl-pspexp/README.md). Defaults here:
+# sound on the PSP only (the console's audio FIFO is not the game's), the
+# program's own X window hidden (there is no LCD to show it on).
+LIB=${PSPEXP_SHIM:-/usr/local/lib/libsdl-pspexp.so}
+[ -f "$LIB" ] || { echo "pspexp-run: $LIB missing" >&2; exit 1; }
+[ $# -ge 1 ] || { echo "usage: pspexp-run <program> [args...]" >&2; exit 2; }
+export PSPEXP="${PSPEXP:-usb}"
+export PSPEXP_LOCAL_AUDIO="${PSPEXP_LOCAL_AUDIO:-0}"
+export PSPEXP_WINDOW="${PSPEXP_WINDOW:-hide}"
+export DISPLAY="${DISPLAY:-:0}"
+export LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}"
+exec /usr/local/bin/pspexp-exec "$@"

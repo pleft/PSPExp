@@ -1,0 +1,12 @@
+[Unit]
+Description=PSPExp Wi-Fi mode (home Wi-Fi or the PSP's access point)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pspexp-wifi-mode apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
