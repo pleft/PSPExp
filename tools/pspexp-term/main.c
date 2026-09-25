@@ -33,8 +33,10 @@
  * launcher and games), and the PSP's buttons become a virtual keypad through
  * /dev/uinput (default: the GameShell's keys: d-pad/nub = arrows, cross /
  * circle / square / triangle = A B X Y = J K U I, start = Enter, select =
- * Space, L / R = H / L). L+R+start = Menu (Esc); L+R+select switches between
- * the mirror and the terminal.
+ * Space, L / R = H / L). Hold start ~0.7 s = Menu (Esc); hold select ~0.7 s
+ * switches between the mirror and the terminal (quick taps of select and
+ * start still type Space / Enter, sent on release). No shoulder-button
+ * combos: on a PSP-1000 over Wi-Fi, holding L+R covers the antenna.
  *
  * Hand-over: another PSPExp program (a game) can take the PSP while the
  * terminal keeps running: SIGUSR1 releases the PSP, SIGUSR2 takes it back
@@ -819,6 +821,7 @@ static int fire(int v, int held, uint64_t now, int repeat)
 }
 
 static uint32_t g_prev_buttons;
+static int g_prev_select_held, g_prev_select_released, g_select_tap;
 static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons drive the keypad */
 static int mirror_available(void);
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
@@ -833,16 +836,27 @@ static void handle_input(void)
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
-    /* L + R + select: switch between the terminal and the mirrored screen */
-    if ((pressed & PSPEXP_BUTTON_SELECT) && (b & PSPEXP_BUTTON_LTRIGGER) && (b & PSPEXP_BUTTON_RTRIGGER) && mirror_available()) {
-        g_view_mirror = !g_view_mirror;
-        if (g_view_mirror) mirror_invalidate(); else T.dirty = 1;
-        return;
+    /* select: a long hold switches between the terminal and the mirrored
+     * screen; a tap is resolved on release (keyboard toggle / Space) */
+    {
+        static uint64_t sel_down; static int sel_used;
+        int sel_tap = 0;
+        if (pressed & PSPEXP_BUTTON_SELECT) { sel_down = now; sel_used = 0; }
+        if ((b & PSPEXP_BUTTON_SELECT) && !sel_used && now - sel_down >= 700000u && mirror_available()) {
+            sel_used = 1;
+            if (g_view_mirror) keypad_release_all();
+            g_view_mirror = !g_view_mirror;
+            if (g_view_mirror) mirror_invalidate(); else T.dirty = 1;
+        }
+        if ((g_prev_select_released = (!(b & PSPEXP_BUTTON_SELECT) && g_prev_select_held))) sel_tap = !sel_used;
+        g_prev_select_held = (b & PSPEXP_BUTTON_SELECT) != 0;
+        g_select_tap = sel_tap;
+        if (!mirror_available()) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no mirror: taps act at once */
     }
     if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
     if (shift != held_shift || ctrl != held_ctrl) { held_shift = shift; held_ctrl = ctrl; if (kb_shown) T.dirty = 1; }
 
-    if (pressed & PSPEXP_BUTTON_SELECT) { kb_shown = !kb_shown; term_resize(kb_shown ? ROWS_KB : ROWS_FULL); }
+    if (g_select_tap) { kb_shown = !kb_shown; term_resize(kb_shown ? ROWS_KB : ROWS_FULL); }
 
     if (ctrl && (up || down || left || right)) {   /* R + direction: scrollback */
         int page = (kb_shown ? ROWS_KB : ROWS_FULL) - 1;
@@ -1274,16 +1288,32 @@ static void keypad_release_all(void)
     ui_emit(EV_SYN, SYN_REPORT, 0);
 }
 
+static void tap_key(int key)
+{
+    ui_emit(EV_KEY, key, 1); ui_emit(EV_SYN, SYN_REPORT, 0);
+    usleep(30000);
+    ui_emit(EV_KEY, key, 0); ui_emit(EV_SYN, SYN_REPORT, 0);
+}
+
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay)
 {
-    int i, lr = (b & PSPEXP_BUTTON_LTRIGGER) && (b & PSPEXP_BUTTON_RTRIGGER), nub[4];
+    static uint64_t start_down; static int start_held, start_used;
+    uint64_t now = pspexp_time_us();
+    int i, nub[4];
+    (void)pressed;
     if (keypad_open() < 0) return;
-    /* L + R + start: Menu (Esc) instead of Enter */
-    if ((pressed & PSPEXP_BUTTON_START) && lr) { ui_emit(EV_KEY, KEY_ESC, 1); g_kp_menu = 1; }
-    if (g_kp_menu && !(b & PSPEXP_BUTTON_START)) { ui_emit(EV_KEY, KEY_ESC, 0); g_kp_menu = 0; }
+    /* start: a long hold is Menu (Esc), held while start stays down; a tap is Enter */
+    if ((b & PSPEXP_BUTTON_START) && !start_held) { start_held = 1; start_down = now; start_used = 0; }
+    if ((b & PSPEXP_BUTTON_START) && !start_used && now - start_down >= 700000u) { ui_emit(EV_KEY, KEY_ESC, 1); g_kp_menu = 1; start_used = 1; }
+    if (!(b & PSPEXP_BUTTON_START) && start_held) {
+        start_held = 0;
+        if (g_kp_menu) { ui_emit(EV_KEY, KEY_ESC, 0); g_kp_menu = 0; }
+        else if (!start_used) tap_key(KEY_ENTER);
+    }
+    if (g_select_tap) tap_key(KEY_SPACE);
     for (i = 0; i < NKEYPAD; i++) {
         int down = (b & KEYPAD[i].button) != 0;
-        if (KEYPAD[i].button == PSPEXP_BUTTON_START && g_kp_menu) down = 0;
+        if (KEYPAD[i].button == PSPEXP_BUTTON_START || KEYPAD[i].button == PSPEXP_BUTTON_SELECT) continue;   /* above */
         if (down != g_kp_down[i]) { ui_emit(EV_KEY, KEYPAD[i].key, down); g_kp_down[i] = down; }
     }
     nub[0] = ay < -60; nub[1] = ay > 60; nub[2] = ax < -60; nub[3] = ax > 60;
@@ -1685,6 +1715,19 @@ int main(int argc, char **argv)
 #ifdef PSPEXP_HAVE_SDL
         if (g_sdl && pspexp_sdl_quit_requested(g_sdl)) break;
 #endif
+        {   /* a status line every 5 s: what reaches the PSP and what comes back */
+            static uint64_t last_stat;
+            static unsigned last_frames, last_presented, last_inputs;
+            if (now - last_stat >= 5000000u) {
+                const PspExpStats *st = pspexp_stats(ctx);
+                const PspExpInput *in = pspexp_input(ctx);
+                fprintf(stderr, "[pspexp-term] %s view: frames sent %u, presented %u, inputs %u (buttons %08x), in flight %d, errors %u/%u, B/frame %u\n",
+                        g_view_mirror ? "mirror" : "terminal", frames - last_frames, st->frames_presented - last_presented,
+                        st->inputs_received - last_inputs, (unsigned)in->buttons, pspexp_frames_in_flight(ctx),
+                        st->protocol_errors, st->resource_errors, st->last_frame_bytes);
+                last_stat = now; last_frames = frames; last_presented = st->frames_presented; last_inputs = st->inputs_received;
+            }
+        }
     }
 
     if (g_child > 0) kill(-g_child, SIGHUP);
