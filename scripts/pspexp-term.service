@@ -1,0 +1,17 @@
+# systemd unit: the PSP as this machine's console (pspexp-term).
+# Installed by scripts/install-pspexp-term.sh for the invoking user, e.g.
+#   sudo cp scripts/pspexp-term.service /etc/systemd/system/ && systemctl enable --now pspexp-term
+[Unit]
+Description=PSPExp console on the PSP (pspexp-term)
+After=multi-user.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@HOME@
+Environment=HOME=@HOME@ SHELL=@SHELL@ PATH=/usr/local/bin:/usr/bin:/bin:@ROOT@/scripts:@ROOT@/build/host
+ExecStart=@ROOT@/build/host/pspexp-term --shell @SHELL@
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

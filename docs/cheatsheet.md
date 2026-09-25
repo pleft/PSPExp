@@ -52,6 +52,7 @@ cable pull, so pull the cable to read it after a session.
 | **Doom on the PSP** (Chocolate Doom + Freedoom, PSP controls mapped) | `scripts/pspexp-doom` |
 | **Tyrian on the PSP** (OpenTyrian built in ../tyrian, freeware data) | `scripts/pspexp-tyrian` |
 | **the PSP as the host's console** (shell, on-screen keyboard; runs at boot on the Omega) | `build/host/pspexp-term` |
+| install the console as a service on a Pi (its keyboard and mouse type into it) | `scripts/install-pspexp-term.sh` (`remove` to uninstall) |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,

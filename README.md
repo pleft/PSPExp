@@ -149,7 +149,11 @@ about four times as much.
 pseudo-terminal, drawn on the PSP as an 80x34 VT100 / xterm-subset terminal
 (colours, scrollback, alternate screen for `vi` and `top`), typed on with
 an on-screen keyboard. The bell beeps on the PSP and raw 44.1 kHz stereo
-written to `/tmp/pspexp-audio` plays there. On the Omega2+ it starts at boot
+written to `/tmp/pspexp-audio` plays there. On Linux a real keyboard and
+mouse (the Raspberry Pi 400's own, or USB ones on the Omega's dock) type into
+the same terminal and are grabbed while the PSP is connected. On a Pi,
+`scripts/install-pspexp-term.sh` installs it as a systemd service for your
+user. On the Omega2+ it starts at boot
 (`/etc/init.d/pspexp-term`) and waits for a PSP on USB; running a game from
 it (`doom`) hands the PSP to the game and takes it back afterwards
 (`pspexp-exec`).
@@ -163,6 +167,8 @@ it (`doom`) hands the PSP to the game and takes it back afterwards
 | L / R held | Shift / Ctrl |
 | nub | arrow keys |
 | R + up / down, left / right | scroll back a line / a page |
+| host keyboard (Linux) | types directly (US layout); Shift + PgUp / PgDn scroll back |
+| host mouse (Linux) | wheel scrolls back; clicks go to programs that ask for the mouse |
 
 ## Layout
 

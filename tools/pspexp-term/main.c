@@ -20,6 +20,14 @@
  *   nub           arrow keys (history, cursor, vi)
  *   R + up/down   scroll back through the history (R + left/right: a page)
  *
+ * Linux hosts: a real keyboard and mouse (the Raspberry Pi 400's own, or USB
+ * ones on the Omega's dock) are read from /dev/input and type into the same
+ * terminal (US layout); while the PSP is connected they are grabbed, so the
+ * host's own console does not see the keys too. The first key hides the
+ * on-screen keyboard. The mouse wheel scrolls back; programs that ask for the
+ * mouse (xterm mouse modes 1000/1002/1006) get clicks. --no-host-input
+ * turns this off, --no-grab shares the devices.
+ *
  * Hand-over: another PSPExp program (a game) can take the PSP while the
  * terminal keeps running: SIGUSR1 releases the PSP, SIGUSR2 takes it back
  * (scripts/pspexp-exec does both around a command).
@@ -95,6 +103,7 @@ typedef struct Term {
     int top, bottom;                /* scroll region, inclusive */
     Pen pen;
     int cursor_visible, autowrap, app_cursor;
+    int mouse_mode, mouse_sgr;      /* xterm mouse reporting: 1000 / 1002 / 1003, SGR (1006) */
     Line sb[SCROLLBACK]; int sb_count, sb_head;   /* ring of lines scrolled off the top */
     int view;                       /* lines scrolled back, 0 = live */
     /* parser */
@@ -322,6 +331,8 @@ static void set_mode(int on)
         if (p == 25) T.cursor_visible = on;
         else if (p == 7) T.autowrap = on;
         else if (p == 1) T.app_cursor = on;
+        else if (p == 1000 || p == 1002 || p == 1003) T.mouse_mode = on ? p : 0;
+        else if (p == 1006) T.mouse_sgr = on;
         else if (p == 47 || p == 1047 || p == 1049) {
             if (on && !T.on_alt) {
                 int y;
@@ -543,6 +554,8 @@ static void send_arrow(char d)
 
 /* ---- rendering ------------------------------------------------------------ */
 
+static void draw_pointer(void);
+
 static PspExpContext *ctx;
 static PspExpFont font;
 static int have_font, blink_on = 1;
@@ -636,6 +649,7 @@ static void render(void)
         if (kb_shown) draw_keyboard();
         if (g_batch.n) pspexp_draw_sprite_batch(ctx, font.atlas, g_batch.r, (uint32_t)g_batch.n);
     }
+    draw_pointer();
     pspexp_present(ctx);
     T.dirty = 0;
 }
@@ -836,12 +850,231 @@ static void handle_input(void)
     if (pressed & PSPEXP_BUTTON_START) pty_puts("\t");
 }
 
+/* ---- host keyboard and mouse (Linux evdev) ------------------------------------------ */
+
+#ifdef __linux__
+#include <dirent.h>
+#include <linux/input.h>
+
+typedef struct InDev { int fd, kbd, mouse, grabbed, num; } InDev;
+static InDev g_in[16];
+static int g_nin, g_host_input = 1, g_grab = 1;
+static uint64_t g_in_scan;
+static int k_shift, k_ctrl, k_alt, k_caps;
+static int m_x = 240, m_y = 136, m_buttons;   /* pointer in PSP pixels */
+static uint64_t m_shown_until;
+
+#define BIT(arr, n) ((arr[(n) / (8 * sizeof(long))] >> ((n) % (8 * sizeof(long)))) & 1)
+
+static void host_input_scan(void)
+{
+    DIR *d = opendir("/dev/input");
+    struct dirent *e;
+    if (!d) return;
+    while ((e = readdir(d)) && g_nin < 16) {
+        char path[300];
+        unsigned long ev[1] = { 0 }, keys[KEY_MAX / (8 * sizeof(long)) + 1], rel[REL_MAX / (8 * sizeof(long)) + 1];
+        int num, fd, i, kbd, mouse;
+        if (sscanf(e->d_name, "event%d", &num) != 1) continue;
+        for (i = 0; i < g_nin; i++) if (g_in[i].num == num) break;
+        if (i < g_nin) continue;
+        snprintf(path, sizeof(path), "/dev/input/%s", e->d_name);
+        fd = open(path, O_RDONLY | O_NONBLOCK);
+        if (fd < 0) continue;
+        memset(keys, 0, sizeof(keys)); memset(rel, 0, sizeof(rel));
+        ioctl(fd, EVIOCGBIT(0, sizeof(ev)), ev);
+        ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keys)), keys);
+        ioctl(fd, EVIOCGBIT(EV_REL, sizeof(rel)), rel);
+        kbd = BIT(ev, EV_KEY) && BIT(keys, KEY_A) && BIT(keys, KEY_Z) && BIT(keys, KEY_ENTER);
+        mouse = BIT(ev, EV_REL) && BIT(rel, REL_X) && BIT(keys, BTN_LEFT);
+        if (!kbd && !mouse) { close(fd); continue; }
+        g_in[g_nin].fd = fd; g_in[g_nin].kbd = kbd; g_in[g_nin].mouse = mouse; g_in[g_nin].grabbed = 0; g_in[g_nin].num = num;
+        g_nin++;
+        {
+            char name[80] = "";
+            ioctl(fd, EVIOCGNAME(sizeof(name)), name);
+            fprintf(stderr, "[pspexp-term] host %s: %s (%s)\n", kbd ? "keyboard" : "mouse", name, path);
+        }
+    }
+    closedir(d);
+}
+
+static void host_input_grab(int want)
+{
+    int i;
+    for (i = 0; i < g_nin; i++) {
+        if (g_in[i].grabbed == want) continue;
+        if (ioctl(g_in[i].fd, EVIOCGRAB, want ? 1 : 0) == 0) g_in[i].grabbed = want;
+        if (!want) k_shift = k_ctrl = k_alt = 0;
+    }
+}
+
+/* US layout: [keycode] = { normal, shifted } */
+static const char *const KMAP[KEY_MAX + 1][2] = {
+    [KEY_1] = {"1","!"}, [KEY_2] = {"2","@"}, [KEY_3] = {"3","#"}, [KEY_4] = {"4","$"}, [KEY_5] = {"5","%"},
+    [KEY_6] = {"6","^"}, [KEY_7] = {"7","&"}, [KEY_8] = {"8","*"}, [KEY_9] = {"9","("}, [KEY_0] = {"0",")"},
+    [KEY_MINUS] = {"-","_"}, [KEY_EQUAL] = {"=","+"}, [KEY_LEFTBRACE] = {"[","{"}, [KEY_RIGHTBRACE] = {"]","}"},
+    [KEY_SEMICOLON] = {";",":"}, [KEY_APOSTROPHE] = {"'","\""}, [KEY_GRAVE] = {"`","~"}, [KEY_BACKSLASH] = {"\\","|"},
+    [KEY_COMMA] = {",","<"}, [KEY_DOT] = {".",">"}, [KEY_SLASH] = {"/","?"}, [KEY_SPACE] = {" "," "}, [KEY_102ND] = {"<",">"},
+    [KEY_Q] = {"q","Q"}, [KEY_W] = {"w","W"}, [KEY_E] = {"e","E"}, [KEY_R] = {"r","R"}, [KEY_T] = {"t","T"},
+    [KEY_Y] = {"y","Y"}, [KEY_U] = {"u","U"}, [KEY_I] = {"i","I"}, [KEY_O] = {"o","O"}, [KEY_P] = {"p","P"},
+    [KEY_A] = {"a","A"}, [KEY_S] = {"s","S"}, [KEY_D] = {"d","D"}, [KEY_F] = {"f","F"}, [KEY_G] = {"g","G"},
+    [KEY_H] = {"h","H"}, [KEY_J] = {"j","J"}, [KEY_K] = {"k","K"}, [KEY_L] = {"l","L"},
+    [KEY_Z] = {"z","Z"}, [KEY_X] = {"x","X"}, [KEY_C] = {"c","C"}, [KEY_V] = {"v","V"}, [KEY_B] = {"b","B"},
+    [KEY_N] = {"n","N"}, [KEY_M] = {"m","M"},
+    [KEY_KP0] = {"0","0"}, [KEY_KP1] = {"1","1"}, [KEY_KP2] = {"2","2"}, [KEY_KP3] = {"3","3"}, [KEY_KP4] = {"4","4"},
+    [KEY_KP5] = {"5","5"}, [KEY_KP6] = {"6","6"}, [KEY_KP7] = {"7","7"}, [KEY_KP8] = {"8","8"}, [KEY_KP9] = {"9","9"},
+    [KEY_KPDOT] = {".","."}, [KEY_KPPLUS] = {"+","+"}, [KEY_KPMINUS] = {"-","-"}, [KEY_KPASTERISK] = {"*","*"},
+    [KEY_KPSLASH] = {"/","/"},
+    [KEY_ENTER] = {"\r","\r"}, [KEY_KPENTER] = {"\r","\r"}, [KEY_TAB] = {"\t","\033[Z"}, [KEY_BACKSPACE] = {"\177","\177"},
+    [KEY_ESC] = {"\033","\033"},
+    [KEY_HOME] = {"\033[H","\033[H"}, [KEY_END] = {"\033[F","\033[F"}, [KEY_INSERT] = {"\033[2~","\033[2~"},
+    [KEY_DELETE] = {"\033[3~","\033[3~"}, [KEY_PAGEUP] = {"\033[5~","\033[5~"}, [KEY_PAGEDOWN] = {"\033[6~","\033[6~"},
+    [KEY_F1] = {"\033OP","\033OP"}, [KEY_F2] = {"\033OQ","\033OQ"}, [KEY_F3] = {"\033OR","\033OR"}, [KEY_F4] = {"\033OS","\033OS"},
+    [KEY_F5] = {"\033[15~","\033[15~"}, [KEY_F6] = {"\033[17~","\033[17~"}, [KEY_F7] = {"\033[18~","\033[18~"},
+    [KEY_F8] = {"\033[19~","\033[19~"}, [KEY_F9] = {"\033[20~","\033[20~"}, [KEY_F10] = {"\033[21~","\033[21~"},
+    [KEY_F11] = {"\033[23~","\033[23~"}, [KEY_F12] = {"\033[24~","\033[24~"},
+};
+
+static void host_key(int code, int value)
+{
+    const char *s;
+    char c;
+    switch (code) {
+    case KEY_LEFTSHIFT: case KEY_RIGHTSHIFT: k_shift = value != 0; return;
+    case KEY_LEFTCTRL: case KEY_RIGHTCTRL: k_ctrl = value != 0; return;
+    case KEY_LEFTALT: case KEY_RIGHTALT: k_alt = value != 0; return;
+    case KEY_CAPSLOCK: if (value == 1) k_caps = !k_caps; return;
+    default: break;
+    }
+    if (value == 0) return;   /* 1 press, 2 auto-repeat */
+    if (kb_shown) { kb_shown = 0; term_resize(ROWS_FULL); }   /* a real keyboard: no need for the on-screen one */
+    if (k_shift && (code == KEY_PAGEUP || code == KEY_PAGEDOWN)) {   /* Shift+PgUp/PgDn: scrollback */
+        int page = T.rows - 1;
+        T.view += code == KEY_PAGEUP ? page : -page;
+        if (T.view > T.sb_count) T.view = T.sb_count;
+        if (T.view < 0 || T.on_alt) T.view = 0;
+        T.dirty = 1;
+        return;
+    }
+    T.view = 0;
+    if (code == KEY_UP || code == KEY_DOWN || code == KEY_LEFT || code == KEY_RIGHT) {
+        if (k_alt) pty_puts("\033");
+        send_arrow(code == KEY_UP ? 'A' : code == KEY_DOWN ? 'B' : code == KEY_RIGHT ? 'C' : 'D');
+        return;
+    }
+    if (code > KEY_MAX || !KMAP[code][0]) return;
+    {
+        int shifted = k_shift;
+        if (k_caps && code >= KEY_Q && code <= KEY_M && KMAP[code][0][0] >= 'a' && KMAP[code][0][0] <= 'z' && !KMAP[code][0][1]) shifted = !shifted;
+        s = KMAP[code][shifted ? 1 : 0];
+    }
+    if (k_ctrl && s[0] && !s[1]) {
+        c = s[0];
+        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 1);
+        else if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 1);
+        else if (c == '[' || c == '{') c = 27;
+        else if (c == '\\' || c == '|') c = 28;
+        else if (c == ']' || c == '}') c = 29;
+        else if (c == '6' || c == '^') c = 30;
+        else if (c == '-' || c == '_') c = 31;
+        else if (c == ' ' || c == '2' || c == '@') c = 0;
+        else if (c == '/' || c == '?') c = 31;
+        if (k_alt) pty_puts("\033");
+        pty_write(&c, 1);
+        return;
+    }
+    if (k_alt && s[0] != '\033') pty_puts("\033");
+    pty_puts(s);
+}
+
+static void mouse_report(int button, int press, int motion)
+{
+    char buf[40];
+    int cx = m_x / CELL_W + 1, cy = m_y / CELL_H + 1;
+    if (!T.mouse_mode || T.view) return;
+    if (cy > T.rows) return;
+    if (motion) button += 32;
+    if (T.mouse_sgr) snprintf(buf, sizeof(buf), "\033[<%d;%d;%d%c", button, cx, cy, press ? 'M' : 'm');
+    else {
+        int b = press ? button : 3;
+        if (cx > 223) cx = 223;
+        if (cy > 223) cy = 223;
+        snprintf(buf, sizeof(buf), "\033[M%c%c%c", 32 + b, 32 + cx, 32 + cy);
+    }
+    pty_puts(buf);
+}
+
+static void host_mouse(const struct input_event *e)
+{
+    if (e->type == EV_REL) {
+        if (e->code == REL_X) { m_x += e->value; if (m_x < 0) m_x = 0; if (m_x > 479) m_x = 479; }
+        else if (e->code == REL_Y) { m_y += e->value; if (m_y < 0) m_y = 0; if (m_y > 271) m_y = 271; }
+        else if (e->code == REL_WHEEL) {
+            if (T.mouse_mode && !T.view) { mouse_report(e->value > 0 ? 64 : 65, 1, 0); return; }
+            T.view += e->value * 3;
+            if (T.view > T.sb_count) T.view = T.sb_count;
+            if (T.view < 0 || T.on_alt) T.view = 0;
+        }
+        if ((e->code == REL_X || e->code == REL_Y) && (T.mouse_mode == 1003 || (T.mouse_mode == 1002 && m_buttons)))
+            mouse_report(m_buttons & 1 ? 0 : m_buttons & 2 ? 2 : m_buttons & 4 ? 1 : 3, 1, 1);
+        m_shown_until = pspexp_time_us() + 3000000u;
+        T.dirty = 1;
+    } else if (e->type == EV_KEY && (e->code == BTN_LEFT || e->code == BTN_RIGHT || e->code == BTN_MIDDLE)) {
+        int b = e->code == BTN_LEFT ? 0 : e->code == BTN_MIDDLE ? 1 : 2;
+        int bit = e->code == BTN_LEFT ? 1 : e->code == BTN_MIDDLE ? 4 : 2;
+        if (e->value) m_buttons |= bit; else m_buttons &= ~bit;
+        mouse_report(b, e->value != 0, 0);
+        m_shown_until = pspexp_time_us() + 3000000u;
+        T.dirty = 1;
+    }
+}
+
+static void host_input_poll(int connected)
+{
+    int i;
+    uint64_t now = pspexp_time_us();
+    if (!g_host_input) return;
+    if (now - g_in_scan > 3000000u) { g_in_scan = now; host_input_scan(); }
+    if (g_grab) host_input_grab(connected && !g_released);
+    for (i = 0; i < g_nin; i++) {
+        struct input_event ev[32];
+        ssize_t n;
+        while ((n = read(g_in[i].fd, ev, sizeof(ev))) > 0) {
+            int k, cnt = (int)(n / (ssize_t)sizeof(ev[0]));
+            if (!connected || g_released) continue;   /* not ours to use: drain */
+            for (k = 0; k < cnt; k++) {
+                if (g_in[i].kbd && ev[k].type == EV_KEY && ev[k].code < BTN_MISC) host_key(ev[k].code, ev[k].value);
+                else if (g_in[i].mouse) host_mouse(&ev[k]);
+            }
+        }
+        if (n < 0 && errno != EAGAIN && errno != EINTR) {   /* unplugged */
+            close(g_in[i].fd);
+            g_in[i] = g_in[--g_nin];
+            i--;
+        }
+    }
+}
+
+static void draw_pointer(void)
+{
+    if (pspexp_time_us() > m_shown_until) return;
+    pspexp_fill_rect(ctx, (int16_t)m_x, (int16_t)m_y, 2, 8, rgb565(0xffffff), 230);
+    pspexp_fill_rect(ctx, (int16_t)m_x, (int16_t)m_y, 6, 2, rgb565(0xffffff), 230);
+}
+#else
+static int g_host_input, g_grab;
+static void host_input_poll(int connected) { (void)connected; }
+static void draw_pointer(void) {}
+#endif
+
 /* ---- main ------------------------------------------------------------------------ */
 
 static void usage(void)
 {
     fprintf(stderr, "usage: pspexp-term [--usb | --tcp host[:port] | --null | --sdl] [--shell PATH] [--cmd \"command\"]\n"
-                    "                   [--audio-fifo PATH | --no-audio-fifo] [--pidfile PATH] [--shot N]\n");
+                    "                   [--audio-fifo PATH | --no-audio-fifo] [--pidfile PATH] [--shot N]\n"
+                    "                   [--no-host-input] [--no-grab]\n");
 }
 
 int main(int argc, char **argv)
@@ -882,6 +1115,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--no-audio-fifo")) fifo_path = NULL;
         else if (!strcmp(argv[i], "--pidfile") && i + 1 < argc) pidfile = argv[++i];
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--no-host-input")) g_host_input = 0;
+        else if (!strcmp(argv[i], "--no-grab")) g_grab = 0;
         else { usage(); return 1; }
     }
 
@@ -958,6 +1193,7 @@ int main(int argc, char **argv)
 
         now = pspexp_time_us();
         connected = pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED;
+        host_input_poll(connected);
         if (!connected && !g_released && (g_mode == MODE_USB || g_mode == MODE_TCP) && now - last_try > 1000000u) {
             last_try = now;
             if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; }   /* ignore buttons held while connecting */

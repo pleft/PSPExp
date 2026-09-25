@@ -29,4 +29,4 @@ fi
 export PSPEXP_KEYS="${PSPEXP_KEYS:-cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right}"
 export PSPEXP_NUB="${PSPEXP_NUB:-keys}"
 export PSPEXP_LOCAL_AUDIO="${PSPEXP_LOCAL_AUDIO:-0}"
-exec "$ROOT/scripts/pspexp-run" $TARGET "$BIN" --data="$DATA" --no-joystick "$@"
+exec "$ROOT/scripts/pspexp-exec" "$ROOT/scripts/pspexp-run" $TARGET "$BIN" --data="$DATA" --no-joystick "$@"

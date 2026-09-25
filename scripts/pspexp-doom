@@ -24,4 +24,4 @@ command -v chocolate-doom >/dev/null || { echo "chocolate-doom not found (brew i
 export PSPEXP_KEYS="${PSPEXP_KEYS:-cross=lctrl,circle=space,square=lshift,triangle=return,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right}"
 export PSPEXP_NUB="${PSPEXP_NUB:-keys}"
 export PSPEXP_LOCAL_AUDIO="${PSPEXP_LOCAL_AUDIO:-0}"   # sound on the PSP only; =1 to hear it here too
-exec "$ROOT/scripts/pspexp-run" $TARGET chocolate-doom -iwad "$WAD" -window -nomouse -nograbmouse "$@"
+exec "$ROOT/scripts/pspexp-exec" "$ROOT/scripts/pspexp-run" $TARGET chocolate-doom -iwad "$WAD" -window -nomouse -nograbmouse "$@"
