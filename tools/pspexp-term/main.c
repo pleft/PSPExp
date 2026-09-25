@@ -896,9 +896,23 @@ static int g_mirror_force;
 static uint16_t g_mirror_tex[8];
 static int g_mirror_npages;
 static uint64_t g_mirror_last;
+/* tiled mode (screens up to 480x272, sent at native size): 64x32 tiles kept
+ * on the PSP as separate textures; only the tiles that changed are re-sent */
+#define MT_W 64
+#define MT_H 32
+#define MT_MAX ((480 / MT_W + 1) * (272 / MT_H + 1))
+static uint16_t g_tile_id[MT_MAX];   /* 0: not uploaded */
+static int g_tile_gen[MT_MAX];
+static int g_tile_cols, g_tile_rows, g_tile_w, g_tile_h;
+static unsigned g_tiles_sent, g_tiles_frames;
 
 static int mirror_available(void) { return g_fb_path != NULL; }
-static void mirror_invalidate(void) { g_mirror_force = 1; }
+static void mirror_invalidate(void)
+{
+    int i;
+    g_mirror_force = 1;
+    for (i = 0; i < MT_MAX; i++) g_tile_id[i] = 0;   /* after a reconnect the PSP holds none of them */
+}
 
 static int mirror_open(void)
 {
@@ -928,6 +942,92 @@ static inline uint16_t fb_pixel(const uint8_t *row, int x, const struct fb_var_s
     return (uint16_t)(r | (g << 5) | (b << 11));
 }
 
+/* Tiled mirror: compare each 64x32 tile with the last frame sent, upload the
+ * changed ones (alternating texture ids, the old one released), and draw all
+ * tiles from what the PSP holds. A launcher cursor move costs a few tiles,
+ * not the whole 150 KB screen: the difference that matters over Wi-Fi. */
+static int mirror_frame_tiled(const struct fb_var_screeninfo *v, const uint8_t *base, size_t fl)
+{
+    int w = (int)v->xres, h = (int)v->yres, tx, ty, i, changed = 0, bpp = (int)v->bits_per_pixel / 8;
+    float s = 480.0f / w < 272.0f / h ? 480.0f / w : 272.0f / h;
+    int qw = (int)(w * s), qh = (int)(h * s), ox = (480 - qw) / 2, oy = (272 - qh) / 2;
+    int cols = (w + MT_W - 1) / MT_W, rows = (h + MT_H - 1) / MT_H;
+    uint8_t dirty[MT_MAX];
+    size_t line = g_fbf.line_length;
+
+    if (cols * rows > MT_MAX) return 0;
+    if (cols != g_tile_cols || rows != g_tile_rows || w != g_tile_w || h != g_tile_h || g_fb_prev_len != fl) {
+        for (i = 0; i < MT_MAX; i++) { if (g_tile_id[i]) pspexp_release(ctx, g_tile_id[i]); g_tile_id[i] = 0; }
+        free(g_fb_prev); g_fb_prev = (uint8_t *)malloc(fl); g_fb_prev_len = g_fb_prev ? fl : 0;
+        g_tile_cols = cols; g_tile_rows = rows; g_tile_w = w; g_tile_h = h;
+        g_mirror_force = 1;
+    }
+    if (!g_fb_prev) return 0;
+    /* which tiles changed */
+    for (ty = 0; ty < rows; ty++)
+        for (tx = 0; tx < cols; tx++) {
+            int k = ty * cols + tx, y, y1 = (ty + 1) * MT_H < h ? (ty + 1) * MT_H : h;
+            size_t xoff = (size_t)tx * MT_W * bpp, xlen = (size_t)((tx + 1) * MT_W < w ? MT_W : w - tx * MT_W) * bpp;
+            dirty[k] = g_mirror_force || !g_tile_id[k];
+            for (y = ty * MT_H; !dirty[k] && y < y1; y++)
+                if (memcmp(g_fb_prev + (size_t)y * line + xoff, base + (size_t)y * line + xoff, xlen)) dirty[k] = 1;
+            changed |= dirty[k];
+        }
+    if (!changed) return 0;
+    g_mirror_force = 0;
+
+    pspexp_begin_frame(ctx);
+    pspexp_set_clip(ctx, 0, 0, 480, 272);
+    pspexp_fill_rect(ctx, 0, 0, 480, 272, 0, 255);
+    for (ty = 0; ty < rows; ty++)
+        for (tx = 0; tx < cols; tx++) {
+            int k = ty * cols + tx, x0 = tx * MT_W, y0 = ty * MT_H;
+            int pw = w - x0 < MT_W ? w - x0 : MT_W, ph = h - y0 < MT_H ? h - y0 : MT_H;
+            PspExpQuadExRec q;
+            if (dirty[k]) {
+                int tw = 16, th = 8, y, rowblocks;
+                uint16_t id = (uint16_t)(1000 + k * 2 + (g_tile_gen[k] & 1)), *dst;
+                PspExpTextureDesc d;
+                PspExpFrame f;
+                while (tw < pw) tw <<= 1;
+                while (th < ph) th <<= 1;
+                memset(&d, 0, sizeof(d));
+                d.width = (uint16_t)tw; d.height = (uint16_t)th; d.format = PSPEXP_TEX_5650;
+                d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;
+                f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw < 64 ? tw : 64); f.h = (uint16_t)th;
+                dst = (uint16_t *)pspexp_upload_texture_begin(ctx, id, &d, (uint32_t)(tw * th * 2), &f, 1);
+                if (!dst) continue;
+                rowblocks = tw >> 3;
+                for (y = 0; y < th; y++) {
+                    uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
+                    int x = 0;
+                    if (y < ph) {
+                        const uint8_t *row = base + (size_t)(y0 + y) * line;
+                        for (; x < pw; x++) band[((x >> 3) << 6) + (x & 7)] = fb_pixel(row, x0 + x, v);
+                        memcpy(g_fb_prev + (size_t)(y0 + y) * line + (size_t)x0 * bpp, row + (size_t)x0 * bpp, (size_t)pw * bpp);
+                    }
+                    for (; x < tw; x++) band[((x >> 3) << 6) + (x & 7)] = 0;
+                }
+                if (pspexp_upload_texture_commit(ctx, 0) < 0) continue;
+                if (g_tile_id[k]) pspexp_release(ctx, g_tile_id[k]);
+                g_tile_id[k] = id;
+                g_tile_gen[k]++;
+                g_tiles_sent++;
+            }
+            if (!g_tile_id[k]) continue;
+            memset(&q, 0, sizeof(q));
+            q.x = (int16_t)(ox + x0 * qw / w); q.y = (int16_t)(oy + y0 * qh / h);
+            q.w = (int16_t)(ox + (x0 + pw) * qw / w - q.x); q.h = (int16_t)(oy + (y0 + ph) * qh / h - q.y);
+            q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)pw; q.v1 = (uint16_t)ph; q.color = 0xFFFF;
+            pspexp_draw_quad_ex_batch(ctx, g_tile_id[k], &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
+        }
+    draw_pointer();
+    pspexp_present(ctx);
+    g_mirror_last++;
+    g_tiles_frames++;
+    return 1;
+}
+
 /* One frame: if the screen changed, upload it (downscaled when larger than the
  * PSP, else native and scaled by the GE) as swizzled 5650 pages and draw it
  * letterboxed. Returns 1 when a frame was sent. */
@@ -945,6 +1045,7 @@ static int mirror_frame(void)
     base = g_fb_mem + (size_t)v.yoffset * g_fbf.line_length + (size_t)v.xoffset * (v.bits_per_pixel / 8);
     fl = (size_t)h * g_fbf.line_length;
     if (base + fl > g_fb_mem + g_fb_len) return 0;
+    if (w <= 480 && h <= 272) return mirror_frame_tiled(&v, base, fl);
     if (!g_mirror_force && g_fb_prev && g_fb_prev_len == fl && memcmp(g_fb_prev, base, fl) == 0) return 0;
     if (g_fb_prev_len != fl) { free(g_fb_prev); g_fb_prev = (uint8_t *)malloc(fl); g_fb_prev_len = g_fb_prev ? fl : 0; }
     if (g_fb_prev) memcpy(g_fb_prev, base, fl);
@@ -1572,7 +1673,7 @@ int main(int argc, char **argv)
         if (g_view_mirror) {
             /* ~30 fps poll of the framebuffer; frames only when it changed */
             static uint64_t last_mirror;
-            if (now - last_mirror >= 33000u && pspexp_should_render(ctx)) {
+            if (now - last_mirror >= 16000u && pspexp_should_render(ctx)) {
                 last_mirror = now;
                 if (mirror_frame()) frames++;
             }
