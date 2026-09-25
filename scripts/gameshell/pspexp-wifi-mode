@@ -12,6 +12,7 @@
 CONF=/etc/pspexp/wifi-mode
 AP=/etc/pspexp/hostapd.conf
 DEV=wlan0
+NMCONF=/etc/NetworkManager/conf.d/99-pspexp-psp-mode.conf
 mode() { cat "$CONF" 2>/dev/null || echo home; }
 
 # a clean firmware state: after AP mode this chip no longer finds networks
@@ -42,14 +43,34 @@ status)
 apply)
 	[ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
 	if [ "$(mode)" = psp ]; then
+		# NetworkManager must leave the Wi-Fi alone, also for the interface
+		# that reappears after the driver reset (else hostapd: "Could not
+		# connect to kernel driver")
+		printf '[keyfile]\nunmanaged-devices=interface-name:%s\n' "$DEV" > "$NMCONF"
 		nmcli dev disconnect $DEV >/dev/null 2>&1
+		nmcli general reload conf >/dev/null 2>&1 || systemctl reload NetworkManager
 		reset_wifi
-		nmcli dev set $DEV managed no
+		nmcli dev set $DEV managed no >/dev/null 2>&1
+		sleep 3
 		ip addr flush dev $DEV
 		ip addr add 192.168.50.1/24 dev $DEV
 		ip link set $DEV up
-		hostapd -B -P /run/pspexp-hostapd.pid -f /var/log/pspexp-hostapd.log "$AP" && echo "PSP mode: access point PSPExp on $DEV (192.168.50.1)"
+		pkill -x hostapd 2>/dev/null; sleep 1
+		: > /var/log/pspexp-hostapd.log
+		hostapd -B -P /run/pspexp-hostapd.pid -f /var/log/pspexp-hostapd.log "$AP"
+		sleep 3
+		if grep -q AP-ENABLED /var/log/pspexp-hostapd.log; then echo "PSP mode: access point PSPExp on $DEV (192.168.50.1)"
+		else echo "PSP mode: the access point did not start, see /var/log/pspexp-hostapd.log" >&2; fi
+		# names: nothing fills resolv.conf without the home Wi-Fi; the Mac's
+		# Internet Sharing resolves on its bridge address, a public one as fallback
+		if ! grep -q "^nameserver" /etc/resolv.conf 2>/dev/null; then
+			gw=$(ip -4 route show default dev usb0 2>/dev/null | awk '{print $3; exit}')
+			{ echo "# PSPExp PSP mode"; [ -n "$gw" ] && echo "nameserver $gw"; echo "nameserver 1.1.1.1"; } > /etc/resolv.conf
+		fi
 	else
+		pkill -x hostapd 2>/dev/null
+		rm -f "$NMCONF"
+		nmcli general reload conf >/dev/null 2>&1 || systemctl reload NetworkManager
 		reset_wifi
 		ip addr flush dev $DEV
 		nmcli dev set $DEV managed yes
