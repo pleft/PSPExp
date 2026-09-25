@@ -67,7 +67,11 @@ else
 	for k in "$HOME"/.ssh/id_ed25519.pub "$HOME"/.ssh/id_rsa.pub; do
 		[ -f "$k" ] && ! grep -qF "$(cut -d' ' -f2 "$k")" "$T/authorized_keys" && cat "$k" >> "$T/authorized_keys"
 	done
-	echo "mkdir /home/cpi/.ssh" >> "$CMDS"
+	# mkdir only when missing: debugfs mkdir on an existing name half-creates
+	# an orphan directory and later hands its block to another file
+	if ! "$DF" -R "stat /home/cpi/.ssh" "$FS" 2>/dev/null | grep -q "Type: directory"; then
+		echo "mkdir /home/cpi/.ssh" >> "$CMDS"
+	fi
 	echo "set_inode_field /home/cpi/.ssh mode 040700" >> "$CMDS"
 	echo "set_inode_field /home/cpi/.ssh uid 1000" >> "$CMDS"
 	echo "set_inode_field /home/cpi/.ssh gid 1000" >> "$CMDS"
@@ -98,5 +102,8 @@ U
 	echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01ca", MODE="0666"' > "$T/60-pspexp.rules"
 	put "$T/60-pspexp.rules" /etc/udev/rules.d/60-pspexp.rules 0100644 0 0
 fi
+# rm only names that exist (debugfs rm of a missing name is harmless, but keep it quiet)
 "$DF" -w -f "$CMDS" "$FS" 2>&1 | grep -viE "^debugfs [0-9]|File not found by ext2_lookup|Ext2 directory already exists|^rm |^write |^set_inode|^mkdir |^symlink |^Allocated" || true
-echo "prepared: $IMG"
+E2FSCK="$(brew --prefix e2fsprogs)/sbin/e2fsck"
+if "$E2FSCK" -fn "$FS" >"$T/fsck" 2>&1; then echo "prepared: $IMG (filesystem check clean)"
+else echo "filesystem check FAILED after editing $IMG:" >&2; grep -vE "^Pass" "$T/fsck" | head -20 >&2; exit 1; fi
