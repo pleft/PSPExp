@@ -1706,6 +1706,20 @@ int main(int argc, char **argv)
         if (!connected) continue;
 
         pspexp_pump(ctx, 0);
+        {   /* liveness: the PSP sends input samples at 60 Hz; a link that stays
+             * silent for 3 s is dead (a Wi-Fi peer that vanished without closing
+             * leaves a half-open TCP connection that never errors) */
+            static uint32_t last_inputs; static uint64_t last_heard;
+            const PspExpStats *st = pspexp_stats(ctx);
+            if (st->inputs_received != last_inputs || !last_heard) { last_inputs = st->inputs_received; last_heard = now; }
+            else if (now - last_heard > 3000000u) {
+                fprintf(stderr, "[pspexp-term] no word from the PSP for 3 s: dropping the link\n");
+                keypad_release_all();
+                pspexp_set_transport(ctx, NULL);
+                last_heard = 0; last_try = 0;
+                continue;
+            }
+        }
         handle_input();
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
