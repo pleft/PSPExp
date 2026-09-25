@@ -5,6 +5,7 @@
 #include <pspnet_inet.h>
 #include <pspnet_apctl.h>
 #include <psputility.h>
+#include <psputility_netparam.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -20,7 +21,7 @@ static int g_state = ST_OFF;
 static int g_listen = -1;
 static int g_client = -1;
 static unsigned int g_generation;
-static char g_status[96] = "tcp: off";
+static char g_status[160] = "tcp: off";
 static char g_ip[32] = "";
 static unsigned char g_syncbuf[PSPEXP_USB_SYNC_LEN];
 static int g_synclen;
@@ -30,6 +31,46 @@ static const unsigned char SYNC[PSPEXP_USB_SYNC_LEN] = PSPEXP_USB_SYNC_BYTES;
 static volatile int g_ap_state, g_ap_error, g_ap_event;
 static int g_ap_tries;
 static unsigned int g_ap_since;
+/* Saved connection profiles, in the order they are tried: a network named
+ * "PSPExp" (a PSPExp host's own access point) first, then the rest. */
+static int g_profiles[10], g_nprofiles, g_profile_idx;
+static char g_profile_ssid[40];
+
+static void scan_profiles(void)
+{
+    int i, n = 0, first = -1;
+    netData d;
+    for (i = 1; i <= 10 && n < 10; i++) {
+        if (sceUtilityCheckNetParam(i) != 0) continue;
+        memset(&d, 0, sizeof(d));
+        if (sceUtilityGetNetParam(i, PSP_NETPARAM_SSID, &d) == 0 && strstr(d.asString, "PSPExp")) first = n;
+        g_profiles[n++] = i;
+    }
+    if (first > 0) { int t = g_profiles[0]; g_profiles[0] = g_profiles[first]; g_profiles[first] = t; }
+    g_nprofiles = n;
+    g_profile_idx = 0;
+}
+
+static int current_profile(void) { return g_nprofiles ? g_profiles[g_profile_idx % g_nprofiles] : 1; }
+
+static void profile_ssid(void)
+{
+    netData d;
+    memset(&d, 0, sizeof(d));
+    g_profile_ssid[0] = 0;
+    if (sceUtilityGetNetParam(current_profile(), PSP_NETPARAM_SSID, &d) == 0) {
+        strncpy(g_profile_ssid, d.asString, sizeof(g_profile_ssid) - 1);
+        g_profile_ssid[sizeof(g_profile_ssid) - 1] = 0;
+    }
+}
+
+/* join the current profile; the next retry moves on to the next profile */
+static int ap_join(void)
+{
+    profile_ssid();
+    return sceNetApctlConnect(current_profile());
+}
+
 static const char *const AP_STATE_NAMES[] = { "disconnected", "scanning", "joining", "getting IP", "got IP", "EAP auth", "key exchange" };
 
 static void (*g_trace)(const char *);
@@ -61,8 +102,9 @@ int pspexp_tcp_psp_init(void)
     sceNetApctlAddHandler(ap_handler, NULL);
     g_ap_tries = 1;
     g_ap_since = sceKernelGetSystemTimeLow();
-    rc = sceNetApctlConnect(1);   /* the first saved Wi-Fi profile; instant under PPSSPP */
-    if (rc < 0) { snprintf(g_status, sizeof(g_status), "tcp: apctl connect %08X (no Wi-Fi profile 1?)", rc); g_state = ST_FAILED; return -1; }
+    scan_profiles();
+    rc = ap_join();   /* "PSPExp" first if saved, else profile 1; instant under PPSSPP */
+    if (rc < 0) { snprintf(g_status, sizeof(g_status), "tcp: apctl connect %08X (no Wi-Fi profile?)", rc); g_state = ST_FAILED; return -1; }
     g_state = ST_CONNECTING;
     set_status("tcp: connecting to access point");
     return 0;
@@ -101,7 +143,7 @@ static void start_listening(void)
     }
     if (sceNetApctlGetInfo(PSP_NET_APCTL_INFO_IP, &info) == 0) strncpy(g_ip, info.ip, sizeof(g_ip) - 1);
     g_state = ST_LISTENING;
-    snprintf(g_status, sizeof(g_status), "tcp: listening on %s:%d", g_ip[0] ? g_ip : "?", PORT);
+    snprintf(g_status, sizeof(g_status), "tcp: listening on %s:%d (%s)", g_ip[0] ? g_ip : "?", PORT, g_profile_ssid);
 }
 
 /* The access point can drop us at any time (weak signal, router): once a
@@ -124,7 +166,8 @@ static void check_access_point(void)
     g_ap_error = 0;
     g_ap_tries++;
     g_ap_since = now;
-    sceNetApctlConnect(1);
+    scan_profiles();          /* start again from the preferred network */
+    ap_join();
     g_state = ST_CONNECTING;
     set_status("tcp: wifi lost, rejoining");
 }
@@ -141,17 +184,19 @@ void pspexp_tcp_psp_poll(void)
         /* show where it is, and retry when it fell back to disconnected
          * (a failed join or key exchange) or got stuck for 30 s */
         {
-            char buf[96];
+            char buf[160];
             const char *name = st >= 0 && st <= 6 ? AP_STATE_NAMES[st] : "?";
-            if (g_ap_error) snprintf(buf, sizeof(buf), "tcp: wifi %s, try %d, error %08X", name, g_ap_tries, (unsigned)g_ap_error);
-            else snprintf(buf, sizeof(buf), "tcp: wifi %s, try %d", name, g_ap_tries);
+            if (g_ap_error) snprintf(buf, sizeof(buf), "tcp: %s: %s, try %d, error %08X", g_profile_ssid, name, g_ap_tries, (unsigned)g_ap_error);
+            else snprintf(buf, sizeof(buf), "tcp: %s: %s, try %d", g_profile_ssid, name, g_ap_tries);
             if (strcmp(buf, g_status)) set_status(buf);
         }
         if ((st == PSP_NET_APCTL_STATE_DISCONNECTED && now - g_ap_since > 3000000u) || now - g_ap_since > 30000000u) {
             sceNetApctlDisconnect();
             g_ap_tries++;
             g_ap_since = now;
-            sceNetApctlConnect(1);
+            g_ap_error = 0;
+            g_profile_idx++;          /* the next saved network, e.g. home Wi-Fi when the host's AP is off */
+            ap_join();
         }
         break;
     }
