@@ -772,16 +772,17 @@ static int g_released;
 
 static void log_fn(void *u, const char *msg) { (void)u; fprintf(stderr, "[pspexp-term] %s\n", msg); }
 
+static int g_want_usb, g_want_tcp;   /* both may be set: USB is tried first, then TCP */
+
 static PspExpTransport *open_transport(void)
 {
     char err[200];
-    switch (g_mode) {
-    case MODE_TCP: return pspexp_tcp_open(&g_tcp, err, sizeof(err));
+    PspExpTransport *t = NULL;
 #ifdef PSPEXP_HAVE_USB
-    case MODE_USB: return pspexp_usb_open(&g_usb, err, sizeof(err));
+    if (g_want_usb) t = pspexp_usb_open(&g_usb, err, sizeof(err));
 #endif
-    default: return NULL;
-    }
+    if (!t && g_want_tcp) t = pspexp_tcp_open(&g_tcp, err, sizeof(err));
+    return t;
 }
 
 static int try_connect(void)
@@ -1580,13 +1581,15 @@ int main(int argc, char **argv)
     g_shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
     if (access(g_shell, X_OK) != 0) g_shell = "/bin/sh";
     for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--usb")) g_mode = MODE_USB;
+        if (!strcmp(argv[i], "--usb")) { g_mode = MODE_USB; g_want_usb = 1; }
         else if (!strcmp(argv[i], "--null")) g_mode = MODE_NULL;
         else if (!strcmp(argv[i], "--sdl")) g_mode = MODE_SDL;
         else if (!strcmp(argv[i], "--tcp")) {
             char *colon;
-            g_mode = MODE_TCP;
+            if (g_mode != MODE_USB) g_mode = MODE_TCP;
+            g_want_tcp = 1;
             pspexp_tcp_options_default(&g_tcp);
+            g_tcp.connect_timeout_ms = 700;   /* retried every second: do not stall the terminal when the PSP is away */
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 strncpy(tcp_host, argv[++i], sizeof(tcp_host) - 1);
                 colon = strrchr(tcp_host, ':');
@@ -1621,6 +1624,7 @@ int main(int argc, char **argv)
         else { usage(); return 1; }
     }
 
+    if (!g_want_usb && !g_want_tcp && g_mode == MODE_USB) g_want_usb = 1;
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, on_sigchld);
     signal(SIGUSR1, on_usr1);
@@ -1656,7 +1660,7 @@ int main(int argc, char **argv)
     if (g_mode == MODE_NULL || g_mode == MODE_SDL) {
         if (pspexp_connect(ctx, 5000) < 0) { fprintf(stderr, "no HELLO\n"); return 1; }
     } else {
-        fprintf(stderr, "[pspexp-term] waiting for the PSP (%s)\n", g_mode == MODE_TCP ? "tcp" : "usb");
+        fprintf(stderr, "[pspexp-term] waiting for the PSP (%s%s%s)\n", g_want_usb ? "usb" : "", g_want_usb && g_want_tcp ? " + " : "", g_want_tcp ? "tcp" : "");
     }
     /* uploaded once, replayed by the library after every reconnect */
     have_font = pspexp_font_builtin_upload(ctx, FONT_ID, FONT_PAL_ID, &font) == 0;
