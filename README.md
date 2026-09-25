@@ -147,8 +147,11 @@ about four times as much.
 
 `scripts/build-gameshell.sh` cross-compiles the tools as static ARMv7
 binaries and the SDL layer as a library for the GameShell OS image's own SDL2
-programs; `scripts/gameshell-prep-image.sh` puts them on a flashed card (SSH
-key, console service with the launcher mirrored, udev rules, audio). With the
+programs; `scripts/gameshell-prep-image.sh` puts them into the card image
+before flashing (SSH key, console service with the launcher mirrored, udev
+rules, audio, Wi-Fi mode switch, launcher entries) and
+`scripts/install-gameshell.sh` installs or updates the same files on a
+running GameShell over SSH (the list is `scripts/gameshell/stage.sh`). With the
 PSP on the OTG port, the USB link measures 24–26 MB/s, the sprite demo runs
 at 60 fps up to 15,000 sprites, and the image's Chocolate Doom plays at
 35 fps: `pspexp-run chocolate-doom -iwad ~/games/ChocoDM/freedoom1.wad`.

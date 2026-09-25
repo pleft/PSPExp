@@ -40,6 +40,8 @@ if [ "$WHAT" = tyrian ]; then
 		cp ~/pspexp/tyrian-src/opentyrian ~/pspexp/opentyrian
 		sudo install -m 755 /tmp/pspexp-tyrian /usr/local/bin/pspexp-tyrian
 		ls -la ~/pspexp/opentyrian'
+	# a copy for the next card (gameshell-prep-image.sh puts it there)
+	mkdir -p "$OUT/bin"; scp -q "$GS:pspexp/opentyrian" "$OUT/bin/opentyrian"
 	echo "on the GameShell: pspexp-tyrian"
 	exit 0
 fi
