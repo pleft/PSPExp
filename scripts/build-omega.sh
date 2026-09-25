@@ -17,7 +17,14 @@
 # which renames every hooked SDL call to the shim's pspexp_<fn>.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$ROOT/build/omega"
+# Other targets reuse this script (scripts/build-gameshell.sh): ZIG_TARGET /
+# ZIG_CPU / CROSS_NAME / CROSS_HOST select the architecture and output dir.
+ZIG_TARGET="${ZIG_TARGET:-mipsel-linux-musleabi}"
+ZIG_CPU="${ZIG_CPU:-mips32r2}"
+CROSS_NAME="${CROSS_NAME:-omega}"
+CROSS_HOST="${CROSS_HOST:-mipsel-linux-musl}"
+CROSS_PROC="${CROSS_PROC:-mipsel}"
+OUT="$ROOT/build/$CROSS_NAME"
 LIBUSB_VER="${LIBUSB_VER:-1.0.29}"
 command -v zig >/dev/null || { echo "zig not found (brew install zig)" >&2; exit 1; }
 mkdir -p "$OUT/src" "$OUT/prefix" "$OUT/bin" "$ROOT/build/zig-cache"
@@ -25,8 +32,8 @@ mkdir -p "$OUT/src" "$OUT/prefix" "$OUT/bin" "$ROOT/build/zig-cache"
 # compiler wrappers: one path each, as autotools and CMake want
 for t in cc cxx ar ranlib; do
 	case $t in
-		cc) cmd='zig cc -target mipsel-linux-musleabi -mcpu=mips32r2' ;;
-		cxx) cmd='zig c++ -target mipsel-linux-musleabi -mcpu=mips32r2' ;;
+		cc) cmd="zig cc -target $ZIG_TARGET -mcpu=$ZIG_CPU" ;;
+		cxx) cmd="zig c++ -target $ZIG_TARGET -mcpu=$ZIG_CPU" ;;
 		ar) cmd='zig ar' ;;
 		ranlib) cmd='zig ranlib' ;;
 	esac
@@ -43,7 +50,7 @@ if [ ! -f "$OUT/prefix/lib/libusb-1.0.a" ]; then
 	cd "$OUT/src"
 	[ -d "libusb-$LIBUSB_VER" ] || curl -sL "https://github.com/libusb/libusb/releases/download/v$LIBUSB_VER/libusb-$LIBUSB_VER.tar.bz2" | tar xjf -
 	cd "libusb-$LIBUSB_VER"
-	./configure --host=mipsel-linux-musl --prefix="$OUT/prefix" --disable-udev --enable-static --disable-shared \
+	./configure --host="$CROSS_HOST" --prefix="$OUT/prefix" --disable-udev --enable-static --disable-shared \
 		CC="$OUT/zcc" AR="$OUT/zar" RANLIB="$OUT/zranlib" >"$OUT/libusb-configure.log" 2>&1
 	make -j8 install >"$OUT/libusb-make.log" 2>&1
 fi
@@ -51,7 +58,7 @@ fi
 # PSPExp host tools
 cat > "$OUT/toolchain.cmake" <<T
 set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_SYSTEM_PROCESSOR mipsel)
+set(CMAKE_SYSTEM_PROCESSOR $CROSS_PROC)
 set(CMAKE_C_COMPILER "$OUT/zcc")
 set(CMAKE_CXX_COMPILER "$OUT/zcxx")
 set(CMAKE_AR "$OUT/zar")
@@ -135,4 +142,4 @@ if [ "$1" = "doom" ]; then
 	cp "$ROOT/scripts/omega/doom.sh" "$OUT/bin/doom.sh"
 fi
 ls -la "$OUT/bin"
-echo "copy build/omega/bin/* to the Omega (static, soft-float MIPS32r2)"
+echo "static $ZIG_TARGET ($ZIG_CPU) binaries in build/$CROSS_NAME/bin"
