@@ -4,6 +4,8 @@
 #   - this Mac's SSH key for the cpi user
 #   - pspexp-term (the PSP as the console) as a systemd service for cpi,
 #     plus pspexp-exec, pspexp-bench and pspexp-sprite-demo in /usr/local/bin
+#   - the sdl-pspexp shim (/usr/local/lib/libsdl-pspexp.so) and pspexp-run, so
+#     the image's own SDL2 games can use the PSP directly (freeDM: see docs)
 #   - a udev rule so cpi can open the PSP over USB and create the virtual
 #     keypad (/dev/uinput), and uinput loaded at boot
 #   - mirror view: the console starts showing the GameShell's own screen
@@ -83,6 +85,11 @@ else
 	# tools
 	for f in pspexp-term pspexp-bench pspexp-sprite-demo; do put "$BIN/$f" "/usr/local/bin/$f" 0100755 0 0; done
 	put "$ROOT/scripts/pspexp-exec" /usr/local/bin/pspexp-exec 0100755 0 0
+	# the sdl-pspexp shim for the image's own SDL2 games and its run wrapper
+	if [ -f "$ROOT/build/gameshell/lib/libsdl-pspexp.so" ]; then
+		put "$ROOT/build/gameshell/lib/libsdl-pspexp.so" /usr/local/lib/libsdl-pspexp.so 0100644 0 0
+		put "$ROOT/scripts/gameshell/pspexp-run" /usr/local/bin/pspexp-run 0100755 0 0
+	fi
 	# service
 	cat > "$T/pspexp-term.service" <<U
 [Unit]

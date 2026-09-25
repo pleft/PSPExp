@@ -7,13 +7,20 @@
 # Environment passed through: PSPEXP_KEYS, PSPEXP_NUB, PSPEXP_WINDOW,
 # PSPEXP_LOCAL_AUDIO (see compatibility/sdl-pspexp/README.md). Defaults here:
 # sound on the PSP only (the console's audio FIFO is not the game's), the
-# program's own X window hidden (there is no LCD to show it on).
+# headless SDL (dummy video and audio drivers): the X path costs chocolate-doom
+# 20 fps (35 headless) and there is no LCD to show it on. PSPEXP_X=1 keeps X
+# (hidden window) for programs that need it.
 LIB=${PSPEXP_SHIM:-/usr/local/lib/libsdl-pspexp.so}
 [ -f "$LIB" ] || { echo "pspexp-run: $LIB missing" >&2; exit 1; }
 [ $# -ge 1 ] || { echo "usage: pspexp-run <program> [args...]" >&2; exit 2; }
 export PSPEXP="${PSPEXP:-usb}"
 export PSPEXP_LOCAL_AUDIO="${PSPEXP_LOCAL_AUDIO:-0}"
 export PSPEXP_WINDOW="${PSPEXP_WINDOW:-hide}"
-export DISPLAY="${DISPLAY:-:0}"
-export LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}"
-exec /usr/local/bin/pspexp-exec "$@"
+if [ "${PSPEXP_X:-0}" = 1 ]; then
+	export DISPLAY="${DISPLAY:-:0}"
+else
+	export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}" SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
+fi
+# preload into the program only: the shim's SDL symbols resolve from the
+# program's libSDL2, so a shell or env loading it would fail
+exec /usr/local/bin/pspexp-exec env LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}" "$@"
