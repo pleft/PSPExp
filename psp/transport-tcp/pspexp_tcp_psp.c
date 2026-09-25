@@ -98,8 +98,34 @@ static void start_listening(void)
     snprintf(g_status, sizeof(g_status), "tcp: listening on %s:%d", g_ip[0] ? g_ip : "?", PORT);
 }
 
+/* The access point can drop us at any time (weak signal, router): once a
+ * second, outside the connecting phase, look at the apctl state and, when
+ * the IP is gone, drop the sockets and join again. */
+static void check_access_point(void)
+{
+    static unsigned int last;
+    unsigned int now = sceKernelGetSystemTimeLow();
+    int st = 0;
+    if (g_state != ST_LISTENING && g_state != ST_SYNCING && g_state != ST_CONNECTED) return;
+    if (now - last < 1000000u) return;
+    last = now;
+    if (sceNetApctlGetState(&st) < 0 || st == PSP_NET_APCTL_STATE_GOT_IP) return;
+    tracef("tcp: access point lost (state %d, try %d), rejoining", st, g_ap_tries + 1);
+    if (g_client >= 0) { sceNetInetClose(g_client); g_client = -1; }
+    if (g_listen >= 0) { sceNetInetClose(g_listen); g_listen = -1; }
+    g_synclen = 0;
+    sceNetApctlDisconnect();
+    g_ap_error = 0;
+    g_ap_tries++;
+    g_ap_since = now;
+    sceNetApctlConnect(1);
+    g_state = ST_CONNECTING;
+    set_status("tcp: wifi lost, rejoining");
+}
+
 void pspexp_tcp_psp_poll(void)
 {
+    check_access_point();
     switch (g_state) {
     case ST_CONNECTING: {
         int st = 0;
@@ -170,6 +196,7 @@ int pspexp_tcp_psp_read(void *buf, int len, unsigned int timeout_us)
     /* Non-blocking recv, polled: sceNetInetSelect is not reliable everywhere
      * (the emulator), and a 1 ms poll costs nothing at this rate. */
     unsigned int waited = 0;
+    check_access_point();
     if (g_state != ST_CONNECTED) return -1;
     for (;;) {
         int n = (int)sceNetInetRecv(g_client, buf, len, 0);
@@ -202,7 +229,7 @@ int pspexp_tcp_psp_write(const void *data, int len)
         if (n < 0) {
             int e = sceNetInetGetErrno();
             if (e == EAGAIN || e == EWOULDBLOCK) {
-                if (++spins > 3000) { close_client(); set_status("tcp: send timeout"); return -2; }
+                if (++spins > 1500) { close_client(); set_status("tcp: send timeout (host gone?)"); return -2; }
                 sceKernelDelayThread(1000);
                 continue;
             }
