@@ -92,7 +92,7 @@ After=multi-user.target
 [Service]
 User=cpi
 WorkingDirectory=/home/cpi
-Environment=HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash --mirror /dev/fb0
 Restart=always
 RestartSec=2
@@ -130,6 +130,20 @@ pcm.pspexp_out {
 ctl.!default { type hw; card 0 }
 A
 	put "$T/asound.conf" /etc/asound.conf 0100644 0 0
+	# The launcher's X session: fbdev (fbturbo is not installed, and the
+	# modesetting fallback never draws into /dev/fb0, which the mirror reads);
+	# without ~/.lima it uses that config. Its start in ~/.bashrc skips the
+	# PSP console's own login shell (PSPEXP_TERM=1), which would otherwise
+	# take the one-time autologin flag and try to run X on a pseudo-terminal.
+	"$DF" -R "cat /home/cpi/launchergo/.xorg.conf" "$FS" 2>/dev/null | sed 's/Driver *"fbturbo"/Driver          "fbdev"/' > "$T/xorg.conf"
+	[ -s "$T/xorg.conf" ] && put "$T/xorg.conf" /home/cpi/launchergo/.xorg.conf 0100644 1000 1000
+	echo "rm /home/cpi/.lima" >> "$CMDS"
+	"$DF" -R "cat /home/cpi/.bashrc" "$FS" 2>/dev/null > "$T/bashrc"
+	if [ -s "$T/bashrc" ] && ! grep -q PSPEXP_TERM "$T/bashrc"; then
+		sed -i.bak 's|^if \[ -f ~/launchergo/.cpirc \]; then|# PSPExp: the PSP console'"'"'s shell (PSPEXP_TERM=1) must not start the X session\
+if [ -f ~/launchergo/.cpirc ] \&\& [ -z "$PSPEXP_TERM" ]; then|' "$T/bashrc"
+		put "$T/bashrc" /home/cpi/.bashrc 0100644 1000 1000
+	fi
 fi
 # rm only names that exist (debugfs rm of a missing name is harmless, but keep it quiet)
 "$DF" -w -f "$CMDS" "$FS" 2>&1 | grep -viE "^debugfs [0-9]|File not found by ext2_lookup|Ext2 directory already exists|^rm |^write |^set_inode|^mkdir |^symlink |^Allocated" || true

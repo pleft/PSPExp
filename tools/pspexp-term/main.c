@@ -737,6 +737,7 @@ static void spawn_shell(void)
     if (g_child < 0) { perror("forkpty"); exit(1); }
     if (g_child == 0) {
         setenv("TERM", "xterm", 1);
+        setenv("PSPEXP_TERM", "1", 1);   /* lets login scripts tell the PSP console apart (the GameShell's starts X) */
         setenv("COLUMNS", "80", 1);
         unsetenv("LINES");
         if (g_cmd) execl("/bin/sh", "sh", "-c", g_cmd, (char *)NULL);
@@ -1015,10 +1016,122 @@ static const struct { uint32_t button; int key; } KEYPAD[] = {
 #define NKEYPAD (int)(sizeof(KEYPAD) / sizeof(KEYPAD[0]))
 static int g_kp_down[NKEYPAD], g_kp_menu, g_kp_nub[4];
 
+/* XTEST fallback (kernels without uinput, like the GameShell's 5.3.6): a
+ * minimal X11 client, speaking the protocol directly so the static binary
+ * needs no libraries. Keys go to the X server on :0 as XTEST fake input,
+ * X keycode = Linux keycode + 8 (the evdev keymap). */
+#include <sys/socket.h>
+#include <sys/un.h>
+static int g_x = -1, g_xtest_op;
+static uint64_t g_x_retry;
+
+static int read_full(int fd, void *buf, size_t n)
+{
+    size_t got = 0;
+    while (got < n) {
+        ssize_t r = read(fd, (char *)buf + got, n - got);
+        if (r <= 0) { if (r < 0 && errno == EINTR) continue; return -1; }
+        got += (size_t)r;
+    }
+    return 0;
+}
+
+/* MIT-MAGIC-COOKIE-1 for display 0 from $XAUTHORITY or ~/.Xauthority */
+static int xauth_cookie(uint8_t *cookie, int max)
+{
+    char path[512];
+    const char *xa = getenv("XAUTHORITY"), *home = getenv("HOME");
+    FILE *f;
+    int n = -1;
+    if (xa) snprintf(path, sizeof(path), "%s", xa); else snprintf(path, sizeof(path), "%s/.Xauthority", home ? home : "/root");
+    f = fopen(path, "rb");
+    if (!f) return -1;
+    for (;;) {
+        uint8_t hdr[2], len[2], fields[4][256];
+        int fl[4], i;
+        if (fread(hdr, 1, 2, f) != 2) break;
+        for (i = 0; i < 4; i++) {
+            if (fread(len, 1, 2, f) != 2) { fclose(f); return n; }
+            fl[i] = (len[0] << 8) | len[1];
+            if (fl[i] > 255 || fread(fields[i], 1, (size_t)fl[i], f) != (size_t)fl[i]) { fclose(f); return n; }
+        }
+        /* fields: address, display number, name, data */
+        if (fl[2] == 18 && !memcmp(fields[2], "MIT-MAGIC-COOKIE-1", 18) && fl[3] <= max &&
+            (fl[1] == 0 || (fl[1] == 1 && fields[1][0] == '0'))) {
+            memcpy(cookie, fields[3], (size_t)fl[3]); n = fl[3];
+            break;
+        }
+    }
+    fclose(f);
+    return n;
+}
+
+static int xtest_open(void)
+{
+    struct sockaddr_un sa;
+    uint8_t cookie[64], req[64], rep[32];
+    int clen, fd, len;
+    uint64_t now = pspexp_time_us();
+    if (g_x >= 0) return 0;
+    if (now - g_x_retry < 3000000u) return -1;
+    g_x_retry = now;
+    fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+    memset(&sa, 0, sizeof(sa));
+    sa.sun_family = AF_UNIX;
+    strcpy(sa.sun_path, "/tmp/.X11-unix/X0");
+    if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) { close(fd); return -1; }
+    clen = xauth_cookie(cookie, (int)sizeof(cookie));
+    memset(req, 0, sizeof(req));
+    req[0] = 'l'; req[2] = 11; req[4] = 0;               /* little-endian, protocol 11.0 */
+    if (clen > 0) {
+        req[6] = 18; req[8] = (uint8_t)clen;
+        memcpy(req + 12, "MIT-MAGIC-COOKIE-1", 18);     /* 18 -> padded to 20 */
+        memcpy(req + 32, cookie, (size_t)clen);
+        len = 32 + ((clen + 3) & ~3);
+    } else len = 12;
+    if (write(fd, req, (size_t)len) != len || read_full(fd, rep, 8) < 0 || rep[0] != 1) {
+        fprintf(stderr, "[pspexp-term] X connection refused (auth?)\n");
+        close(fd); return -1;
+    }
+    {   /* skip the rest of the setup reply */
+        size_t extra = (size_t)(rep[6] | (rep[7] << 8)) * 4;
+        uint8_t *tmp = (uint8_t *)malloc(extra ? extra : 1);
+        if (!tmp || read_full(fd, tmp, extra) < 0) { free(tmp); close(fd); return -1; }
+        free(tmp);
+    }
+    /* QueryExtension "XTEST" */
+    memset(req, 0, sizeof(req));
+    req[0] = 98; req[2] = 4; req[4] = 5;                  /* length 4 units: 8 + "XTEST" padded to 8 */
+    memcpy(req + 8, "XTEST", 5);
+    if (write(fd, req, 16) != 16 || read_full(fd, rep, 32) < 0 || rep[0] != 1 || !rep[8]) {
+        fprintf(stderr, "[pspexp-term] X server has no XTEST\n");
+        close(fd); return -1;
+    }
+    g_xtest_op = rep[9];
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    g_x = fd;
+    fprintf(stderr, "[pspexp-term] keypad through X (XTEST)\n");
+    return 0;
+}
+
+static void xtest_key(int linux_code, int down)
+{
+    uint8_t req[36], junk[256];
+    if (xtest_open() < 0) return;
+    while (read(g_x, junk, sizeof(junk)) > 0) {}          /* discard events / errors */
+    memset(req, 0, sizeof(req));
+    req[0] = (uint8_t)g_xtest_op; req[1] = 2;             /* FakeInput */
+    req[2] = 9;                                           /* 36 bytes */
+    req[4] = down ? 2 : 3;                                /* KeyPress / KeyRelease */
+    req[5] = (uint8_t)(linux_code + 8);
+    if (write(g_x, req, sizeof(req)) != (ssize_t)sizeof(req)) { close(g_x); g_x = -1; }
+}
+
 static void ui_emit(int type, int code, int value)
 {
     struct input_event e;
-    if (g_ui < 0) return;
+    if (g_ui < 0) { if (type == EV_KEY) xtest_key(code, value); return; }
     memset(&e, 0, sizeof(e));
     e.type = (uint16_t)type; e.code = (uint16_t)code; e.value = value;
     if (write(g_ui, &e, sizeof(e)) < 0) { /* keypad gone */ }
@@ -1028,9 +1141,15 @@ static int keypad_open(void)
 {
     struct uinput_setup us;
     int i;
+    static int uinput_failed;
     if (g_ui >= 0) return 0;
+    if (uinput_failed) return xtest_open() == 0 ? 0 : -1;
     g_ui = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (g_ui < 0) { fprintf(stderr, "[pspexp-term] /dev/uinput: %s (no virtual keypad)\n", strerror(errno)); return -1; }
+    if (g_ui < 0) {
+        fprintf(stderr, "[pspexp-term] /dev/uinput: %s; trying the X server\n", strerror(errno));
+        uinput_failed = 1;
+        return xtest_open() == 0 ? 0 : -1;
+    }
     ioctl(g_ui, UI_SET_EVBIT, EV_KEY);
     for (i = 0; i < NKEYPAD; i++) ioctl(g_ui, UI_SET_KEYBIT, KEYPAD[i].key);
     ioctl(g_ui, UI_SET_KEYBIT, KEY_ESC);
@@ -1346,6 +1465,16 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--no-host-input")) g_host_input = 0;
 #ifdef __linux__
+        else if (!strcmp(argv[i], "--test-key") && i + 1 < argc) {   /* send one key through the keypad path and exit */
+            int code = atoi(argv[++i]);
+            if (keypad_open() < 0) { fprintf(stderr, "no keypad (uinput or X)\n"); return 1; }
+            usleep(300000);
+            ui_emit(EV_KEY, code, 1); ui_emit(EV_SYN, SYN_REPORT, 0);
+            usleep(80000);
+            ui_emit(EV_KEY, code, 0); ui_emit(EV_SYN, SYN_REPORT, 0);
+            usleep(300000);
+            return 0;
+        }
         else if (!strcmp(argv[i], "--mirror")) {
             g_fb_path = (i + 1 < argc && argv[i + 1][0] == '/') ? argv[++i] : "/dev/fb0";
             g_view_mirror = 1;
