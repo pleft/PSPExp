@@ -81,16 +81,22 @@ static void start_listening(void)
     int one = 1;
     union SceNetApctlInfo info;
     g_listen = sceNetInetSocket(AF_INET, SOCK_STREAM, 0);
-    if (g_listen < 0) { set_status("tcp: socket failed"); g_state = ST_FAILED; return; }
+    if (g_listen < 0) { set_status("tcp: socket failed, retrying"); return; }   /* stays in ST_CONNECTING: poll retries */
     sceNetInetSetsockopt(g_listen, SOL_SOCKET, SO_NONBLOCK, &one, sizeof(one));
+    /* after a Wi-Fi drop the old socket may still hold the port for a while */
+    sceNetInetSetsockopt(g_listen, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(PORT);
     addr.sin_addr.s_addr = INADDR_ANY;
     if (sceNetInetBind(g_listen, (struct sockaddr *)&addr, sizeof(addr)) < 0 || sceNetInetListen(g_listen, 1) < 0) {
-        set_status("tcp: bind/listen failed");
+        static unsigned int fails;
+        char buf[96];
+        snprintf(buf, sizeof(buf), "tcp: bind/listen failed (errno %d), retrying", sceNetInetGetErrno());
+        set_status(buf);
         sceNetInetClose(g_listen); g_listen = -1;
-        g_state = ST_FAILED;
+        fails++;
+        sceKernelDelayThread(500000);   /* poll() tries again (state stays ST_CONNECTING) */
         return;
     }
     if (sceNetApctlGetInfo(PSP_NET_APCTL_INFO_IP, &info) == 0) strncpy(g_ip, info.ip, sizeof(g_ip) - 1);
