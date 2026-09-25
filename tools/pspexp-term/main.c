@@ -566,6 +566,7 @@ static void send_arrow(char d)
 
 static void draw_pointer(void);
 static void mirror_invalidate(void);
+static void mirror_reset(void);
 static void keypad_release_all(void);
 static int mirror_frame(void);
 
@@ -791,7 +792,7 @@ static int try_connect(void)
     if (pspexp_connect(ctx, 3000) < 0) { pspexp_set_transport(ctx, NULL); return 0; }
     fprintf(stderr, "[pspexp-term] PSP connected\n");
     T.dirty = 1;
-    mirror_invalidate();
+    mirror_reset();
     return 1;
 }
 
@@ -921,11 +922,15 @@ static int g_tile_cols, g_tile_rows, g_tile_w, g_tile_h;
 static unsigned g_tiles_sent, g_tiles_frames;
 
 static int mirror_available(void) { return g_fb_path != NULL; }
-static void mirror_invalidate(void)
+/* redraw everything (view switch): the PSP still holds the tiles, their ids stay known */
+static void mirror_invalidate(void) { g_mirror_force = 1; }
+/* after a (re)connect the PSP holds none of them: forget the ids, or new
+ * uploads would reuse names the old session left behind -> DUPLICATE_ID */
+static void mirror_reset(void)
 {
     int i;
     g_mirror_force = 1;
-    for (i = 0; i < MT_MAX; i++) g_tile_id[i] = 0;   /* after a reconnect the PSP holds none of them */
+    for (i = 0; i < MT_MAX; i++) g_tile_id[i] = 0;
 }
 
 static int mirror_open(void)
@@ -1324,6 +1329,7 @@ static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay)
 #else
 static int mirror_available(void) { return 0; }
 static void mirror_invalidate(void) {}
+static void mirror_reset(void) {}
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay) { (void)b; (void)pressed; (void)ax; (void)ay; }
 static int mirror_frame(void) { return 0; }
 static void keypad_release_all(void) {}
