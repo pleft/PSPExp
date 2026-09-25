@@ -1,8 +1,8 @@
 #!/bin/sh
 # GameShell: OpenTyrian on the PSP. The launcher's own OpenTyrian is an SDL 1.2
 # build the shim cannot reach (it only shows through the mirror, ~14 fps); this
-# runs the SDL2 build (~/pspexp/opentyrian, compiled on the GameShell, see
-# docs/GameShell_Launcher_and_Shim.md) through pspexp-run: 35 fps, PSP audio.
+# runs the SDL2 build (~/pspexp/opentyrian, built by
+# scripts/build-gameshell.sh tyrian) through pspexp-run: 35 fps, PSP audio.
 # Keys as scripts/pspexp-tyrian: cross fire, circle/L sidekick, square/R
 # change mode, triangle enter, start pause, select Escape (menu).
 #   pspexp-tyrian [opentyrian args...]

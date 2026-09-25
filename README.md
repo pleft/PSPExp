@@ -143,6 +143,22 @@ Omega's CPU about 90 % idle. Large transfers reach 21 MB/s; small ones are
 slower than on the Mac or the Pi because each USB transfer costs the Omega
 about four times as much.
 
+## ClockworkPi GameShell as the host
+
+`scripts/build-gameshell.sh` cross-compiles the tools as static ARMv7
+binaries and the SDL layer as a library for the GameShell OS image's own SDL2
+programs; `scripts/gameshell-prep-image.sh` puts them on a flashed card (SSH
+key, console service with the launcher mirrored, udev rules, audio). With the
+PSP on the OTG port, the USB link measures 24–26 MB/s, the sprite demo runs
+at 60 fps up to 15,000 sprites, and the image's Chocolate Doom plays at
+35 fps: `pspexp-run chocolate-doom -iwad ~/games/ChocoDM/freedoom1.wad`.
+`pspexp-run` runs the game headless (SDL's X path costs Doom 15 fps). The
+image's OpenTyrian is an SDL 1.2 build, out of the SDL layer's reach:
+`scripts/build-gameshell.sh tyrian` compiles the SDL2 one on the GameShell
+and installs `pspexp-tyrian` (35 fps); the launcher's OpenTyrian entry runs
+it while the PSP console is up. `pspexp-wifi-mode psp|home` switches between
+the GameShell's own access point for the PSP and the home Wi-Fi.
+
 ## The PSP as a console: `pspexp-term`
 
 `tools/pspexp-term` makes the PSP a host's console: a shell in a

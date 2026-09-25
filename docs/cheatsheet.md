@@ -53,6 +53,9 @@ cable pull, so pull the cable to read it after a session.
 | **Tyrian on the PSP** (OpenTyrian built in ../tyrian, freeware data) | `scripts/pspexp-tyrian` |
 | **the PSP as the host's console** (shell, on-screen keyboard; runs at boot on the Omega) | `build/host/pspexp-term` |
 | install the console as a service on a Pi (its keyboard and mouse type into it) | `scripts/install-pspexp-term.sh` (`remove` to uninstall) |
+| GameShell: build the tools and the SDL layer / OpenTyrian (compiled on the GameShell) | `scripts/build-gameshell.sh` / `GAMESHELL=cpi@<ip> scripts/build-gameshell.sh tyrian` |
+| GameShell: an image SDL2 game on the PSP (headless) / Doom / Tyrian | `pspexp-run <program>` / `pspexp-run chocolate-doom -iwad ~/games/ChocoDM/freedoom1.wad` / `pspexp-tyrian` |
+| GameShell: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,

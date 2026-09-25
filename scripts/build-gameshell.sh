@@ -11,10 +11,38 @@
 #   scripts/build-gameshell.sh          both
 #   scripts/build-gameshell.sh tools    only the static tools
 #   scripts/build-gameshell.sh shim     only the shim
+#   scripts/build-gameshell.sh tyrian   OpenTyrian (SDL2) for the PSP, compiled
+#      on the GameShell itself (its gcc, its libSDL2) from ../tyrian/opentyrian,
+#      installed with pspexp-tyrian; GAMESHELL=user@host (default cpi@gameshell).
+#      The launcher's own OpenTyrian is SDL 1.2, which the shim cannot reach.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build/gameshell"
 WHAT="${1:-all}"
+
+if [ "$WHAT" = tyrian ]; then
+	GS="${GAMESHELL:-cpi@gameshell}"
+	SRC="$ROOT/../tyrian/opentyrian"
+	INC="$OUT/gnu/src/SDL2-${SDL_VER:-2.30.12}/include"
+	[ -f "$SRC/Makefile" ] || { echo "OpenTyrian source not found in $SRC (git clone https://github.com/opentyrian/opentyrian)" >&2; exit 1; }
+	[ -f "$INC/SDL.h" ] || { echo "SDL2 headers missing: run scripts/build-gameshell.sh shim first" >&2; exit 1; }
+	# the source tree's generic SDL_config.h includes no libc headers (math,
+	# stdlib: roundf/sinf would be implicitly int), hence the -include flags
+	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git --exclude obj --exclude opentyrian -cf - . ; } 2>/dev/null |
+		ssh "$GS" 'rm -rf ~/pspexp/tyrian-src && mkdir -p ~/pspexp/tyrian-src && tar -C ~/pspexp/tyrian-src -xf -'
+	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$INC" -cf - . ; } 2>/dev/null |
+		ssh "$GS" 'rm -rf ~/pspexp/sdl2-include && mkdir -p ~/pspexp/sdl2-include/SDL2 && tar -C ~/pspexp/sdl2-include/SDL2 -xf -'
+	scp -q "$ROOT/scripts/gameshell/pspexp-tyrian" "$GS:/tmp/pspexp-tyrian"
+	ssh "$GS" 'set -e; ln -sf /lib/arm-linux-gnueabihf/libSDL2-2.0.so.0 ~/pspexp/libSDL2.so
+		make -C ~/pspexp/tyrian-src -j4 WITH_NETWORK=false \
+			SDL_CPPFLAGS="-I$HOME/pspexp/sdl2-include/SDL2 -D_REENTRANT -include stdlib.h -include string.h -include math.h -include stdio.h" \
+			SDL_LDFLAGS="-L$HOME/pspexp" SDL_LDLIBS="-lSDL2 -lm" 2>&1 | grep -E "error|implicit" || true
+		cp ~/pspexp/tyrian-src/opentyrian ~/pspexp/opentyrian
+		sudo install -m 755 /tmp/pspexp-tyrian /usr/local/bin/pspexp-tyrian
+		ls -la ~/pspexp/opentyrian'
+	echo "on the GameShell: pspexp-tyrian"
+	exit 0
+fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = tools ]; then
 	env ZIG_TARGET=arm-linux-musleabihf ZIG_CPU=cortex_a7 CROSS_NAME=gameshell \

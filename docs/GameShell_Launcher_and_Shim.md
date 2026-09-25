@@ -174,20 +174,3 @@ large art, small chrome; instant (all textures cached on the PSP once).
 6. Image prep: the launcher view is the service's default; launchergo and X
    still start for the non-PSPExp games (mirror).
 
-## OpenTyrian on the GameShell (measured 2026-09-26)
-
-The launcher's OpenTyrian (Indie Games) is an SDL 1.2 build: the shim cannot
-reach it, so it only shows through the mirror (≈ 14 fps). The SDL2 OpenTyrian
-builds on the GameShell itself (gcc is on the image; headers from the SDL2
-source, linked to the image's libSDL2-2.0.so.0):
-
-    make WITH_NETWORK=false SDL_CPPFLAGS="-I<sdl2 include> -D_REENTRANT -include stdlib.h \
-         -include string.h -include math.h -include stdio.h" SDL_LDFLAGS=-L<dir with libSDL2.so> \
-         SDL_LDLIBS="-lSDL2 -lm"
-
-(the generic SDL_config.h from the source tree includes no libc headers, hence
-the `-include` flags; without them roundf/sinf are implicitly int). Installed as
-`~/pspexp/opentyrian` and run by `scripts/gameshell/pspexp-tyrian` (data from
-the launcher's own copy): 35 fps in play, 0 underruns, ≈ 13 % of one core. The
-launcher entry `OpenTyrian.sh` (stock copy kept as `.orig`) runs pspexp-tyrian
-while the PSP console is running, the stock build otherwise.
