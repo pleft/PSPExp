@@ -28,6 +28,14 @@
  * mouse (xterm mouse modes 1000/1002/1006) get clicks. --no-host-input
  * turns this off, --no-grab shares the devices.
  *
+ * Mirror view (Linux, --mirror [/dev/fb0]): the host's own framebuffer is
+ * streamed to the PSP, scaled to fit (the ClockworkPi GameShell's 320x240
+ * launcher and games), and the PSP's buttons become a virtual keypad through
+ * /dev/uinput (default: the GameShell's keys: d-pad/nub = arrows, cross /
+ * circle / square / triangle = A B X Y = J K U I, start = Enter, select =
+ * Space, L / R = H / L). L+R+start = Menu (Esc); L+R+select switches between
+ * the mirror and the terminal.
+ *
  * Hand-over: another PSPExp program (a game) can take the PSP while the
  * terminal keeps running: SIGUSR1 releases the PSP, SIGUSR2 takes it back
  * (scripts/pspexp-exec does both around a command).
@@ -555,6 +563,9 @@ static void send_arrow(char d)
 /* ---- rendering ------------------------------------------------------------ */
 
 static void draw_pointer(void);
+static void mirror_invalidate(void);
+static void keypad_release_all(void);
+static int mirror_frame(void);
 
 static PspExpContext *ctx;
 static PspExpFont font;
@@ -677,7 +688,11 @@ static uint64_t g_audio_t0; static uint64_t g_audio_sent;
 
 static void audio_fifo_open(const char *path)
 {
+    struct stat st;
     if (!path) return;
+    /* a regular file there (an ALSA "file" output that ran before us) would
+     * grow forever: replace it with the FIFO */
+    if (lstat(path, &st) == 0 && !S_ISFIFO(st.st_mode)) unlink(path);
     if (mkfifo(path, 0666) < 0 && errno != EEXIST) { fprintf(stderr, "pspexp-term: mkfifo %s: %s\n", path, strerror(errno)); return; }
     chmod(path, 0666);
     g_fifo = open(path, O_RDONLY | O_NONBLOCK);
@@ -773,12 +788,14 @@ static int try_connect(void)
     if (pspexp_connect(ctx, 3000) < 0) { pspexp_set_transport(ctx, NULL); return 0; }
     fprintf(stderr, "[pspexp-term] PSP connected\n");
     T.dirty = 1;
+    mirror_invalidate();
     return 1;
 }
 
 static void release_psp(void)
 {
     if (g_released) return;
+    keypad_release_all();
     if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);
     pspexp_set_transport(ctx, NULL);
     g_released = 1;
@@ -801,6 +818,9 @@ static int fire(int v, int held, uint64_t now, int repeat)
 }
 
 static uint32_t g_prev_buttons;
+static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons drive the keypad */
+static int mirror_available(void);
+static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
 
 static void handle_input(void)
 {
@@ -812,6 +832,13 @@ static void handle_input(void)
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
+    /* L + R + select: switch between the terminal and the mirrored screen */
+    if ((pressed & PSPEXP_BUTTON_SELECT) && (b & PSPEXP_BUTTON_LTRIGGER) && (b & PSPEXP_BUTTON_RTRIGGER) && mirror_available()) {
+        g_view_mirror = !g_view_mirror;
+        if (g_view_mirror) mirror_invalidate(); else T.dirty = 1;
+        return;
+    }
+    if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
     if (shift != held_shift || ctrl != held_ctrl) { held_shift = shift; held_ctrl = ctrl; if (kb_shown) T.dirty = 1; }
 
     if (pressed & PSPEXP_BUTTON_SELECT) { kb_shown = !kb_shown; term_resize(kb_shown ? ROWS_KB : ROWS_FULL); }
@@ -849,6 +876,208 @@ static void handle_input(void)
     if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts("\r"); T.view = 0; }
     if (pressed & PSPEXP_BUTTON_START) pty_puts("\t");
 }
+
+/* ---- mirror view: the host framebuffer and a virtual keypad (Linux) ------------------ */
+
+#ifdef __linux__
+#include <linux/fb.h>
+#include <linux/uinput.h>
+#include <sys/mman.h>
+
+static const char *g_fb_path;
+static int g_fb = -1, g_ui = -1;
+static uint8_t *g_fb_mem;
+static size_t g_fb_len;
+static struct fb_fix_screeninfo g_fbf;
+static uint8_t *g_fb_prev;          /* last frame sent, for change detection */
+static size_t g_fb_prev_len;
+static int g_mirror_force;
+static uint16_t g_mirror_tex[8];
+static int g_mirror_npages;
+static uint64_t g_mirror_last;
+
+static int mirror_available(void) { return g_fb_path != NULL; }
+static void mirror_invalidate(void) { g_mirror_force = 1; }
+
+static int mirror_open(void)
+{
+    if (g_fb >= 0) return 0;
+    if (!g_fb_path) return -1;
+    g_fb = open(g_fb_path, O_RDONLY);
+    if (g_fb < 0) return -1;
+    if (ioctl(g_fb, FBIOGET_FSCREENINFO, &g_fbf) < 0) { close(g_fb); g_fb = -1; return -1; }
+    g_fb_len = g_fbf.smem_len;
+    g_fb_mem = (uint8_t *)mmap(NULL, g_fb_len, PROT_READ, MAP_SHARED, g_fb, 0);
+    if (g_fb_mem == MAP_FAILED) { g_fb_mem = NULL; close(g_fb); g_fb = -1; return -1; }
+    return 0;
+}
+
+/* 16 or 32 bpp framebuffer pixel -> 5650 (R in the low bits, as the PSP wants) */
+static inline uint16_t fb_pixel(const uint8_t *row, int x, const struct fb_var_screeninfo *v)
+{
+    uint32_t p, r, g, b;
+    if (v->bits_per_pixel == 16) p = ((const uint16_t *)row)[x];
+    else p = ((const uint32_t *)row)[x];
+    r = (p >> v->red.offset) & ((1u << v->red.length) - 1);
+    g = (p >> v->green.offset) & ((1u << v->green.length) - 1);
+    b = (p >> v->blue.offset) & ((1u << v->blue.length) - 1);
+    r = v->red.length >= 5 ? r >> (v->red.length - 5) : r << (5 - v->red.length);
+    g = v->green.length >= 6 ? g >> (v->green.length - 6) : g << (6 - v->green.length);
+    b = v->blue.length >= 5 ? b >> (v->blue.length - 5) : b << (5 - v->blue.length);
+    return (uint16_t)(r | (g << 5) | (b << 11));
+}
+
+/* One frame: if the screen changed, upload it (downscaled when larger than the
+ * PSP, else native and scaled by the GE) as swizzled 5650 pages and draw it
+ * letterboxed. Returns 1 when a frame was sent. */
+static int mirror_frame(void)
+{
+    struct fb_var_screeninfo v;
+    int w, h, dw, dh, x0, y0, i, ox, oy, qw, qh;
+    const uint8_t *base;
+    size_t fl;
+    float s;
+    if (mirror_open() < 0) return 0;
+    if (ioctl(g_fb, FBIOGET_VSCREENINFO, &v) < 0) return 0;
+    if (v.bits_per_pixel != 16 && v.bits_per_pixel != 32) return 0;
+    w = (int)v.xres; h = (int)v.yres;
+    base = g_fb_mem + (size_t)v.yoffset * g_fbf.line_length + (size_t)v.xoffset * (v.bits_per_pixel / 8);
+    fl = (size_t)h * g_fbf.line_length;
+    if (base + fl > g_fb_mem + g_fb_len) return 0;
+    if (!g_mirror_force && g_fb_prev && g_fb_prev_len == fl && memcmp(g_fb_prev, base, fl) == 0) return 0;
+    if (g_fb_prev_len != fl) { free(g_fb_prev); g_fb_prev = (uint8_t *)malloc(fl); g_fb_prev_len = g_fb_prev ? fl : 0; }
+    if (g_fb_prev) memcpy(g_fb_prev, base, fl);
+    g_mirror_force = 0;
+
+    s = 480.0f / w < 272.0f / h ? 480.0f / w : 272.0f / h;
+    if (s < 1.0f) { dw = (int)(w * s); dh = (int)(h * s); } else { dw = w; dh = h; }
+    qw = (int)(w * s); qh = (int)(h * s);
+    ox = (480 - qw) / 2; oy = (272 - qh) / 2;
+
+    for (i = 0; i < g_mirror_npages; i++) pspexp_release(ctx, g_mirror_tex[i]);
+    g_mirror_npages = 0;
+    pspexp_begin_frame(ctx);
+    pspexp_set_clip(ctx, 0, 0, 480, 272);
+    pspexp_fill_rect(ctx, 0, 0, 480, 272, 0, 255);
+    for (y0 = 0; y0 < dh; y0 += 256) {
+        for (x0 = 0; x0 < dw; x0 += 256) {
+            int pw = dw - x0 < 256 ? dw - x0 : 256, ph = dh - y0 < 256 ? dh - y0 : 256;
+            int tw = 16, th = 8, y, rowblocks;
+            PspExpTextureDesc d;
+            PspExpFrame f;
+            PspExpQuadExRec q;
+            uint16_t *dst, id;
+            while (tw < pw) tw <<= 1;
+            while (th < ph) th <<= 1;
+            memset(&d, 0, sizeof(d));
+            d.width = (uint16_t)tw; d.height = (uint16_t)th; d.format = PSPEXP_TEX_5650;
+            d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;
+            f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw < 64 ? tw : 64); f.h = (uint16_t)th;
+            id = (uint16_t)(100 + (g_mirror_last & 1) * 8 + g_mirror_npages);   /* alternate ids: old pages may still be drawn */
+            dst = (uint16_t *)pspexp_upload_texture_begin(ctx, id, &d, (uint32_t)(tw * th * 2), &f, 1);
+            if (!dst) continue;
+            rowblocks = tw >> 3;
+            for (y = 0; y < th; y++) {
+                uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
+                int x = 0;
+                if (y < ph) {
+                    int sy = dh == h ? y0 + y : (int)((int64_t)(y0 + y) * h / dh);
+                    const uint8_t *row = base + (size_t)sy * g_fbf.line_length;
+                    for (; x < pw; x++) {
+                        int sx = dw == w ? x0 + x : (int)((int64_t)(x0 + x) * w / dw);
+                        band[((x >> 3) << 6) + (x & 7)] = fb_pixel(row, sx, &v);
+                    }
+                }
+                for (; x < tw; x++) band[((x >> 3) << 6) + (x & 7)] = 0;
+            }
+            if (pspexp_upload_texture_commit(ctx, 0) < 0) continue;
+            g_mirror_tex[g_mirror_npages++] = id;
+            memset(&q, 0, sizeof(q));
+            q.x = (int16_t)(ox + x0 * qw / dw); q.y = (int16_t)(oy + y0 * qh / dh);
+            q.w = (int16_t)(pw * qw / dw); q.h = (int16_t)(ph * qh / dh);
+            q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)pw; q.v1 = (uint16_t)ph; q.color = 0xFFFF;
+            pspexp_draw_quad_ex_batch(ctx, id, &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
+        }
+    }
+    draw_pointer();
+    pspexp_present(ctx);
+    g_mirror_last++;
+    return 1;
+}
+
+/* the virtual keypad */
+static const struct { uint32_t button; int key; } KEYPAD[] = {
+    { PSPEXP_BUTTON_UP, KEY_UP }, { PSPEXP_BUTTON_DOWN, KEY_DOWN }, { PSPEXP_BUTTON_LEFT, KEY_LEFT }, { PSPEXP_BUTTON_RIGHT, KEY_RIGHT },
+    { PSPEXP_BUTTON_CROSS, KEY_J }, { PSPEXP_BUTTON_CIRCLE, KEY_K }, { PSPEXP_BUTTON_SQUARE, KEY_U }, { PSPEXP_BUTTON_TRIANGLE, KEY_I },
+    { PSPEXP_BUTTON_START, KEY_ENTER }, { PSPEXP_BUTTON_SELECT, KEY_SPACE },
+    { PSPEXP_BUTTON_LTRIGGER, KEY_H }, { PSPEXP_BUTTON_RTRIGGER, KEY_L },
+};
+#define NKEYPAD (int)(sizeof(KEYPAD) / sizeof(KEYPAD[0]))
+static int g_kp_down[NKEYPAD], g_kp_menu, g_kp_nub[4];
+
+static void ui_emit(int type, int code, int value)
+{
+    struct input_event e;
+    if (g_ui < 0) return;
+    memset(&e, 0, sizeof(e));
+    e.type = (uint16_t)type; e.code = (uint16_t)code; e.value = value;
+    if (write(g_ui, &e, sizeof(e)) < 0) { /* keypad gone */ }
+}
+
+static int keypad_open(void)
+{
+    struct uinput_setup us;
+    int i;
+    if (g_ui >= 0) return 0;
+    g_ui = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (g_ui < 0) { fprintf(stderr, "[pspexp-term] /dev/uinput: %s (no virtual keypad)\n", strerror(errno)); return -1; }
+    ioctl(g_ui, UI_SET_EVBIT, EV_KEY);
+    for (i = 0; i < NKEYPAD; i++) ioctl(g_ui, UI_SET_KEYBIT, KEYPAD[i].key);
+    ioctl(g_ui, UI_SET_KEYBIT, KEY_ESC);
+    memset(&us, 0, sizeof(us));
+    us.id.bustype = BUS_VIRTUAL; us.id.vendor = 0x054c; us.id.product = 0x01ca;
+    strcpy(us.name, "PSPExp keypad");
+    if (ioctl(g_ui, UI_DEV_SETUP, &us) < 0 || ioctl(g_ui, UI_DEV_CREATE) < 0) {
+        fprintf(stderr, "[pspexp-term] uinput setup failed: %s\n", strerror(errno));
+        close(g_ui); g_ui = -1; return -1;
+    }
+    fprintf(stderr, "[pspexp-term] virtual keypad created\n");
+    return 0;
+}
+
+static void keypad_release_all(void)
+{
+    int i;
+    for (i = 0; i < NKEYPAD; i++) if (g_kp_down[i]) { ui_emit(EV_KEY, KEYPAD[i].key, 0); g_kp_down[i] = 0; }
+    for (i = 0; i < 4; i++) if (g_kp_nub[i]) { ui_emit(EV_KEY, i == 0 ? KEY_UP : i == 1 ? KEY_DOWN : i == 2 ? KEY_LEFT : KEY_RIGHT, 0); g_kp_nub[i] = 0; }
+    if (g_kp_menu) { ui_emit(EV_KEY, KEY_ESC, 0); g_kp_menu = 0; }
+    ui_emit(EV_SYN, SYN_REPORT, 0);
+}
+
+static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay)
+{
+    int i, lr = (b & PSPEXP_BUTTON_LTRIGGER) && (b & PSPEXP_BUTTON_RTRIGGER), nub[4];
+    if (keypad_open() < 0) return;
+    /* L + R + start: Menu (Esc) instead of Enter */
+    if ((pressed & PSPEXP_BUTTON_START) && lr) { ui_emit(EV_KEY, KEY_ESC, 1); g_kp_menu = 1; }
+    if (g_kp_menu && !(b & PSPEXP_BUTTON_START)) { ui_emit(EV_KEY, KEY_ESC, 0); g_kp_menu = 0; }
+    for (i = 0; i < NKEYPAD; i++) {
+        int down = (b & KEYPAD[i].button) != 0;
+        if (KEYPAD[i].button == PSPEXP_BUTTON_START && g_kp_menu) down = 0;
+        if (down != g_kp_down[i]) { ui_emit(EV_KEY, KEYPAD[i].key, down); g_kp_down[i] = down; }
+    }
+    nub[0] = ay < -60; nub[1] = ay > 60; nub[2] = ax < -60; nub[3] = ax > 60;
+    for (i = 0; i < 4; i++)
+        if (nub[i] != g_kp_nub[i]) { ui_emit(EV_KEY, i == 0 ? KEY_UP : i == 1 ? KEY_DOWN : i == 2 ? KEY_LEFT : KEY_RIGHT, nub[i]); g_kp_nub[i] = nub[i]; }
+    ui_emit(EV_SYN, SYN_REPORT, 0);
+}
+#else
+static int mirror_available(void) { return 0; }
+static void mirror_invalidate(void) {}
+static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay) { (void)b; (void)pressed; (void)ax; (void)ay; }
+static int mirror_frame(void) { return 0; }
+static void keypad_release_all(void) {}
+#endif
 
 /* ---- host keyboard and mouse (Linux evdev) ------------------------------------------ */
 
@@ -1036,13 +1265,13 @@ static void host_input_poll(int connected)
     uint64_t now = pspexp_time_us();
     if (!g_host_input) return;
     if (now - g_in_scan > 3000000u) { g_in_scan = now; host_input_scan(); }
-    if (g_grab) host_input_grab(connected && !g_released);
+    if (g_grab) host_input_grab(connected && !g_released && !g_view_mirror);   /* mirror view: keys go to the host's own UI */
     for (i = 0; i < g_nin; i++) {
         struct input_event ev[32];
         ssize_t n;
         while ((n = read(g_in[i].fd, ev, sizeof(ev))) > 0) {
             int k, cnt = (int)(n / (ssize_t)sizeof(ev[0]));
-            if (!connected || g_released) continue;   /* not ours to use: drain */
+            if (!connected || g_released || g_view_mirror) continue;   /* not ours to use: drain */
             for (k = 0; k < cnt; k++) {
                 if (g_in[i].kbd && ev[k].type == EV_KEY && ev[k].code < BTN_MISC) host_key(ev[k].code, ev[k].value);
                 else if (g_in[i].mouse) host_mouse(&ev[k]);
@@ -1074,7 +1303,7 @@ static void usage(void)
 {
     fprintf(stderr, "usage: pspexp-term [--usb | --tcp host[:port] | --null | --sdl] [--shell PATH] [--cmd \"command\"]\n"
                     "                   [--audio-fifo PATH | --no-audio-fifo] [--pidfile PATH] [--shot N]\n"
-                    "                   [--no-host-input] [--no-grab]\n");
+                    "                   [--no-host-input] [--no-grab] [--mirror [/dev/fbN]]\n");
 }
 
 int main(int argc, char **argv)
@@ -1116,6 +1345,12 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--pidfile") && i + 1 < argc) pidfile = argv[++i];
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--no-host-input")) g_host_input = 0;
+#ifdef __linux__
+        else if (!strcmp(argv[i], "--mirror")) {
+            g_fb_path = (i + 1 < argc && argv[i + 1][0] == '/') ? argv[++i] : "/dev/fb0";
+            g_view_mirror = 1;
+        }
+#endif
         else if (!strcmp(argv[i], "--no-grab")) g_grab = 0;
         else { usage(); return 1; }
     }
@@ -1205,7 +1440,14 @@ int main(int argc, char **argv)
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u) { last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1; }
-        if (T.dirty && pspexp_should_render(ctx)) {
+        if (g_view_mirror) {
+            /* ~30 fps poll of the framebuffer; frames only when it changed */
+            static uint64_t last_mirror;
+            if (now - last_mirror >= 33000u && pspexp_should_render(ctx)) {
+                last_mirror = now;
+                if (mirror_frame()) frames++;
+            }
+        } else if (T.dirty && pspexp_should_render(ctx)) {
             render();
             frames++;
             if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);

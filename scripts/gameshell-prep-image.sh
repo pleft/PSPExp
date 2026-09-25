@@ -4,7 +4,11 @@
 #   - this Mac's SSH key for the cpi user
 #   - pspexp-term (the PSP as the console) as a systemd service for cpi,
 #     plus pspexp-exec, pspexp-bench and pspexp-sprite-demo in /usr/local/bin
-#   - a udev rule so cpi can open the PSP over USB
+#   - a udev rule so cpi can open the PSP over USB and create the virtual
+#     keypad (/dev/uinput), and uinput loaded at boot
+#   - mirror view: the console starts showing the GameShell's own screen
+#     (/dev/fb0: the launcher and games) with the PSP's buttons as its keypad
+#   - ALSA's default output goes to the console's audio FIFO (the PSP plays it)
 #   - with --wifi: a NetworkManager connection; prompts for the network name
 #     and password (they go into the image only)
 #
@@ -89,7 +93,7 @@ After=multi-user.target
 User=cpi
 WorkingDirectory=/home/cpi
 Environment=HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash
+ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash --mirror /dev/fb0
 Restart=always
 RestartSec=2
 
@@ -99,8 +103,33 @@ U
 	put "$T/pspexp-term.service" /etc/systemd/system/pspexp-term.service 0100644 0 0
 	echo "rm /etc/systemd/system/multi-user.target.wants/pspexp-term.service" >> "$CMDS"
 	echo "symlink /etc/systemd/system/multi-user.target.wants/pspexp-term.service /etc/systemd/system/pspexp-term.service" >> "$CMDS"
-	echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01ca", MODE="0666"' > "$T/60-pspexp.rules"
+	{
+		echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01ca", MODE="0666"'
+		echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"'
+	} > "$T/60-pspexp.rules"
 	put "$T/60-pspexp.rules" /etc/udev/rules.d/60-pspexp.rules 0100644 0 0
+	echo uinput > "$T/pspexp-modules.conf"
+	put "$T/pspexp-modules.conf" /etc/modules-load.d/pspexp.conf 0100644 0 0
+	# the audio FIFO exists from boot, owned by cpi (the console reads it)
+	echo 'p /tmp/pspexp-audio 0666 cpi cpi -' > "$T/pspexp-tmpfiles.conf"
+	put "$T/pspexp-tmpfiles.conf" /etc/tmpfiles.d/pspexp.conf 0100644 0 0
+	cat > "$T/asound.conf" <<A
+# PSPExp: the default output is 44.1 kHz S16 stereo raw into the FIFO that
+# pspexp-term plays on the PSP (the pipe paces the writer); the mixer controls
+# stay on the board's own codec.
+pcm.!default {
+	type plug
+	slave { pcm "pspexp_out"; format S16_LE; rate 44100; channels 2 }
+}
+pcm.pspexp_out {
+	type file
+	slave.pcm "null"
+	file "/tmp/pspexp-audio"
+	format "raw"
+}
+ctl.!default { type hw; card 0 }
+A
+	put "$T/asound.conf" /etc/asound.conf 0100644 0 0
 fi
 # rm only names that exist (debugfs rm of a missing name is harmless, but keep it quiet)
 "$DF" -w -f "$CMDS" "$FS" 2>&1 | grep -viE "^debugfs [0-9]|File not found by ext2_lookup|Ext2 directory already exists|^rm |^write |^set_inode|^mkdir |^symlink |^Allocated" || true
