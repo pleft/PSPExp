@@ -26,10 +26,23 @@ static unsigned char g_syncbuf[PSPEXP_USB_SYNC_LEN];
 static int g_synclen;
 static const unsigned char SYNC[PSPEXP_USB_SYNC_LEN] = PSPEXP_USB_SYNC_BYTES;
 
+/* access point connection progress, from the apctl handler */
+static volatile int g_ap_state, g_ap_error, g_ap_event;
+static int g_ap_tries;
+static unsigned int g_ap_since;
+static const char *const AP_STATE_NAMES[] = { "disconnected", "scanning", "joining", "getting IP", "got IP", "EAP auth", "key exchange" };
+
 static void (*g_trace)(const char *);
 void pspexp_tcp_psp_set_trace(void (*fn)(const char *msg)) { g_trace = fn; }
 static void set_status(const char *s) { strncpy(g_status, s, sizeof(g_status) - 1); g_status[sizeof(g_status) - 1] = 0; if (g_trace) g_trace(g_status); }
 static void tracef(const char *fmt, int a, int b) { char buf[96]; if (!g_trace) return; snprintf(buf, sizeof(buf), fmt, a, b); g_trace(buf); }
+
+static void ap_handler(int old_state, int new_state, int event, int error, void *arg)
+{
+    (void)old_state; (void)arg;
+    g_ap_state = new_state; g_ap_event = event;
+    if (error) g_ap_error = error;
+}
 
 int pspexp_tcp_psp_init(void)
 {
@@ -45,6 +58,9 @@ int pspexp_tcp_psp_init(void)
     if (rc < 0) { snprintf(g_status, sizeof(g_status), "tcp: sceNetInetInit %08X", rc); g_state = ST_FAILED; return -1; }
     rc = sceNetApctlInit(0x8000, 48);
     if (rc < 0) { snprintf(g_status, sizeof(g_status), "tcp: sceNetApctlInit %08X", rc); g_state = ST_FAILED; return -1; }
+    sceNetApctlAddHandler(ap_handler, NULL);
+    g_ap_tries = 1;
+    g_ap_since = sceKernelGetSystemTimeLow();
     rc = sceNetApctlConnect(1);   /* the first saved Wi-Fi profile; instant under PPSSPP */
     if (rc < 0) { snprintf(g_status, sizeof(g_status), "tcp: apctl connect %08X (no Wi-Fi profile 1?)", rc); g_state = ST_FAILED; return -1; }
     g_state = ST_CONNECTING;
@@ -87,7 +103,24 @@ void pspexp_tcp_psp_poll(void)
     switch (g_state) {
     case ST_CONNECTING: {
         int st = 0;
-        if (sceNetApctlGetState(&st) == 0 && st == PSP_NET_APCTL_STATE_GOT_IP) start_listening();
+        unsigned int now = sceKernelGetSystemTimeLow();
+        if (sceNetApctlGetState(&st) < 0) st = g_ap_state;
+        if (st == PSP_NET_APCTL_STATE_GOT_IP) { start_listening(); break; }
+        /* show where it is, and retry when it fell back to disconnected
+         * (a failed join or key exchange) or got stuck for 30 s */
+        {
+            char buf[96];
+            const char *name = st >= 0 && st <= 6 ? AP_STATE_NAMES[st] : "?";
+            if (g_ap_error) snprintf(buf, sizeof(buf), "tcp: wifi %s, try %d, error %08X", name, g_ap_tries, (unsigned)g_ap_error);
+            else snprintf(buf, sizeof(buf), "tcp: wifi %s, try %d", name, g_ap_tries);
+            if (strcmp(buf, g_status)) set_status(buf);
+        }
+        if ((st == PSP_NET_APCTL_STATE_DISCONNECTED && now - g_ap_since > 3000000u) || now - g_ap_since > 30000000u) {
+            sceNetApctlDisconnect();
+            g_ap_tries++;
+            g_ap_since = now;
+            sceNetApctlConnect(1);
+        }
         break;
     }
     case ST_LISTENING: {
