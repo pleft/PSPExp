@@ -8,6 +8,7 @@
 #include <pspsdk.h>
 #include <pspusb.h>
 #include <pspusbbus.h>
+#include <pspctrl.h>
 #include <string.h>
 #include "../../protocol/pspexp_usb_link.h"
 #include "pspexp_usb_driver.h"
@@ -483,6 +484,18 @@ int pspexpUsbGetStats(PspExpUsbStats *out)
     memcpy(out, &g_stats, sizeof(*out));
     pspSdkSetK1(k1);
     return 0;
+}
+
+/* HOME is visible to kernel mode only; the runtime polls this so HOME held
+ * leaves PSPExp even when the system's quit dialog does not come up. */
+int pspexpUsbHomeHeld(void)
+{
+    int k1 = pspSdkSetK1(0);
+    SceCtrlData pad;
+    int held = 0;
+    if (sceCtrlPeekBufferPositive(&pad, 1) > 0) held = (pad.Buttons & PSP_CTRL_HOME) != 0;
+    pspSdkSetK1(k1);
+    return held;
 }
 
 int module_start(SceSize args, void *argp)

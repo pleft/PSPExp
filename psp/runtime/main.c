@@ -148,7 +148,7 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
     int i;
     pspexpUsbGetStats(&us);
     pspDebugScreenSetXY(0, 0);
-    printf("PSPExp runtime v0.2  %s  (HOME to exit)                   \n",
+    printf("PSPExp runtime v0.2  %s  (hold HOME 2 s to exit)          \n",
            connected ? (g_link == LINK_TCP ? "CONNECTED (TCP)" : "CONNECTED (USB)")
                      : (pspexpUsbAttached() ? "attached, waiting for host sync" : "waiting for USB cable or TCP"));
     printf("%-78s\n", g_tcp_available ? pspexp_tcp_psp_status() : "tcp: unavailable");
@@ -252,6 +252,20 @@ int main(int argc, char *argv[])
          * only button presses as activity, and it often sits untouched while
          * the host drives it (or while it waits for one). */
         if (now - last_tick > 1000000) { scePowerTick(PSP_POWER_TICK_ALL); last_tick = now; }
+
+        /* HOME held for 2 s leaves PSPExp, whatever state the link is in:
+         * the system's quit dialog did not always come up (seen while a host
+         * had died mid-session). A short press still opens that dialog. */
+        {
+            static uint32_t last_home_poll, home_since;
+            if (now - last_home_poll > 50000) {
+                last_home_poll = now;
+                if (pspexpUsbHomeHeld() > 0) {
+                    if (!home_since) home_since = now | 1;
+                    else if (now - home_since > 2000000) { trace("HOME held: leaving"); break; }
+                } else home_since = 0;
+            }
+        }
 
         if (!link_connected()) {
             if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); }

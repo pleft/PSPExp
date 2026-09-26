@@ -36,6 +36,8 @@ int pspexpUsbRead(void *buf, int len, unsigned int timeout_us);
 /* Write all len bytes. len on success, < 0 on error (-2 = timeout). */
 int pspexpUsbWrite(const void *data, int len);
 int pspexpUsbGetStats(PspExpUsbStats *out);
+/* 1 while HOME is pressed (read in kernel mode). */
+int pspexpUsbHomeHeld(void);
 
 #ifdef __cplusplus
 }
