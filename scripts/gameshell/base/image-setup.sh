@@ -12,7 +12,7 @@ R=$W/rootfs
 rm -rf "$R"
 PKGS="systemd-sysv,udev,dbus,openssh-server,sudo,network-manager,wpasupplicant,hostapd,iw,wireless-regdb,\
 firmware-brcm80211,libsdl2-2.0-0,chocolate-doom,curl,ca-certificates,avahi-daemon,libnss-mdns,ifupdown,isc-dhcp-client,\
-cloud-guest-utils,fdisk,alsa-utils,iproute2,iptables,kmod,nano,htop,unzip,less,procps,tzdata,systemd-timesyncd,locales,bash-completion"
+cloud-guest-utils,fdisk,alsa-utils,iproute2,iputils-ping,iptables,kmod,nano,htop,unzip,less,procps,tzdata,systemd-timesyncd,locales,bash-completion"
 mmdebstrap --arch=armhf --variant=minbase --mode=root --include="$PKGS" \
 	--components="main contrib non-free-firmware" trixie "$R" \
 	"deb http://deb.debian.org/debian trixie main contrib non-free-firmware" \

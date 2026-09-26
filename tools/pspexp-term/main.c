@@ -775,6 +775,8 @@ static void log_fn(void *u, const char *msg) { (void)u; fprintf(stderr, "[pspexp
 
 static int g_want_usb, g_want_tcp;   /* both may be set: USB is tried first, then TCP */
 
+static int g_link_tcp;   /* the current link is TCP (Wi-Fi), not USB: games are told so */
+
 static PspExpTransport *open_transport(void)
 {
     char err[200];
@@ -782,7 +784,8 @@ static PspExpTransport *open_transport(void)
 #ifdef PSPEXP_HAVE_USB
     if (g_want_usb) t = pspexp_usb_open(&g_usb, err, sizeof(err));
 #endif
-    if (!t && g_want_tcp) t = pspexp_tcp_open(&g_tcp, err, sizeof(err));
+    g_link_tcp = 0;
+    if (!t && g_want_tcp && (t = pspexp_tcp_open(&g_tcp, err, sizeof(err)))) g_link_tcp = 1;
     return t;
 }
 
@@ -1612,6 +1615,13 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
         for (i = 3; i < 1024; i++) close(i);
         if (chdir(cwd) != 0) { /* run anyway */ }
         if (!getenv("DISPLAY")) setenv("DISPLAY", ":0", 1);
+        /* the program reaches the PSP the way the console just did (the SDL
+         * layer's default is USB): Wi-Fi when that was the link */
+        if (g_link_tcp) {
+            char v[300];
+            snprintf(v, sizeof(v), "tcp:%s:%u", g_tcp.host ? g_tcp.host : "127.0.0.1", g_tcp.port ? g_tcp.port : 3838);
+            setenv("PSPEXP", v, 1);
+        } else if (g_want_usb) setenv("PSPEXP", "usb", 1);
         setsid();
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);

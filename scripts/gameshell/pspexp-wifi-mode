@@ -16,8 +16,13 @@ NMCONF=/etc/NetworkManager/conf.d/99-pspexp-psp-mode.conf
 mode() { cat "$CONF" 2>/dev/null || echo home; }
 
 # a clean firmware state: after AP mode this chip no longer finds networks
-# until its driver is rebound (or the board rebooted)
+# until its driver is rebound (or the board rebooted). ClockworkOS's Linux 5.3
+# only: on the fresh base (Linux 6.x) unbinding brcmfmac crashes the kernel
+# (a NULL dereference removing the P2P device wpa_supplicant already
+# removed, with the network lock held), and the interface is simply handed
+# between NetworkManager and hostapd.
 reset_wifi() {
+	case "$(uname -r)" in [0-5].*) ;; *) return 0 ;; esac
 	pkill -x hostapd 2>/dev/null
 	for d in /sys/bus/sdio/drivers/brcmfmac/mmc*; do
 		[ -e "$d" ] || continue
