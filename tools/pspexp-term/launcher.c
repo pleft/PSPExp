@@ -490,7 +490,7 @@ static char g_link[160] = "not connected";
 void launcher_set_link(const char *desc) { snprintf(g_link, sizeof(g_link), "%s", desc ? desc : ""); g_dirty = 1; }
 
 typedef struct About {
-    char board[96], soc[96], cpu[96], mem[64], disk[64], os[96], kernel[96];
+    char board[96], soc[96], cpu[96], mem[64], disk[64], data[96], os[96], kernel[96];
     char host[64], net[160], power[64], temp[32], uptime[48], library[96];
 } About;
 static About g_about;
@@ -617,6 +617,17 @@ static void about_collect(void)
         human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tmp, sizeof(tmp));
         human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, t2, sizeof(t2));
         snprintf(a->disk, sizeof(a->disk), "%s, %s free", tmp, t2);
+    }
+    {   /* the packages on another file system (the Omega's SD card): their space too */
+        struct stat rs, ds;
+        if (stat("/", &rs) == 0 && stat(L.root, &ds) == 0 && rs.st_dev != ds.st_dev && statvfs(L.root, &sv) == 0) {
+            char where[48];
+            const char *m = L.root;
+            human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tmp, sizeof(tmp));
+            human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, t2, sizeof(t2));
+            snprintf(where, sizeof(where), "%s", !strncmp(m, "/mnt/mmcblk", 11) || strstr(m, "/sd") ? "SD card" : "data disk");
+            snprintf(a->data, sizeof(a->data), "%s, %s free (%s)", tmp, t2, where);
+        }
     }
     if (read_quoted("/etc/os-release", "PRETTY_NAME", a->os, sizeof(a->os)) < 0)
         read_quoted("/etc/openwrt_release", "DISTRIB_DESCRIPTION", a->os, sizeof(a->os));
@@ -1412,6 +1423,7 @@ static void draw_about(float dt)
     }
     y = about_row(cx1 + 12, y, cw - 24, "layers", "MEMORY", b->mem, a);
     y = about_row(cx1 + 12, y, cw - 24, "hard-drive", "STORAGE", b->disk, a);
+    y = about_row(cx1 + 12, y, cw - 24, "package", "GAMES AND APPS", b->data, a);
     {
         char sys[200];
         snprintf(sys, sizeof(sys), "%s, %s", b->os[0] ? b->os : "Linux", b->kernel);
