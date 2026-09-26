@@ -22,6 +22,9 @@
 #include <strings.h>
 #include <math.h>
 #include <time.h>
+#ifdef __linux__
+#include <sys/sysmacros.h>
+#endif
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -159,9 +162,9 @@ static void cats_build(void)
     action(&g_actions[g_nactions++], "rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
     if (g_wifi_cmd) action(&g_actions[g_nactions++], "wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
     action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
-    action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "The GameShell's shell on the PSP");
-    action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart the GameShell");
-    action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut the GameShell down");
+    action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "This board's shell on the PSP");
+    action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart this board");
+    action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut this board down");
     action(&g_actions[g_nactions++], "about", "About", "info", "This board, the PSP and the connection");
     for (i = 0; i < g_nactions; i++) cat_push(c, &g_actions[i]);
     /* back to where we were */
@@ -580,8 +583,31 @@ static void human_bytes(unsigned long long b, char *out, size_t n)
 }
 
 /* what kind of storage a device is, by its name */
-static const char *disk_kind(const char *dev, const char *mnt)
+/* the storage kind of a mounted file system. The device name alone can
+ * mislead ("/dev/root" on a GameShell is its SD card), so block devices are
+ * looked up by number in sysfs; MMC says whether it is an SD card or eMMC. */
+static const char *disk_kind(const char *dev, const char *mnt, dev_t num)
 {
+    char link[96], path[512], type[16];
+    ssize_t n;
+    FILE *f;
+    snprintf(link, sizeof(link), "/sys/dev/block/%u:%u", major(num), minor(num));
+    n = readlink(link, path, sizeof(path) - 32);
+    if (n > 0) {
+        path[n] = 0;
+        if (strstr(path, "/mmc")) {
+            /* partition: the card is one directory up */
+            char tp[600];
+            type[0] = 0;
+            snprintf(tp, sizeof(tp), "%s/device/type", link);
+            if (!(f = fopen(tp, "r"))) { snprintf(tp, sizeof(tp), "%s/../device/type", link); f = fopen(tp, "r"); }
+            if (f) { if (!fgets(type, sizeof(type), f)) type[0] = 0; fclose(f); }
+            return !strncmp(type, "MMC", 3) ? "Internal flash" : "SD card";
+        }
+        if (strstr(path, "/nvme")) return "SSD";
+        if (strstr(path, "/usb")) return "USB disk";
+        if (strstr(path, "/mtd") || strstr(path, "/ubi")) return "Internal flash";
+    }
     if (strstr(dev, "mmcblk")) return "SD card";
     if (strstr(dev, "nvme")) return "SSD";
     if (!strncmp(dev, "/dev/sd", 7)) return "USB disk";
@@ -616,7 +642,7 @@ static void about_disks(About *a)
         if (a->ndisks == 3) continue;
         human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tot, sizeof(tot));
         human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, fr, sizeof(fr));
-        snprintf(a->disks[a->ndisks], sizeof(a->disks[0]), "%s: %s, %s free", disk_kind(dev, mnt), tot, fr);
+        snprintf(a->disks[a->ndisks], sizeof(a->disks[0]), "%s: %s, %s free", disk_kind(dev, mnt, st.st_dev), tot, fr);
         if (!strcmp(mnt, "/") && a->ndisks > 0) {   /* keep the root on the first line */
             char t[96];
             memcpy(t, a->disks[a->ndisks], sizeof(t));
@@ -1538,6 +1564,13 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     g_nofetch = getenv("PSPEXP_LAUNCHER_NO_FETCH") != NULL || !lib_setting_int(&L, "boxart", 1);
     cats_build();
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i;   /* start on Games */
+    /* screenshots and tests: open a page without replaying keys, which a slow
+     * link can drop (a lost press in System could land on Power off) */
+    if (getenv("PSPEXP_LAUNCHER_OPEN") && !strcmp(getenv("PSPEXP_LAUNCHER_OPEN"), "about")) {
+        about_collect();
+        g_mode = M_ABOUT;
+        g_dirty = 1;
+    }
     fprintf(stderr, "[launcher] library %s: %d entries, %d systems, %d categories\n", L.home, L.n, L.nsys, g_ncat);
     return 0;
 }
