@@ -1,8 +1,8 @@
 # USB network to the computer the GameShell is plugged into: a fixed address,
 # plus an address, route and DNS from that computer's Internet Sharing when it
 # is on (PSPExp: the outside world while the Wi-Fi is the PSP's access point).
+# brought up when the cable appears (hotplug); "auto" as well raced it at boot
 allow-hotplug usb0
-auto usb0
 iface usb0 inet static
 	address 192.168.10.1
 	netmask 255.255.255.0

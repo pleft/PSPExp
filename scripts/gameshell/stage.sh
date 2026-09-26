@@ -85,8 +85,8 @@ U
 		echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"'
 	} > "$S/60-pspexp.rules"
 	gs_copy "$S/60-pspexp.rules" 0644 0 0 /etc/udev/rules.d/60-pspexp.rules
-	echo uinput > "$S/pspexp-modules.conf"
-	gs_copy "$S/pspexp-modules.conf" 0644 0 0 /etc/modules-load.d/pspexp.conf
+	# (no uinput: this kernel has no modules; the keypad used X, which is gone)
+	gs_rm /etc/modules-load.d/pspexp.conf
 	echo 'p /tmp/pspexp-audio 0666 cpi cpi -' > "$S/pspexp-tmpfiles.conf"
 	gs_copy "$S/pspexp-tmpfiles.conf" 0644 0 0 /etc/tmpfiles.d/pspexp.conf
 	cat > "$S/asound.conf" <<A
@@ -116,8 +116,11 @@ A
 	gs_link /etc/systemd/system/pspexp-wifi-mode.service /etc/systemd/system/multi-user.target.wants/pspexp-wifi-mode.service
 	gs_fetch /etc/network/interfaces.d/usb "$S/usb.orig"
 	if [ -s "$S/usb.orig" ] && ! grep -q PSPExp "$S/usb.orig"; then
-		gs_copy "$S/usb.orig" 0644 0 0 /etc/network/interfaces.d/usb.pspexp-bak
+		# kept outside interfaces.d: ifupdown reads every file there, and the
+		# stock stanza's "auto usb0" raced ours at boot
+		gs_copy "$S/usb.orig" 0644 0 0 /etc/pspexp/usb.interfaces.stock
 	fi
+	gs_rm /etc/network/interfaces.d/usb.pspexp-bak
 	gs_copy "$G/usb0.interfaces" 0644 0 0 /etc/network/interfaces.d/usb
 
 	# The launcher's X session: fbdev (fbturbo is not installed, and the

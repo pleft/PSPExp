@@ -7,10 +7,18 @@ DONE=/etc/pspexp/firstboot-done
 [ -f "$DONE" ] && exit 0
 exec >>/var/log/pspexp-firstboot.log 2>&1
 echo "== $(date): PSPExp first boot"
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games
+# a card image is smaller than the card: grow the root partition to fill it
+src=$(findmnt -no SOURCE /)
+case "$src" in
+/dev/mmcblk*p[0-9]*)
+	disk=${src%p*}; part=${src##*p}
+	if command -v growpart >/dev/null && growpart "$disk" "$part"; then resize2fs "$src"; fi ;;
+esac
 sh /usr/local/lib/pspexp/clean-stock.sh || echo "clean-stock failed: $?"
 for f in /opt/pspexp/preinstall/*.tar.gz; do
 	[ -f "$f" ] || continue
-	if su cpi -s /bin/sh -c "pspexp-pkg install '$f'"; then rm -f "$f"; else echo "not installed: $f"; fi
+	if su cpi -s /bin/sh -c "PATH=$PATH pspexp-pkg install '$f'"; then rm -f "$f"; else echo "not installed: $f"; fi
 done
 mkdir -p /etc/pspexp
 date > "$DONE"

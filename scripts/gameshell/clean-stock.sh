@@ -30,6 +30,19 @@ pkill -x Xorg 2>/dev/null || true
 pkill -x aria2c 2>/dev/null || true
 pkill -f gsnotify 2>/dev/null || true
 
+# updates: ClockworkPi's own package source is off (nothing of theirs is
+# left to update, nothing should come back), and the two packages that shape
+# how this board boots and how its Wi-Fi chip behaves stay as they are
+# (the PSP access point mode was worked out on this firmware)
+for f in /etc/apt/sources.list.d/clockworkpi*.list; do [ -f "$f" ] && mv "$f" "$f.disabled"; done
+apt-mark hold armbian-bsp-cli-orangepipc armbian-firmware >/dev/null 2>&1 || true
+
+# boot-time leftovers that fail on this board: the stock Bluetooth firmware
+# call in rc.local (its script went with the old launcher), Armbian's LED and
+# ZRAM services (no such LEDs, no zram in this kernel)
+[ -f /etc/rc.local ] && sed -i 's|^/home/cpi/launcher/bluetooth_firmware.sh|# PSPExp: removed with the stock launcher: &|' /etc/rc.local
+systemctl disable armbian-led-state armbian-zram-config >/dev/null 2>&1 || true
+
 # stock services and packages
 systemctl disable --now shairport-sync 2>/dev/null || true
 PKGS=""
