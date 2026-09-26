@@ -6,9 +6,17 @@
 set -e
 . "$ROOT/scripts/gameshell/pkg/_lib.sh"
 D="$1"
-[ "${BOARD:-gameshell}" = gameshell ] || { echo "opentyrian: no build for $BOARD yet" >&2; exit 3; }
-BIN="$ROOT/build/gameshell/bin/opentyrian"
-[ -x "$BIN" ] || "$ROOT/scripts/build-gameshell.sh" tyrian
+case "${BOARD:-gameshell}" in
+gameshell)   # compiled on the GameShell against its libSDL2; the SDL layer preloaded
+	BIN="$ROOT/build/gameshell/bin/opentyrian"
+	[ -x "$BIN" ] || "$ROOT/scripts/build-gameshell.sh" tyrian
+	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
+omega)       # static, the SDL layer built in (build-omega.sh tyrian)
+	BIN="$ROOT/build/omega/bin/opentyrian"
+	[ -x "$BIN" ] || "$ROOT/scripts/build-omega.sh" tyrian
+	RUN="env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy pspexp-exec ./opentyrian"; REQ="pspexp-exec" ;;
+*) echo "opentyrian: no build for $BOARD" >&2; exit 3 ;;
+esac
 Z=$(fetch "https://camanis.net/tyrian/tyrian21.zip")
 mkdir -p "$D/data"
 unzip -q -j -o "$Z" -d "$D/data"
@@ -19,15 +27,16 @@ cat > "$D/run.sh" <<'R'
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/opentyrian"
 mkdir -p "$CFG"
 [ -f "$CFG/opentyrian.cfg" ] || printf 'section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n\n' > "$CFG/opentyrian.cfg"
-exec pspexp-run ./opentyrian --data=./data --no-joystick "$@"
+exec RUN_CMD --data=./data --no-joystick "$@"
 R
+sed -i.bak "s|RUN_CMD|$RUN|" "$D/run.sh" && rm -f "$D/run.sh.bak"
 chmod +x "$D/run.sh" "$D/opentyrian"
 cat > "$D/package" <<P
 version=2.1
 title=OpenTyrian
 description=The vertical shooter Tyrian 2.1, freeware since 2004
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
-requires=pspexp-run
+requires=$REQ
 P
 cat > "$D/opentyrian.entry" <<E
 title=OpenTyrian
