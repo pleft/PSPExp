@@ -165,6 +165,12 @@ if [ "$1" = "tyrian" ]; then
 	W="$OUT/src/opentyrian"
 	rm -rf "$W"; mkdir -p "$W"
 	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git --exclude obj --exclude opentyrian -cf - . ; } 2>/dev/null | tar -C "$W" -xf -
+	# audio mixed at 11 kHz, not 44.1: its AdLib music emulation is double
+	# floating point, emulated in software on the FPU-less MT7688 (the whole
+	# CPU at 44.1 kHz: 14-23 fps and crackling sound); the SDL layer
+	# upsamples 11025 Hz to the PSP's 44.1 kHz with integers
+	sed -i.bak 's/^#define OUTPUT_QUALITY 4 .*/#define OUTPUT_QUALITY 1  \/\/ 11025 Hz (PSPExp, Omega2)/' "$W/src/loudness.c"
+	grep -q '^#define OUTPUT_QUALITY 1 ' "$W/src/loudness.c" || { echo "OpenTyrian: OUTPUT_QUALITY not found in src/loudness.c" >&2; exit 1; }
 	# every source sees the rename header; libc headers first (the generic
 	# SDL_config.h includes none); network off (no SDL_net needed)
 	make -C "$W" -j8 CC="$OUT/zcc" WITH_NETWORK=false \
