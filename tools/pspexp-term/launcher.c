@@ -701,6 +701,11 @@ static void status_poll(uint64_t now)
             }
             fclose(f);
         }
+        if (wifi < 0) {   /* no wireless extensions in the kernel: up or not, strength unknown */
+            FILE *o = fopen("/sys/class/net/wlan0/operstate", "r");
+            char st[16] = "";
+            if (o) { if (fgets(st, sizeof(st), o) && !strncmp(st, "up", 2)) wifi = 2; fclose(o); }
+        }
     }
     if (bat != g_bat || chg != g_chg || wifi != g_wifi) { g_bat = bat; g_chg = chg; g_wifi = wifi; g_dirty = 1; }
 }

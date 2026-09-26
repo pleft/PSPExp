@@ -102,7 +102,9 @@ cat > "$R/etc/systemd/system/pspexp-bootlog.service" <<S
 Description=PSPExp boot log on the boot partition (for cards without a serial console)
 After=boot.mount
 [Service]
-Type=oneshot
+# in the background: it waits a minute, and must not hold the boot (the
+# console starts after multi-user.target)
+Type=simple
 ExecStart=/usr/local/sbin/pspexp-bootlog
 [Install]
 WantedBy=multi-user.target
