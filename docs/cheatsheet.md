@@ -62,6 +62,7 @@ cable pull, so pull the cable to read it after a session.
 | Omega2+: install the console and launcher / packages built for it | `OMEGA=omega scripts/install-omega.sh` / `BOARD=omega GAMESHELL=omega scripts/gs-pkg install freedoom opentyrian` |
 | Raspberry Pi: install the console and launcher / packages built for it | `PI=user@<ip> scripts/install-pi.sh` / `BOARD=pi GAMESHELL=user@<ip> scripts/gs-pkg install freedoom opentyrian` |
 | installers ship the existing build: after a source change | `scripts/build-gameshell.sh` / `scripts/build-omega.sh` first (`install-pi.sh` builds on the Pi) |
+| benchmark the SDL layer's texture uploads (Doom timedemo, old way vs CLUT8 / changed pages / both) | `scripts/bench-shim.sh` (the Mac, PSP on USB) / `scripts/bench-shim.sh --seconds 40 omega` / `--link tcp:<mac>:3838 cpi@<ip>` |
 | launcher screenshots from any board (a stand-in PSP on the Mac) | Mac: `SDL_VIDEODRIVER=dummy build/host/pspexp-sdl-server`; board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` |
 | GameShell fresh base: kernel / card image (Debian 13, Linux 6.18) | `scripts/gameshell/base/build-kernel.sh` / `scripts/gameshell/base/build-image.sh clockworkos_v0.6.img [--ssh-key F] [--wifi-from cpi@<ip>]` |
 

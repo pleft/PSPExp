@@ -37,7 +37,7 @@ scripts/pspexp-run build/host/sdl-game --surface     # window-surface path
 |---|---|
 | `SDL_CreateWindow`, `SDL_CreateRenderer`, `SDL_CreateWindowAndRenderer` | connect to the PSP (once) |
 | `SDL_RenderSetLogicalSize`, `SDL_RenderSetViewport`, `SDL_RenderSetClipRect` | the logical size (or window size) is fitted into 480x272 with letterboxing; viewport offsets and clip rectangles are applied |
-| `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture`, `SDL_SetTextureBlendMode` | a shadow copy in RGBA8888, uploaded swizzled, in pages of up to 512x512 (256x128 for streaming textures): 5650 when the blend mode is NONE, 4444 otherwise; re-uploaded when the program changes it (streaming textures cost one upload per frame) |
+| `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture`, `SDL_SetTextureBlendMode` | a shadow copy (in the program's own ARGB8888 / ABGR8888 layout, else converted), uploaded swizzled in pages cut at power-of-two sizes of up to 512x512 (256x128 for streaming textures), so there is no padding (320x200: 256 + 64 by 128 + 64 + 8); a page with at most 256 colours goes as CLUT8 with its own palette, else 5650 when the blend mode is NONE, 4444 otherwise; only the pages whose pixels changed are sent again (see "Where the bytes go") |
 | `SDL_SetRenderTarget`, `SDL_RenderSetScale` | drawing into a render-target texture is recorded (copies and fills, up to 256 per target) and replayed, scaled and clipped, when the target is copied to the screen: the integer-upscaling pattern of pixel-art ports |
 | `SDL_SetTextureColorMod`, `SDL_SetTextureAlphaMod` | per-quad tint (5650 when opaque, 4444 when translucent) |
 | `SDL_RenderCopy`, `SDL_RenderCopyEx`, `SDL_RenderCopyF`, `SDL_RenderCopyExF` | scaled quads (`PSPEXP_BATCH_SCALED`); horizontal and vertical flips; **rotation is ignored** (drawn unrotated) |
@@ -72,19 +72,47 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | `PSPEXP_AUDIO=psp` | drive the game's audio callback from the shim's own thread on a precise clock instead of the host device's cadence; the default when the host audio driver is SDL's `dummy` (headless hosts: the dummy driver runs slow and jittery and the PSP underruns) |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
+| `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/bench-shim.sh` |
 
-A stats line is printed every 2 s: fps, bytes per frame, batches, sprites,
-PSP CPU and GE time, uploads, errors, audio buffered / underruns.
+Stats lines are printed every 2 s: fps, bytes per frame (draw commands),
+batches, sprites, PSP CPU and GE time, uploads, errors, audio buffered /
+underruns; then all link bytes per frame, texture pages sent (of them
+CLUT8) and kept, and the CPU time the shim spent on textures per frame
+(this thread's CPU time: waiting for the link does not count). At exit a
+totals line sums up the run.
 
 ## Where the bytes go
 
 A frame of the test game is 26 batches, 95 sprites, 3.7 KB. Textures are
-uploaded once (4444, two bytes per texel, padded to power-of-two pages);
-`SDL_TEXTUREACCESS_STREAMING` textures that change every frame are
-re-uploaded every frame, which is what they cost on the wire (8 KB for the
-demo's 128x32 bar). A renderer-less program streams its whole surface:
-270 KB per frame, about 16 MB/s at 60 fps, which USB carries but leaves
-little headroom; expect 30-60 fps depending on the program.
+uploaded once; what costs is a texture the program rewrites every frame,
+the whole picture of a frame-streaming game (Doom, Tyrian, emulators) or a
+renderer-less program's window surface. Three things keep that small:
+
+- **Only changed pages.** New pixels are compared with the shadow as they
+  arrive; a page whose pixels are the same keeps its PSP texture.
+- **CLUT8.** Most such games draw in 256 colours and convert to 32 bits
+  only for SDL; a page with at most 256 distinct colours (after the
+  conversion to the PSP's 16 bits) goes as 8-bit indices plus a 512-byte
+  palette, half the bytes. The PSP's GE also reads it faster.
+- **No padding.** Pages are cut at power-of-two sizes, which the protocol
+  requires, instead of being padded up to them.
+
+Measured 2026-09-26 with `scripts/bench-shim.sh` (Chocolate Doom's timedemo
+of Freedoom Phase 1, 40 s per mode; "old" is the shim before these changes):
+
+| host, link | old | new | link data per frame |
+|---|---|---|---|
+| Mac, real PSP-1000 over USB | 59.8 fps | 59.8 fps (the PSP's 60 Hz) | 160.8 -> 62.5 KB |
+| Omega2+, real PSP-1000 over USB | 29.9 fps | 37.2 fps (38.9 with changed pages only) | 160.8 -> 62.4 KB |
+| GameShell, Wi-Fi to the SDL executor on the Mac | 10.4 fps | 21.1 fps | 160.8 -> 61.3 KB |
+| Pi 400, Ethernet to the SDL executor on the Mac | 59.3 fps | 59.3 fps (the executor's 60 Hz) | 160.8 -> 62.4 KB |
+
+On the Omega the CPU decides: CLUT8 costs it about 1 ms of conversion per
+frame, fewer USB bytes save more than that (each transfer is expensive
+there). OpenTyrian on the Omega: 177 -> 79 KB per frame, the PSP's GE time
+2.3 -> 0.6 ms, about 27 fps either way (the game's own CPU). Over the
+PSP-1000's Wi-Fi (about 0.25 MB/s) full-motion games stay slow: a moving
+3D view changes nearly every page every frame.
 
 ## Doom
 
@@ -93,8 +121,9 @@ with Freedoom's WAD (unzip a release from https://freedoom.github.io/ into
 `../doom/`, or pass a WAD path) and the PSP controls mapped to Doom's keys:
 nub and d-pad move and turn, cross fires, circle uses, square runs, L / R
 strafe, triangle is Enter, start is Escape, select is the map. Doom's
-320x200 frame is one streaming texture, four swizzled pages of 5650 in
-VRAM, 160 KB per frame at 35 fps (5.6 MB/s), letterboxed to 362x272.
+320x200 frame is one streaming texture, six swizzled pages (256 + 64 by
+128 + 64 + 8) in VRAM, CLUT8 but for the smallest: about 62 KB per frame
+(160 KB before 2026-09-26), letterboxed to 362x272.
 
 ## OpenTyrian
 

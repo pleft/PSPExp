@@ -1729,7 +1729,18 @@ int main(int argc, char **argv)
     signal(SIGUSR2, on_usr2);
     signal(SIGTERM, on_term);
     signal(SIGINT, on_term);
-    if (pidfile) { FILE *f = fopen(pidfile, "w"); if (f) { fprintf(f, "%d\n", (int)getpid()); fclose(f); } }
+    /* the pid file tells pspexp-exec whom to ask for the PSP. A second
+     * console (screenshots, tests) leaves a running one's file alone, and
+     * each removes the file at exit only when it still names itself. */
+    if (pidfile) {
+        FILE *f = fopen(pidfile, "r");
+        int other = 0;
+        if (f) { if (fscanf(f, "%d", &other) != 1) other = 0; fclose(f); }
+        if (other > 0 && other != (int)getpid() && kill(other, 0) == 0) {
+            fprintf(stderr, "[pspexp-term] %s names a running console (%d): not taking it over\n", pidfile, other);
+            pidfile = NULL;
+        } else if ((f = fopen(pidfile, "w"))) { fprintf(f, "%d\n", (int)getpid()); fclose(f); }
+    }
 
     term_reset(kb_shown ? ROWS_KB : ROWS_FULL);
     spawn_shell();
@@ -1889,6 +1900,11 @@ int main(int argc, char **argv)
 #ifdef PSPEXP_HAVE_SDL
     if (g_sdl) pspexp_sdl_destroy(g_sdl);
 #endif
-    if (pidfile) unlink(pidfile);
+    if (pidfile) {
+        FILE *f = fopen(pidfile, "r");
+        int who = 0;
+        if (f) { if (fscanf(f, "%d", &who) != 1) who = 0; fclose(f); }
+        if (who == (int)getpid()) unlink(pidfile);
+    }
     return 0;
 }

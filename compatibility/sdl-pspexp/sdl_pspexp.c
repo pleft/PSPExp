@@ -13,10 +13,11 @@
  * (~270 KB per frame at 480 x 272, fine over USB).
  *
  * Coordinates: the renderer's logical size (or window size) is fitted into
- * 480 x 272 with letterboxing. Textures are shadowed in RGBA8888 so that
- * SDL_UpdateTexture / SDL_LockTexture changes can be re-uploaded (4444, in
- * pages of <= 512 x 512; 5650 when the texture's blend mode is NONE, 4444
- * otherwise). Drawing into a render target is recorded and replayed, scaled,
+ * 480 x 272 with letterboxing. Textures are shadowed in 32 bits so that
+ * SDL_UpdateTexture / SDL_LockTexture changes can be re-uploaded, in
+ * power-of-two pages of <= 512 x 512: only the pages that changed, CLUT8 when
+ * a page has at most 256 colours, else 5650 when the texture's blend mode is
+ * NONE, 4444 otherwise (see upload_tex). Drawing into a render target is recorded and replayed, scaled,
  * when the target is copied to the screen (the integer-upscaling pattern of
  * pixel-art ports). SDL_RenderGeometry and rotation in SDL_RenderCopyEx are
  * ignored (drawn unrotated).
@@ -33,6 +34,8 @@
  *   PSPEXP_AUDIO=psp | host                   pace the game's audio callback ourselves (default when
  *                                             the host driver is SDL's dummy: headless hosts)
  *   PSPEXP_SHOT_EVERY=N                       PSP framebuffer dumps
+ *   PSPEXP_DELTA=0, PSPEXP_CLUT=0             send every texture page, 16-bit; both: also the
+ *                                             even page grid (the shim before 2026-09-26, to measure)
  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -52,6 +55,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #if !defined(__APPLE__) && !defined(PSPEXP_STATIC_RENAME)
 #include <dlfcn.h>
 #endif
@@ -114,7 +118,7 @@ __attribute__((constructor)) static void crash_report_install(void)
 
 /* ---- state ------------------------------------------------------------------ */
 
-typedef struct Page { uint16_t tex; int x0, y0, w, h, texw, texh; } Page;
+typedef struct Page { uint16_t tex, pal; int x0, y0, w, h, texw, texh; } Page;   /* pal: CLUT8 page's palette, 0 none */
 
 /* A draw recorded into a render target, in the target's pixel space; replayed
  * (scaled into the destination) when the target is copied to the screen. */
@@ -129,13 +133,19 @@ typedef struct TargetOp {
 typedef struct Tex {
     SDL_Texture *sdl;
     int w, h;
-    uint32_t *rgba;            /* shadow, RGBA8888 (R in the low byte) */
+    uint32_t *rgba;            /* shadow: ABGR8888 (R in the low byte), or ARGB8888 when argb */
+    int argb;                  /* the shadow is in the game's ARGB8888: no conversion to compare */
     int dirty, unsupported, streaming;   /* streaming: re-uploaded often, small pages */
     int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
     TargetOp *ops; int nops;
     SDL_BlendMode blend;       /* NONE: uploaded as 5650 (full colour), else 4444 */
     Page pages[16];
     int npages;
+    uint32_t pdirty;           /* pages whose pixels changed (bit = page index) */
+    int grid_w, grid_h, grid_stream;     /* what the grid below was cut for */
+    int ncol, nrow, cx[17], ry[17];      /* page columns / rows: starts, then the end */
+    int npages_grid_changed;             /* the grid was recut: pages are cut again */
+    int opaque_used;
     Uint8 r, g, b, a;          /* colour / alpha mod */
     void *lock_pixels; int lock_pitch; SDL_Rect lock_rect; int locked;
     struct Tex *next;
@@ -183,6 +193,12 @@ static struct {
     SDL_Joystick *vjoy_handle;
     /* stats */
     Uint32 last_report; unsigned frames, uploads, shot_every, shot_index;
+    int no_delta, no_clut;             /* PSPEXP_DELTA=0 / PSPEXP_CLUT=0: every page, 16-bit (benchmarks) */
+    uint64_t rep_bytes;                /* link bytes at the last report */
+    uint64_t up_ticks, tot_up_ticks;   /* ns of this thread's CPU converting textures (waits do not count) */
+    unsigned pages_sent, pages_t8, pages_kept;          /* since the last report */
+    unsigned long tot_pages_sent, tot_pages_t8, tot_pages_kept;
+    Uint64 first_frame;                /* performance counter at the first frame sent */
     uint32_t last_shot_frame;
     int skip_clear, skip_rects, skip_lines, skip_quads, skip_audio;   /* PSPEXP_DEBUG_SKIP */
     /* window-surface streaming (no renderer) */
@@ -269,6 +285,8 @@ static void connect_once(void)
     S.nub_keys = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "keys");
     S.hide_window = getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
     S.shot_every = getenv("PSPEXP_SHOT_EVERY") ? (unsigned)atoi(getenv("PSPEXP_SHOT_EVERY")) : 0;
+    S.no_delta = getenv("PSPEXP_DELTA") && !strcmp(getenv("PSPEXP_DELTA"), "0");
+    S.no_clut = getenv("PSPEXP_CLUT") && !strcmp(getenv("PSPEXP_CLUT"), "0");
     S.vjoy = -1;
     S.rsx = S.rsy = 1.0f;
     parse_keys();
@@ -486,87 +504,290 @@ static Tex *add_tex(SDL_Texture *t, int w, int h)
 static void release_pages(Tex *x)
 {
     int i;
-    if (S.ctx) for (i = 0; i < x->npages; i++) pspexp_release(S.ctx, x->pages[i].tex);
+    if (S.ctx) for (i = 0; i < x->npages; i++) {
+        pspexp_release(S.ctx, x->pages[i].tex);
+        if (x->pages[i].pal) pspexp_release(S.ctx, x->pages[i].pal);
+    }
     x->npages = 0;
 }
 
 static int pow2ceil(int v, int minimum) { int p = minimum; while (p < v) p <<= 1; return p; }
 
-/* One pass per page: convert each shadow pixel to 5650 (opaque) or 4444 and
- * store it at its swizzled position (16-byte x 8-row blocks: the GE reads
- * these several times faster) directly in the outgoing message. No buffers
- * are allocated, and textures re-sent every frame keep no replay copy.
+/* Texture pages. A texture is cut into pages of at most 512 x 512 (256 x 128
+ * for streaming textures: less padding per frame), each a PSP texture of its
+ * own, stored swizzled (16-byte x 8-row blocks: the GE reads these several
+ * times faster) directly in the outgoing message.
+ *
+ * Only what changed is sent: the shadow is compared as it is updated
+ * (shadow_update) and marks the pages that differ; an unchanged page keeps
+ * its PSP texture. A page with at most 256 distinct colours (after the
+ * conversion to the PSP's 16 bits) goes as CLUT8 with its own palette: half
+ * the bytes. Most frame-streaming games draw in 256 colours and convert to
+ * 32 bits only for SDL (Doom, Tyrian, emulators of 8- and 16-bit machines).
+ * PSPEXP_DELTA=0 and PSPEXP_CLUT=0 turn these off, for measurements.
  * On a small host (Omega2: 580 MHz, no FPU) this is most of the shim's cost. */
-static int upload_tex(Tex *x)
+/* Cut `total` into power-of-two pieces of at most `cap` (the protocol wants
+ * power-of-two textures; pieces of those sizes carry no padding: 320 x 200 is
+ * 256 + 64 by 128 + 64 + 8), the last one padded up to `minimum`. */
+static int cut_pow2(int total, int cap, int minimum, int *starts, int max)
 {
-    int y0, x0;
-    int pw = x->streaming ? 256 : 512, ph = x->streaming ? 128 : 512;   /* small pages: less padding per frame */
-    int opaque = x->blend == SDL_BLENDMODE_NONE;
-    release_pages(x);
-    for (y0 = 0; y0 < x->h; y0 += ph) {
-        for (x0 = 0; x0 < x->w; x0 += pw) {
-            Page *p;
-            PspExpTextureDesc d;
-            PspExpFrame f;
-            uint16_t *dst;
-            int y, rowblocks;
-            if (x->npages == 16) { x->unsupported = 1; return -1; }
-            p = &x->pages[x->npages];
-            p->x0 = x0; p->y0 = y0;
-            p->w = x->w - x0 < pw ? x->w - x0 : pw;
-            p->h = x->h - y0 < ph ? x->h - y0 : ph;
-            p->texw = pow2ceil(p->w, 16);
-            p->texh = pow2ceil(p->h, 8);
-            memset(&d, 0, sizeof(d));
-            d.width = (uint16_t)p->texw; d.height = (uint16_t)p->texh; d.format = opaque ? PSPEXP_TEX_5650 : PSPEXP_TEX_4444;
-            d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;   /* VRAM: the GE reads it far faster than RAM */
-            f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(p->texw < 64 ? p->texw : 64); f.h = (uint16_t)p->texh;
-            p->tex = alloc_handle();
-            dst = (uint16_t *)pspexp_upload_texture_begin(S.ctx, p->tex, &d, (uint32_t)((size_t)p->texw * p->texh * 2), &f, 1);
-            if (!dst) { x->unsupported = 1; logf_("texture %dx%d rejected", x->w, x->h); return -1; }
-            rowblocks = p->texw >> 3;   /* 8 pixels per 16-byte block */
-            for (y = 0; y < p->texh; y++) {
-                uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
-                int xx = 0;
-                if (y < p->h) {
-                    const uint32_t *src = x->rgba + (size_t)(y0 + y) * x->w + x0;
-                    if (opaque) {
-                        for (; xx < p->w; xx++) {
-                            uint32_t c = src[xx];   /* ABGR8888: R in the low byte */
-                            band[((xx >> 3) << 6) + (xx & 7)] =
-                                (uint16_t)(((c >> 3) & 0x1Fu) | (((c >> 10) & 0x3Fu) << 5) | (((c >> 19) & 0x1Fu) << 11));
-                        }
-                    } else {
-                        for (; xx < p->w; xx++) {
-                            uint32_t c = src[xx];
-                            band[((xx >> 3) << 6) + (xx & 7)] =
-                                (uint16_t)(((c >> 4) & 0xFu) | (((c >> 12) & 0xFu) << 4) | (((c >> 20) & 0xFu) << 8) | (((c >> 28) & 0xFu) << 12));
-                        }
-                    }
-                }
-                for (; xx < p->texw; xx++) band[((xx >> 3) << 6) + (xx & 7)] = 0;
-            }
-            if (pspexp_upload_texture_commit(S.ctx, !x->streaming) < 0) {
-                x->unsupported = 1;
-                logf_("texture %dx%d rejected", x->w, x->h);
-                return -1;
-            }
-            S.uploads++;
-            x->npages++;
+    int n = 0, at = 0;
+    while (at < total && n < max) {
+        int rem = total - at, sz = cap;
+        while (sz > rem && sz > minimum) sz >>= 1;
+        starts[n++] = at;
+        at += sz < rem ? sz : rem;
+    }
+    starts[n] = total;
+    return at < total ? -1 : n;
+}
+
+/* CPU time of the calling thread, ns: waits for the link do not count */
+static uint64_t cpu_ns(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
+
+static void page_grid(Tex *x)
+{
+    int cap_w = x->streaming ? 256 : 512, cap_h = x->streaming ? 128 : 512;
+    if (x->grid_w == x->w && x->grid_h == x->h && x->grid_stream == x->streaming && x->ncol) return;
+    x->ncol = cut_pow2(x->w, cap_w, 16, x->cx, 16);
+    x->nrow = cut_pow2(x->h, cap_h, 8, x->ry, 16);
+    if ((S.no_delta && S.no_clut) || x->ncol < 1 || x->nrow < 1 || x->ncol * x->nrow > 16) {
+        /* too many pieces (or measuring the old way): an even grid of full pages */
+        int i;
+        x->ncol = (x->w + cap_w - 1) / cap_w; x->nrow = (x->h + cap_h - 1) / cap_h;
+        if (x->ncol > 16) x->ncol = 16;
+        if (x->nrow > 16) x->nrow = 16;
+        for (i = 0; i < x->ncol; i++) x->cx[i] = i * cap_w;
+        x->cx[x->ncol] = x->w;
+        for (i = 0; i < x->nrow; i++) x->ry[i] = i * cap_h;
+        x->ry[x->nrow] = x->h;
+    }
+    x->grid_w = x->w; x->grid_h = x->h; x->grid_stream = x->streaming;
+    x->npages_grid_changed = 1;
+}
+
+static uint16_t g_px16[512 * 512];     /* one page, converted, row-major */
+static uint8_t  g_idx8[512 * 512];     /* the same as palette indices */
+/* colour -> palette index while a page is indexed, valid for one generation
+ * (no clearing between pages). A 1024-slot hash that fits the Omega2's 32 KB
+ * data cache measured slower there than these direct tables. */
+static uint16_t g_stamp[65536];        /* colour -> generation seen */
+static uint8_t  g_index[65536];        /* colour -> palette index */
+static uint16_t g_gen;
+
+static int upload_page(Tex *x, Page *p, int opaque)
+{
+    PspExpTextureDesc d;
+    PspExpFrame f;
+    uint16_t pal[256];
+    int y, xx, npal = 0, t8 = 0;
+    /* One pass: convert the page to 16 bits (row-major) and, while it has at
+     * most 256 colours, index it (runs of one colour skip the lookup). CLUT8
+     * only when it pays: the palette costs 512 bytes. */
+    int try8 = !S.no_clut && p->texw * p->texh >= 2048, over = !try8, last = -1;
+    uint8_t lasti = 0;
+    if (try8 && ++g_gen == 0) { memset(g_stamp, 0, sizeof(g_stamp)); g_gen = 1; }
+#define PAGE_LOOP(CONV) \
+    for (y = 0; y < p->h; y++) { \
+        const uint32_t *src = x->rgba + (size_t)(p->y0 + y) * x->w + p->x0; \
+        uint16_t *o = g_px16 + (size_t)y * p->w; \
+        uint8_t *oi = g_idx8 + (size_t)y * p->w; \
+        for (xx = 0; xx < p->w; xx++) { \
+            uint32_t c = src[xx]; \
+            uint16_t c16 = (uint16_t)(CONV); \
+            o[xx] = c16; \
+            if (!over) { \
+                if (c16 != last) { \
+                    if (g_stamp[c16] != g_gen) { \
+                        if (npal == 256) { over = 1; continue; } \
+                        g_stamp[c16] = g_gen; g_index[c16] = (uint8_t)npal; pal[npal++] = c16; \
+                    } \
+                    last = c16; lasti = g_index[c16]; \
+                } \
+                oi[xx] = lasti; \
+            } \
+        } \
+    }
+    if (x->argb) {   /* ARGB8888: B in the low byte */
+        if (opaque) PAGE_LOOP(((c >> 19) & 0x1Fu) | (((c >> 10) & 0x3Fu) << 5) | (((c >> 3) & 0x1Fu) << 11))
+        else PAGE_LOOP(((c >> 20) & 0xFu) | (((c >> 12) & 0xFu) << 4) | (((c >> 4) & 0xFu) << 8) | (((c >> 28) & 0xFu) << 12))
+    } else {         /* ABGR8888: R in the low byte */
+        if (opaque) PAGE_LOOP(((c >> 3) & 0x1Fu) | (((c >> 10) & 0x3Fu) << 5) | (((c >> 19) & 0x1Fu) << 11))
+        else PAGE_LOOP(((c >> 4) & 0xFu) | (((c >> 12) & 0xFu) << 4) | (((c >> 20) & 0xFu) << 8) | (((c >> 28) & 0xFu) << 12))
+    }
+#undef PAGE_LOOP
+    t8 = try8 && !over;
+    if (p->pal) { pspexp_release(S.ctx, p->pal); p->pal = 0; }
+    if (t8) {
+        for (y = npal; y < 256; y++) pal[y] = 0;
+        p->pal = alloc_handle();
+        int prc = pspexp_upload_palette(S.ctx, p->pal, opaque ? PSPEXP_TEX_5650 : PSPEXP_TEX_4444, 256, pal, sizeof(pal));
+        if (prc < 0) {
+            p->pal = 0; t8 = 0;   /* g_px16 still holds the colours: 16-bit */
+            S.no_clut = 1;
         }
     }
-    x->dirty = 0;
+    memset(&d, 0, sizeof(d));
+    d.width = (uint16_t)p->texw; d.height = (uint16_t)p->texh;
+    d.format = t8 ? PSPEXP_TEX_T8 : opaque ? PSPEXP_TEX_5650 : PSPEXP_TEX_4444;
+    d.palette = p->pal;
+    d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;   /* VRAM: the GE reads it far faster than RAM */
+    f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(p->texw < 64 ? p->texw : 64); f.h = (uint16_t)p->texh;
+    p->tex = alloc_handle();
+    if (t8) {
+        uint8_t *dst = pspexp_upload_texture_begin(S.ctx, p->tex, &d, (uint32_t)((size_t)p->texw * p->texh), &f, 1);
+        if (!dst) return -1;
+        for (y = 0; y < p->texh; y++) {   /* 16 pixels per 16-byte block */
+            uint8_t *band = dst + (size_t)(y >> 3) * (size_t)p->texw * 8u + (size_t)((y & 7) << 4);
+            xx = 0;
+            if (y < p->h) {
+                const uint8_t *src = g_idx8 + (size_t)y * p->w;
+                for (; xx + 16 <= p->w; xx += 16) memcpy(band + ((xx >> 4) << 7), src + xx, 16);
+                for (; xx < p->w; xx++) band[((xx >> 4) << 7) + (xx & 15)] = src[xx];
+            }
+            for (; xx < p->texw; xx++) band[((xx >> 4) << 7) + (xx & 15)] = 0;
+        }
+    } else {
+        uint16_t *dst = (uint16_t *)pspexp_upload_texture_begin(S.ctx, p->tex, &d, (uint32_t)((size_t)p->texw * p->texh * 2), &f, 1);
+        int rowblocks = p->texw >> 3;   /* 8 pixels per 16-byte block */
+        if (!dst) return -1;
+        for (y = 0; y < p->texh; y++) {
+            uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
+            xx = 0;
+            if (y < p->h) {
+                const uint16_t *src = g_px16 + (size_t)y * p->w;
+                for (; xx + 8 <= p->w; xx += 8) memcpy(band + ((xx >> 3) << 6), src + xx, 16);
+                for (; xx < p->w; xx++) band[((xx >> 3) << 6) + (xx & 7)] = src[xx];
+            }
+            for (; xx < p->texw; xx++) band[((xx >> 3) << 6) + (xx & 7)] = 0;
+        }
+    }
+    {
+        int crc = pspexp_upload_texture_commit(S.ctx, !x->streaming);
+        if (crc < 0) return -1;
+    }
+    S.uploads++;
+    S.pages_sent++;
+    if (t8) S.pages_t8++;
     return 0;
 }
 
-/* Copy pixels of any SDL format into the RGBA8888 shadow. */
+static int upload_tex(Tex *x)
+{
+    int i, full;
+    int opaque = x->blend == SDL_BLENDMODE_NONE;
+    uint64_t t0 = cpu_ns();
+    page_grid(x);
+    full = x->dirty || S.no_delta || !x->npages || x->npages_grid_changed || opaque != x->opaque_used;
+    if (full) {
+        int r, c;
+        release_pages(x);
+        if (x->ncol * x->nrow > 16) { x->unsupported = 1; return -1; }
+        for (r = 0; r < x->nrow; r++) {
+            for (c = 0; c < x->ncol; c++) {
+                Page *p = &x->pages[x->npages];
+                memset(p, 0, sizeof(*p));
+                p->x0 = x->cx[c]; p->y0 = x->ry[r];
+                p->w = x->cx[c + 1] - x->cx[c];
+                p->h = x->ry[r + 1] - x->ry[r];
+                p->texw = pow2ceil(p->w, 16);
+                p->texh = pow2ceil(p->h, 8);
+                if (upload_page(x, p, opaque) < 0) { x->unsupported = 1; logf_("texture %dx%d rejected", x->w, x->h); return -1; }
+                x->npages++;
+            }
+        }
+        x->opaque_used = opaque;
+        x->npages_grid_changed = 0;
+    } else {
+        for (i = 0; i < x->npages; i++) {
+            Page *p = &x->pages[i];
+            if (!(x->pdirty & (1u << i))) { S.pages_kept++; continue; }
+            pspexp_release(S.ctx, p->tex);
+            if (upload_page(x, p, opaque) < 0) { x->unsupported = 1; logf_("texture %dx%d rejected", x->w, x->h); return -1; }
+        }
+    }
+    x->dirty = 0;
+    x->pdirty = 0;
+    S.up_ticks += cpu_ns() - t0;
+    return 0;
+}
+
+/* Store converted pixels (ABGR8888, `spitch` pixels per row) at r in the
+ * shadow, marking the pages whose pixels actually changed. */
+static void shadow_store(Tex *x, const SDL_Rect *r, const uint32_t *px, int spitch)
+{
+    int y, c, row = 0;
+    page_grid(x);
+    if (x->npages_grid_changed) x->dirty = 1;   /* pages are cut again: all of them go */
+    for (y = 0; y < r->h; y++) {
+        const uint32_t *src = px + (size_t)y * spitch;
+        uint32_t *dst = x->rgba + (size_t)(r->y + y) * x->w;
+        int yy = r->y + y;
+        while (row + 1 < x->nrow && yy >= x->ry[row + 1]) row++;
+        for (c = 0; c < x->ncol; c++) {
+            int a0 = x->cx[c] > r->x ? x->cx[c] : r->x;
+            int a1 = x->cx[c + 1] < r->x + r->w ? x->cx[c + 1] : r->x + r->w;
+            if (a0 >= a1) continue;
+            if (memcmp(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 4)) {
+                int bit = row * x->ncol + c;
+                memcpy(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 4);
+                if (bit < 32) x->pdirty |= 1u << bit; else x->dirty = 1;
+            }
+        }
+    }
+}
+
+static uint32_t *g_conv; static size_t g_conv_n;
+static void shadow_update_(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch);
+/* the game's new pixels into the shadow; its CPU time counts as texture work */
 static void shadow_update(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch)
 {
+    uint64_t t0 = cpu_ns();
+    shadow_update_(x, rect, format, pixels, pitch);
+    S.up_ticks += cpu_ns() - t0;
+}
+static void shadow_update_(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch)
+{
     SDL_Rect r = rect ? *rect : (SDL_Rect){ 0, 0, x->w, x->h };
+    size_t n = (size_t)r.w * r.h;
+    Uint32 want;
+    int whole, y;
     if (r.x < 0 || r.y < 0 || r.x + r.w > x->w || r.y + r.h > x->h || r.w <= 0 || r.h <= 0) return;
-    SDL_ConvertPixels(r.w, r.h, format, pixels, pitch, SDL_PIXELFORMAT_ABGR8888,
-                      x->rgba + (size_t)r.y * x->w + r.x, x->w * 4);
-    x->dirty = 1;
+    /* keep the shadow in the game's own 32-bit layout when it sends one:
+     * then nothing is converted before comparing (a whole-texture update can
+     * switch the layout; it re-sends every page anyway) */
+    whole = r.x == 0 && r.y == 0 && r.w == x->w && r.h == x->h;
+    want = x->argb ? SDL_PIXELFORMAT_ARGB8888 : SDL_PIXELFORMAT_ABGR8888;
+    if (whole && (format == SDL_PIXELFORMAT_ARGB8888 || format == SDL_PIXELFORMAT_ABGR8888) && format != want) {
+        want = format;
+        x->argb = format == SDL_PIXELFORMAT_ARGB8888;
+        x->dirty = 1;
+    }
+    if (S.no_delta || x->dirty) {   /* all of it goes anyway */
+        if (format == want && (pitch & 3) == 0)
+            for (y = 0; y < r.h; y++)
+                memcpy(x->rgba + (size_t)(r.y + y) * x->w + r.x, (const Uint8 *)pixels + (size_t)y * pitch, (size_t)r.w * 4);
+        else
+            SDL_ConvertPixels(r.w, r.h, format, pixels, pitch, want, x->rgba + (size_t)r.y * x->w + r.x, x->w * 4);
+        x->dirty = 1;
+        return;
+    }
+    if (format == want && (pitch & 3) == 0) {
+        shadow_store(x, &r, (const uint32_t *)pixels, pitch / 4);
+        return;
+    }
+    if (n > g_conv_n) {
+        uint32_t *b = (uint32_t *)realloc(g_conv, n * 4);
+        if (!b) { x->dirty = 1; SDL_ConvertPixels(r.w, r.h, format, pixels, pitch, want, x->rgba + (size_t)r.y * x->w + r.x, x->w * 4); return; }
+        g_conv = b; g_conv_n = n;
+    }
+    SDL_ConvertPixels(r.w, r.h, format, pixels, pitch, want, g_conv, r.w * 4);
+    shadow_store(x, &r, g_conv, r.w);
 }
 
 static uint16_t tint_for(const Tex *x, uint16_t *fmt)
@@ -625,7 +846,7 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
     }
     if (x->is_target) { replay_target(x, src, dx, dy, dw, dh); return; }
     if (!drawing()) return;
-    if (x->dirty && upload_tex(x) < 0) return;
+    if ((x->dirty || x->pdirty) && upload_tex(x) < 0) return;
     s = src ? *src : (SDL_Rect){ 0, 0, x->w, x->h };
     color = tint_for(x, &fmt);
     /* the source may span pages: split it */
@@ -1069,6 +1290,7 @@ HOOK(SDL_Texture *, SDL_CreateTextureFromSurface, (SDL_Renderer *r, SDL_Surface 
             SDL_Surface *conv = SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_ABGR8888, 0);
             if (conv) {
                 int y;
+                x->argb = 0;
                 for (y = 0; y < surf->h; y++)
                     memcpy(x->rgba + (size_t)y * surf->w, (const Uint8 *)conv->pixels + (size_t)y * conv->pitch, (size_t)surf->w * 4);
                 SDL_FreeSurface(conv);
@@ -1317,6 +1539,7 @@ static void end_frame(void)
     pspexp_pump(S.ctx, 0);
     feed_input();
     S.frames++;
+    if (!S.total_frames) S.first_frame = SDL_GetPerformanceCounter();
     S.total_frames++;
     if (S.shot_every && S.total_frames % S.shot_every == 0) pspexp_request_screenshot(S.ctx, (uint16_t)S.shot_index++);
     {
@@ -1324,10 +1547,16 @@ static void end_frame(void)
         if (now - S.last_report >= 2000) {
             const PspExpStats *st = pspexp_stats(S.ctx);
             const PspExpAudioStatus *au = pspexp_audio_status(S.ctx);
+            double fr = S.frames ? (double)S.frames : 1.0;
             logf_("%.1f fps  %u B/frame  %u batches  %u sprites  psp cpu %u us  ge %u us  uploads %u  errors %u  audio buffered %u underruns %u",
                   S.frames * 1000.0 / (double)(now - S.last_report), st->last_frame_bytes, st->last_frame_batches,
                   st->last_frame_sprites, st->last_execute_us, st->last_ge_us, S.uploads,
                   st->resource_errors + st->protocol_errors, au->buffered_frames, au->underruns);
+            logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)",
+                  (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, S.pages_sent, S.pages_t8, S.pages_kept,
+                  (double)S.up_ticks / 1e6 / fr);
+            S.tot_pages_sent += S.pages_sent; S.tot_pages_t8 += S.pages_t8; S.tot_pages_kept += S.pages_kept; S.tot_up_ticks += S.up_ticks;
+            S.rep_bytes = st->bytes_sent; S.pages_sent = S.pages_t8 = S.pages_kept = 0; S.up_ticks = 0;
             S.last_report = now; S.frames = 0; S.uploads = 0;
         }
     }
@@ -1427,7 +1656,14 @@ static void stream_surface(SDL_Window *win)
     /* Convert, then shrink to the PSP size with nearest-neighbour sampling so
      * the upload is at most 480 x 272 (~270 KB), whatever the window size. */
     if (SDL_MUSTLOCK(surf)) SDL_LockSurface(surf);
-    SDL_ConvertPixels(surf->w, surf->h, surf->format->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ABGR8888, x->rgba, surf->w * 4);
+    if (S.sx >= 1.0f) {   /* full size: only the pages that changed */
+        SDL_Rect all = { 0, 0, surf->w, surf->h };
+        x->w = surf->w; x->h = surf->h;
+        shadow_update(x, &all, surf->format->format, surf->pixels, surf->pitch);
+    } else {
+        x->argb = 0;
+        SDL_ConvertPixels(surf->w, surf->h, surf->format->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ABGR8888, x->rgba, surf->w * 4);
+    }
     if (SDL_MUSTLOCK(surf)) SDL_UnlockSurface(surf);
     if (S.sx < 1.0f) {
         int dw = (int)(surf->w * S.sx + 0.5f), dh = (int)(surf->h * S.sy + 0.5f), yy, xx;
@@ -1439,15 +1675,15 @@ static void stream_surface(SDL_Window *win)
             for (xx = 0; xx < dw; xx++) dst[xx] = src[xx * surf->w / dw];
         }
         x->w = dw; x->h = dh;
+        x->dirty = 1;
     }
-    x->dirty = 1;
     begin_frame();
     S.has_clip = 0;
     apply_clip();
     /* Black letterbox bars (and, under PPSSPP, a frame made only of textured
      * quads never reaches its framebuffer: the flat rect first makes it show). */
     pspexp_fill_rect(S.ctx, 0, 0, 480, 272, 0, 255);
-    if (upload_tex(x) == 0) {
+    if (!(x->dirty || x->pdirty) || upload_tex(x) == 0) {
         int i;
         uint16_t fmt, color = tint_for(x, &fmt);
         int shrunk = S.sx < 1.0f;
@@ -1539,6 +1775,15 @@ HOOK(int, SDL_QueueAudio, (SDL_AudioDeviceID dev, const void *data, Uint32 len))
 static void shim_exit(void)
 {
     logf_("exit: %lu frames mirrored", S.total_frames);
+    if (S.ctx && S.total_frames) {
+        const PspExpStats *st = pspexp_stats(S.ctx);
+        double fr = (double)S.total_frames;
+        double secs = (double)(SDL_GetPerformanceCounter() - S.first_frame) / (double)SDL_GetPerformanceFrequency();
+        logf_("totals: %.1f fps  link %.1f KB/frame  pages sent %lu (clut8 %lu) kept %lu  texture work %.2f ms/frame (delta %s, clut8 %s)",
+              secs > 0 ? (fr - 1) / secs : 0.0, (double)st->bytes_sent / 1024.0 / fr, S.tot_pages_sent + S.pages_sent, S.tot_pages_t8 + S.pages_t8,
+              S.tot_pages_kept + S.pages_kept, (double)(S.tot_up_ticks + S.up_ticks) / 1e6 / fr,
+              S.no_delta ? "off" : "on", S.no_clut ? "off" : "on");
+    }
     if (S.audio_thread) { S.audio_thread_stop = 1; SDL_WaitThread(S.audio_thread, NULL); S.audio_thread = NULL; }
     if (S.ctx) {
         pspexp_send_raw(S.ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);
