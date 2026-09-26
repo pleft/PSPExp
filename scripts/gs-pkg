@@ -1,21 +1,25 @@
 #!/bin/sh
-# PSPExp packages for the ClockworkPi GameShell, from the Mac.
+# PSPExp packages for a board running the PSPExp launcher, from the Mac.
 #   scripts/gs-pkg recipes               what can be built (scripts/gameshell/pkg/*.sh)
 #   scripts/gs-pkg build ID...           -> build/gameshell/pkg/ID.tar.gz
 #   scripts/gs-pkg install ID...         build when missing, copy, pspexp-pkg install
 #   scripts/gs-pkg remove ID...
 #   scripts/gs-pkg list                  what the GameShell has installed
-# GAMESHELL=user@host (default cpi@gameshell). A recipe is a shell script run
-# as `recipe DIR` that fills DIR (the package's <id>/ directory) and writes
-# DIR/package; it may use $ROOT (this repo), $CACHE (downloads, kept between
-# builds), $GAMESHELL (for programs compiled on the GameShell) and fetch().
+# BOARD=gameshell (default) | omega picks the build; GAMESHELL=user@host the
+# board to install on (default cpi@gameshell; for the Omega: omega). A recipe
+# is a shell script run as `recipe DIR` that fills DIR (the package's <id>/
+# directory) and writes DIR/package; it may use $ROOT (this repo), $BOARD,
+# $CACHE (downloads, kept between builds), $GAMESHELL (for programs compiled
+# on the GameShell) and fetch(). A recipe that has no build for $BOARD says
+# so and exits 3.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GS="${GAMESHELL:-cpi@gameshell}"
 RECIPES="$ROOT/scripts/gameshell/pkg"
-OUT="$ROOT/build/gameshell/pkg"
+BOARD="${BOARD:-gameshell}"
+OUT="$ROOT/build/$BOARD/pkg"
 CACHE="$ROOT/build/gameshell/pkg-cache"
-export ROOT CACHE GAMESHELL="$GS"
+export ROOT CACHE BOARD GAMESHELL="$GS"
 mkdir -p "$OUT" "$CACHE"
 
 build() {
@@ -26,7 +30,9 @@ build() {
 	if ! sh "$RECIPES/$id.sh" "$w/$id"; then rm -rf "$w"; echo "gs-pkg: $id failed" >&2; exit 1; fi
 	[ -f "$w/$id/package" ] || { rm -rf "$w"; echo "gs-pkg: $id wrote no package file" >&2; exit 1; }
 	ls "$w/$id"/*.entry >/dev/null 2>&1 || ls "$w/$id"/systems/*.system >/dev/null 2>&1 || { rm -rf "$w"; echo "gs-pkg: $id has no entry or system" >&2; exit 1; }
-	COPYFILE_DISABLE=1 tar --no-xattrs -C "$w" -czf "$OUT/$id.tar.gz" "$id" 2>/dev/null || COPYFILE_DISABLE=1 tar -C "$w" -czf "$OUT/$id.tar.gz" "$id"
+	# owned by root in the archive, not by whoever built it
+	COPYFILE_DISABLE=1 tar --no-xattrs --uid 0 --gid 0 --uname root --gname root -C "$w" -czf "$OUT/$id.tar.gz" "$id" 2>/dev/null ||
+		COPYFILE_DISABLE=1 tar -C "$w" -czf "$OUT/$id.tar.gz" "$id"
 	rm -rf "$w"
 	echo "built $OUT/$id.tar.gz ($(du -h "$OUT/$id.tar.gz" | cut -f1))"
 }
@@ -38,7 +44,7 @@ build) for id in "$@"; do build "$id"; done ;;
 install)
 	for id in "$@"; do
 		[ -f "$OUT/$id.tar.gz" ] && [ "$OUT/$id.tar.gz" -nt "$RECIPES/$id.sh" ] || build "$id"
-		scp -q "$OUT/$id.tar.gz" "$GS:/tmp/$id.tar.gz"
+		scp -O -q "$OUT/$id.tar.gz" "$GS:/tmp/$id.tar.gz"   # -O: dropbear (OpenWrt) speaks only the classic protocol
 		ssh "$GS" "pspexp-pkg install /tmp/$id.tar.gz && rm -f /tmp/$id.tar.gz"
 	done ;;
 remove) ssh "$GS" "pspexp-pkg remove $*" ;;

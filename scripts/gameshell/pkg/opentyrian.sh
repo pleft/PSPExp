@@ -6,6 +6,7 @@
 set -e
 . "$ROOT/scripts/gameshell/pkg/_lib.sh"
 D="$1"
+[ "${BOARD:-gameshell}" = gameshell ] || { echo "opentyrian: no build for $BOARD yet" >&2; exit 3; }
 BIN="$ROOT/build/gameshell/bin/opentyrian"
 [ -x "$BIN" ] || "$ROOT/scripts/build-gameshell.sh" tyrian
 Z=$(fetch "https://camanis.net/tyrian/tyrian21.zip")

@@ -269,7 +269,9 @@ static void fetch_start(const LEntry *e)
     if (pid == 0) {
         setenv("D", dir, 1); setenv("P", png, 1); setenv("M", miss, 1); setenv("U", url, 1);
         execl("/bin/sh", "sh", "-c",
-              "mkdir -p \"$D\" && curl -fsSL --max-time 20 -o \"$P.part\" \"$U\" && mv \"$P.part\" \"$P\" || { rm -f \"$P.part\"; touch \"$M\"; }",
+              /* curl where there is one; OpenWrt has wget (uclient-fetch) */
+              "mkdir -p \"$D\" && if command -v curl >/dev/null; then curl -fsSL --max-time 20 -o \"$P.part\" \"$U\"; "
+              "else wget -q -T 20 -O \"$P.part\" \"$U\"; fi && [ -s \"$P.part\" ] && mv \"$P.part\" \"$P\" || { rm -f \"$P.part\"; touch \"$M\"; }",
               (char *)NULL);
         _exit(127);
     }
@@ -413,7 +415,7 @@ static void run_action(LEntry *e, uint64_t now)
             return;
         }
         g_confirm[0] = 0;
-        snprintf(cmd, sizeof(cmd), "sudo -n %s %s", g_wifi_cmd, to_psp ? "psp" : "home");
+        snprintf(cmd, sizeof(cmd), "%s%s %s", geteuid() == 0 ? "" : "sudo -n ", g_wifi_cmd, to_psp ? "psp" : "home");
         bg_run(cmd, "radio-tower", to_psp ? "Wi-Fi: PSP direct" : "Wi-Fi: home network", "Wi-Fi switch failed (see /tmp/pspexp-launcher.log)");
         toast("radio-tower", "Switching Wi-Fi...", now);
     } else if (!strcmp(a, "reboot") || !strcmp(a, "poweroff")) {
@@ -425,7 +427,10 @@ static void run_action(LEntry *e, uint64_t now)
             return;
         }
         g_confirm[0] = 0;
-        snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec sudo -n /usr/sbin/%s", reboot ? "reboot" : "poweroff");
+        /* as root (OpenWrt on the Omega2+) directly; else through the sudo rule
+         * the installer adds (/etc/sudoers.d/pspexp) */
+        if (geteuid() == 0) snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec %s", reboot ? "reboot" : "poweroff");
+        else snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec sudo -n /usr/sbin/%s", reboot ? "reboot" : "poweroff");
         snprintf(g_launch_cwd, sizeof(g_launch_cwd), "/");
         g_launch_aware = 1;
         g_launch_pending = 1;

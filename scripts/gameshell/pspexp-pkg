@@ -17,11 +17,17 @@ field() { sed -n "s/^$2=//p" "$1/package" 2>/dev/null | head -1; }
 [ -d "$APPS" ] && [ -w "$APPS" ] || die "$APPS missing or not writable"
 mkdir -p "$SYS"
 
+# never the archive's owners (root on a FAT SD card, the Omega, cannot set them)
+untar() {
+	if tar --help 2>&1 | grep -q no-same-owner; then tar --no-same-owner -C "$2" -xzf "$1"
+	else tar -C "$2" -xzf "$1"; fi
+}
+
 install_one() {
 	f="$1"
 	[ -f "$f" ] || die "$f: no such file"
 	tmp=$(mktemp -d "$ROOT/.install.XXXXXX") || die "no temp dir"
-	if ! tar -C "$tmp" -xzf "$f"; then rm -rf "$tmp"; die "$f: not a package"; fi
+	if ! untar "$f" "$tmp"; then rm -rf "$tmp"; die "$f: not a package"; fi
 	set -- "$tmp"/*
 	if [ $# != 1 ] || [ ! -d "$1" ] || [ ! -f "$1/package" ]; then rm -rf "$tmp"; die "$f: expected one <id>/ directory with a package file"; fi
 	dir="$1"; id=$(basename "$dir")

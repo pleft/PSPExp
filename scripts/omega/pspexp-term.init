@@ -1,7 +1,9 @@
 #!/bin/sh /etc/rc.common
-# /etc/init.d/pspexp-term: the PSP as the Omega's console (display,
-# on-screen keyboard, sound). Waits for the SD card, then runs pspexp-term,
-# which waits for a PSP on USB and reconnects whenever one appears.
+# /etc/init.d/pspexp-term: the PSP as the Omega's console: the PSPExp
+# launcher first (packages in $DIR/opt, fonts in $DIR/assets), the terminal
+# a hold of SELECT away. Waits for the SD card, then runs pspexp-term, which
+# waits for a PSP on USB and reconnects whenever one appears. Everything that
+# grows (packages, box art, settings) lives on the SD card, not the flash.
 #   /etc/init.d/pspexp-term enable|disable|start|stop
 #
 # The restart is done by the small supervisor loop below rather than by
@@ -17,14 +19,16 @@ start_service() {
 	procd_set_param command /bin/sh -c "
 		trap 'kill \$C 2>/dev/null; wait \$C 2>/dev/null; exit 0' TERM INT
 		while [ ! -x $DIR/pspexp-term ]; do sleep 2; done
-		cd /root
+		mkdir -p $DIR/home $DIR/opt/apps $DIR/opt/systems
+		cd $DIR/home
 		while :; do
-			$DIR/pspexp-term --shell /bin/ash & C=\$!
+			$DIR/pspexp-term --shell /bin/ash --launcher & C=\$!
 			wait \$C
 			echo 'pspexp-term exited; restarting in 2 s' >&2
 			sleep 2
 		done"
-	procd_set_param env HOME=/root SHELL=/bin/ash PATH=/usr/sbin:/usr/bin:/sbin:/bin:$DIR
+	procd_set_param env HOME=$DIR/home SHELL=/bin/ash PATH=/usr/sbin:/usr/bin:/sbin:/bin:$DIR \
+		PSPEXP_ROOT=$DIR/opt PSPEXP_LAUNCHER_ASSETS=$DIR/assets
 	procd_set_param stderr 1
 	procd_close_instance
 }

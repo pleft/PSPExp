@@ -143,6 +143,15 @@ Omega's CPU about 90 % idle. Large transfers reach 21 MB/s; small ones are
 slower than on the Mac or the Pi because each USB transfer costs the Omega
 about four times as much.
 
+The Omega also runs the PSPExp launcher: `scripts/install-omega.sh` puts
+the console (`pspexp-term --launcher`), its fonts, the package manager and
+the init script on it, everything that grows on the SD card
+(`/mnt/mmcblk0p1/pspexp`: packages in `opt/`, settings and box art in
+`home/`). Packages are built per board:
+`BOARD=omega GAMESHELL=omega scripts/gs-pkg install freedoom` (a static
+Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU). The
+launcher starts in about 2 s there and uses under 4 MB of memory.
+
 ## ClockworkPi GameShell as the host
 
 The GameShell becomes a PSPExp console: its own launcher, games and apps are
