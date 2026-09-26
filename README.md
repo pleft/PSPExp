@@ -157,7 +157,8 @@ the init script on it, everything that grows on the SD card
 (`/mnt/mmcblk0p1/pspexp`: packages in `opt/`, settings and box art in
 `home/`). Packages are built per board:
 `BOARD=omega GAMESHELL=omega scripts/gs-pkg install freedoom` (a static
-Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU). The
+Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU) and
+`opentyrian` (a static OpenTyrian, `scripts/build-omega.sh tyrian`). The
 launcher starts in about 2 s there and uses under 4 MB of memory.
 
 ## ClockworkPi GameShell as the host
@@ -201,8 +202,8 @@ an on-screen keyboard. The bell beeps on the PSP and raw 44.1 kHz stereo
 written to `/tmp/pspexp-audio` plays there. On Linux a real keyboard and
 mouse (the Raspberry Pi 400's own, or USB ones on the Omega's dock) type into
 the same terminal and are grabbed while the PSP is connected. On a Pi,
-`scripts/install-pspexp-term.sh` installs it as a systemd service for your
-user. On the Omega2+ it starts at boot
+`scripts/install-pi.sh` installs it with the launcher (see above), or
+`scripts/install-pspexp-term.sh` as a plain console service for your user. On the Omega2+ it starts at boot
 (`/etc/init.d/pspexp-term`) and waits for a PSP on USB; running a game from
 it (`doom`) hands the PSP to the game and takes it back afterwards
 (`pspexp-exec`).
@@ -233,6 +234,8 @@ psp/boot/            EBOOT loader
 compatibility/stratagus/  Stratagus renderer backend: patch + notes (v0.2)
 compatibility/sdl-pspexp/ injected library: any SDL2 program on the PSP (v0.4)
 examples/sdl-game/        plain SDL2 test game for it (renderer and window-surface paths)
+tools/pspexp-term/   the PSP as a console: terminal, mirror, the PSPExp launcher
+tools/pspexp-sdl-server/  SDL executor behind TCP 3838: a stand-in PSP for screenshots
 tools/usb-bench/     transport benchmark
 tests/               unit tests (ctest)
 docs/                architecture

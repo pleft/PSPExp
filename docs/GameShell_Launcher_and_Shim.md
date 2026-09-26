@@ -1,6 +1,6 @@
 # GameShell: games through the shim, and a new launcher
 
-**Status:** design, 2026-09-26. Two streams that together make the GameShell a
+**Status:** 2026-09-26: both streams done; the launcher runs on the GameShell, the Omega2+ and the Pi 400 (3.2). Two streams that together make the GameShell a
 complete PSPExp host: (a) every game reaches the PSP the best way it can, and
 (b) the PSP shows a launcher built for it instead of a mirrored 320x240 menu.
 
@@ -136,6 +136,20 @@ handed over; anything else runs in the X session and the mirror shows it
 until it exits. Hold select cycles launcher / terminal / mirror; System >
 Console opens the terminal.
 
+The same launcher runs on every PSPExp board; only the installer and the
+package builds differ (`BOARD=` for `scripts/gs-pkg`):
+
+| Board | Installer (from the Mac) | Packages in | Games |
+|---|---|---|---|
+| GameShell (Debian 13 armhf) | `scripts/install-gameshell.sh`, or the card image | `/opt/pspexp` | Debian's Chocolate Doom and an OpenTyrian compiled on the board, the SDL layer preloaded (`pspexp-run`) |
+| Omega2+ (OpenWrt, MIPS, no FPU) | `scripts/install-omega.sh` | `/mnt/mmcblk0p1/pspexp/opt` (SD card) | static builds with the SDL layer linked in (`build-omega.sh doom`, `build-omega.sh tyrian`), run through `pspexp-exec` |
+| Raspberry Pi (Debian arm64) | `scripts/install-pi.sh` (builds on the Pi) | `/opt/pspexp` | as on the GameShell; OpenTyrian compiled on the Pi (`install-pi.sh tyrian`) |
+
+The installers ship what is already built: run `build-gameshell.sh` or
+`build-omega.sh` first after a source change (`install-pi.sh` builds itself).
+While a game runs the launcher stays resident, asleep, with the PSP handed
+over: about 3 MB on the Omega, whose graphics live on the PSP as textures.
+
 ### 3.3 The look
 
 ```
@@ -194,14 +208,47 @@ About. Root commands go through `sudo -n` with the rule
 `/etc/sudoers.d/pspexp` from the staging list. The fonts and icons are installed to
 `/usr/local/share/pspexp/launcher/`.
 
+**About** (System > About): two cards, this board and the PSP. Board: model
+(device tree, else /proc/cpuinfo: OpenWrt's "machine"), chip and cores, memory, storage,
+system. Storage has one line per storage device: the root file system and
+anything mounted under `/mnt`, `/media` or `/opt`, labelled by what the
+device is (SD card, Internal flash, USB disk, SSD; looked up by device
+number in sysfs, so the GameShell's `/dev/root` reads as its SD card),
+leaving out RAM file systems and partitions under 16 MB. PSP: the link (USB,
+or Wi-Fi with the PSP's address), latency, runtime and screen, PSP memory,
+the board's network addresses, power (battery or mains, temperature,
+uptime). It refreshes every 3 s. A line wider than its card scrolls
+(marquee: still, to its end, still, back) instead of ending in "...", and
+so do long titles in the list.
+
 ### 3.4 Status (2026-09-26)
 
-Done and tested headless on the Mac (`tests/test_launcher_lib.c` for the
-library; the view with the SDL executor, `PSPEXP_TERM_KEYS` replaying buttons
-and `--shot N` writing frames); cross-built for the GameShell. Not yet
-deployed: the GameShell's sshd reset every connection that day. A volume
-page is not needed: the sound plays on the PSP, whose own buttons set it.
-Next: per-entry art for games and apps, the X readback for the Lima mode.
+Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the
+Omega2+ and the Pi 400; `tests/test_launcher_lib.c` covers the library. A
+volume page is not needed: the sound plays on the PSP, whose own buttons set
+it. Next: per-entry art for games and apps, more packages, emulators.
+
+### 3.5 Screenshots from any board
+
+`build/host/pspexp-sdl-server` is the SDL executor behind TCP port 3838, a
+stand-in for a PSP on Wi-Fi (`SDL_VIDEODRIVER=dummy` for no window). A
+temporary console on the board draws to it and asks for frames, which land
+as `pspexp-shot-N.bmp` in the server's directory:
+
+```sh
+# on the Mac
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy build/host/pspexp-sdl-server
+# on the board (the running console keeps its own PSP)
+PSPEXP_LAUNCHER_OPEN=about PSPEXP_TERM_KEYS=wait \
+  pspexp-term --launcher --tcp <mac>:3838 --shot 1
+```
+
+`--shot N` saves every Nth frame sent; a still launcher sends few, so use
+1. `PSPEXP_TERM_KEYS` replays buttons (`left,down,cross,wait,...`) to reach
+other pages; `PSPEXP_LAUNCHER_OPEN=about` opens About without them. Do not
+replay keys into System on a slow link: a dropped press can land on Restart
+or Power off. A game started with `PSPEXP=tcp:<mac>:3838` draws to the same
+server, which is enough to check it runs but not its frame rate.
 
 ## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
 
