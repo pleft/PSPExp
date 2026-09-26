@@ -134,6 +134,11 @@ if(PSPEXP_HAVE_SDL)
   target_compile_definitions(pspexp-term PRIVATE PSPEXP_HAVE_SDL=1)
 endif()
 
+if(PSPEXP_HAVE_SDL)
+  add_executable(pspexp-sdl-server tools/pspexp-sdl-server/main.c)
+  target_link_libraries(pspexp-sdl-server PRIVATE pspexp_sdl pspexp)
+endif()
+
 add_executable(pspexp-sprite-demo examples/sprite-demo/main.c)
 target_link_libraries(pspexp-sprite-demo PRIVATE pspexp pspexp_null pspexp_tcp)
 if(PSPEXP_HAVE_USB)
