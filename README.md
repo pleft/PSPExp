@@ -133,6 +133,14 @@ desktop: the USB link measures the same 25 MB/s as on the Mac, and
 launcher picks SDL's dummy drivers when there is no display, and the SDL
 layer paces the game's audio itself on such a host.
 
+The Pi also runs the PSPExp launcher: `PI=user@host scripts/install-pi.sh`
+(from the Mac) copies the source to `~/pspexp/src` on the Pi, builds it
+there and installs the same layout as the GameShell: the console as a
+systemd service with the launcher, the SDL layer in `/usr/local/lib`,
+packages in `/opt/pspexp`. Packages:
+`BOARD=pi GAMESHELL=user@host scripts/gs-pkg install freedoom opentyrian`
+(Freedoom runs Debian's Chocolate Doom; OpenTyrian is compiled on the Pi).
+
 ## Onion Omega2+ as the host
 
 `scripts/build-omega.sh` cross-compiles static soft-float MIPS binaries of

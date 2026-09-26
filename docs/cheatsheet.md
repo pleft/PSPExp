@@ -59,6 +59,7 @@ cable pull, so pull the cable to read it after a session.
 | GameShell: an SDL2 program on the PSP (headless) / the first-boot log | `pspexp-run <program>` / `cat /var/log/pspexp-firstboot.log` |
 | GameShell: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
 | Omega2+: install the console and launcher / a package built for it | `OMEGA=omega scripts/install-omega.sh` / `BOARD=omega GAMESHELL=omega scripts/gs-pkg install freedoom` |
+| Raspberry Pi: install the console and launcher / packages built for it | `PI=user@<ip> scripts/install-pi.sh` / `BOARD=pi GAMESHELL=user@<ip> scripts/gs-pkg install freedoom opentyrian` |
 | GameShell fresh base: kernel / card image (Debian 13, Linux 6.18) | `scripts/gameshell/base/build-kernel.sh` / `scripts/gameshell/base/build-image.sh clockworkos_v0.6.img [--ssh-key F] [--wifi-from cpi@<ip>]` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,

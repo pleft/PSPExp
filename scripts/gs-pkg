@@ -5,7 +5,7 @@
 #   scripts/gs-pkg install ID...         build when missing, copy, pspexp-pkg install
 #   scripts/gs-pkg remove ID...
 #   scripts/gs-pkg list                  what the GameShell has installed
-# BOARD=gameshell (default) | omega picks the build; GAMESHELL=user@host the
+# BOARD=gameshell (default) | omega | pi picks the build; GAMESHELL=user@host the
 # board to install on (default cpi@gameshell; for the Omega: omega). A recipe
 # is a shell script run as `recipe DIR` that fills DIR (the package's <id>/
 # directory) and writes DIR/package; it may use $ROOT (this repo), $BOARD,

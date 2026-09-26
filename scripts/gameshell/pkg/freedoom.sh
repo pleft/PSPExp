@@ -8,7 +8,7 @@ D="$1"; V=0.13.0
 Z=$(fetch "https://github.com/freedoom/freedoom/releases/download/v$V/freedoom-$V.zip")
 unzip -q -j -o "$Z" "freedoom-$V/freedoom1.wad" "freedoom-$V/freedoom2.wad" "freedoom-$V/COPYING.txt" -d "$D"
 case "$BOARD" in
-gameshell)   # the system's Chocolate Doom, the SDL layer preloaded
+gameshell|pi)   # the system's Chocolate Doom (apt), the SDL layer preloaded
 	REQ="chocolate-doom pspexp-run"
 	RUN="exec pspexp-run chocolate-doom"; ARGS="" ;;
 omega)       # a static Chocolate Doom with the SDL layer built in (build-omega.sh doom)

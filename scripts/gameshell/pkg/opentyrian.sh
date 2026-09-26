@@ -11,6 +11,10 @@ gameshell)   # compiled on the GameShell against its libSDL2; the SDL layer prel
 	BIN="$ROOT/build/gameshell/bin/opentyrian"
 	[ -x "$BIN" ] || "$ROOT/scripts/build-gameshell.sh" tyrian
 	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
+pi)          # compiled on the Pi against its libSDL2 (install-pi.sh tyrian); preloaded
+	BIN="$ROOT/build/pi/bin/opentyrian"
+	[ -x "$BIN" ] || PI="$GAMESHELL" "$ROOT/scripts/install-pi.sh" tyrian
+	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
 omega)       # static, the SDL layer built in (build-omega.sh tyrian)
 	BIN="$ROOT/build/omega/bin/opentyrian"
 	[ -x "$BIN" ] || "$ROOT/scripts/build-omega.sh" tyrian
