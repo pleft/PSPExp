@@ -34,5 +34,8 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
 void launcher_child_exited(int status);
 /* 1 once when the user picked System > Console: show the terminal view */
 int launcher_take_console(void);
+/* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
+ * for the About page */
+void launcher_set_link(const char *desc);
 
 #endif

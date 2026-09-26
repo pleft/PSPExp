@@ -242,6 +242,38 @@ int gfx_text(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int
     return pen - x;
 }
 
+static int CLX, CLY, CLW = SCREEN_W, CLH = SCREEN_H;
+
+void gfx_set_clip(int x, int y, int w, int h)
+{
+    CLX = x; CLY = y; CLW = w; CLH = h;
+    pspexp_set_clip(G, (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h);
+}
+
+int gfx_text_marquee(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int max_w, uint64_t t_us, int *moving)
+{
+    const float speed = 32.0f, pause = 1.4f;   /* px/s, s */
+    int w = gfx_text_width(font, s), over, x0, y0, x1, y1;
+    float t, run, cycle, off;
+    if (max_w <= 0 || w <= max_w) return gfx_text(font, x, y, s, rgb, alpha, 0);
+    over = w - max_w;
+    run = over / speed;
+    cycle = pause + run + pause;
+    t = fmodf((float)(t_us / 1000) / 1000.0f, cycle);
+    off = t < pause ? 0.0f : t < pause + run ? (t - pause) * speed : (float)over;
+    /* clip to the text's box, within the current clip */
+    x0 = x > CLX ? x : CLX; y0 = (y - 2) > CLY ? (y - 2) : CLY;
+    x1 = (x + max_w) < (CLX + CLW) ? (x + max_w) : (CLX + CLW);
+    y1 = (y + F[font].height + 4) < (CLY + CLH) ? (y + F[font].height + 4) : (CLY + CLH);
+    if (x1 > x0 && y1 > y0) {
+        pspexp_set_clip(G, (int16_t)x0, (int16_t)y0, (int16_t)(x1 - x0), (int16_t)(y1 - y0));
+        gfx_text(font, x - (int)lroundf(off), y, s, rgb, alpha, 0);
+        pspexp_set_clip(G, (int16_t)CLX, (int16_t)CLY, (int16_t)CLW, (int16_t)CLH);
+    }
+    if (moving) *moving = 1;
+    return max_w;
+}
+
 /* ---- flat rectangles and 9-slices ---------------------------------------------------------- */
 
 void gfx_rect(int x, int y, int w, int h, uint32_t rgb, int alpha)
@@ -719,7 +751,7 @@ void gfx_cover_forget(const char *key)
 
 /* ---- init -------------------------------------------------------------------------------------------- */
 
-void gfx_frame(PspExpContext *ctx) { G = ctx; }
+void gfx_frame(PspExpContext *ctx) { G = ctx; CLX = 0; CLY = 0; CLW = SCREEN_W; CLH = SCREEN_H; }
 
 int gfx_init(PspExpContext *ctx, const char *assets)
 {

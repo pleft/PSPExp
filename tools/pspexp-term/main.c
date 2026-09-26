@@ -798,6 +798,12 @@ static int try_connect(void)
     fprintf(stderr, "[pspexp-term] PSP connected\n");
     T.dirty = 1;
     mirror_reset();
+    {
+        char link[160];
+        if (g_link_tcp) snprintf(link, sizeof(link), "Wi-Fi, PSP at %s", g_tcp.host ? g_tcp.host : "?");
+        else snprintf(link, sizeof(link), "USB");
+        launcher_set_link(link);
+    }
     launcher_invalidate();
     return 1;
 }
@@ -1751,6 +1757,7 @@ int main(int argc, char **argv)
     pspexp_set_log(ctx, log_fn, NULL);
     if (g_mode == MODE_NULL || g_mode == MODE_SDL) {
         if (pspexp_connect(ctx, 5000) < 0) { fprintf(stderr, "no HELLO\n"); return 1; }
+        launcher_set_link(g_mode == MODE_SDL ? "SDL window (a test executor)" : "none (null executor)");
     } else {
         fprintf(stderr, "[pspexp-term] waiting for the PSP (%s%s%s)\n", g_want_usb ? "usb" : "", g_want_usb && g_want_tcp ? " + " : "", g_want_tcp ? "tcp" : "");
     }

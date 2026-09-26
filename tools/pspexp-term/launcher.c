@@ -26,6 +26,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/statvfs.h>
+#include <sys/utsname.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 #define SCREEN_W 480
 #define SCREEN_H 272
@@ -156,7 +162,7 @@ static void cats_build(void)
     action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "The GameShell's shell on the PSP");
     action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart the GameShell");
     action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut the GameShell down");
-    action(&g_actions[g_nactions++], "about", "About", "info", "PSPExp launcher: library and systems");
+    action(&g_actions[g_nactions++], "about", "About", "info", "This board, the PSP and the connection");
     for (i = 0; i < g_nactions; i++) cat_push(c, &g_actions[i]);
     /* back to where we were */
     g_cur = -1;
@@ -178,7 +184,20 @@ static LEntry *cur_entry(void)
 
 /* ---- state ------------------------------------------------------------------------------ */
 
+enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT };
+static int g_mode;
+static float g_overlay_a;             /* search / details / about fade-in */
+static uint64_t g_about_at;
+static void about_collect(void);
+
 static int g_dirty = 1, g_anim;
+static uint64_t g_now, g_open_at;   /* this frame's time; when the details card or About page opened */
+
+/* scrolling text: keeps frames coming while it moves */
+static int mtext(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int max_w, uint64_t since)
+{
+    return gfx_text_marquee(font, x, y, s, rgb, alpha, max_w, g_now - since, &g_anim);
+}
 static uint64_t g_last_frame, g_sel_since;
 static float g_rail_x = 16, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024], g_cover_fade = 1;
 static char g_cover_prev[160], g_cover_cur[160];
@@ -412,11 +431,12 @@ static void run_action(LEntry *e, uint64_t now)
         g_launch_pending = 1;
         toast("power", reboot ? "Restarting..." : "Powering off...", now);
     } else if (!strcmp(a, "about")) {
-        char s[160];
-        int roms = 0, i;
-        for (i = 0; i < L.nsys; i++) roms += L.sys[i].nroms;
-        snprintf(s, sizeof(s), "%d games and apps, %d ROMs, %d systems", L.n, roms, L.nsys);
-        toast("info", s, now);
+        about_collect();
+        g_about_at = now;
+        g_open_at = now;
+        g_mode = M_ABOUT;
+        g_overlay_a = 0;
+        g_dirty = 1;
     }
 }
 
@@ -459,11 +479,182 @@ void launcher_child_exited(int status)
 
 void launcher_invalidate(void) { g_dirty = 1; }
 
+/* ---- about: this board and the PSP --------------------------------------------------------------- */
+
+static char g_link[160] = "not connected";
+void launcher_set_link(const char *desc) { snprintf(g_link, sizeof(g_link), "%s", desc ? desc : ""); g_dirty = 1; }
+
+typedef struct About {
+    char board[96], soc[96], cpu[96], mem[64], disk[64], os[96], kernel[96];
+    char host[64], net[160], power[64], temp[32], uptime[48], library[96];
+} About;
+static About g_about;
+
+static int read_line(const char *path, char *out, size_t n)
+{
+    FILE *f = fopen(path, "r");
+    size_t l;
+    if (!f) return -1;
+    if (!fgets(out, (int)n, f)) { fclose(f); return -1; }
+    fclose(f);
+    l = strlen(out);
+    while (l && (out[l - 1] == '\n' || out[l - 1] == '\r' || out[l - 1] == ' ')) out[--l] = 0;
+    return 0;
+}
+
+/* KEY="value" from os-release style files */
+static int read_quoted(const char *path, const char *key, char *out, size_t n)
+{
+    FILE *f = fopen(path, "r");
+    char line[256];
+    size_t kl = strlen(key);
+    if (!f) return -1;
+    while (fgets(line, sizeof(line), f)) {
+        if (!strncmp(line, key, kl) && line[kl] == '=') {
+            char *v = line + kl + 1, *e;
+            if (*v == '"' || *v == '\'') v++;
+            e = v + strlen(v);
+            while (e > v && (e[-1] == '\n' || e[-1] == '"' || e[-1] == '\'')) *--e = 0;
+            snprintf(out, n, "%s", v);
+            fclose(f);
+            return 0;
+        }
+    }
+    fclose(f);
+    return -1;
+}
+
+static void cpuinfo_field(const char *key, char *out, size_t n)
+{
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    char line[256];
+    size_t kl = strlen(key);
+    out[0] = 0;
+    if (!f) return;
+    while (fgets(line, sizeof(line), f)) {
+        if (!strncasecmp(line, key, kl)) {
+            char *c = strchr(line, ':');
+            if (c) { c++; while (*c == ' ' || *c == '\t') c++; snprintf(out, n, "%s", c); }
+            break;
+        }
+    }
+    fclose(f);
+    { size_t l = strlen(out); while (l && (out[l - 1] == '\n' || out[l - 1] == ' ')) out[--l] = 0; }
+}
+
+/* the chip, from the device tree's compatible list (friendlier than /proc/cpuinfo) */
+static void soc_name(char *out, size_t n)
+{
+    static const struct { const char *compat, *name; } SOCS[] = {
+        { "allwinner,sun8i-r16", "Allwinner R16" }, { "allwinner,sun8i-a33", "Allwinner A33" },
+        { "allwinner,sun8i-h3", "Allwinner H3" }, { "allwinner,sun50i-h6", "Allwinner H6" },
+        { "brcm,bcm2712", "Broadcom BCM2712" }, { "brcm,bcm2711", "Broadcom BCM2711" },
+        { "brcm,bcm2837", "Broadcom BCM2837" }, { "brcm,bcm2836", "Broadcom BCM2836" }, { "brcm,bcm2835", "Broadcom BCM2835" },
+        { "mediatek,mt7628an-soc", "MediaTek MT7688" }, { "mediatek,mt7628", "MediaTek MT7688" },
+        { "rockchip,rk3399", "Rockchip RK3399" }, { "rockchip,rk3566", "Rockchip RK3566" },
+    };
+    char buf[512];
+    FILE *f = fopen("/proc/device-tree/compatible", "rb");
+    size_t len = 0, i, k;
+    out[0] = 0;
+    if (f) { len = fread(buf, 1, sizeof(buf) - 1, f); fclose(f); }
+    buf[len] = 0;
+    for (k = 0; k < sizeof(SOCS) / sizeof(SOCS[0]) && !out[0]; k++)   /* first match in table order: most specific */
+        for (i = 0; i < len; i += strlen(buf + i) + 1)
+            if (!strcmp(buf + i, SOCS[k].compat)) { snprintf(out, n, "%s", SOCS[k].name); break; }
+    if (!out[0]) cpuinfo_field("system type", out, n);   /* OpenWrt on MIPS */
+    if (!out[0]) cpuinfo_field("Hardware", out, n);
+    if (!out[0]) cpuinfo_field("model name", out, n);
+}
+
+static void human_bytes(unsigned long long b, char *out, size_t n)
+{
+    if (b >= 1000ull * 1000 * 1000) snprintf(out, n, "%.1f GB", (double)b / 1e9);
+    else snprintf(out, n, "%llu MB", b / 1000000ull);
+}
+
+static void about_collect(void)
+{
+    About *a = &g_about;
+    struct utsname u;
+    struct statvfs sv;
+    char tmp[128], t2[64];
+    int cores = 0, bat, i;
+    memset(a, 0, sizeof(*a));
+    if (read_line("/proc/device-tree/model", a->board, sizeof(a->board)) < 0 || !a->board[0]) {
+        cpuinfo_field("machine", a->board, sizeof(a->board));   /* OpenWrt: "Onion Omega2+" */
+        if (!a->board[0]) cpuinfo_field("Model", a->board, sizeof(a->board));
+        if (!a->board[0]) snprintf(a->board, sizeof(a->board), "Linux computer");
+    }
+    soc_name(a->soc, sizeof(a->soc));
+    { FILE *f = fopen("/proc/cpuinfo", "r"); char l[256]; if (f) { while (fgets(l, sizeof(l), f)) if (!strncmp(l, "processor", 9)) cores++; fclose(f); } }
+    tmp[0] = 0;
+    if (read_line("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", tmp, sizeof(tmp)) == 0 && atol(tmp) > 0)
+        snprintf(t2, sizeof(t2), ", %.1f GHz", atol(tmp) / 1e6);
+    else t2[0] = 0;
+    uname(&u);
+    if (!cores) cores = 1;
+    snprintf(a->cpu, sizeof(a->cpu), "%d core%s %s%s", cores, cores == 1 ? "" : "s", u.machine, t2);
+    {
+        FILE *f = fopen("/proc/meminfo", "r");
+        char l[128]; unsigned long long tot = 0, avail = 0;
+        if (f) {
+            while (fgets(l, sizeof(l), f)) {
+                if (!strncmp(l, "MemTotal:", 9)) tot = strtoull(l + 9, NULL, 10) * 1024ull;
+                else if (!strncmp(l, "MemAvailable:", 13)) avail = strtoull(l + 13, NULL, 10) * 1024ull;
+            }
+            fclose(f);
+        }
+        human_bytes(tot, tmp, sizeof(tmp)); human_bytes(avail, t2, sizeof(t2));
+        snprintf(a->mem, sizeof(a->mem), "%s, %s free", tmp, t2);
+    }
+    if (statvfs("/", &sv) == 0) {
+        human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tmp, sizeof(tmp));
+        human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, t2, sizeof(t2));
+        snprintf(a->disk, sizeof(a->disk), "%s, %s free", tmp, t2);
+    }
+    if (read_quoted("/etc/os-release", "PRETTY_NAME", a->os, sizeof(a->os)) < 0)
+        read_quoted("/etc/openwrt_release", "DISTRIB_DESCRIPTION", a->os, sizeof(a->os));
+    snprintf(a->kernel, sizeof(a->kernel), "Linux %s", u.release);
+    gethostname(a->host, sizeof(a->host) - 1);
+    {   /* IPv4 addresses, one per interface */
+        struct ifaddrs *ifs, *it;
+        size_t o = 0;
+        if (getifaddrs(&ifs) == 0) {
+            for (it = ifs; it; it = it->ifa_next) {
+                char ip[INET_ADDRSTRLEN];
+                if (!it->ifa_addr || it->ifa_addr->sa_family != AF_INET || (it->ifa_flags & IFF_LOOPBACK)) continue;
+                inet_ntop(AF_INET, &((struct sockaddr_in *)it->ifa_addr)->sin_addr, ip, sizeof(ip));
+                if (o + strlen(ip) + strlen(it->ifa_name) + 5 < sizeof(a->net))
+                    o += (size_t)snprintf(a->net + o, sizeof(a->net) - o, "%s%s %s", o ? ", " : "", it->ifa_name, ip);
+            }
+            freeifaddrs(ifs);
+        }
+        if (!o) snprintf(a->net, sizeof(a->net), "no network");
+    }
+    bat = g_bat;
+    if (bat >= 0) snprintf(a->power, sizeof(a->power), "battery %d%%%s", bat, g_chg ? ", charging" : "");
+    else snprintf(a->power, sizeof(a->power), "mains / USB");
+    for (i = 0; i < 4 && !a->temp[0]; i++) {
+        char p[80];
+        snprintf(p, sizeof(p), "/sys/class/thermal/thermal_zone%d/temp", i);
+        if (read_line(p, tmp, sizeof(tmp)) == 0 && atol(tmp) > 0) snprintf(a->temp, sizeof(a->temp), "%.0f C", atol(tmp) / 1000.0);
+    }
+    if (read_line("/proc/uptime", tmp, sizeof(tmp)) == 0) {
+        long up = atol(tmp);
+        if (up >= 86400) snprintf(a->uptime, sizeof(a->uptime), "%ld d %ld h", up / 86400, up % 86400 / 3600);
+        else if (up >= 3600) snprintf(a->uptime, sizeof(a->uptime), "%ld h %ld min", up / 3600, up % 3600 / 60);
+        else snprintf(a->uptime, sizeof(a->uptime), "%ld min", up / 60);
+    }
+    {
+        int roms = 0, s2;
+        for (s2 = 0; s2 < L.nsys; s2++) roms += L.sys[s2].nroms;
+        snprintf(a->library, sizeof(a->library), "%d games and apps, %d systems, %d ROMs", L.n, L.nsys, roms);
+    }
+}
+
 /* ---- search and details: state and logic ------------------------------------------------------ */
 
-enum { M_BROWSE, M_SEARCH, M_DETAILS };
-static int g_mode;
-static float g_overlay_a;             /* search / details fade-in */
 
 /* search: an on-screen keyboard over live results from the whole library */
 #define KB_COLS 13
@@ -574,6 +765,7 @@ static void search_input(uint32_t pressed, int up, int down, int left, int right
         if ((pressed & PSPEXP_BUTTON_START) && g_nres) g_sfocus = 1;
         if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; }
     } else {
+        if ((up || down) && g_nres) g_sel_since = now;
         if (up && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_UP) ? (g_ssel + g_nres - 1) % g_nres : (g_ssel > 0 ? g_ssel - 1 : 0);
         if (down && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_DOWN) ? (g_ssel + 1) % g_nres : (g_ssel + 1 < g_nres ? g_ssel + 1 : g_ssel);
         if ((pressed & PSPEXP_BUTTON_CROSS) && g_nres) { LEntry *e = g_res[g_ssel]; g_mode = M_BROWSE; launch(e, now); }
@@ -641,6 +833,10 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     if (g_running || !g_ncat) return;
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
+    if (g_mode == M_ABOUT) {
+        if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_mode = M_BROWSE; g_dirty = 1; }
+        return;
+    }
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
     if (left) select_cat(g_cur - 1, -1, now);
     if (right) select_cat(g_cur + 1, 1, now);
@@ -662,7 +858,7 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) {
         if (e->type == LT_ACTION) toast(e->icon, e->tags, now);
-        else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_dirty = 1; }
+        else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
     }
 }
 
@@ -742,6 +938,7 @@ int launcher_needs_frame(uint64_t now)
     status_poll(now);
     if (g_confirm[0] && now > g_confirm_until) g_confirm[0] = 0;
     if (g_mode == M_SEARCH && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
+    if (g_mode == M_ABOUT && now - g_about_at > 3000000u) { about_collect(); g_about_at = now; g_dirty = 1; }
     if (g_toast[0] && now >= g_toast_until && g_toast_a <= 0.01f) { g_toast[0] = 0; g_dirty = 1; }
     return g_dirty || g_anim || g_toast[0] != 0;
 }
@@ -897,7 +1094,7 @@ static void draw_list(float dt)
     if (target < 0) target = 0;
     c->scroll = ease(c->scroll, target, 16.0f, dt, 0.3f);
 
-    pspexp_set_clip(g_ctx, LIST_X - 8, LIST_Y - 2, LIST_W + 16, LIST_H + 4);
+    gfx_set_clip(LIST_X - 8, LIST_Y - 2, LIST_W + 16, LIST_H + 4);
     y = (float)LIST_Y - c->scroll;
     for (i = 0; i < c->n; i++) {
         float ex = i < 1024 ? g_expand[i] : 0;
@@ -930,15 +1127,16 @@ static void draw_list(float dt)
                 gfx_text(FONT_BADGE, right, ry + (ROW - gfx_line_height(FONT_BADGE)) / 2 + 1, b, C_MUTED, alpha, 0);
                 right -= 8;
             }
-            gfx_text(font, tx, ry + (ROW - lh) / 2 + (sel ? 1 : 0), it->title, sel ? C_TEXT : C_SUB, alpha, right - tx - 4);
+            if (sel) mtext(font, tx, ry + (ROW - lh) / 2 + 1, it->title, C_TEXT, alpha, right - tx - 4, g_sel_since);
+            else gfx_text(font, tx, ry + (ROW - lh) / 2, it->title, C_SUB, alpha, right - tx - 4);
             if (ex > 0.3f) {
                 detail_line(it, s, sizeof(s));
-                gfx_text(FONT_SMALL, tx, ry + ROW - 1, s, C_MUTED, (int)((ex - 0.3f) / 0.7f * alpha), LIST_X + LIST_W - 12 - tx + dx);
+                mtext(FONT_SMALL, tx, ry + ROW - 1, s, C_MUTED, (int)((ex - 0.3f) / 0.7f * alpha), LIST_X + LIST_W - 12 - tx + dx, g_sel_since);
             }
         }
         y += (float)h;
     }
-    pspexp_set_clip(g_ctx, 0, 0, SCREEN_W, SCREEN_H);
+    gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
 
     /* scroll bar */
     if (c->n * ROW + ROW_EXTRA > LIST_H) {
@@ -1028,7 +1226,7 @@ static void draw_search(float dt)
         if (target > (float)(g_nres - S_ROWS)) target = (float)(g_nres - S_ROWS);
         if (target < 0) target = 0;
         g_sscroll = ease(g_sscroll, target, 16.0f, dt, 0.02f);
-        pspexp_set_clip(g_ctx, fx - 4, S_RES_Y - 2, fw + 8, S_ROWS * ROW + 4);
+        gfx_set_clip(fx - 4, S_RES_Y - 2, fw + 8, S_ROWS * ROW + 4);
         for (i = 0; i < g_nres; i++) {
             LEntry *e = g_res[i];
             int ry = S_RES_Y + (int)lroundf((i - g_sscroll) * ROW), sel = i == g_ssel, right = fx + fw - 10;
@@ -1043,9 +1241,10 @@ static void draw_search(float dt)
             right -= gfx_text_width(FONT_BADGE, b);
             gfx_text(FONT_BADGE, right, ry + (ROW - gfx_line_height(FONT_BADGE)) / 2 + 1, b, C_MUTED, a, 0);
             if (e->fav) { right -= 18; gfx_icon("star", 12, right, ry + (ROW - 12) / 2, 0xfbbf24, a); }
-            gfx_text(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, sel && g_sfocus ? C_TEXT : C_SUB, a, right - fx - 44);
+            if (sel && g_sfocus) mtext(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, C_TEXT, a, right - fx - 44, g_sel_since);
+            else gfx_text(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, C_SUB, a, right - fx - 44);
         }
-        pspexp_set_clip(g_ctx, 0, 0, SCREEN_W, SCREEN_H);
+        gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     }
     /* keyboard */
     kb_a = g_sfocus ? a * 110 / 255 : a;
@@ -1084,7 +1283,7 @@ static void draw_search(float dt)
 static void info_row(int x, int y, const char *icon, const char *text, int w, int a)
 {
     gfx_icon(icon, 14, x, y + 1, C_MUTED, a);
-    gfx_text(FONT_SMALL, x + 22, y + (16 - gfx_line_height(FONT_SMALL)) / 2, text, C_SUB, a, w - 22);
+    mtext(FONT_SMALL, x + 22, y + (16 - gfx_line_height(FONT_SMALL)) / 2, text, C_SUB, a, w - 22, g_open_at);
 }
 
 static void draw_details(float dt)
@@ -1101,7 +1300,7 @@ static void draw_details(float dt)
     gfx_nine(NINE_R14, cx, cy, cw, ch, 0x1a2030, a * 250 / 255);
     draw_cover(e, cx + 16, cy + 16, a);
     tx = cx + 16 + COVER_SIZE + 18; ty = cy + 16; tw = cx + cw - 16 - tx;
-    gfx_text(FONT_H1, tx, ty, e->title, C_TEXT, a, tw);
+    mtext(FONT_H1, tx, ty, e->title, C_TEXT, a, tw, g_open_at);
     ty += gfx_line_height(FONT_H1) + 2;
     switch (e->type) {
     case LT_ROM: snprintf(s, sizeof(s), "%s game", L.sys[e->sys].name); break;
@@ -1109,8 +1308,7 @@ static void draw_details(float dt)
     case LT_TOOL: snprintf(s, sizeof(s), "Tool"); break;
     default: snprintf(s, sizeof(s), "Game"); break;
     }
-    if (e->desc[0]) { gfx_text(FONT_BODY, tx, ty, e->desc, C_SUB, a, tw); }
-    else gfx_text(FONT_BODY, tx, ty, s, C_SUB, a, tw);
+    mtext(FONT_BODY, tx, ty, e->desc[0] ? e->desc : s, C_SUB, a, tw, g_open_at);
     ty += 26;
     if (e->type == LT_ROM) {
         const char *base = strrchr(e->exec, '/');
@@ -1154,7 +1352,7 @@ static void draw_toast(float dt, uint64_t now)
     gfx_shadow(NINE_SHADOW10, x, y + 3, w, 26, 0x000000, a * 170 / 255);
     gfx_nine(NINE_R10, x, y, w, 26, 0x2a3142, a * 245 / 255);
     if (ic) gfx_icon(g_toast_icon, 14, x + 12, y + 6, C_ACCENT, a);
-    gfx_text(FONT_BODY, x + 14 + ic, y + (26 - gfx_line_height(FONT_BODY)) / 2, g_toast, C_TEXT, a, w - 28 - ic);
+    mtext(FONT_BODY, x + 14 + ic, y + (26 - gfx_line_height(FONT_BODY)) / 2, g_toast, C_TEXT, a, w - 28 - ic, g_toast_until - 2600000u);
 }
 
 static void draw_running(void)
@@ -1172,12 +1370,83 @@ static void draw_running(void)
     gfx_text(FONT_SMALL, (SCREEN_W - w) / 2, HINT_Y - 1, h, C_MUTED, 255, 0);
 }
 
+/* ---- the about page --------------------------------------------------------------------------------- */
+
+static int about_row(int x, int y, int w, const char *icon, const char *label, const char *value, int a)
+{
+    if (!value || !value[0]) return y;
+    gfx_icon(icon, 14, x, y + 3, C_MUTED, a);
+    gfx_text(FONT_BADGE, x + 22, y, label, C_MUTED, a, w - 22);
+    mtext(FONT_BODY, x + 22, y + 11, value, C_TEXT, a, w - 22, g_open_at);
+    return y + 28;
+}
+
+static void draw_about(float dt)
+{
+    About *b = &g_about;
+    const PspExpHello *h = g_ctx ? pspexp_caps(g_ctx) : NULL;
+    const PspExpStats *st = g_ctx ? pspexp_stats(g_ctx) : NULL;
+    int a, cw = (SCREEN_W - 16 * 2 - 12) / 2, cx1 = 16, cx2 = 16 + cw + 12, cy = 42, ch = 200, y;
+    char psp[96] = "", mem[96] = "", rtt[48] = "", host[128];
+    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
+    a = (int)(g_overlay_a * 255);
+    snprintf(host, sizeof(host), "%s", b->host);
+    gfx_icon("info", 20, 16, 12, C_ACCENT, a);
+    gfx_text(FONT_TITLE, 44, 11, "About this console", C_TEXT, a, 0);
+    gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 15, host, C_MUTED, a, 0);
+
+    gfx_shadow(NINE_SHADOW10, cx1, cy + 4, cw, ch, 0x000000, a * 120 / 255);
+    gfx_nine(NINE_R10, cx1, cy, cw, ch, 0x1a2030, a * 240 / 255);
+    gfx_text(FONT_BADGE, cx1 + 12, cy + 9, "THIS BOARD", C_ACCENT, a, 0);
+    y = cy + 26;
+    y = about_row(cx1 + 12, y, cw - 24, "cpu", "BOARD", b->board, a);
+    {
+        char chip[160];
+        snprintf(chip, sizeof(chip), "%s%s%s", b->soc, b->soc[0] ? ", " : "", b->cpu);
+        y = about_row(cx1 + 12, y, cw - 24, "zap", "CHIP", chip, a);
+    }
+    y = about_row(cx1 + 12, y, cw - 24, "layers", "MEMORY", b->mem, a);
+    y = about_row(cx1 + 12, y, cw - 24, "hard-drive", "STORAGE", b->disk, a);
+    {
+        char sys[200];
+        snprintf(sys, sizeof(sys), "%s, %s", b->os[0] ? b->os : "Linux", b->kernel);
+        about_row(cx1 + 12, y, cw - 24, "square-terminal", "SYSTEM", sys, a);
+    }
+
+    gfx_shadow(NINE_SHADOW10, cx2, cy + 4, cw, ch, 0x000000, a * 120 / 255);
+    gfx_nine(NINE_R10, cx2, cy, cw, ch, 0x1a2030, a * 240 / 255);
+    gfx_text(FONT_BADGE, cx2 + 12, cy + 9, "PSP AND CONNECTION", C_ACCENT, a, 0);
+    if (h && h->protocol) {
+        snprintf(psp, sizeof(psp), "runtime %u, %ux%u at %u Hz", h->runtime_version, h->display_width, h->display_height, h->refresh_hz);
+        snprintf(mem, sizeof(mem), "%u KB VRAM, %u KB RAM", (unsigned)(h->vram_budget / 1024), (unsigned)(h->ram_budget / 1024));
+    }
+    if (st && st->last_present_latency_us) snprintf(rtt, sizeof(rtt), "%.1f ms per frame, send to shown", st->last_present_latency_us / 1000.0);
+    y = cy + 26;
+    y = about_row(cx2 + 12, y, cw - 24, "link", "LINK", g_link, a);
+    y = about_row(cx2 + 12, y, cw - 24, "clock", "LATENCY", rtt, a);
+    y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSP", psp, a);
+    y = about_row(cx2 + 12, y, cw - 24, "layers", "PSP MEMORY", mem, a);
+    y = about_row(cx2 + 12, y, cw - 24, "globe", "NETWORK", b->net, a);
+    {
+        char pw[140];
+        snprintf(pw, sizeof(pw), "%s%s%s%s%s", b->power, b->temp[0] ? ", " : "", b->temp, b->uptime[0] ? ", up " : "", b->uptime);
+        about_row(cx2 + 12, y, cw - 24, g_bat >= 0 ? "battery-full" : "zap", "POWER", pw, a);
+    }
+
+    gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, b->library), HINT_Y - 1, b->library, C_MUTED, a, SCREEN_W - 100);
+    {
+        int x = 16;
+        gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Back", C_SUB, 255, 0);
+    }
+}
+
 void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
 {
     float dt = g_last_frame ? (float)(now - g_last_frame) / 1e6f : 0.016f;
     (void)psp_connected;
     if (dt > 0.1f) dt = 0.1f;
     g_last_frame = now;
+    g_now = now;
     g_anim = 0;
     g_ctx = ctx;
     gfx_frame(ctx);
@@ -1186,6 +1455,7 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
     gfx_backdrop();
     if (g_running) draw_running();
     else if (g_mode == M_SEARCH) draw_search(dt);
+    else if (g_mode == M_ABOUT) draw_about(dt);
     else if (g_ncat) {
         draw_status();
         draw_rail(dt);

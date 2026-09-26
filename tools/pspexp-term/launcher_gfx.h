@@ -36,6 +36,14 @@ int  gfx_init(PspExpContext *ctx, const char *assets_dir);
 void gfx_frame(PspExpContext *ctx);   /* call at the start of every frame */
 
 int  gfx_text(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int max_w);
+/* like gfx_text, but a line wider than max_w scrolls instead of ending in
+ * "...": still for a moment, then to its end, still again, back. t_us is the
+ * time since the text appeared (restart it when it changes). Sets *moving
+ * when it scrolls, so the caller keeps drawing frames. */
+int  gfx_text_marquee(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int max_w, uint64_t t_us, int *moving);
+/* the clip rectangle, remembered so text scrolling inside it can narrow it
+ * and put it back */
+void gfx_set_clip(int x, int y, int w, int h);
 int  gfx_text_width(int font, const char *s);
 int  gfx_line_height(int font);
 
