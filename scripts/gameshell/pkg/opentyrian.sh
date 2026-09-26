@@ -13,12 +13,15 @@ gameshell)   # compiled on the GameShell against its libSDL2; the SDL layer prel
 	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
 pi)          # compiled on the Pi against its libSDL2 (install-pi.sh tyrian); preloaded
 	BIN="$ROOT/build/pi/bin/opentyrian"
-	[ -x "$BIN" ] || PI="$GAMESHELL" "$ROOT/scripts/install-pi.sh" tyrian
+	[ -x "$BIN" ] || PI="$HOST" "$ROOT/scripts/install-pi.sh" tyrian
 	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
 omega)       # static, the SDL layer built in (build-omega.sh tyrian)
 	BIN="$ROOT/build/omega/bin/opentyrian"
 	[ -x "$BIN" ] || "$ROOT/scripts/build-omega.sh" tyrian
-	RUN="env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy pspexp-exec ./opentyrian"; REQ="pspexp-exec" ;;
+	RUN="env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy pspexp-exec ./opentyrian"; REQ="pspexp-exec"
+	# 16-bit pages, not CLUT8: over USB the MT7688's CPU is the limit, and
+	# indexing costs it more than the extra bytes (measured: 21-25 -> 25 fps)
+	EXTRA_ENV="env=PSPEXP_CLUT=0" ;;
 *) echo "opentyrian: no build for $BOARD" >&2; exit 3 ;;
 esac
 Z=$(fetch "https://camanis.net/tyrian/tyrian21.zip")
@@ -50,5 +53,6 @@ icon=rocket
 exec=./run.sh
 env=PSPEXP_KEYS=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right
 env=PSPEXP_NUB=keys
+${EXTRA_ENV:-}
 pspexp=1
 E

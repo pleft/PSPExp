@@ -6,7 +6,7 @@
 #   scripts/build-gameshell.sh
 #   GAMESHELL=user@host scripts/install-gameshell.sh
 # GAMESHELL defaults to cpi@gameshell; cpi needs sudo without a password
-# (the GameShell OS default). Games and apps are packages: scripts/gs-pkg.
+# (the GameShell OS default). Games and apps are packages: scripts/pspexp-pkg-build.
 # Removing ClockworkOS's own launcher and games, once: scripts/gameshell/clean-stock.sh.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,7 +15,7 @@ GS="${GAMESHELL:-cpi@gameshell}"
 ssh -o ConnectTimeout=8 "$GS" 'sudo -n true' 2>/dev/null || { echo "cannot run sudo on $GS without a password" >&2; exit 1; }
 
 gs_fetch() { ssh "$GS" "cat '$1' 2>/dev/null" > "$2" || : ; }
-# after its first boot a GameShell gets packages with scripts/gs-pkg, not the bundle
+# after its first boot a GameShell gets packages with scripts/pspexp-pkg-build, not the bundle
 ssh "$GS" 'test -f /etc/pspexp/firstboot-done' 2>/dev/null && export GS_PREINSTALL=0
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT

@@ -6,7 +6,7 @@
 # the flash is small. Then the console restarts.
 #   scripts/build-omega.sh
 #   OMEGA=root@host scripts/install-omega.sh      (default: the ssh alias "omega")
-# Packages: BOARD=omega GAMESHELL=<same host> scripts/gs-pkg install freedoom
+# Packages: BOARD=omega HOST=<same host> scripts/pspexp-pkg-build install freedoom
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OM="${OMEGA:-omega}"

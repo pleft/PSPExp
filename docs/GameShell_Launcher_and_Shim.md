@@ -137,7 +137,7 @@ until it exits. Hold select cycles launcher / terminal / mirror; System >
 Console opens the terminal.
 
 The same launcher runs on every PSPExp board; only the installer and the
-package builds differ (`BOARD=` for `scripts/gs-pkg`):
+package builds differ (`BOARD=` for `scripts/pspexp-pkg-build`):
 
 | Board | Installer (from the Mac) | Packages in | Games |
 |---|---|---|---|
@@ -284,12 +284,12 @@ does it at once.
 
 ### 4.2 Packages
 
-`scripts/gs-pkg build ID` runs the recipe `scripts/gameshell/pkg/ID.sh`,
+`scripts/pspexp-pkg-build build ID` runs the recipe `scripts/gameshell/pkg/ID.sh`,
 which fills the package folder (downloads cached in build/gameshell/pkg-cache,
-helpers in `_lib.sh`) -> `build/gameshell/pkg/ID.tar.gz`. `gs-pkg install
+helpers in `_lib.sh`) -> `build/gameshell/pkg/ID.tar.gz`. `pspexp-pkg-build install
 ID` copies it over and runs `pspexp-pkg install` (unpacks next to the apps
 folder, checks `requires`, replaces the old version in one rename, copies its
-systems). `gs-pkg remove`, `gs-pkg list`, and `pspexp-pkg` on the GameShell
+systems). `pspexp-pkg-build remove`, `pspexp-pkg-build list`, and `pspexp-pkg` on the GameShell
 for a tarball from anywhere. Only titles the PSP draws (through pspexp-run)
 are packaged; data is only what may be redistributed.
 

@@ -4,7 +4,7 @@
 # with its packages. Built on this machine in containers (OrbStack/Docker):
 #
 #   scripts/build-gameshell.sh                   (the tools and the SDL layer)
-#   scripts/gs-pkg build freedoom opentyrian     (the packages to bundle)
+#   scripts/pspexp-pkg-build build freedoom opentyrian     (the packages to bundle)
 #   scripts/gameshell/base/build-kernel.sh
 #   scripts/gameshell/base/build-image.sh STOCK.img [options]
 #       -> build/gameshell-base/pspexp-gameshell.img  (write it to a card)

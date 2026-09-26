@@ -1159,7 +1159,7 @@ static void draw_list(float dt)
 
     if (!c->n) {
         gfx_text(FONT_TITLE, LIST_X + 10 + dx, LIST_Y + 18, c->kind == CK_GAMES ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
-        gfx_text(FONT_SMALL, LIST_X + 10 + dx, LIST_Y + 42, "Install packages with gs-pkg; they appear here", C_MUTED, alpha, 0);
+        gfx_text(FONT_SMALL, LIST_X + 10 + dx, LIST_Y + 42, "Installed games and apps appear here", C_MUTED, alpha, 0);
         return;
     }
 

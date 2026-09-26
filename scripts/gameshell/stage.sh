@@ -28,7 +28,7 @@ gs_stage() {
 	gs_copy "$G/pspexp-run" 0755 0 0 /usr/local/bin/pspexp-run
 	gs_rm /usr/local/bin/pspexp-tyrian   # replaced by the opentyrian package
 
-	# PSPExp packages: the launcher's games and apps (scripts/gs-pkg on the
+	# PSPExp packages: the launcher's games and apps (scripts/pspexp-pkg-build on the
 	# Mac, pspexp-pkg here), owned by cpi so installing needs no root
 	gs_dir 0755 1000 1000 /opt/pspexp
 	gs_dir 0755 1000 1000 /opt/pspexp/apps

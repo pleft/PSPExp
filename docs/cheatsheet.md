@@ -55,12 +55,12 @@ cable pull, so pull the cable to read it after a session.
 | install the console as a service on a Pi (its keyboard and mouse type into it) | `scripts/install-pspexp-term.sh` (`remove` to uninstall) |
 | GameShell: build the tools and the SDL layer / OpenTyrian's binary (compiled on the GameShell) | `scripts/build-gameshell.sh` / `GAMESHELL=cpi@<ip> scripts/build-gameshell.sh tyrian` |
 | GameShell: prepare a card image (packages included, stock removed on first boot) / update a running GameShell | `scripts/gameshell-prep-image.sh <image> [--wifi]` / `GAMESHELL=cpi@<ip> scripts/install-gameshell.sh` |
-| GameShell: packages (build, install, remove, list; recipes in scripts/gameshell/pkg) | `GAMESHELL=cpi@<ip> scripts/gs-pkg install freedoom opentyrian` / `scripts/gs-pkg list` |
+| GameShell: packages (build, install, remove, list; recipes in scripts/gameshell/pkg) | `HOST=cpi@<ip> scripts/pspexp-pkg-build install freedoom opentyrian` / `scripts/pspexp-pkg-build list` |
 | GameShell: an SDL2 program on the PSP (headless) / the first-boot log | `pspexp-run <program>` / `cat /var/log/pspexp-firstboot.log` |
 | GameShell: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
 | Omega2+: build the tools / Doom / OpenTyrian (static, SDL layer linked in) | `scripts/build-omega.sh` / `scripts/build-omega.sh doom` / `scripts/build-omega.sh tyrian` |
-| Omega2+: install the console and launcher / packages built for it | `OMEGA=omega scripts/install-omega.sh` / `BOARD=omega GAMESHELL=omega scripts/gs-pkg install freedoom opentyrian` |
-| Raspberry Pi: install the console and launcher / packages built for it | `PI=user@<ip> scripts/install-pi.sh` / `BOARD=pi GAMESHELL=user@<ip> scripts/gs-pkg install freedoom opentyrian` |
+| Omega2+: install the console and launcher / packages built for it | `OMEGA=omega scripts/install-omega.sh` / `BOARD=omega HOST=root@<omega> scripts/pspexp-pkg-build install freedoom opentyrian` |
+| Raspberry Pi: install the console and launcher / packages built for it | `PI=user@<ip> scripts/install-pi.sh` / `BOARD=pi HOST=user@<ip> scripts/pspexp-pkg-build install freedoom opentyrian` |
 | installers ship the existing build: after a source change | `scripts/build-gameshell.sh` / `scripts/build-omega.sh` first (`install-pi.sh` builds on the Pi) |
 | benchmark the SDL layer's texture uploads (Doom timedemo, old way vs CLUT8 / changed pages / both) | `scripts/bench-shim.sh` (the Mac, PSP on USB) / `scripts/bench-shim.sh --seconds 40 omega` / `--link tcp:<mac>:3838 cpi@<ip>` |
 | launcher screenshots from any board (a stand-in PSP on the Mac) | Mac: `SDL_VIDEODRIVER=dummy build/host/pspexp-sdl-server`; board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` |

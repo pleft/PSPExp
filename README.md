@@ -138,7 +138,7 @@ The Pi also runs the PSPExp launcher: `PI=user@host scripts/install-pi.sh`
 there and installs the same layout as the GameShell: the console as a
 systemd service with the launcher, the SDL layer in `/usr/local/lib`,
 packages in `/opt/pspexp`. Packages:
-`BOARD=pi GAMESHELL=user@host scripts/gs-pkg install freedoom opentyrian`
+`BOARD=pi HOST=user@host scripts/pspexp-pkg-build install freedoom opentyrian`
 (Freedoom runs Debian's Chocolate Doom; OpenTyrian is compiled on the Pi).
 
 ## Onion Omega2+ as the host
@@ -156,7 +156,7 @@ the console (`pspexp-term --launcher`), its fonts, the package manager and
 the init script on it, everything that grows on the SD card
 (`/mnt/mmcblk0p1/pspexp`: packages in `opt/`, settings and box art in
 `home/`). Packages are built per board:
-`BOARD=omega GAMESHELL=omega scripts/gs-pkg install freedoom` (a static
+`BOARD=omega HOST=root@<omega> scripts/pspexp-pkg-build install freedoom` (a static
 Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU) and
 `opentyrian` (a static OpenTyrian, `scripts/build-omega.sh tyrian`). The
 launcher starts in about 2 s there and uses under 4 MB of memory.
@@ -169,7 +169,7 @@ PSP draws itself (docs/GameShell_Launcher_and_Shim.md).
 
 - `scripts/build-gameshell.sh` cross-compiles the tools (static ARMv7) and the
   SDL layer (for the image's own SDL2 programs).
-- `scripts/gs-pkg build|install|remove|list ID` builds and installs packages
+- `scripts/pspexp-pkg-build build|install|remove|list ID` builds and installs packages
   from the recipes in `scripts/gameshell/pkg/` (Freedoom, OpenTyrian so far);
   a package is a folder in `/opt/pspexp/apps` with its `.entry` files, and the
   launcher picks it up by itself. `pspexp-pkg` does the same on the GameShell.

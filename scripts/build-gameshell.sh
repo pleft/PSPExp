@@ -14,7 +14,7 @@
 #   scripts/build-gameshell.sh tyrian   OpenTyrian (SDL2) for the PSP, compiled
 #      on the GameShell itself (its gcc, its libSDL2) from ../tyrian/opentyrian
 #      into build/gameshell/bin/opentyrian, which the opentyrian package
-#      (scripts/gs-pkg) ships; GAMESHELL=user@host (default cpi@gameshell).
+#      (scripts/pspexp-pkg-build) ships; HOST=user@host (default cpi@gameshell).
 #      The launcher's own OpenTyrian is SDL 1.2, which the shim cannot reach.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -22,7 +22,7 @@ OUT="$ROOT/build/gameshell"
 WHAT="${1:-all}"
 
 if [ "$WHAT" = tyrian ]; then
-	GS="${GAMESHELL:-cpi@gameshell}"
+	GS="${HOST:-${GAMESHELL:-cpi@gameshell}}"
 	SRC="$ROOT/../tyrian/opentyrian"
 	INC="$OUT/gnu/src/SDL2-${SDL_VER:-2.30.12}/include"
 	[ -f "$SRC/Makefile" ] || { echo "OpenTyrian source not found in $SRC (git clone https://github.com/opentyrian/opentyrian)" >&2; exit 1; }
@@ -39,7 +39,7 @@ if [ "$WHAT" = tyrian ]; then
 			SDL_LDFLAGS="-L$HOME/pspexp" SDL_LDLIBS="-lSDL2 -lm" 2>&1 | grep -E "error|implicit" || true
 		ls -la ~/pspexp/tyrian-src/opentyrian'
 	mkdir -p "$OUT/bin"; scp -q "$GS:pspexp/tyrian-src/opentyrian" "$OUT/bin/opentyrian"
-	echo "build/gameshell/bin/opentyrian: package it with scripts/gs-pkg build opentyrian"
+	echo "build/gameshell/bin/opentyrian: package it with scripts/pspexp-pkg-build build opentyrian"
 	exit 0
 fi
 
