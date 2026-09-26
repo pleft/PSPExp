@@ -58,6 +58,7 @@ cable pull, so pull the cable to read it after a session.
 | GameShell: packages (build, install, remove, list; recipes in scripts/gameshell/pkg) | `GAMESHELL=cpi@<ip> scripts/gs-pkg install freedoom opentyrian` / `scripts/gs-pkg list` |
 | GameShell: an SDL2 program on the PSP (headless) / the first-boot log | `pspexp-run <program>` / `cat /var/log/pspexp-firstboot.log` |
 | GameShell: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
+| GameShell fresh base: kernel / card image (Debian 13, Linux 6.18) | `scripts/gameshell/base/build-kernel.sh` / `scripts/gameshell/base/build-image.sh clockworkos_v0.6.img [--ssh-key F] [--wifi-from cpi@<ip>]` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
 input-to-present latency, PSP CPU and GE time, uploads, resident surfaces,

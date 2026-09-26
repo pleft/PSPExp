@@ -164,6 +164,10 @@ PSP draws itself (docs/GameShell_Launcher_and_Shim.md).
 - `scripts/install-gameshell.sh` puts the same files on a running GameShell
   over SSH (the list is `scripts/gameshell/stage.sh`); a reboot then runs the
   same first boot.
+- `scripts/gameshell/base/build-kernel.sh` and `build-image.sh STOCK.img`
+  build a card on a fresh base instead: Debian 13 and mainline Linux 6.18
+  with our own device tree for the board, nothing of ClockworkOS but its
+  U-Boot and Wi-Fi firmware (docs/GameShell_Launcher_and_Shim.md, section 5).
 
 With the PSP on the OTG port the USB link measures 24–26 MB/s, the sprite
 demo runs at 60 fps up to 15,000 sprites, and Freedoom and OpenTyrian play
