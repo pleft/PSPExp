@@ -104,6 +104,7 @@ of Freedoom Phase 1, 40 s per mode; "old" is the shim before these changes):
 |---|---|---|---|
 | Mac, real PSP-1000 over USB | 59.8 fps | 59.8 fps (the PSP's 60 Hz) | 160.8 -> 62.5 KB |
 | Omega2+, real PSP-1000 over USB | 29.9 fps | 37.2 fps (38.9 with changed pages only) | 160.8 -> 62.4 KB |
+| GameShell, real PSP-1000 over USB | 31.1 fps | 38.6 fps | 160.8 -> 62.5 KB |
 | GameShell, Wi-Fi to the SDL executor on the Mac | 10.4 fps | 21.1 fps | 160.8 -> 61.3 KB |
 | Pi 400, Ethernet to the SDL executor on the Mac | 59.3 fps | 59.3 fps (the executor's 60 Hz) | 160.8 -> 62.4 KB |
 
