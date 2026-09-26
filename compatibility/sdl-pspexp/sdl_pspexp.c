@@ -24,7 +24,8 @@
  * Environment:
  *   PSPEXP=usb | tcp[:host[:port]] | sdl | null   (default usb; sdl = the
  *          PSPExp SDL executor in a second window, for checking the stream)
- *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons
+ *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons ("return+y": both)
+ *   (holding START + SELECT leaves any game: SDL_QUIT after 1 s, exit after 2 s)
  *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows)
  *   PSPEXP_WINDOW=hide                        hide the program's own window
  *   PSPEXP_FOCUS=host                         let the game see host focus loss (default: hidden)
@@ -176,7 +177,8 @@ static struct {
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
     int nub_mouse, nub_keys, hide_window; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
-    SDL_Keycode keys[16];
+    SDL_Keycode keys[16][3];           /* up to three keys per PSP button ("return+y") */
+    Uint32 quit_hold; int quit_sent;   /* START + SELECT held: leave the game */
     int vjoy;                          /* virtual joystick device index, -1 none */
     SDL_Joystick *vjoy_handle;
     /* stats */
@@ -238,7 +240,7 @@ static void parse_keys(void)
     const char *env = getenv("PSPEXP_KEYS");
     char buf[512], *p, *tok;
     int i;
-    for (i = 0; i < B_COUNT; i++) S.keys[i] = SDLK_UNKNOWN;
+    for (i = 0; i < B_COUNT; i++) S.keys[i][0] = S.keys[i][1] = S.keys[i][2] = SDLK_UNKNOWN;
     strncpy(buf, env && *env ? env : def, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = 0;
     for (tok = strtok_r(buf, ",", &p); tok; tok = strtok_r(NULL, ",", &p)) {
@@ -246,7 +248,12 @@ static void parse_keys(void)
         if (!eq) continue;
         *eq = 0;
         for (i = 0; i < B_COUNT; i++)
-            if (!strcmp(tok, BUTTON_NAMES[i])) S.keys[i] = key_from_name(eq + 1);
+            if (!strcmp(tok, BUTTON_NAMES[i])) {   /* "return+y": both keys */
+                char *k, *q;
+                int n = 0;
+                for (k = strtok_r(eq + 1, "+", &q); k && n < 3; k = strtok_r(NULL, "+", &q)) S.keys[i][n++] = key_from_name(k);
+                while (n < 3) S.keys[i][n++] = SDLK_UNKNOWN;
+            }
     }
 }
 
@@ -871,10 +878,33 @@ static void feed_input(void)
         SDL_JoystickSetVirtualHat(S.vjoy_handle, 0, hat);
     }
     for (i = 0; i < B_COUNT; i++) {
+        int k;
         if (S.nub_mouse && (i == B_CROSS || i == B_CIRCLE)) continue;
-        if (pressed & BUTTON_BITS[i]) push_key(S.keys[i], 1);
-        if (released & BUTTON_BITS[i]) push_key(S.keys[i], 0);
+        for (k = 0; k < 3; k++) {
+            if (S.keys[i][k] == SDLK_UNKNOWN) continue;
+            if (pressed & BUTTON_BITS[i]) push_key(S.keys[i][k], 1);
+            if (released & BUTTON_BITS[i]) push_key(S.keys[i][k], 0);
+        }
     }
+    /* START + SELECT held: the way out of any game. After 1 s the game is
+     * asked to quit (SDL_QUIT, as when its window is closed); still held at
+     * 2 s (a game that asks "are you sure?"), the process ends. */
+    if ((in->buttons & (PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) == (PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) {
+        Uint32 now = SDL_GetTicks();
+        if (!S.quit_hold) S.quit_hold = now ? now : 1;
+        if (!S.quit_sent && now - S.quit_hold >= 1000) {
+            SDL_Event ev;
+            SDL_zero(ev);
+            ev.type = SDL_QUIT;
+            SDL_PushEvent(&ev);
+            S.quit_sent = 1;
+            logf_("START + SELECT held: asking the game to quit");
+        }
+        if (now - S.quit_hold >= 2000) {
+            logf_("START + SELECT held 2 s: leaving");
+            exit(0);
+        }
+    } else { S.quit_hold = 0; S.quit_sent = 0; }
     if (S.nub_keys) {
         /* The nub as the four arrow keys, with hysteresis so a held diagonal stays held. */
         int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
@@ -885,10 +915,10 @@ static void feed_input(void)
         if (ay > 50 || (ay > 30 && (S.nub_dirs & PSPEXP_BUTTON_DOWN))) dirs |= PSPEXP_BUTTON_DOWN;
         changed = dirs ^ S.nub_dirs;
         S.nub_dirs = dirs;
-        if (changed & PSPEXP_BUTTON_LEFT) push_key(S.keys[B_LEFT], (dirs & PSPEXP_BUTTON_LEFT) != 0);
-        if (changed & PSPEXP_BUTTON_RIGHT) push_key(S.keys[B_RIGHT], (dirs & PSPEXP_BUTTON_RIGHT) != 0);
-        if (changed & PSPEXP_BUTTON_UP) push_key(S.keys[B_UP], (dirs & PSPEXP_BUTTON_UP) != 0);
-        if (changed & PSPEXP_BUTTON_DOWN) push_key(S.keys[B_DOWN], (dirs & PSPEXP_BUTTON_DOWN) != 0);
+        if (changed & PSPEXP_BUTTON_LEFT) push_key(S.keys[B_LEFT][0], (dirs & PSPEXP_BUTTON_LEFT) != 0);
+        if (changed & PSPEXP_BUTTON_RIGHT) push_key(S.keys[B_RIGHT][0], (dirs & PSPEXP_BUTTON_RIGHT) != 0);
+        if (changed & PSPEXP_BUTTON_UP) push_key(S.keys[B_UP][0], (dirs & PSPEXP_BUTTON_UP) != 0);
+        if (changed & PSPEXP_BUTTON_DOWN) push_key(S.keys[B_DOWN][0], (dirs & PSPEXP_BUTTON_DOWN) != 0);
     }
     if (S.nub_mouse) {
         Uint32 now = SDL_GetTicks();
