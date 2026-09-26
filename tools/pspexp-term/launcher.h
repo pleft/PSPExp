@@ -1,14 +1,12 @@
 /*
- * pspexp-term launcher view: the GameShell's menu tree shown as a launcher
- * made for the PSP's 480x272 (docs/GameShell_Launcher_and_Shim.md, section 3).
+ * pspexp-term launcher view: the PSP's home screen when a GameShell (or any
+ * Linux host) runs pspexp-term --launcher (docs/GameShell_Launcher_and_Shim.md).
  *
- * The content model is launchergo's, so every existing GameShell package and
- * skin shows up unchanged: menu roots hold categories (folders) and entries
- * (.sh scripts); a folder with plugin.json is a built-in page, one with
- * action.config an emulator whose ROM folder is listed; the skin holds one
- * PNG per entry. Everything is drawn through libpspexp: a CLUT4 glyph atlas
- * rasterised from the skin's TTF, the icons as 4444 textures, cards as
- * alpha-blended rectangles. A static screen sends nothing.
+ * What it shows comes from its own library (launcher_lib.h): installed
+ * PSPExp packages in /opt/pspexp and hand-made entry files, one per game
+ * or app, one per emulated system. It draws with
+ * its own look (launcher_gfx.h): Inter text, Lucide icons, generated covers
+ * or box art, all rendered on the host and cached on the PSP.
  */
 #ifndef PSPEXP_TERM_LAUNCHER_H
 #define PSPEXP_TERM_LAUNCHER_H
@@ -17,9 +15,8 @@
 #include <stddef.h>
 #include "../../host/libpspexp/pspexp.h"
 
-/* roots: menu directories separated by ':' (launchergo/Menu/GameShell, apps/Menu);
- * skin: the skin directory (holding Menu/GameShell PNG icons and truetype/). 0 or -1. */
-int launcher_init(PspExpContext *ctx, const char *roots, const char *skin);
+/* assets: the directory holding Inter-*.ttf and lucide.ttf. 0 or -1. */
+int launcher_init(PspExpContext *ctx, const char *assets);
 
 /* Buttons: b = current mask, pressed = newly pressed, up..right = fired with
  * auto-repeat (1 on press and on repeats). */
@@ -35,5 +32,7 @@ void launcher_invalidate(void);
  * itself (pspexp-run / pspexp-exec), so the console need not mirror it. */
 int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, int *pspexp_aware);
 void launcher_child_exited(int status);
+/* 1 once when the user picked System > Console: show the terminal view */
+int launcher_take_console(void);
 
 #endif

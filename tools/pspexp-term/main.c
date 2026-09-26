@@ -830,7 +830,7 @@ static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons
 static int mirror_available(void);
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
 static int g_view_launcher, g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
-static const char *g_launcher_roots, *g_launcher_skin;
+static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself: no mirror while it runs */
 
@@ -1635,7 +1635,7 @@ static void usage(void)
     fprintf(stderr, "usage: pspexp-term [--usb | --tcp host[:port] | --null | --sdl] [--shell PATH] [--cmd \"command\"]\n"
                     "                   [--audio-fifo PATH | --no-audio-fifo] [--pidfile PATH] [--shot N]\n"
                     "                   [--no-host-input] [--no-grab] [--mirror [/dev/fbN]]\n"
-                    "                   [--launcher [DIR[:DIR...]]] [--skin DIR]\n");
+                    "                   [--launcher] [--assets DIR]\n");
 }
 
 int main(int argc, char **argv)
@@ -1696,11 +1696,8 @@ int main(int argc, char **argv)
         }
 #endif
         else if (!strcmp(argv[i], "--no-grab")) g_grab = 0;
-        else if (!strcmp(argv[i], "--launcher")) {
-            g_launcher_on = 1;
-            if (i + 1 < argc && argv[i + 1][0] != '-') g_launcher_roots = argv[++i];
-        }
-        else if (!strcmp(argv[i], "--skin") && i + 1 < argc) g_launcher_skin = argv[++i];
+        else if (!strcmp(argv[i], "--launcher")) g_launcher_on = 1;
+        else if (!strcmp(argv[i], "--assets") && i + 1 < argc) g_launcher_assets = argv[++i];
         else { usage(); return 1; }
     }
 
@@ -1746,11 +1743,14 @@ int main(int argc, char **argv)
     /* uploaded once, replayed by the library after every reconnect */
     have_font = pspexp_font_builtin_upload(ctx, FONT_ID, FONT_PAL_ID, &font) == 0;
     if (g_launcher_on) {
-        static char roots[1024], skin[512];
-        const char *home = getenv("HOME") ? getenv("HOME") : "/home/cpi";
-        if (!g_launcher_roots) { snprintf(roots, sizeof(roots), "%s/launchergo/Menu/GameShell:%s/apps/Menu", home, home); g_launcher_roots = roots; }
-        if (!g_launcher_skin) { snprintf(skin, sizeof(skin), "%s/launchergo/skin/default", home); g_launcher_skin = skin; }
-        if (launcher_init(ctx, g_launcher_roots, g_launcher_skin) < 0) g_launcher_on = 0;
+        if (!g_launcher_assets) g_launcher_assets = getenv("PSPEXP_LAUNCHER_ASSETS");
+        if (!g_launcher_assets) g_launcher_assets = access("/usr/local/share/pspexp/launcher/lucide.ttf", R_OK) == 0 ? "/usr/local/share/pspexp/launcher"
+#ifdef PSPEXP_LAUNCHER_ASSET_DIR
+                                                    : PSPEXP_LAUNCHER_ASSET_DIR;   /* the source tree, for development */
+#else
+                                                    : "/usr/local/share/pspexp/launcher";
+#endif
+        if (launcher_init(ctx, g_launcher_assets) < 0) g_launcher_on = 0;
         else { g_view_launcher = 1; g_view_mirror = 0; }   /* the home view; the mirror shows the programs it starts */
     }
 
@@ -1818,6 +1818,7 @@ int main(int argc, char **argv)
             char cmd[1024], cwd[512];
             int aware;
             if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) launch_child(cmd, cwd, aware);
+            if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; }
         }
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }

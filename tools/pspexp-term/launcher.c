@@ -1,761 +1,436 @@
 /*
  * pspexp-term launcher view (see launcher.h). Layout at 480 x 272:
  *
- *   status strip   y 0..20     clock, battery, Wi-Fi, PSP link
- *   category rail  y 26..100   one icon per category, the selected one lifted
- *   cover + list   y 108..250  the entry's icon (or a generated cover) on the
- *                              left, the category's entries on the right
- *   hint bar       y 254..272  what the buttons do here
+ *   status    y 4..24     clock and date; Wi-Fi and battery
+ *   rail      y 28..86    one tile per category (Recent, Favourites, Games,
+ *                         each emulated system with ROMs, Apps, System)
+ *   header    y 88..108   the category's name and size
+ *   cover     x 16, y 112 128 x 128: box art or a generated cover
+ *   list      x 160..464  the category's entries; the focused row expands
+ *                         with a detail line
+ *   hints     y 250..268  what the buttons do
+ *
+ * The categories are built from the library (launcher_lib.c), never from
+ * folders. Every movement is eased by time; a still screen sends nothing.
  */
 #include "launcher.h"
+#include "launcher_lib.h"
+#include "launcher_gfx.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <math.h>
 #include <time.h>
-#include <dirent.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb/stb_truetype.h"
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_STATIC
-#define STBI_ONLY_PNG
-#define STBI_NO_STDIO
-#define STBI_NO_LINEAR
-#define STBI_NO_HDR
-#include "stb/stb_image.h"
-#pragma GCC diagnostic pop
-
-/* ---- resources on the PSP ---------------------------------------------------- */
-
-#define L_FONT_ATLAS   20     /* CLUT4 glyph atlas, both sizes */
-#define L_FONT_PAL     21     /* 16 alpha levels of white */
-#define L_ICON_FIRST   2000   /* one 4444 texture per icon */
-#define L_ICON_MAX     160
+#include <fcntl.h>
 
 #define SCREEN_W 480
 #define SCREEN_H 272
 
-/* colours (RGB) */
-#define C_BG      0x0d1117
-#define C_STRIP   0x161b22
-#define C_CARD    0x1c2430
-#define C_CARD_HI 0x243043
-#define C_TEXT    0xe6edf3
-#define C_MUTED   0x8b949e
-#define C_DIM     0x484f58
-static uint32_t C_ACCENT = 0x33a6ff;
+/* palette */
+#define C_TEXT   0xf1f4f9
+#define C_SUB    0xa9b2c3
+#define C_MUTED  0x7d869a
+#define C_TILE   0x1b2131
+#define C_ACCENT 0x8b9bff
 
-static uint16_t rgb(uint32_t c) { return pspexp_color_5650((uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c); }
+/* layout */
+#define RAIL_Y      56      /* tile centre */
+#define TILE        46
+#define TILE_SEL    58
+#define TILE_GAP    12
+#define HEAD_Y      90
+#define LIST_X      160
+#define LIST_W      300
+#define LIST_Y      112
+#define LIST_H      128
+#define ROW         22
+#define ROW_EXTRA   17
+#define COVER_X     16
+#define COVER_Y     112
+#define HINT_Y      252
 
-/* ---- fonts: TTF -> CLUT4 atlas ---------------------------------------------- */
+/* ---- categories ------------------------------------------------------------------------ */
 
-#define G_FIRST 32
-#define G_COUNT 95
-typedef struct Glyph { int16_t xoff, yoff; int16_t adv; uint16_t frame; uint8_t w, h; } Glyph;
-typedef struct UiFont { Glyph g[G_COUNT]; int ascent, height; float scale; stbtt_fontinfo *info; } UiFont;
-static UiFont F_UI, F_TITLE, F_SMALL;
-static stbtt_fontinfo g_ttf;
-static uint8_t *g_ttf_data;
-static int g_have_font;
-#define ATLAS_W 256
-#define ATLAS_H 256
-static uint8_t g_atlas8[ATLAS_W * ATLAS_H];
-static PspExpFrame g_frames[3 * G_COUNT];
-static int g_nframes, g_pen_x, g_pen_y, g_row_h;
+enum { CK_RECENT, CK_FAVS, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
 
-static int font_bake(UiFont *f, float px)
-{
-    int c;
-    memset(f, 0, sizeof(*f));
-    f->info = &g_ttf;
-    f->scale = stbtt_ScaleForPixelHeight(&g_ttf, px);
-    {
-        int a, d, lg;
-        stbtt_GetFontVMetrics(&g_ttf, &a, &d, &lg);
-        f->ascent = (int)(a * f->scale + 0.5f);
-        f->height = (int)((a - d) * f->scale + 0.5f);
-    }
-    for (c = 0; c < G_COUNT; c++) {
-        int x0, y0, x1, y1, adv, lsb, w, h;
-        Glyph *g = &f->g[c];
-        stbtt_GetCodepointHMetrics(&g_ttf, G_FIRST + c, &adv, &lsb);
-        stbtt_GetCodepointBitmapBox(&g_ttf, G_FIRST + c, f->scale, f->scale, &x0, &y0, &x1, &y1);
-        w = x1 - x0; h = y1 - y0;
-        g->adv = (int16_t)floorf(adv * f->scale + 0.5f);
-        g->xoff = (int16_t)x0; g->yoff = (int16_t)y0;
-        g->w = (uint8_t)w; g->h = (uint8_t)h;
-        g->frame = 0xFFFF;
-        if (w <= 0 || h <= 0 || w > 64) continue;
-        if (g_pen_x + w + 1 > ATLAS_W) { g_pen_x = 0; g_pen_y += g_row_h + 1; g_row_h = 0; }
-        if (g_pen_y + h + 1 > ATLAS_H || g_nframes >= (int)(sizeof(g_frames) / sizeof(g_frames[0]))) return -1;
-        stbtt_MakeCodepointBitmap(&g_ttf, g_atlas8 + g_pen_y * ATLAS_W + g_pen_x, w, h, ATLAS_W, f->scale, f->scale, G_FIRST + c);
-        g_frames[g_nframes].u0 = (uint16_t)g_pen_x; g_frames[g_nframes].v0 = (uint16_t)g_pen_y;
-        g_frames[g_nframes].w = (uint16_t)w; g_frames[g_nframes].h = (uint16_t)h;
-        g->frame = (uint16_t)g_nframes++;
-        g_pen_x += w + 1;
-        if (h > g_row_h) g_row_h = h;
-    }
-    return 0;
-}
+typedef struct Cat {
+    char name[64], icon[32], noun[16];
+    uint32_t col;
+    int kind, sys;
+    LEntry **it; int n;
+    int sel; float scroll;
+} Cat;
 
-static int fonts_upload(PspExpContext *ctx)
-{
-    static uint8_t pixels[ATLAS_W * ATLAS_H / 2];
-    uint16_t pal[16];
-    PspExpTextureDesc d;
-    int i, r;
-    for (i = 0; i < 16; i++) pal[i] = pspexp_color_4444(255, 255, 255, (uint8_t)(i * 17));
-    memset(pixels, 0, sizeof(pixels));
-    for (i = 0; i < ATLAS_W * ATLAS_H; i++) pixels[i >> 1] |= (uint8_t)((g_atlas8[i] >> 4) << ((i & 1) * 4));
-    r = pspexp_upload_palette(ctx, L_FONT_PAL, PSPEXP_TEX_4444, 16, pal, sizeof(pal));
-    if (r < 0) return r;
-    memset(&d, 0, sizeof(d));
-    d.width = ATLAS_W; d.height = ATLAS_H; d.format = PSPEXP_TEX_T4;
-    d.layout = PSPEXP_LAYOUT_LINEAR; d.priority = PSPEXP_PRIORITY_HIGH; d.palette = L_FONT_PAL;
-    return pspexp_upload_texture(ctx, L_FONT_ATLAS, &d, pixels, sizeof(pixels), g_frames, (uint16_t)g_nframes);
-}
-
-static int read_file(const char *path, uint8_t **out, size_t *len)
-{
-    FILE *f = fopen(path, "rb");
-    long n;
-    if (!f) return -1;
-    fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
-    if (n <= 0) { fclose(f); return -1; }
-    *out = (uint8_t *)malloc((size_t)n);
-    if (!*out || fread(*out, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(*out); *out = NULL; return -1; }
-    fclose(f);
-    *len = (size_t)n;
-    return 0;
-}
-
-static int fonts_init(PspExpContext *ctx, const char *skin)
-{
-    static const char *names[] = { "VarelaRound-Regular.ttf", "NotoSansMono-Regular.ttf", "VeraMono.ttf", NULL };
-    char path[1024];
-    size_t len;
-    int i;
-    for (i = 0; names[i]; i++) {
-        snprintf(path, sizeof(path), "%s/truetype/%s", skin ? skin : ".", names[i]);
-        if (read_file(path, &g_ttf_data, &len) == 0) break;
-    }
-    if (!g_ttf_data) { fprintf(stderr, "[launcher] no TTF in %s/truetype: text off\n", skin ? skin : "."); return -1; }
-    if (!stbtt_InitFont(&g_ttf, g_ttf_data, stbtt_GetFontOffsetForIndex(g_ttf_data, 0))) return -1;
-    if (font_bake(&F_TITLE, 20.0f) < 0 || font_bake(&F_UI, 14.0f) < 0 || font_bake(&F_SMALL, 11.0f) < 0) return -1;
-    if (fonts_upload(ctx) < 0) return -1;
-    g_have_font = 1;
-    return 0;
-}
-
-/* text: sprite batches per call (a screen has a few dozen strings) */
 static PspExpContext *g_ctx;
-static PspExpSpriteRec g_srec[512];
-static int g_sn;
+static Library L;
+static Cat g_cat[40];
+static int g_ncat, g_cur;
+static LEntry g_actions[8];
+static int g_nactions;
+static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
+static int g_nofetch;             /* box art downloads off */
 
-static void text_flush(void)
+static void action(LEntry *e, const char *id, const char *title, const char *icon, const char *detail)
 {
-    if (g_sn) pspexp_draw_sprite_batch(g_ctx, L_FONT_ATLAS, g_srec, (uint32_t)g_sn);
-    g_sn = 0;
-}
-
-static int text_width(const UiFont *f, const char *s, int n)
-{
-    int w = 0, i;
-    for (i = 0; (n < 0 || i < n) && s[i]; i++) {
-        int c = (unsigned char)s[i];
-        if (c < G_FIRST || c >= G_FIRST + G_COUNT) c = '?';
-        w += f->g[c - G_FIRST].adv;
-    }
-    return w;
-}
-
-/* draws at (x, y) = top-left of the line box; clipped to max_w with "..." */
-static int text_draw(const UiFont *f, int x, int y, const char *s, uint32_t color, int max_w)
-{
-    int pen = x, i, n = (int)strlen(s), ell = 0;
-    uint16_t col = rgb(color);
-    if (!g_have_font) return 0;
-    if (max_w > 0 && text_width(f, s, -1) > max_w) {
-        int dots = text_width(f, "...", -1);
-        while (n > 0 && text_width(f, s, n) + dots > max_w) n--;
-        ell = 1;
-    }
-    for (i = 0; i < n + (ell ? 3 : 0); i++) {
-        int c = i < n ? (unsigned char)s[i] : '.';
-        const Glyph *g;
-        if (c < G_FIRST || c >= G_FIRST + G_COUNT) c = '?';
-        g = &f->g[c - G_FIRST];
-        if (g->frame != 0xFFFF && g_sn < (int)(sizeof(g_srec) / sizeof(g_srec[0]))) {
-            g_srec[g_sn].x = (int16_t)(pen + g->xoff); g_srec[g_sn].y = (int16_t)(y + f->ascent + g->yoff);
-            g_srec[g_sn].frame = g->frame; g_srec[g_sn].color = col;
-            g_sn++;
-        }
-        pen += g->adv;
-    }
-    return pen - x;
-}
-
-/* ---- icons: PNG -> 4444 texture ----------------------------------------------- */
-
-typedef struct Icon { char path[512]; uint16_t tex; uint16_t w, h, tw, th; int state; } Icon;   /* state 0 none, 1 uploaded, -1 failed */
-static Icon g_icons[L_ICON_MAX];
-static int g_nicons;
-
-/* averages the image down by 2 until it fits 128 */
-static void halve(uint8_t *px, int *w, int *h)
-{
-    int nw = *w / 2, nh = *h / 2, x, y, c;
-    for (y = 0; y < nh; y++)
-        for (x = 0; x < nw; x++)
-            for (c = 0; c < 4; c++) {
-                const uint8_t *a = px + ((size_t)(2 * y) * (size_t)*w + (size_t)(2 * x)) * 4 + c;
-                px[((size_t)y * (size_t)nw + (size_t)x) * 4 + c] = (uint8_t)((a[0] + a[4] + a[(size_t)*w * 4] + a[(size_t)*w * 4 + 4] + 2) / 4);
-            }
-    *w = nw; *h = nh;
-}
-
-static int icon_upload(PspExpContext *ctx, Icon *ic)
-{
-    uint8_t *file, *px;
-    size_t len;
-    int w, h, n, tw = 8, th = 8, x, y;
-    uint16_t *dst;
-    PspExpTextureDesc d;
-    PspExpFrame f;
-    if (read_file(ic->path, &file, &len) < 0) return -1;
-    px = stbi_load_from_memory(file, (int)len, &w, &h, &n, 4);
-    free(file);
-    if (!px) return -1;
-    while (w > 128 || h > 128) halve(px, &w, &h);
-    while (tw < w) tw <<= 1;
-    while (th < h) th <<= 1;
-    memset(&d, 0, sizeof(d));
-    d.width = (uint16_t)tw; d.height = (uint16_t)th; d.format = PSPEXP_TEX_4444;
-    d.layout = PSPEXP_LAYOUT_LINEAR; d.priority = PSPEXP_PRIORITY_NORMAL;
-    f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw < 64 ? tw : 64); f.h = (uint16_t)th;
-    dst = (uint16_t *)pspexp_upload_texture_begin(ctx, ic->tex, &d, (uint32_t)(tw * th * 2), &f, 1);
-    if (!dst) { stbi_image_free(px); return -1; }
-    for (y = 0; y < th; y++)
-        for (x = 0; x < tw; x++) {
-            const uint8_t *p = px + ((size_t)y * (size_t)w + (size_t)x) * 4;
-            dst[y * tw + x] = (x < w && y < h) ? pspexp_color_4444(p[0], p[1], p[2], p[3]) : 0;
-        }
-    stbi_image_free(px);
-    if (pspexp_upload_texture_commit(ctx, 1) < 0) return -1;
-    ic->w = (uint16_t)w; ic->h = (uint16_t)h; ic->tw = (uint16_t)tw; ic->th = (uint16_t)th;
-    return 0;
-}
-
-/* returns an icon index (+1) for the file, 0 if none */
-static int icon_get(const char *path)
-{
-    int i;
-    struct stat st;
-    if (!path || !*path || stat(path, &st) != 0) return 0;
-    for (i = 0; i < g_nicons; i++) if (!strcmp(g_icons[i].path, path)) return i + 1;
-    if (g_nicons >= L_ICON_MAX) return 0;
-    snprintf(g_icons[g_nicons].path, sizeof(g_icons[g_nicons].path), "%s", path);
-    g_icons[g_nicons].tex = (uint16_t)(L_ICON_FIRST + g_nicons);
-    g_icons[g_nicons].state = 0;
-    return ++g_nicons;
-}
-
-/* draws icon (index+1) fitted into a box, centred; alpha 0..255 */
-static int icon_draw(int idx, int x, int y, int box, int alpha)
-{
-    Icon *ic;
-    PspExpQuadExRec q;
-    int w, h;
-    if (idx <= 0) return 0;
-    ic = &g_icons[idx - 1];
-    if (ic->state == 0) ic->state = icon_upload(g_ctx, ic) == 0 ? 1 : -1;
-    if (ic->state < 0) return 0;
-    if (ic->w >= ic->h) { w = box; h = box * ic->h / ic->w; } else { h = box; w = box * ic->w / ic->h; }
-    memset(&q, 0, sizeof(q));
-    q.x = (int16_t)(x + (box - w) / 2); q.y = (int16_t)(y + (box - h) / 2); q.w = (int16_t)w; q.h = (int16_t)h;
-    q.u0 = 0; q.v0 = 0; q.u1 = ic->w; q.v1 = ic->h;
-    q.color = pspexp_color_4444(255, 255, 255, (uint8_t)alpha);
-    pspexp_draw_quad_ex_batch(g_ctx, ic->tex, &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_4444);
-    return 1;
-}
-
-/* ---- the content model ------------------------------------------------------- */
-
-enum { K_SCRIPT, K_FOLDER, K_PLUGIN, K_EMU, K_ROM };
-
-typedef struct Entry {
-    char name[96];          /* shown: "NN_" prefix and ".sh" stripped */
-    char path[512];         /* the script, folder or ROM */
-    char detail[128];
-    int kind, icon, fav;
-    /* K_EMU */
-    char rom_dir[256], ext[64], launcher[256], rom_so[256];
-    /* K_FOLDER / K_EMU: children, loaded on first open */
-    struct Entry *kids; int nkids, loaded;
-} Entry;
-
-typedef struct Category { char name[96]; char dir[512]; int icon; Entry *e; int n; } Category;
-
-#define MAX_CATS 24
-static Category g_cats[MAX_CATS];
-static int g_ncats;
-static char g_skin[512];
-static char g_config_dir[512];
-
-/* "20_Retro Games" -> "Retro Games"; "freeDM.sh" -> "freeDM" */
-static void display_name(const char *file, char *out, size_t n)
-{
-    const char *s = file, *dot;
-    size_t len;
-    if (s[0] >= '0' && s[0] <= '9' && s[1] >= '0' && s[1] <= '9' && s[2] == '_') s += 3;
-    else if (s[0] >= '0' && s[0] <= '9' && s[1] == '_') s += 2;
-    snprintf(out, n, "%s", s);
-    len = strlen(out);
-    dot = len > 3 ? out + len - 3 : NULL;
-    if (dot && !strcmp(dot, ".sh")) out[len - 3] = 0;
-}
-
-static int cmp_names(const void *a, const void *b) { return strcasecmp(*(const char *const *)a, *(const char *const *)b); }
-
-/* sorted directory listing (names only); returns count, fills `names` (malloc'd) */
-static int list_dir(const char *dir, char ***names)
-{
-    DIR *d = opendir(dir);
-    struct dirent *de;
-    int n = 0, cap = 0;
-    *names = NULL;
-    if (!d) return 0;
-    while ((de = readdir(d))) {
-        if (de->d_name[0] == '.') continue;
-        if (n == cap) { cap = cap ? cap * 2 : 32; *names = (char **)realloc(*names, (size_t)cap * sizeof(char *)); }
-        (*names)[n++] = strdup(de->d_name);
-    }
-    closedir(d);
-    if (n) qsort(*names, (size_t)n, sizeof(char *), cmp_names);
-    return n;
-}
-
-static void free_names(char **names, int n) { int i; for (i = 0; i < n; i++) free(names[i]); free(names); }
-
-static int is_dir(const char *p) { struct stat st; return stat(p, &st) == 0 && S_ISDIR(st.st_mode); }
-static int exists(const char *p) { struct stat st; return stat(p, &st) == 0; }
-
-static void trim(char *s)
-{
-    size_t n = strlen(s);
-    while (n && (s[n - 1] == ' ' || s[n - 1] == '\r' || s[n - 1] == '\n' || s[n - 1] == '\t')) s[--n] = 0;
-}
-
-/* action.config: KEY=value lines */
-static void read_action_config(Entry *e, const char *path)
-{
-    FILE *f = fopen(path, "r");
-    char line[512];
-    if (!f) return;
-    while (fgets(line, sizeof(line), f)) {
-        char *eq = strchr(line, '=');
-        if (!eq) continue;
-        *eq++ = 0; trim(line); trim(eq);
-        if (!strcmp(line, "ROM")) snprintf(e->rom_dir, sizeof(e->rom_dir), "%s", eq);
-        else if (!strcmp(line, "EXT")) snprintf(e->ext, sizeof(e->ext), "%s", eq);
-        else if (!strcmp(line, "LAUNCHER")) snprintf(e->launcher, sizeof(e->launcher), "%s", eq);
-        else if (!strcmp(line, "ROM_SO")) snprintf(e->rom_so, sizeof(e->rom_so), "%s", eq);
-        else if (!strcmp(line, "TITLE")) snprintf(e->detail, sizeof(e->detail), "%s", eq);
-    }
-    fclose(f);
-}
-
-/* the icon for an entry: next to it, else in the skin under the same folder path */
-static int find_icon(const char *skin_rel, const char *name, const char *beside_dir)
-{
-    char p[1024];
-    int ic;
-    if (beside_dir) {
-        snprintf(p, sizeof(p), "%s/%s.png", beside_dir, name);
-        if ((ic = icon_get(p))) return ic;
-    }
-    snprintf(p, sizeof(p), "%s/Menu/GameShell/%s%s%s.png", g_skin, skin_rel, *skin_rel ? "/" : "", name);
-    if ((ic = icon_get(p))) return ic;
-    snprintf(p, sizeof(p), "%s/Menu/GameShell/%s.png", g_skin, name);
-    return icon_get(p);
-}
-
-static int has_ext(const char *file, const char *exts)
-{
-    const char *dot = strrchr(file, '.');
-    char list[64], *tok, *save;
-    if (!dot) return 0;
-    snprintf(list, sizeof(list), "%s", exts);
-    for (tok = strtok_r(list, ", ", &save); tok; tok = strtok_r(NULL, ", ", &save))
-        if (!strcasecmp(dot + 1, tok)) return 1;
-    return 0;
-}
-
-static Entry *add_entry(Entry **arr, int *n)
-{
-    Entry *e;
-    *arr = (Entry *)realloc(*arr, (size_t)(*n + 1) * sizeof(Entry));
-    e = &(*arr)[(*n)++];
     memset(e, 0, sizeof(*e));
-    return e;
+    e->type = LT_ACTION; e->sys = -1;
+    snprintf(e->id, sizeof(e->id), "a:%s", id);
+    snprintf(e->title, sizeof(e->title), "%s", title);
+    snprintf(e->icon, sizeof(e->icon), "%s", icon);
+    snprintf(e->tags, sizeof(e->tags), "%s", detail);
 }
 
-/* fills a folder's entries: scripts, sub-folders, plugin pages, emulators */
-static void load_folder(const char *dir, const char *skin_rel, Entry **out, int *n)
+static uint32_t system_colour(const char *id)
 {
-    char **names;
-    int cnt = list_dir(dir, &names), i;
-    for (i = 0; i < cnt; i++) {
-        char p[1024], pj[1024], ac[1024], rel[256];
-        Entry *e;
-        snprintf(p, sizeof(p), "%s/%s", dir, names[i]);
-        if (is_dir(p)) {
-            snprintf(pj, sizeof(pj), "%s/plugin.json", p);
-            snprintf(ac, sizeof(ac), "%s/action.config", p);
-            e = add_entry(out, n);
-            display_name(names[i], e->name, sizeof(e->name));
-            snprintf(e->path, sizeof(e->path), "%s", p);
-            if (exists(ac)) { e->kind = K_EMU; read_action_config(e, ac); }
-            else if (exists(pj)) { e->kind = K_PLUGIN; snprintf(e->detail, sizeof(e->detail), "built-in page"); }
-            else {
-                /* a folder holding exactly its own script (apps/Menu style: 34_OpenTyrian/OpenTyrian.sh) is that script */
-                char **kids; int nk = list_dir(p, &kids), k, script = -1, scripts = 0;
-                for (k = 0; k < nk; k++) if (strlen(kids[k]) > 3 && !strcmp(kids[k] + strlen(kids[k]) - 3, ".sh")) { script = k; scripts++; }
-                if (scripts == 1) {
-                    e->kind = K_SCRIPT;
-                    snprintf(e->path, sizeof(e->path), "%s/%s", p, kids[script]);
-                    snprintf(e->detail, sizeof(e->detail), "%s", kids[script]);
-                    e->icon = find_icon(skin_rel, e->name, p);
-                } else {
-                    e->kind = K_FOLDER;
-                    snprintf(e->detail, sizeof(e->detail), "folder");
-                }
-                free_names(kids, nk);
-            }
-            if (!e->icon) e->icon = find_icon(skin_rel, e->name, NULL);
-            if (e->kind == K_EMU && !e->icon) {
-                snprintf(rel, sizeof(rel), "%s%s%s", skin_rel, *skin_rel ? "/" : "", names[i]);
-                e->icon = find_icon(rel, e->name, NULL);
-            }
-        } else if (strlen(names[i]) > 3 && !strcmp(names[i] + strlen(names[i]) - 3, ".sh")) {
-            e = add_entry(out, n);
-            e->kind = K_SCRIPT;
-            display_name(names[i], e->name, sizeof(e->name));
-            snprintf(e->path, sizeof(e->path), "%s", p);
-            snprintf(e->detail, sizeof(e->detail), "%s", names[i]);
-            e->icon = find_icon(skin_rel, e->name, NULL);
-        }
-    }
-    free_names(names, cnt);
+    static const uint32_t pal[] = { 0x38bdf8, 0xa78bfa, 0xfb7185, 0x34d399, 0xfbbf24, 0x60a5fa, 0xf472b6, 0x2dd4bf, 0xfb923c, 0xc084fc };
+    return pal[gfx_hash(id) % (sizeof(pal) / sizeof(pal[0]))];
 }
 
-static void load_roms(Entry *emu)
+static Cat *cat_add(const char *name, const char *icon, uint32_t col, int kind, const char *noun)
 {
-    char **names;
-    int cnt = list_dir(emu->rom_dir, &names), i;
-    for (i = 0; i < cnt; i++) {
-        char p[1024];
-        Entry *e;
-        snprintf(p, sizeof(p), "%s/%s", emu->rom_dir, names[i]);
-        if (is_dir(p) || (emu->ext[0] && !has_ext(names[i], emu->ext))) continue;
-        e = add_entry(&emu->kids, &emu->nkids);
-        e->kind = K_ROM;
-        snprintf(e->name, sizeof(e->name), "%s", names[i]);
-        { char *dot = strrchr(e->name, '.'); if (dot && dot != e->name) *dot = 0; }
-        snprintf(e->path, sizeof(e->path), "%s", p);
-        snprintf(e->detail, sizeof(e->detail), "%s", emu->detail[0] ? emu->detail : emu->name);
-    }
-    free_names(names, cnt);
-    emu->loaded = 1;
+    Cat *c = &g_cat[g_ncat++];
+    memset(c, 0, sizeof(*c));
+    snprintf(c->name, sizeof(c->name), "%s", name);
+    snprintf(c->icon, sizeof(c->icon), "%s", icon);
+    snprintf(c->noun, sizeof(c->noun), "%s", noun);
+    c->col = col; c->kind = kind; c->sys = -1;
+    return c;
 }
 
-/* the rail: every root's sub-folders are categories; its loose scripts form one */
-static void load_roots(const char *roots)
+static void cat_push(Cat *c, LEntry *e)
 {
-    char list[2048], *tok, *save;
-    snprintf(list, sizeof(list), "%s", roots);
-    for (tok = strtok_r(list, ":", &save); tok && g_ncats < MAX_CATS - 1; tok = strtok_r(NULL, ":", &save)) {
-        char **names;
-        int cnt = list_dir(tok, &names), i;
-        Category *loose = NULL;
-        for (i = 0; i < cnt; i++) {
-            char p[1024];
-            snprintf(p, sizeof(p), "%s/%s", tok, names[i]);
-            if (is_dir(p) && g_ncats < MAX_CATS - 1) {
-                char pj[1024], ac[1024];
-                Category *c;
-                snprintf(pj, sizeof(pj), "%s/plugin.json", p);
-                snprintf(ac, sizeof(ac), "%s/action.config", p);
-                if (exists(pj) || exists(ac)) {   /* a page or an emulator at the top: goes into the loose group */
-                    if (!loose) { loose = &g_cats[g_ncats++]; snprintf(loose->name, sizeof(loose->name), "Apps"); }
-                    continue;
-                }
-                c = &g_cats[g_ncats++];
-                display_name(names[i], c->name, sizeof(c->name));
-                snprintf(c->dir, sizeof(c->dir), "%s", p);
-                load_folder(p, names[i], &c->e, &c->n);
-                c->icon = find_icon("", c->name, NULL);
-                if (c->n == 0) { g_ncats--; memset(c, 0, sizeof(*c)); }
-            } else if (!is_dir(p) && strlen(names[i]) > 3 && !strcmp(names[i] + strlen(names[i]) - 3, ".sh")) {
-                if (!loose) { loose = &g_cats[g_ncats++]; snprintf(loose->name, sizeof(loose->name), "Apps"); }
-            }
-        }
-        if (loose) {
-            /* loose scripts, plugin pages and emulators at the root, in order */
-            Entry *all = NULL; int n = 0, k;
-            load_folder(tok, "", &all, &n);
-            for (k = 0; k < n; k++) if (all[k].kind != K_FOLDER) { Entry *e = add_entry(&loose->e, &loose->n); *e = all[k]; }
-            free(all);
-            snprintf(loose->dir, sizeof(loose->dir), "%s", tok);
-            loose->icon = find_icon("", "GS", NULL);
-            if (!loose->icon) { char p[1024]; snprintf(p, sizeof(p), "%s/sysgo/gameshell/icons/GS.png", g_skin); loose->icon = icon_get(p); }
-        }
-        free_names(names, cnt);
-    }
+    c->it = (LEntry **)realloc(c->it, (size_t)(c->n + 1) * sizeof(LEntry *));
+    c->it[c->n++] = e;
 }
 
-/* ---- recent and favourites -------------------------------------------------------- */
-
-#define MAX_RECENT 8
-static char g_recent[MAX_RECENT][512];
-static int g_nrecent;
-static char g_favs[64][512];
-static int g_nfavs;
-
-static void list_load(const char *file, char (*arr)[512], int *n, int max)
-{
-    char p[1024], line[512];
-    FILE *f;
-    snprintf(p, sizeof(p), "%s/%s", g_config_dir, file);
-    *n = 0;
-    if (!(f = fopen(p, "r"))) return;
-    while (*n < max && fgets(line, sizeof(line), f)) { trim(line); if (line[0]) snprintf(arr[(*n)++], 512, "%s", line); }
-    fclose(f);
-}
-
-static void list_save(const char *file, char (*arr)[512], int n)
-{
-    char p[1024];
-    FILE *f;
-    int i;
-    {   /* mkdir -p */
-        char *q = g_config_dir + 1;
-        for (; *q; q++) if (*q == '/') { *q = 0; mkdir(g_config_dir, 0755); *q = '/'; }
-        mkdir(g_config_dir, 0755);
-    }
-    snprintf(p, sizeof(p), "%s/%s", g_config_dir, file);
-    if (!(f = fopen(p, "w"))) return;
-    for (i = 0; i < n; i++) fprintf(f, "%s\n", arr[i]);
-    fclose(f);
-}
-
-static int list_find(char (*arr)[512], int n, const char *path) { int i; for (i = 0; i < n; i++) if (!strcmp(arr[i], path)) return i; return -1; }
-
-static void recent_push(const char *path)
-{
-    int i = list_find(g_recent, g_nrecent, path);
-    if (i < 0) { if (g_nrecent < MAX_RECENT) g_nrecent++; i = g_nrecent - 1; }
-    for (; i > 0; i--) memcpy(g_recent[i], g_recent[i - 1], 512);
-    snprintf(g_recent[0], 512, "%s", path);
-    list_save("recent", g_recent, g_nrecent);
-}
-
-static Entry *find_entry_rec(Entry *arr, int n, const char *path)
+static void cats_free(void)
 {
     int i;
-    for (i = 0; i < n; i++) {
-        Entry *k;
-        if (!strcmp(arr[i].path, path)) return &arr[i];
-        if (arr[i].kids && (k = find_entry_rec(arr[i].kids, arr[i].nkids, path))) return k;
-    }
-    return NULL;
+    for (i = 0; i < g_ncat; i++) free(g_cat[i].it);
+    g_ncat = 0;
 }
 
-static Entry *find_entry(const char *path)
+/* (re)builds the rail from the library; keeps the current category and selection */
+static void cats_build(void)
 {
-    int c;
-    for (c = 0; c < g_ncats; c++) { Entry *e = find_entry_rec(g_cats[c].e, g_cats[c].n, path); if (e) return e; }
-    return NULL;
+    char keep[64] = "", keep_id[160] = "";
+    int i, s, keep_sel = 0;
+    float keep_scroll = 0;
+    Cat *c;
+    if (g_ncat) {
+        snprintf(keep, sizeof(keep), "%s", g_cat[g_cur].name);
+        keep_sel = g_cat[g_cur].sel;
+        keep_scroll = g_cat[g_cur].scroll;
+        if (g_cat[g_cur].n) snprintf(keep_id, sizeof(keep_id), "%s", g_cat[g_cur].it[g_cat[g_cur].sel]->id);
+    }
+    cats_free();
+    if (L.nrecent) {
+        c = cat_add("Recent", "history", 0xf5a524, CK_RECENT, "item");
+        for (i = 0; i < L.nrecent; i++) { LEntry *e = lib_find(&L, L.recent[i]); if (e) cat_push(c, e); }
+        if (!c->n) g_ncat--;
+    }
+    if (L.nfavs) {
+        c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "item");
+        for (i = 0; i < L.nfavs; i++) { LEntry *e = lib_find(&L, L.favs[i]); if (e) cat_push(c, e); }
+        if (!c->n) g_ncat--;
+    }
+    c = cat_add("Games", "gamepad-2", 0x818cf8, CK_GAMES, "game");
+    for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME) cat_push(c, &L.e[i]);
+    for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])) - 2; s++) {
+        if (!L.sys[s].nroms) continue;
+        c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", system_colour(L.sys[s].id), CK_SYSTEM, "game");
+        c->sys = s;
+        for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
+    }
+    c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
+    for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
+    c = cat_add("System", "settings", 0x94a3b8, CK_SETTINGS, "item");
+    g_nactions = 0;
+    action(&g_actions[g_nactions++], "rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
+    if (g_wifi_cmd) action(&g_actions[g_nactions++], "wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
+    action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
+    action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "The GameShell's shell on the PSP");
+    action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart the GameShell");
+    action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut the GameShell down");
+    action(&g_actions[g_nactions++], "about", "About", "info", "PSPExp launcher: library and systems");
+    for (i = 0; i < g_nactions; i++) cat_push(c, &g_actions[i]);
+    /* back to where we were */
+    g_cur = -1;
+    for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
+    if (g_cur < 0) { g_cur = 0; for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i; keep_sel = 0; keep_scroll = 0; }
+    c = &g_cat[g_cur];
+    c->sel = keep_sel < c->n ? keep_sel : (c->n ? c->n - 1 : 0);
+    c->scroll = keep_scroll;
+    for (i = 0; i < c->n; i++) if (keep_id[0] && !strcmp(c->it[i]->id, keep_id)) c->sel = i;
 }
 
-/* ---- navigation state ----------------------------------------------------------- */
+static LEntry *cur_entry(void)
+{
+    Cat *c;
+    if (!g_ncat) return NULL;
+    c = &g_cat[g_cur];
+    return c->n ? c->it[c->sel] : NULL;
+}
 
-typedef struct Level { Entry *e; int n, sel; float scroll; char title[96]; Entry *owner; } Level;
-static Level g_lv[6];
-static int g_depth;                 /* g_lv[0] = the category's entries */
-static int g_cat, g_cat_sel_of[MAX_CATS];
-static Entry g_recent_e[MAX_RECENT];
-static int g_recent_cat = -1;
-static int g_dirty = 1;
-static float g_rail_x, g_rail_target;      /* rail scroll (pixels) */
-static float g_sel_y, g_sel_target;        /* list highlight */
-static float g_lift[MAX_CATS];             /* 0..1 per rail icon */
-static uint64_t g_last_anim;
-static char g_toast[128];
+/* ---- state ------------------------------------------------------------------------------ */
+
+static int g_dirty = 1, g_anim;
+static uint64_t g_last_frame, g_sel_since;
+static float g_rail_x = 16, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024], g_cover_fade = 1;
+static char g_cover_prev[160], g_cover_cur[160];
+static char g_toast[160], g_toast_icon[32];
 static uint64_t g_toast_until;
-static char g_launch_cmd[1024], g_launch_cwd[512];
-static int g_launch_pending, g_launch_aware, g_running;
-static Entry *g_running_e;
+static float g_toast_a;
+static char g_launch_cmd[1200], g_launch_cwd[512];
+static int g_launch_pending, g_launch_aware, g_running, g_console_req;
+static LEntry g_running_e;
+static uint64_t g_confirm_until;
+static char g_confirm[32];
+static int g_bat = -2, g_chg, g_wifi = -2, g_minute = -1;
+static uint64_t g_status_at;
+static int g_nofetch;
 
-static void toast(const char *s, uint64_t now) { snprintf(g_toast, sizeof(g_toast), "%s", s); g_toast_until = now + 2500000u; g_dirty = 1; }
-
-static void build_recent_cat(void)
+static void toast(const char *icon, const char *s, uint64_t now)
 {
-    Category *c;
-    int i;
-    if (g_recent_cat < 0) {
-        if (g_nrecent == 0) return;
-        /* insert at the front */
-        memmove(&g_cats[1], &g_cats[0], (size_t)g_ncats * sizeof(Category));
-        g_ncats++;
-        g_recent_cat = 0;
-        c = &g_cats[0];
-        memset(c, 0, sizeof(*c));
-        snprintf(c->name, sizeof(c->name), "Recent");
-        { char p[1024]; snprintf(p, sizeof(p), "%s/sysgo/gameshell/icons/app.png", g_skin); c->icon = icon_get(p); }
-    }
-    c = &g_cats[g_recent_cat];
-    c->n = 0; c->e = g_recent_e;
-    for (i = 0; i < g_nrecent; i++) {
-        Entry *e = find_entry(g_recent[i]);
-        if (e) { g_recent_e[c->n] = *e; g_recent_e[c->n].kids = NULL; g_recent_e[c->n].nkids = 0; c->n++; }
-    }
-}
-
-static void open_category(int cat)
-{
-    Category *c = &g_cats[cat];
-    g_cat = cat;
-    g_depth = 0;
-    g_lv[0].e = c->e; g_lv[0].n = c->n; g_lv[0].sel = g_cat_sel_of[cat] < c->n ? g_cat_sel_of[cat] : 0;
-    g_lv[0].scroll = 0; g_lv[0].owner = NULL;
-    snprintf(g_lv[0].title, sizeof(g_lv[0].title), "%s", c->name);
+    snprintf(g_toast, sizeof(g_toast), "%s", s);
+    snprintf(g_toast_icon, sizeof(g_toast_icon), "%s", icon ? icon : "");
+    g_toast_until = now + 2600000u;
     g_dirty = 1;
 }
 
-static Entry *current_entry(void)
+/* ---- box art: libretro thumbnails, fetched in the background -------------------------------- */
+
+static pid_t g_fetch_pid;
+static char g_fetch_id[160];
+
+static void art_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m)
 {
-    Level *l = &g_lv[g_depth];
-    return l->n ? &l->e[l->sel] : NULL;
+    const char *home = getenv("HOME") ? getenv("HOME") : "/tmp";
+    const char *base = strrchr(e->exec, '/'), *dot;
+    char stem[200];
+    size_t i;
+    base = base ? base + 1 : e->exec;
+    dot = strrchr(base, '.');
+    snprintf(stem, sizeof(stem), "%.*s", dot ? (int)(dot - base) : (int)strlen(base), base);
+    for (i = 0; stem[i]; i++) if (strchr("&*/:`<>?\\|\"", stem[i])) stem[i] = '_';   /* libretro-thumbnails naming */
+    snprintf(png, n, "%s/.cache/pspexp-launcher/boxart/%s/%s.png", home, L.sys[e->sys].id, stem);
+    if (miss) snprintf(miss, m, "%s/.cache/pspexp-launcher/boxart/%s/%s.miss", home, L.sys[e->sys].id, stem);
 }
 
-static void shell_quote(char *out, size_t n, const char *s)
+static void urlenc(const char *s, char *out, size_t n)
 {
+    static const char *hex = "0123456789ABCDEF";
     size_t o = 0;
-    if (o < n) out[o++] = '\'';
-    for (; *s && o + 5 < n; s++) {
-        if (*s == '\'') { memcpy(out + o, "'\\''", 4); o += 4; }
-        else out[o++] = *s;
+    for (; *s && o + 4 < n; s++) {
+        unsigned char c = (unsigned char)*s;
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || strchr("-._~", c)) out[o++] = (char)c;
+        else { out[o++] = '%'; out[o++] = hex[c >> 4]; out[o++] = hex[c & 15]; }
     }
-    if (o < n) out[o++] = '\'';
-    out[o < n ? o : n - 1] = 0;
+    out[o] = 0;
 }
 
-static int script_is_pspexp_aware(const char *path)
+static void fetch_start(const LEntry *e)
 {
-    uint8_t *d; size_t len; int r;
-    if (read_file(path, &d, &len) < 0) return 0;
-    d = (uint8_t *)realloc(d, len + 1); d[len] = 0;
-    r = strstr((char *)d, "pspexp-run") != NULL || strstr((char *)d, "pspexp-exec") != NULL || strstr((char *)d, "pspexp-") != NULL;
-    free(d);
-    return r;
+    char png[700], miss[700], dir[700], sysenc[300], nameenc[600], url[1200], stem[400], *slash;
+    const char *base;
+    pid_t pid;
+    art_paths(e, png, sizeof(png), miss, sizeof(miss));
+    snprintf(dir, sizeof(dir), "%s", png);
+    if ((slash = strrchr(dir, '/'))) *slash = 0;
+    base = strrchr(png, '/') + 1;
+    urlenc(L.sys[e->sys].thumbs, sysenc, sizeof(sysenc));
+    snprintf(stem, sizeof(stem), "%.*s", (int)(strlen(base) - 4), base);
+    urlenc(stem, nameenc, sizeof(nameenc));
+    snprintf(url, sizeof(url), "https://thumbnails.libretro.com/%s/Named_Boxarts/%s.png", sysenc, nameenc);
+    pid = fork();
+    if (pid == 0) {
+        setenv("D", dir, 1); setenv("P", png, 1); setenv("M", miss, 1); setenv("U", url, 1);
+        execl("/bin/sh", "sh", "-c",
+              "mkdir -p \"$D\" && curl -fsSL --max-time 20 -o \"$P.part\" \"$U\" && mv \"$P.part\" \"$P\" || { rm -f \"$P.part\"; touch \"$M\"; }",
+              (char *)NULL);
+        _exit(127);
+    }
+    if (pid > 0) { g_fetch_pid = pid; snprintf(g_fetch_id, sizeof(g_fetch_id), "%s", e->id); }
 }
 
-static void launch(Entry *e, Entry *owner, uint64_t now)
+static void fetch_poll(uint64_t now)
 {
-    char q[1024];
-    const char *slash;
-    if (e->kind == K_SCRIPT) {
-        shell_quote(q, sizeof(q), e->path);
-        snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec /bin/sh %s", q);
-        g_launch_aware = script_is_pspexp_aware(e->path);
-    } else if (e->kind == K_ROM && owner) {
-        shell_quote(q, sizeof(q), e->path);
-        snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec %s %s %s", owner->launcher, owner->rom_so, q);
-        g_launch_aware = strstr(owner->launcher, "pspexp-") != NULL;
-    } else if (e->kind == K_PLUGIN && !strcasecmp(e->name, "PowerOFF")) {
-        snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec sudo -n poweroff");
+    LEntry *e;
+    if (g_fetch_pid > 0) {
+        int st;
+        if (waitpid(g_fetch_pid, &st, WNOHANG) == g_fetch_pid) {
+            g_fetch_pid = 0;
+            if ((e = cur_entry()) && !strcmp(e->id, g_fetch_id)) g_dirty = 1;   /* the cover picks the art up */
+        }
+        return;
+    }
+    if (g_nofetch || g_running || !(e = cur_entry()) || e->type != LT_ROM || e->sys < 0 || !L.sys[e->sys].thumbs[0]) return;
+    if (now - g_sel_since < 500000u) return;   /* only once the selection rests */
+    {
+        char png[700], miss[700];
+        struct stat st;
+        art_paths(e, png, sizeof(png), miss, sizeof(miss));
+        if (stat(png, &st) == 0 || stat(miss, &st) == 0) return;
+        fetch_start(e);
+    }
+}
+
+/* ---- covers ------------------------------------------------------------------------------ */
+
+static const char *type_icon(const LEntry *e)
+{
+    if (e->icon[0]) return e->icon;
+    switch (e->type) {
+    case LT_ROM: return e->sys >= 0 && L.sys[e->sys].icon[0] ? L.sys[e->sys].icon : "gamepad";
+    case LT_APP: return "app-window";
+    case LT_TOOL: return "wand-sparkles";
+    default: return "gamepad-2";
+    }
+}
+
+static const char *type_badge(const LEntry *e)
+{
+    switch (e->type) {
+    case LT_ROM: return e->sys >= 0 ? L.sys[e->sys].shortname : "ROM";
+    case LT_APP: return "APP";
+    case LT_TOOL: return "TOOL";
+    case LT_ACTION: return "SYSTEM";
+    default: return "GAME";
+    }
+}
+
+static void draw_cover(const LEntry *e, int x, int y, int alpha)
+{
+    CoverSpec cs;
+    char png[700] = "";
+    memset(&cs, 0, sizeof(cs));
+    cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
+    if (e->art[0]) cs.art = e->art;
+    else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
+    gfx_cover(&cs, x, y, alpha);
+}
+
+/* ---- settings ---------------------------------------------------------------------------------- */
+
+static pid_t g_bg_pid;
+static char g_bg_ok[96], g_bg_fail[96], g_bg_icon[32];
+
+/* runs a command in the background; a toast says how it went */
+static void bg_run(const char *cmd, const char *icon, const char *ok, const char *fail)
+{
+    pid_t pid;
+    if (g_bg_pid > 0) return;
+    pid = fork();
+    if (pid == 0) {
+        int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+        setsid();
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    if (pid < 0) return;
+    g_bg_pid = pid;
+    snprintf(g_bg_ok, sizeof(g_bg_ok), "%s", ok);
+    snprintf(g_bg_fail, sizeof(g_bg_fail), "%s", fail);
+    snprintf(g_bg_icon, sizeof(g_bg_icon), "%s", icon);
+}
+
+static void toast(const char *icon, const char *s, uint64_t now);
+
+static void bg_poll(uint64_t now)
+{
+    int st;
+    if (g_bg_pid <= 0 || waitpid(g_bg_pid, &st, WNOHANG) != g_bg_pid) return;
+    g_bg_pid = 0;
+    toast(g_bg_icon, WIFEXITED(st) && WEXITSTATUS(st) == 0 ? g_bg_ok : g_bg_fail, now);
+}
+
+static int wifi_mode_psp(void)
+{
+    FILE *f = fopen("/etc/pspexp/wifi-mode", "r");
+    char m[16] = "";
+    if (f) { if (!fgets(m, sizeof(m), f)) m[0] = 0; fclose(f); }
+    return !strncmp(m, "psp", 3);
+}
+
+/* what a System row shows on its right */
+static const char *action_value(const LEntry *e)
+{
+    const char *a = e->id + 2;
+    if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
+    if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
+    return NULL;
+}
+
+/* ---- launching and actions ------------------------------------------------------------------- */
+
+static void run_action(LEntry *e, uint64_t now)
+{
+    const char *a = e->id + 2;
+    if (!strcmp(a, "rescan")) {
+        char s[96];
+        int n = lib_reload(&L);
+        cats_build();
+        snprintf(s, sizeof(s), "%d game%s, app%s and ROMs", n, n == 1 ? "" : "s", n == 1 ? "" : "s");
+        toast("refresh-cw", s, now);
+    } else if (!strcmp(a, "console")) {
+        g_console_req = 1;
+    } else if (!strcmp(a, "boxart")) {
+        g_nofetch = !g_nofetch;
+        lib_setting_set(&L, "boxart", !g_nofetch);
+        snprintf(e->icon, sizeof(e->icon), "%s", g_nofetch ? "image-off" : "image");
+        toast(e->icon, g_nofetch ? "Box art downloads off" : "Box art downloads on", now);
+    } else if (!strcmp(a, "wifi")) {
+        int to_psp = !wifi_mode_psp();
+        char cmd[400];
+        if (now > g_confirm_until || strcmp(g_confirm, a)) {
+            snprintf(g_confirm, sizeof(g_confirm), "%s", a);
+            g_confirm_until = now + 4000000u;
+            toast("radio-tower", to_psp ? "Press X again: Wi-Fi straight to the PSP" : "Press X again: back to the home Wi-Fi (keep the PSP on USB)", now);
+            return;
+        }
+        g_confirm[0] = 0;
+        snprintf(cmd, sizeof(cmd), "sudo -n %s %s", g_wifi_cmd, to_psp ? "psp" : "home");
+        bg_run(cmd, "radio-tower", to_psp ? "Wi-Fi: PSP direct" : "Wi-Fi: home network", "Wi-Fi switch failed (see /tmp/pspexp-launcher.log)");
+        toast("radio-tower", "Switching Wi-Fi...", now);
+    } else if (!strcmp(a, "reboot") || !strcmp(a, "poweroff")) {
+        int reboot = !strcmp(a, "reboot");
+        if (now > g_confirm_until || strcmp(g_confirm, a)) {
+            snprintf(g_confirm, sizeof(g_confirm), "%s", a);
+            g_confirm_until = now + 3000000u;
+            toast(reboot ? "rotate-ccw" : "power", reboot ? "Press X again to restart" : "Press X again to power off", now);
+            return;
+        }
+        g_confirm[0] = 0;
+        snprintf(g_launch_cmd, sizeof(g_launch_cmd), "exec sudo -n /usr/sbin/%s", reboot ? "reboot" : "poweroff");
+        snprintf(g_launch_cwd, sizeof(g_launch_cwd), "/");
         g_launch_aware = 1;
-    } else { toast("Not available in this launcher yet", now); return; }
-    slash = strrchr(e->path, '/');
-    snprintf(g_launch_cwd, sizeof(g_launch_cwd), "%.*s", slash ? (int)(slash - e->path) : 1, slash ? e->path : ".");
+        g_launch_pending = 1;
+        toast("power", reboot ? "Restarting..." : "Powering off...", now);
+    } else if (!strcmp(a, "about")) {
+        char s[160];
+        int roms = 0, i;
+        for (i = 0; i < L.nsys; i++) roms += L.sys[i].nroms;
+        snprintf(s, sizeof(s), "%d games and apps, %d ROMs, %d systems", L.n, roms, L.nsys);
+        toast("info", s, now);
+    }
+}
+
+static void launch(LEntry *e, uint64_t now)
+{
+    if (e->type == LT_ACTION) { run_action(e, now); return; }
+    lib_command(&L, e, g_launch_cmd, sizeof(g_launch_cmd));
+    snprintf(g_launch_cwd, sizeof(g_launch_cwd), "%s", e->dir[0] ? e->dir : "/");
+    g_launch_aware = e->pspexp || strstr(g_launch_cmd, "pspexp-") != NULL;
     g_launch_pending = 1;
     g_running = 1;
-    g_running_e = e;
-    recent_push(e->path);
+    g_running_e = *e;
+    lib_recent_push(&L, e->id);
     g_dirty = 1;
-}
-
-/* ---- input ------------------------------------------------------------------------ */
-
-void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
-{
-    Level *l = &g_lv[g_depth];
-    (void)b;
-    if (g_running) return;   /* a game has the screen */
-    if (g_ncats == 0) return;
-    if (left || right) {
-        if (g_depth == 0) {
-            int c = g_cat + (right ? 1 : -1);
-            if (c < 0) c = g_ncats - 1;
-            if (c >= g_ncats) c = 0;
-            g_cat_sel_of[g_cat] = g_lv[0].sel;
-            open_category(c);
-        } else {   /* inside a folder: page */
-            l->sel += right ? 5 : -5;
-            if (l->sel < 0) l->sel = 0;
-            if (l->sel >= l->n) l->sel = l->n - 1;
-            g_dirty = 1;
-        }
-    }
-    if (up && l->n) { l->sel = (l->sel + l->n - 1) % l->n; g_dirty = 1; }
-    if (down && l->n) { l->sel = (l->sel + 1) % l->n; g_dirty = 1; }
-    if (b & PSPEXP_BUTTON_LTRIGGER && (pressed & PSPEXP_BUTTON_LTRIGGER) && l->n) { l->sel = l->sel >= 5 ? l->sel - 5 : 0; g_dirty = 1; }
-    if (b & PSPEXP_BUTTON_RTRIGGER && (pressed & PSPEXP_BUTTON_RTRIGGER) && l->n) { l->sel = l->sel + 5 < l->n ? l->sel + 5 : l->n - 1; g_dirty = 1; }
-    if (pressed & PSPEXP_BUTTON_CROSS) {
-        Entry *e = current_entry();
-        if (!e) return;
-        if (e->kind == K_FOLDER || e->kind == K_EMU) {
-            if (g_depth + 1 >= (int)(sizeof(g_lv) / sizeof(g_lv[0]))) return;
-            if (!e->loaded) {
-                if (e->kind == K_EMU) load_roms(e);
-                else { load_folder(e->path, "", &e->kids, &e->nkids); e->loaded = 1; }
-            }
-            if (e->nkids == 0) { toast(e->kind == K_EMU ? "No ROMs in that folder" : "Empty folder", now); return; }
-            g_depth++;
-            g_lv[g_depth].e = e->kids; g_lv[g_depth].n = e->nkids; g_lv[g_depth].sel = 0; g_lv[g_depth].scroll = 0;
-            g_lv[g_depth].owner = e;
-            snprintf(g_lv[g_depth].title, sizeof(g_lv[g_depth].title), "%s", e->name);
-            g_dirty = 1;
-        } else launch(e, l->owner, now);
-    }
-    if (pressed & PSPEXP_BUTTON_CIRCLE) {
-        if (g_depth > 0) { g_depth--; g_dirty = 1; }
-    }
-    if (pressed & PSPEXP_BUTTON_SQUARE) {
-        Entry *e = current_entry();
-        if (e && (e->kind == K_SCRIPT || e->kind == K_ROM)) {
-            int i = list_find(g_favs, g_nfavs, e->path);
-            Entry *orig;
-            if (i >= 0) { memmove(g_favs[i], g_favs[i + 1], (size_t)(g_nfavs - i - 1) * 512); g_nfavs--; e->fav = 0; }
-            else if (g_nfavs < 64) { snprintf(g_favs[g_nfavs++], 512, "%s", e->path); e->fav = 1; }
-            if ((orig = find_entry(e->path)) && orig != e) orig->fav = e->fav;
-            list_save("favourites", g_favs, g_nfavs);
-            toast(e->fav ? "Added to favourites" : "Removed from favourites", now);
-        }
-    }
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) {
-        Entry *e = current_entry();
-        char s[200];
-        if (e) { snprintf(s, sizeof(s), "%s", e->path); toast(s, now); }
-    }
 }
 
 int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, int *pspexp_aware)
@@ -768,370 +443,769 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
     return 1;
 }
 
+int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
+
 void launcher_child_exited(int status)
 {
     char s[160];
+    if (g_running && status != 0) {
+        snprintf(s, sizeof(s), "%s stopped (status %d)", g_running_e.title, status);
+        toast("info", s, pspexp_time_us());
+    }
     g_running = 0;
-    if (status != 0 && g_running_e) { snprintf(s, sizeof(s), "%s ended with status %d", g_running_e->name, status); toast(s, pspexp_time_us()); }
-    build_recent_cat();
-    if (g_recent_cat >= 0 && g_cat == g_recent_cat) open_category(g_cat);
+    cats_build();
     g_dirty = 1;
 }
 
 void launcher_invalidate(void) { g_dirty = 1; }
 
-/* ---- status sources ---------------------------------------------------------------- */
+/* ---- search and details: state and logic ------------------------------------------------------ */
 
-static int read_int_file(const char *p, int *v)
+enum { M_BROWSE, M_SEARCH, M_DETAILS };
+static int g_mode;
+static float g_overlay_a;             /* search / details fade-in */
+
+/* search: an on-screen keyboard over live results from the whole library */
+#define KB_COLS 13
+#define KB_ROWS 3
+static const char *KB[KB_ROWS][KB_COLS] = {
+    { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M" },
+    { "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z" },
+    { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "SPC", "DEL", "GO" },
+};
+static char g_q[40];
+static int g_kx, g_ky, g_sfocus, g_ssel, g_nres, g_caret;
+static float g_sscroll;
+static LEntry **g_res;
+
+static int word_starts(const char *title, const char *q)
 {
-    FILE *f = fopen(p, "r");
-    if (!f) return -1;
-    if (fscanf(f, "%d", v) != 1) { fclose(f); return -1; }
-    fclose(f);
+    size_t n = strlen(q);
+    const char *t = title;
+    while (*t) {
+        if (!strncasecmp(t, q, n)) return t == title ? 3 : 2;
+        while (*t && *t != ' ' && *t != '-' && *t != ':') t++;
+        while (*t == ' ' || *t == '-' || *t == ':') t++;
+    }
     return 0;
 }
 
-static int battery(int *charging)
+static int contains_ci(const char *h, const char *q)
 {
-    static const char *dirs[] = { "/sys/class/power_supply/axp20x-battery", "/sys/class/power_supply/battery", "/sys/class/power_supply/BAT0", NULL };
-    char p[256], st[32];
-    int i, v;
-    *charging = 0;
-    for (i = 0; dirs[i]; i++) {
-        snprintf(p, sizeof(p), "%s/capacity", dirs[i]);
-        if (read_int_file(p, &v) == 0) {
-            FILE *f;
-            snprintf(p, sizeof(p), "%s/status", dirs[i]);
-            if ((f = fopen(p, "r"))) { if (fgets(st, sizeof(st), f) && !strncmp(st, "Charging", 8)) *charging = 1; fclose(f); }
-            return v;
+    size_t n = strlen(q);
+    for (; *h; h++) if (!strncasecmp(h, q, n)) return 1;
+    return 0;
+}
+
+typedef struct Hit { LEntry *e; int score; } Hit;
+static int cmp_hit(const void *a, const void *b)
+{
+    const Hit *x = (const Hit *)a, *y = (const Hit *)b;
+    if (x->score != y->score) return y->score - x->score;
+    return strcasecmp(x->e->title, y->e->title);
+}
+
+static void search_update(void)
+{
+    Hit *h = NULL;
+    int n = 0, cap = 0, i, s, k;
+    char q[40];
+    snprintf(q, sizeof(q), "%s", g_q);
+    { size_t l = strlen(q); while (l && q[l - 1] == ' ') q[--l] = 0; }
+    free(g_res); g_res = NULL; g_nres = 0; g_ssel = 0; g_sscroll = 0;
+    if (!q[0]) return;
+    for (s = -1; s < L.nsys; s++) {
+        LEntry *arr = s < 0 ? L.e : L.sys[s].roms_list;
+        int cnt = s < 0 ? L.n : L.sys[s].nroms;
+        for (i = 0; i < cnt; i++) {
+            int sc = word_starts(arr[i].title, q);
+            if (!sc && contains_ci(arr[i].title, q)) sc = 1;
+            if (!sc) continue;
+            if (arr[i].fav) sc += 1;
+            if (n == cap) { cap = cap ? cap * 2 : 64; h = (Hit *)realloc(h, (size_t)cap * sizeof(Hit)); }
+            h[n].e = &arr[i]; h[n].score = sc; n++;
         }
     }
-    return -1;
+    if (n) qsort(h, (size_t)n, sizeof(Hit), cmp_hit);
+    if (n > 200) n = 200;
+    g_res = (LEntry **)malloc((size_t)(n ? n : 1) * sizeof(LEntry *));
+    for (k = 0; k < n; k++) g_res[k] = h[k].e;
+    g_nres = n;
+    free(h);
 }
 
-static int wifi_level(void)   /* 0..4, -1 unknown */
+static void search_open(uint64_t now)
 {
-    FILE *f = fopen("/proc/net/wireless", "r");
-    char line[256];
-    int q = -1;
-    if (!f) return -1;
-    while (fgets(line, sizeof(line), f)) {
-        char name[32]; int status; float link, level;
-        if (sscanf(line, " %31[^:]: %d %f %f", name, &status, &link, &level) == 4) { q = (int)link; break; }
-    }
-    fclose(f);
-    if (q < 0) return -1;
-    return q >= 60 ? 4 : q >= 45 ? 3 : q >= 30 ? 2 : q > 0 ? 1 : 0;
+    g_mode = M_SEARCH; g_overlay_a = 0;
+    g_sfocus = 0;
+    (void)now;
+    search_update();
+    g_dirty = 1;
 }
 
-/* ---- drawing ------------------------------------------------------------------------ */
+static void launch(LEntry *e, uint64_t now);
 
-static void rect(int x, int y, int w, int h, uint32_t c, int a) { pspexp_fill_rect(g_ctx, (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, rgb(c), (uint8_t)a); }
-
-/* a card with 2 px "rounded" corners: the body and two inset bands */
-static void card(int x, int y, int w, int h, uint32_t c, int a)
+static void search_type(const char *key)
 {
-    rect(x + 2, y, w - 4, h, c, a);
-    rect(x, y + 2, 2, h - 4, c, a);
-    rect(x + w - 2, y + 2, 2, h - 4, c, a);
-    rect(x + 1, y + 1, 1, 1, c, a / 2); rect(x + w - 2, y + 1, 1, 1, c, a / 2);
-    rect(x + 1, y + h - 2, 1, 1, c, a / 2); rect(x + w - 2, y + h - 2, 1, 1, c, a / 2);
+    size_t l = strlen(g_q);
+    if (!strcmp(key, "DEL")) { if (l) g_q[l - 1] = 0; }
+    else if (!strcmp(key, "SPC")) { if (l && l + 1 < sizeof(g_q) && g_q[l - 1] != ' ') { g_q[l] = ' '; g_q[l + 1] = 0; } }
+    else if (l + 1 < sizeof(g_q)) { g_q[l] = (char)(key[0] >= 'A' && key[0] <= 'Z' ? key[0] - 'A' + 'a' : key[0]); g_q[l + 1] = 0; }
+    search_update();
 }
 
-static void line(int x0, int y0, int x1, int y1, uint32_t c, int a) { pspexp_draw_line(g_ctx, (int16_t)x0, (int16_t)y0, (int16_t)x1, (int16_t)y1, rgb(c), (uint8_t)a); }
+static void toast(const char *icon, const char *s, uint64_t now);
+static void cats_build(void);
 
-/* PSP button glyphs, 9 px */
-static void glyph_button(int x, int y, char which, uint32_t c)
+static void search_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
-    switch (which) {
-    case 'x': line(x, y, x + 8, y + 8, c, 255); line(x + 8, y, x, y + 8, c, 255); break;
-    case 'o': line(x + 2, y, x + 6, y, c, 255); line(x + 2, y + 8, x + 6, y + 8, c, 255); line(x, y + 2, x, y + 6, c, 255); line(x + 8, y + 2, x + 8, y + 6, c, 255);
-              line(x, y + 2, x + 2, y, c, 255); line(x + 6, y, x + 8, y + 2, c, 255); line(x, y + 6, x + 2, y + 8, c, 255); line(x + 6, y + 8, x + 8, y + 6, c, 255); break;
-    case 't': line(x + 4, y, x, y + 8, c, 255); line(x + 4, y, x + 8, y + 8, c, 255); line(x, y + 8, x + 8, y + 8, c, 255); break;
-    case 's': pspexp_draw_rect(g_ctx, (int16_t)x, (int16_t)y, 9, 9, rgb(c)); break;
-    default: break;
-    }
-}
-
-static uint32_t name_colour(const char *s)
-{
-    static const uint32_t pal[] = { 0x2f6fb5, 0x8e44ad, 0x16a085, 0xc0392b, 0xd35400, 0x27ae60, 0x2980b9, 0x7f8c8d, 0xb5892f };
-    unsigned h = 5381;
-    for (; *s; s++) h = h * 33u + (unsigned char)*s;
-    return pal[h % (sizeof(pal) / sizeof(pal[0]))];
-}
-
-/* cover for an entry without an icon: its initials on a colour from its name */
-static void generated_cover(const Entry *e, int x, int y, int box, int alpha)
-{
-    char ini[4] = { 0, 0, 0, 0 };
-    const char *s = e->name;
-    int n = 0, w;
-    while (*s && n < 2) {
-        if ((*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9') || (n == 0 && *s >= 'a' && *s <= 'z')) ini[n++] = (char)(*s >= 'a' ? *s - 32 : *s);
-        s++;
-    }
-    if (!n) ini[n++] = '?';
-    card(x, y, box, box, name_colour(e->name), alpha);
-    if (box >= 48) {
-        w = text_width(&F_TITLE, ini, -1);
-        text_draw(&F_TITLE, x + (box - w) / 2, y + (box - F_TITLE.height) / 2, ini, C_TEXT, 0);
+    if (g_sfocus == 0) {
+        if (left) g_kx = (g_kx + KB_COLS - 1) % KB_COLS;
+        if (right) g_kx = (g_kx + 1) % KB_COLS;
+        if (up) g_ky = (g_ky + KB_ROWS - 1) % KB_ROWS;
+        if (down) g_ky = (g_ky + 1) % KB_ROWS;
+        if (pressed & PSPEXP_BUTTON_CROSS) {
+            const char *k = KB[g_ky][g_kx];
+            if (!strcmp(k, "GO")) { if (g_nres) g_sfocus = 1; }
+            else search_type(k);
+        }
+        if (pressed & PSPEXP_BUTTON_SQUARE) search_type("DEL");
+        if (pressed & PSPEXP_BUTTON_TRIANGLE) search_type("SPC");
+        if ((pressed & PSPEXP_BUTTON_START) && g_nres) g_sfocus = 1;
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; }
     } else {
-        w = text_width(&F_UI, ini, -1);
-        text_draw(&F_UI, x + (box - w) / 2, y + (box - F_UI.height) / 2, ini, C_TEXT, 0);
+        if (up && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_UP) ? (g_ssel + g_nres - 1) % g_nres : (g_ssel > 0 ? g_ssel - 1 : 0);
+        if (down && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_DOWN) ? (g_ssel + 1) % g_nres : (g_ssel + 1 < g_nres ? g_ssel + 1 : g_ssel);
+        if ((pressed & PSPEXP_BUTTON_CROSS) && g_nres) { LEntry *e = g_res[g_ssel]; g_mode = M_BROWSE; launch(e, now); }
+        if ((pressed & PSPEXP_BUTTON_SQUARE) && g_nres) {
+            char id[160];
+            int on;
+            snprintf(id, sizeof(id), "%s", g_res[g_ssel]->id);
+            on = lib_fav_toggle(&L, id);
+            cats_build();
+            toast("star", on ? "Added to favourites" : "Removed from favourites", now);
+        }
+        if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_START)) g_sfocus = 0;
+    }
+    g_dirty = 1;
+}
+
+/* details: a card over the list with everything known about the entry */
+static LEntry *g_det;
+
+static void details_input(uint32_t pressed, uint64_t now)
+{
+    if (pressed & PSPEXP_BUTTON_CROSS) { LEntry *e = g_det; g_mode = M_BROWSE; launch(e, now); }
+    else if (pressed & PSPEXP_BUTTON_SQUARE) {
+        char id[160];
+        int on;
+        snprintf(id, sizeof(id), "%s", g_det->id);
+        on = lib_fav_toggle(&L, id);
+        cats_build();
+        g_det = lib_find(&L, id);
+        if (!g_det) g_mode = M_BROWSE;
+        toast("star", on ? "Added to favourites" : "Removed from favourites", now);
+    }
+    else if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE)) g_mode = M_BROWSE;
+    g_dirty = 1;
+}
+
+/* ---- input -------------------------------------------------------------------------------- */
+
+static void select_cat(int c, int dir, uint64_t now)
+{
+    if (c < 0) c = g_ncat - 1;
+    if (c >= g_ncat) c = 0;
+    if (c == g_cur) return;
+    g_cur = c;
+    g_list_anim = 0; g_list_dir = (float)dir;
+    memset(g_expand, 0, sizeof(g_expand));
+    g_sel_since = now;
+    g_dirty = 1;
+}
+
+static void move_sel(int d, int wrap, uint64_t now)
+{
+    Cat *c = &g_cat[g_cur];
+    int s = c->sel + d;
+    if (!c->n) return;
+    if (wrap && (s < 0 || s >= c->n) && (d == 1 || d == -1)) s = (s + c->n) % c->n;
+    s = s < 0 ? 0 : s >= c->n ? c->n - 1 : s;
+    if (s != c->sel) { c->sel = s; g_sel_since = now; g_dirty = 1; }
+}
+
+void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
+{
+    LEntry *e;
+    (void)b;
+    if (g_running || !g_ncat) return;
+    if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
+    if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
+    if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
+    if (left) select_cat(g_cur - 1, -1, now);
+    if (right) select_cat(g_cur + 1, 1, now);
+    if (up) move_sel(-1, (pressed & PSPEXP_BUTTON_UP) != 0, now);   /* wraps on a fresh press, stops while repeating */
+    if (down) move_sel(1, (pressed & PSPEXP_BUTTON_DOWN) != 0, now);
+    if (pressed & PSPEXP_BUTTON_LTRIGGER) move_sel(-5, 0, now);
+    if (pressed & PSPEXP_BUTTON_RTRIGGER) move_sel(5, 0, now);
+    if (pressed & PSPEXP_BUTTON_CIRCLE) move_sel(-100000, 0, now);   /* back to the top */
+    e = cur_entry();
+    if (!e) return;
+    if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && e->type != LT_ACTION) {
+        char id[160];
+        int on;
+        snprintf(id, sizeof(id), "%s", e->id);
+        on = lib_fav_toggle(&L, id);
+        cats_build();
+        toast("star", on ? "Added to favourites" : "Removed from favourites", now);
+    }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) {
+        if (e->type == LT_ACTION) toast(e->icon, e->tags, now);
+        else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_dirty = 1; }
     }
 }
 
-static const char *kind_word(const Entry *e)
+/* ---- status sources ------------------------------------------------------------------------ */
+
+static int read_int(const char *p, int *v) { FILE *f = fopen(p, "r"); int ok; if (!f) return -1; ok = fscanf(f, "%d", v) == 1; fclose(f); return ok ? 0 : -1; }
+
+static void status_poll(uint64_t now)
 {
-    switch (e->kind) {
-    case K_FOLDER: return "folder";
-    case K_PLUGIN: return "page";
-    case K_EMU: return "emulator";
-    case K_ROM: return "rom";
-    default: return "game";
+    static const char *dirs[] = { "/sys/class/power_supply/axp20x-battery", "/sys/class/power_supply/battery", "/sys/class/power_supply/BAT0", NULL };
+    int bat = -1, chg = 0, wifi = -1, i;
+    char p[160];
+    time_t t = time(NULL);
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    if (tmv.tm_min != g_minute) { g_minute = tmv.tm_min; g_dirty = 1; }
+    if (now - g_status_at < 3000000u && g_bat != -2) return;
+    g_status_at = now;
+    for (i = 0; dirs[i]; i++) {
+        snprintf(p, sizeof(p), "%s/capacity", dirs[i]);
+        if (read_int(p, &bat) == 0) {
+            FILE *f; char st[32];
+            snprintf(p, sizeof(p), "%s/status", dirs[i]);
+            if ((f = fopen(p, "r"))) { if (fgets(st, sizeof(st), f) && !strncmp(st, "Charging", 8)) chg = 1; fclose(f); }
+            break;
+        }
+        bat = -1;
     }
+    {
+        FILE *f = fopen("/proc/net/wireless", "r");
+        char line[256];
+        if (f) {
+            while (fgets(line, sizeof(line), f)) {
+                char name[32]; int s; float link;
+                if (sscanf(line, " %31[^:]: %d %f", name, &s, &link) == 3) { wifi = link >= 55 ? 3 : link >= 35 ? 2 : link > 0 ? 1 : 0; break; }
+            }
+            fclose(f);
+        }
+    }
+    if (bat != g_bat || chg != g_chg || wifi != g_wifi) { g_bat = bat; g_chg = chg; g_wifi = wifi; g_dirty = 1; }
 }
 
-static float approach(float cur, float target, float k)
+/* ---- animation ----------------------------------------------------------------------------- */
+
+static float ease(float cur, float target, float rate, float dt, float snap)
 {
-    float d = target - cur;
-    if (fabsf(d) < 0.4f) return target;
-    return cur + d * k;
+    float k = 1.0f - expf(-rate * dt), v = cur + (target - cur) * k;
+    if (fabsf(target - v) < snap) v = target;
+    if (v != target) g_anim = 1;
+    return v;
 }
 
-#define RAIL_Y 26
-#define RAIL_BOX 56
-#define RAIL_GAP 18
-#define LIST_Y 114
-#define ROW_H 25
-#define LIST_X 164
-#define LIST_W 300
-#define ROWS_VISIBLE 5
+static void library_changed(uint64_t now)
+{
+    lib_reload(&L);
+    cats_build();
+    g_det = NULL;
+    if (g_mode == M_DETAILS) g_mode = M_BROWSE;
+    if (g_mode == M_SEARCH) search_update();
+    toast("package", "Library updated", now);
+}
 
 int launcher_needs_frame(uint64_t now)
 {
-    int i;
-    if (g_dirty) return 1;
-    if (g_toast[0] && now >= g_toast_until) { g_toast[0] = 0; return 1; }
-    if (fabsf(g_rail_x - g_rail_target) >= 0.4f || fabsf(g_sel_y - g_sel_target) >= 0.4f) return 1;
-    for (i = 0; i < g_ncats; i++) if (fabsf(g_lift[i] - (i == g_cat ? 1.0f : 0.0f)) >= 0.02f) return 1;
-    return 0;
+    static uint64_t last_check;
+    if (!g_running && now - last_check > 3000000u) {   /* packages installed or removed, ROMs added */
+        last_check = now;
+        if (lib_changed(&L)) library_changed(now);
+    }
+    bg_poll(now);
+    fetch_poll(now);
+    status_poll(now);
+    if (g_confirm[0] && now > g_confirm_until) g_confirm[0] = 0;
+    if (g_mode == M_SEARCH && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
+    if (g_toast[0] && now >= g_toast_until && g_toast_a <= 0.01f) { g_toast[0] = 0; g_dirty = 1; }
+    return g_dirty || g_anim || g_toast[0] != 0;
 }
 
-static void draw_status(uint64_t now, int connected)
+/* ---- drawing ------------------------------------------------------------------------------ */
+
+static void draw_status(void)
 {
     char s[64];
     time_t t = time(NULL);
     struct tm tmv;
-    int x, lvl, chg, bat, i;
-    (void)now;
-    rect(0, 0, SCREEN_W, 20, C_STRIP, 255);
+    int x, w;
     localtime_r(&t, &tmv);
     strftime(s, sizeof(s), "%H:%M", &tmv);
-    text_draw(&F_UI, 12, 2, s, C_TEXT, 0);
+    w = gfx_text(FONT_TITLE, 16, 4, s, C_TEXT, 255, 0);
     strftime(s, sizeof(s), "%a %d %b", &tmv);
-    text_draw(&F_SMALL, 56, 4, s, C_MUTED, 0);
-    /* right side: PSP link, Wi-Fi, battery */
-    x = SCREEN_W - 12;
-    bat = battery(&chg);
-    if (bat >= 0) {
-        int w = 22, fill = (w - 4) * bat / 100;
-        snprintf(s, sizeof(s), "%d%%", bat);
-        x -= text_width(&F_SMALL, s, -1);
-        text_draw(&F_SMALL, x, 4, s, C_MUTED, 0);
-        x -= w + 6;
-        pspexp_draw_rect(g_ctx, (int16_t)x, 5, (int16_t)w, 10, rgb(C_MUTED));
-        rect(x + w, 8, 2, 4, C_MUTED, 255);
-        rect(x + 2, 7, fill, 6, chg ? 0x3fb950 : bat < 20 ? 0xf85149 : C_TEXT, 255);
-        x -= 14;
+    gfx_text(FONT_SMALL, 16 + w + 8, 8, s, C_MUTED, 255, 0);
+    x = SCREEN_W - 16;
+    if (g_bat >= 0) {
+        const char *ic = g_chg ? "battery-charging" : g_bat > 70 ? "battery-full" : g_bat > 35 ? "battery-medium" : g_bat > 12 ? "battery-low" : "battery-warning";
+        snprintf(s, sizeof(s), "%d%%", g_bat);
+        x -= gfx_text_width(FONT_SMALL, s);
+        gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
+        x -= 20;
+        gfx_icon(ic, 16, x, 6, g_bat <= 12 && !g_chg ? 0xf87171 : C_SUB, 255);
+        x -= 10;
     }
-    lvl = wifi_level();
-    if (lvl >= 0) {
-        for (i = 0; i < 4; i++) rect(x - 16 + i * 4, 14 - i * 3, 3, 3 + i * 3, i < lvl ? C_TEXT : C_DIM, 255);
-        x -= 24;
+    if (g_wifi >= 0) {
+        const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-zero";
+        x -= 16;
+        gfx_icon(ic, 16, x, 6, C_SUB, 255);
     }
-    rect(x - 8, 7, 6, 6, connected ? 0x3fb950 : 0xf85149, 255);
-    x -= 8 + 6;
-    text_draw(&F_SMALL, x - text_width(&F_SMALL, "PSP", -1), 4, "PSP", C_MUTED, 0);
 }
 
-static void draw_rail(void)
+static void draw_rail(float dt)
 {
-    int i, x, total = g_ncats * (RAIL_BOX + RAIL_GAP) - RAIL_GAP;
-    /* the selected icon is kept near the centre when the rail overflows */
-    float sel_center = (float)(g_cat * (RAIL_BOX + RAIL_GAP) + RAIL_BOX / 2);
-    if (total <= SCREEN_W - 40) g_rail_target = (float)((SCREEN_W - total) / 2);
+    int i, pitch = TILE + TILE_GAP, total = g_ncat * pitch - TILE_GAP + (TILE_SEL - TILE);
+    float target;
+    /* left-aligned with the cover column; scrolls when it overflows, two tiles of context on the left */
+    if (16 + total <= SCREEN_W - 16) target = 16;
     else {
-        g_rail_target = SCREEN_W / 2.0f - sel_center;
-        if (g_rail_target > 20) g_rail_target = 20;
-        if (g_rail_target < SCREEN_W - 20 - total) g_rail_target = (float)(SCREEN_W - 20 - total);
+        target = 16.0f - (float)((g_cur - 2) * pitch);
+        if (target > 16) target = 16;
+        if (target < (float)(SCREEN_W - 16 - total)) target = (float)(SCREEN_W - 16 - total);
     }
-    g_rail_x = approach(g_rail_x, g_rail_target, 0.22f);
-    for (i = 0; i < g_ncats; i++) {
-        float lift = g_lift[i] = approach(g_lift[i], i == g_cat ? 1.0f : 0.0f, 0.25f);
-        int box = RAIL_BOX + (int)(lift * 14.0f);
-        int cx = (int)(g_rail_x + i * (RAIL_BOX + RAIL_GAP)) + RAIL_BOX / 2;
-        int y = RAIL_Y + 8 - (int)(lift * 8.0f);
-        x = cx - box / 2;
-        if (x + box < 0 || x > SCREEN_W) continue;
-        if (lift > 0.05f) card(x - 4, y - 4, box + 8, box + 8, C_ACCENT, (int)(lift * 70.0f) + 20);
-        card(x, y, box, box, C_CARD_HI, 255);
-        if (!icon_draw(g_cats[i].icon, x + 4, y + 4, box - 8, 200 + (int)(lift * 55.0f))) {
-            Entry fake; memset(&fake, 0, sizeof(fake)); snprintf(fake.name, sizeof(fake.name), "%s", g_cats[i].name);
-            generated_cover(&fake, x + 4, y + 4, box - 8, 200 + (int)(lift * 55.0f));
+    g_rail_x = ease(g_rail_x, target, 14.0f, dt, 0.3f);
+    for (i = 0; i < g_ncat; i++) {
+        Cat *c = &g_cat[i];
+        float lift = g_lift[i] = ease(g_lift[i], i == g_cur ? 1.0f : 0.0f, 16.0f, dt, 0.01f);
+        int size = TILE + (int)lroundf(lift * (TILE_SEL - TILE));
+        /* tiles after the selected one make room for its extra size */
+        float left = g_rail_x + (float)(i * pitch);
+        int x, y;
+        {
+            int k; float extra = 0;
+            for (k = 0; k < i; k++) extra += g_lift[k] * (TILE_SEL - TILE);
+            left += extra;
         }
-        if (i == g_cat) {
-            int w = text_width(&F_UI, g_cats[i].name, -1);
-            text_draw(&F_UI, cx - w / 2, RAIL_Y + RAIL_BOX + 14, g_cats[i].name, C_TEXT, 0);
+        x = (int)lroundf(left);
+        y = RAIL_Y - size / 2 - (int)lroundf(lift * 2);
+        if (x + size < -20 || x > SCREEN_W + 20) continue;
+        if (lift > 0.02f) gfx_shadow(NINE_SHADOW14, x, y + 5, size, size, c->col, (int)(lift * 140));
+        gfx_nine(NINE_R14, x, y, size, size, C_TILE, 235);
+        if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, c->col, (int)(lift * 255));
+        if (c->kind == CK_SYSTEM) {   /* systems: their short name, set like a logo */
+            const char *t = L.sys[c->sys].shortname;
+            int f = gfx_text_width(FONT_TITLE, t) <= size - 12 ? FONT_TITLE : FONT_BODY, tw = gfx_text_width(f, t);
+            int ty = y + (size - gfx_line_height(f)) / 2;
+            gfx_text(f, x + (size - tw) / 2, ty, t, c->col, (int)((1 - lift) * 235), 0);
+            if (lift > 0.02f) gfx_text(f, x + (size - tw) / 2, ty, t, 0xffffff, (int)(lift * 255), 0);
+        } else {
+            gfx_icon(c->icon, 24, x + (size - 24) / 2, y + (size - 24) / 2, c->col, (int)((1 - lift) * 235));
+            if (lift > 0.02f) gfx_icon(c->icon, 24, x + (size - 24) / 2, y + (size - 24) / 2, 0xffffff, (int)(lift * 255));
         }
     }
 }
 
-static void draw_list(void)
+static void human_size(long long b, char *out, size_t n)
 {
-    Level *l = &g_lv[g_depth];
-    int i, first, y, cover_x = 16, cover_y = LIST_Y + 4, cover = 128;
-    Entry *cur = current_entry();
-    char s[160];
-    /* cover panel */
-    if (cur) {
-        if (!icon_draw(cur->icon, cover_x, cover_y, cover, 255)) generated_cover(cur, cover_x, cover_y, cover, 255);
-        if (cur->fav) { card(cover_x + cover - 24, cover_y + 6, 18, 18, C_ACCENT, 240); rect(cover_x + cover - 19, cover_y + 11, 8, 8, C_TEXT, 255); }
-    } else {
-        card(cover_x, cover_y, cover, cover, C_CARD, 255);
-        text_draw(&F_SMALL, cover_x + 30, cover_y + 58, "nothing here", C_MUTED, 0);
+    if (b >= 1048576) snprintf(out, n, "%.1f MB", (double)b / 1048576.0);
+    else snprintf(out, n, "%lld KB", (b + 1023) / 1024);
+}
+
+static void detail_line(const LEntry *e, char *s, size_t n)
+{
+    char sz[32];
+    switch (e->type) {
+    case LT_ROM:
+        human_size(e->size, sz, sizeof(sz));
+        if (e->tags[0]) snprintf(s, n, "%s  /  %s  /  %s", L.sys[e->sys].shortname, e->tags, sz);
+        else snprintf(s, n, "%s  /  %s", L.sys[e->sys].name, sz);
+        break;
+    case LT_APP: snprintf(s, n, "App%s", e->pspexp ? "  /  PSP native" : ""); break;
+    case LT_TOOL: snprintf(s, n, "Tool"); break;
+    case LT_ACTION:
+        if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
+        else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
+        else snprintf(s, n, "%s", e->tags);
+        break;
+    default: snprintf(s, n, "Game%s%s%s", e->pspexp ? "  /  PSP native" : "", e->tags[0] ? "  /  " : "", e->tags); break;
     }
-    /* breadcrumb when inside a folder */
-    if (g_depth > 0) {
-        snprintf(s, sizeof(s), "%s  /  %s", g_lv[0].title, l->title);
-        text_draw(&F_SMALL, LIST_X, LIST_Y - 12, s, C_MUTED, LIST_W);
+}
+
+static void draw_list(float dt)
+{
+    Cat *c = &g_cat[g_cur];
+    float y, target;
+    int i, alpha, dx, lh_t = gfx_line_height(FONT_TITLE), lh_b = gfx_line_height(FONT_BODY);
+    char s[200];
+    LEntry *e = cur_entry();
+    g_list_anim = ease(g_list_anim, 1.0f, 16.0f, dt, 0.01f);
+    alpha = (int)(g_list_anim * 255);
+    dx = (int)lroundf((1 - g_list_anim) * 24 * g_list_dir);
+
+    /* header: the category and its size */
+    gfx_text(FONT_TITLE, 16 + dx / 2, HEAD_Y - 2, c->name, C_TEXT, alpha, 300);
+    if (c->kind != CK_SETTINGS) {
+        snprintf(s, sizeof(s), "%d %s%s", c->n, c->noun, c->n == 1 ? "" : "s");
+        gfx_text(FONT_SMALL, LIST_X + LIST_W - gfx_text_width(FONT_SMALL, s), HEAD_Y + 2, s, C_MUTED, alpha, 0);
     }
-    /* rows: the selection kept in view */
-    if (l->sel < (int)l->scroll) l->scroll = (float)l->sel;
-    if (l->sel >= (int)l->scroll + ROWS_VISIBLE) l->scroll = (float)(l->sel - ROWS_VISIBLE + 1);
-    first = (int)l->scroll;
-    g_sel_target = (float)(LIST_Y + (l->sel - first) * ROW_H);
-    g_sel_y = approach(g_sel_y, g_sel_target, 0.35f);
-    pspexp_set_clip(g_ctx, LIST_X - 4, LIST_Y - 2, LIST_W + 8, ROWS_VISIBLE * ROW_H + 4);
-    if (l->n) card(LIST_X - 4, (int)g_sel_y, LIST_W + 8, ROW_H, C_CARD_HI, 255);
-    if (l->n) rect(LIST_X - 4, (int)g_sel_y + 3, 3, ROW_H - 6, C_ACCENT, 255);
-    for (i = first; i < l->n && i < first + ROWS_VISIBLE; i++) {
-        Entry *e = &l->e[i];
-        int sel = i == l->sel;
-        y = LIST_Y + (i - first) * ROW_H;
-        text_draw(&F_UI, LIST_X + 8, y + 3, e->name, sel ? C_TEXT : 0xb8c0cc, LIST_W - 90);
-        if (e->fav) rect(LIST_X + 8 + text_width(&F_UI, e->name, -1) + 8, y + 10, 5, 5, C_ACCENT, 255);
-        {
-            const char *k = kind_word(e);
-            int w = text_width(&F_SMALL, k, -1);
-            text_draw(&F_SMALL, LIST_X + LIST_W - w - 8, y + 7, k, sel ? C_MUTED : C_DIM, 0);
+
+    /* cover, cross-faded between selections */
+    if (e && strcmp(e->id, g_cover_cur)) {
+        snprintf(g_cover_prev, sizeof(g_cover_prev), "%s", g_cover_cur);
+        snprintf(g_cover_cur, sizeof(g_cover_cur), "%s", e->id);
+        g_cover_fade = g_cover_prev[0] ? 0 : 1;
+    }
+    g_cover_fade = ease(g_cover_fade, 1.0f, 24.0f, dt, 0.02f);
+    if (e) {
+        gfx_shadow(NINE_SHADOW14, COVER_X, COVER_Y + 6, COVER_SIZE, COVER_SIZE, 0x000000, 160);
+        if (g_cover_fade < 1 && g_cover_prev[0]) {
+            LEntry *p = lib_find(&L, g_cover_prev);
+            if (!p) { int k; for (k = 0; k < g_nactions; k++) if (!strcmp(g_actions[k].id, g_cover_prev)) p = &g_actions[k]; }
+            if (p) draw_cover(p, COVER_X, COVER_Y, 255);
         }
-        if (e->kind == K_FOLDER || e->kind == K_EMU) { line(LIST_X + LIST_W - 60, y + 9, LIST_X + LIST_W - 56, y + 13, C_MUTED, 255); line(LIST_X + LIST_W - 56, y + 13, LIST_X + LIST_W - 60, y + 17, C_MUTED, 255); }
+        draw_cover(e, COVER_X, COVER_Y, (int)(g_cover_fade * 255));
+        if (e->fav) {
+            gfx_nine(NINE_R6, COVER_X + COVER_SIZE - 28, COVER_Y + 8, 20, 20, 0x000000, 120);
+            gfx_icon("star", 12, COVER_X + COVER_SIZE - 24, COVER_Y + 12, 0xfbbf24, 255);
+        }
+    }
+
+    if (!c->n) {
+        gfx_text(FONT_TITLE, LIST_X + 10 + dx, LIST_Y + 18, c->kind == CK_GAMES ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
+        gfx_text(FONT_SMALL, LIST_X + 10 + dx, LIST_Y + 42, "Install packages with gs-pkg; they appear here", C_MUTED, alpha, 0);
+        return;
+    }
+
+    /* rows: the focused one grows to hold its detail line; scrolling keeps it in view */
+    for (i = 0; i < c->n && i < 1024; i++) g_expand[i] = ease(g_expand[i], i == c->sel ? 1.0f : 0.0f, 20.0f, dt, 0.01f);
+    target = (float)((c->sel - 1) * ROW);   /* one whole row of context above the focus */
+    if (target > (float)(c->n * ROW + ROW_EXTRA - LIST_H)) target = (float)(c->n * ROW + ROW_EXTRA - LIST_H);
+    if (target < 0) target = 0;
+    c->scroll = ease(c->scroll, target, 16.0f, dt, 0.3f);
+
+    pspexp_set_clip(g_ctx, LIST_X - 8, LIST_Y - 2, LIST_W + 16, LIST_H + 4);
+    y = (float)LIST_Y - c->scroll;
+    for (i = 0; i < c->n; i++) {
+        float ex = i < 1024 ? g_expand[i] : 0;
+        int h = ROW + (int)lroundf(ex * ROW_EXTRA), ry = (int)lroundf(y), sel = i == c->sel;
+        if (ry + h >= LIST_Y - 2 && ry <= LIST_Y + LIST_H + 2) {
+            LEntry *it = c->it[i];
+            int tx = LIST_X + 6 + dx, right = LIST_X + LIST_W - 6 + dx;
+            int font = sel ? FONT_TITLE : FONT_BODY, lh = sel ? lh_t : lh_b;
+            if (ex > 0.02f) {
+                int a = (int)(ex * alpha);
+                gfx_nine(NINE_R10, LIST_X - 6 + dx, ry, LIST_W + 12, h, 0xffffff, a * 24 / 255);
+                gfx_rect(LIST_X - 6 + dx, ry + 7, 3, h - 14, c->col, a);
+            }
+            if (it->type == LT_ACTION) {
+                const char *v = action_value(it);
+                gfx_icon(it->icon, 16, tx, ry + (ROW - 16) / 2 + (sel ? 1 : 0), sel ? 0xffffff : C_SUB, alpha);
+                tx += 24;
+                if (v) {
+                    right -= gfx_text_width(FONT_SMALL, v);
+                    gfx_text(FONT_SMALL, right, ry + (ROW - gfx_line_height(FONT_SMALL)) / 2 + 1, v, sel ? C_TEXT : C_MUTED, alpha, 0);
+                    right -= 8;
+                }
+            }
+            /* right side: favourite mark; the system in mixed lists */
+            if (it->fav) { right -= 12; gfx_icon("star", 12, right, ry + (ROW - 12) / 2 + 1, 0xfbbf24, alpha); right -= 6; }
+            if ((c->kind == CK_RECENT || c->kind == CK_FAVS) && it->type != LT_ACTION) {
+                const char *b = type_badge(it);
+                int bw = gfx_text_width(FONT_BADGE, b);
+                right -= bw;
+                gfx_text(FONT_BADGE, right, ry + (ROW - gfx_line_height(FONT_BADGE)) / 2 + 1, b, C_MUTED, alpha, 0);
+                right -= 8;
+            }
+            gfx_text(font, tx, ry + (ROW - lh) / 2 + (sel ? 1 : 0), it->title, sel ? C_TEXT : C_SUB, alpha, right - tx - 4);
+            if (ex > 0.3f) {
+                detail_line(it, s, sizeof(s));
+                gfx_text(FONT_SMALL, tx, ry + ROW - 1, s, C_MUTED, (int)((ex - 0.3f) / 0.7f * alpha), LIST_X + LIST_W - 12 - tx + dx);
+            }
+        }
+        y += (float)h;
     }
     pspexp_set_clip(g_ctx, 0, 0, SCREEN_W, SCREEN_H);
-    /* scrollbar */
-    if (l->n > ROWS_VISIBLE) {
-        int h = ROWS_VISIBLE * ROW_H, th = h * ROWS_VISIBLE / l->n, ty = h * first / l->n;
-        if (th < 8) th = 8;
-        rect(LIST_X + LIST_W + 8, LIST_Y, 2, h, C_DIM, 255);
-        rect(LIST_X + LIST_W + 8, LIST_Y + ty, 2, th, C_MUTED, 255);
-    }
-    /* detail line under the list */
-    if (cur) {
-        snprintf(s, sizeof(s), "%s", cur->detail[0] ? cur->detail : cur->path);
-        text_draw(&F_SMALL, LIST_X, LIST_Y + ROWS_VISIBLE * ROW_H + 4, s, C_MUTED, LIST_W);
-        if (l->n) { snprintf(s, sizeof(s), "%d / %d", l->sel + 1, l->n); text_draw(&F_SMALL, LIST_X + LIST_W - text_width(&F_SMALL, s, -1), LIST_Y + ROWS_VISIBLE * ROW_H + 4, s, C_DIM, 0); }
+
+    /* scroll bar */
+    if (c->n * ROW + ROW_EXTRA > LIST_H) {
+        int full = c->n * ROW + ROW_EXTRA, th = LIST_H * LIST_H / full, ty = (int)(c->scroll * LIST_H / full);
+        if (th < 12) th = 12;
+        gfx_nine(NINE_R6, LIST_X + LIST_W + 10, LIST_Y, 3, LIST_H, 0xffffff, 18);
+        gfx_nine(NINE_R6, LIST_X + LIST_W + 10, LIST_Y + ty, 3, th, 0xffffff, 90);
     }
 }
 
 static void draw_hints(void)
 {
-    Entry *cur = current_entry();
-    int x = 16, y = SCREEN_H - 16;
-    const char *a = cur && (cur->kind == K_FOLDER || cur->kind == K_EMU) ? "open" : "launch";
-    rect(0, SCREEN_H - 20, SCREEN_W, 20, C_STRIP, 255);
-    glyph_button(x, y + 1, 'x', C_ACCENT); x += 13; x += text_draw(&F_SMALL, x, y - 2, a, C_MUTED, 0) + 16;
-    if (g_depth > 0) { glyph_button(x, y + 1, 'o', C_ACCENT); x += 13; x += text_draw(&F_SMALL, x, y - 2, "back", C_MUTED, 0) + 16; }
-    glyph_button(x, y + 1, 's', C_ACCENT); x += 13; x += text_draw(&F_SMALL, x, y - 2, cur && cur->fav ? "unfavourite" : "favourite", C_MUTED, 0) + 16;
-    glyph_button(x, y + 1, 't', C_ACCENT); x += 13; x += text_draw(&F_SMALL, x, y - 2, "where", C_MUTED, 0) + 16;
-    text_draw(&F_SMALL, SCREEN_W - 16 - text_width(&F_SMALL, "hold select: console", -1), y - 2, "hold select: console", C_DIM, 0);
+    int x = 16;
+    LEntry *e = cur_entry();
+    const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
+    gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14;
+    if (e && e->type != LT_ACTION) {
+        gfx_button('s', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, 255, 0) + 14;
+    }
+    gfx_button('t', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0);
+    {
+        const char *r = "Search";
+        int w = gfx_text_width(FONT_SMALL, r), bw = gfx_text_width(FONT_BADGE, "START") + 10;
+        x = SCREEN_W - 16 - w;
+        gfx_text(FONT_SMALL, x, HINT_Y - 1, r, C_SUB, 255, 0);
+        x -= bw + 6;
+        gfx_nine(NINE_R6, x, HINT_Y, bw, 14, 0x2a3142, 255);
+        gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, "START", C_SUB, 255, 0);
+    }
+}
+
+/* a small key cap with a label, for hint rows */
+static int hint_cap(int x, const char *cap, const char *label, uint32_t col)
+{
+    int bw = gfx_text_width(FONT_BADGE, cap) + 10;
+    gfx_nine(NINE_R6, x, HINT_Y, bw, 14, 0x2a3142, 255);
+    gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, cap, C_SUB, 255, 0);
+    x += bw + 5;
+    return x + gfx_text(FONT_SMALL, x, HINT_Y - 1, label, col, 255, 0) + 14;
+}
+
+static int hint_btn(int x, char b, const char *label)
+{
+    gfx_button(b, x, HINT_Y);
+    x += 18;
+    return x + gfx_text(FONT_SMALL, x, HINT_Y - 1, label, C_SUB, 255, 0) + 14;
+}
+
+/* ---- the search screen ---------------------------------------------------------------------- */
+
+#define S_FIELD_Y 12
+#define S_RES_Y   52
+#define S_ROWS    4
+#define S_KB_Y    150
+#define KEY_W     32
+#define KEY_H     25
+#define KEY_GAP   2
+
+static void draw_search(float dt)
+{
+    int i, a, fx = 16, fw = SCREEN_W - 32, x, y, kb_a;
+    char s[64];
+    float target;
+    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
+    a = (int)(g_overlay_a * 255);
+    /* the field */
+    gfx_shadow(NINE_SHADOW10, fx, S_FIELD_Y + 3, fw, 30, 0x000000, a * 120 / 255);
+    gfx_nine(NINE_R10, fx, S_FIELD_Y, fw, 30, 0x1d2334, a);
+    gfx_icon("search", 16, fx + 11, S_FIELD_Y + 7, g_q[0] ? C_ACCENT : C_MUTED, a);
+    x = fx + 36;
+    if (g_q[0]) x += gfx_text(FONT_TITLE, x, S_FIELD_Y + (30 - gfx_line_height(FONT_TITLE)) / 2, g_q, C_TEXT, a, fw - 120);
+    else gfx_text(FONT_BODY, x, S_FIELD_Y + (30 - gfx_line_height(FONT_BODY)) / 2, "Search games, apps and ROMs", C_MUTED, a, 0);
+    if (g_sfocus == 0 && !g_caret) gfx_rect(x + 1, S_FIELD_Y + 7, 2, 16, C_ACCENT, a);
+    if (g_q[0]) {
+        snprintf(s, sizeof(s), g_nres == 1 ? "1 result" : "%d results", g_nres);
+        gfx_text(FONT_SMALL, fx + fw - 12 - gfx_text_width(FONT_SMALL, s), S_FIELD_Y + (30 - gfx_line_height(FONT_SMALL)) / 2, s, C_MUTED, a, 0);
+    }
+    /* results */
+    if (!g_q[0]) {
+        gfx_icon("text-search", 24, SCREEN_W / 2 - 12, S_RES_Y + 14, C_MUTED, a * 200 / 255);
+        { const char *m = "Type with the keyboard below"; gfx_text(FONT_SMALL, (SCREEN_W - gfx_text_width(FONT_SMALL, m)) / 2, S_RES_Y + 46, m, C_MUTED, a, 0); }
+    } else if (!g_nres) {
+        gfx_icon("search-x", 24, SCREEN_W / 2 - 12, S_RES_Y + 14, C_MUTED, a * 200 / 255);
+        { const char *m = "No matches"; gfx_text(FONT_BODY, (SCREEN_W - gfx_text_width(FONT_BODY, m)) / 2, S_RES_Y + 46, m, C_SUB, a, 0); }
+    } else {
+        target = (float)(g_ssel - 1);
+        if (target > (float)(g_nres - S_ROWS)) target = (float)(g_nres - S_ROWS);
+        if (target < 0) target = 0;
+        g_sscroll = ease(g_sscroll, target, 16.0f, dt, 0.02f);
+        pspexp_set_clip(g_ctx, fx - 4, S_RES_Y - 2, fw + 8, S_ROWS * ROW + 4);
+        for (i = 0; i < g_nres; i++) {
+            LEntry *e = g_res[i];
+            int ry = S_RES_Y + (int)lroundf((i - g_sscroll) * ROW), sel = i == g_ssel, right = fx + fw - 10;
+            const char *b = type_badge(e);
+            if (ry < S_RES_Y - ROW || ry > S_RES_Y + S_ROWS * ROW) continue;
+            if (sel) {
+                gfx_nine(NINE_R10, fx, ry, fw, ROW, 0xffffff, g_sfocus ? 26 : 12);
+                if (g_sfocus) gfx_rect(fx, ry + 6, 3, ROW - 12, C_ACCENT, a);
+            }
+            gfx_icon(e->type == LT_ROM ? "gamepad" : e->type == LT_APP ? "app-window" : e->type == LT_TOOL ? "wand-sparkles" : "gamepad-2", 14, fx + 12, ry + (ROW - 14) / 2,
+                     sel && g_sfocus ? 0xffffff : C_MUTED, a);
+            right -= gfx_text_width(FONT_BADGE, b);
+            gfx_text(FONT_BADGE, right, ry + (ROW - gfx_line_height(FONT_BADGE)) / 2 + 1, b, C_MUTED, a, 0);
+            if (e->fav) { right -= 18; gfx_icon("star", 12, right, ry + (ROW - 12) / 2, 0xfbbf24, a); }
+            gfx_text(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, sel && g_sfocus ? C_TEXT : C_SUB, a, right - fx - 44);
+        }
+        pspexp_set_clip(g_ctx, 0, 0, SCREEN_W, SCREEN_H);
+    }
+    /* keyboard */
+    kb_a = g_sfocus ? a * 110 / 255 : a;
+    x = (SCREEN_W - (KB_COLS * KEY_W + (KB_COLS - 1) * KEY_GAP)) / 2;
+    for (y = 0; y < KB_ROWS; y++)
+        for (i = 0; i < KB_COLS; i++) {
+            const char *k = KB[y][i];
+            int kx = x + i * (KEY_W + KEY_GAP), ky = S_KB_Y + y * (KEY_H + KEY_GAP), foc = !g_sfocus && y == g_ky && i == g_kx;
+            uint32_t fg = foc ? 0xffffff : C_TEXT;
+            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, KEY_W, KEY_H, C_ACCENT, kb_a * 120 / 255);
+            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x6f7ff5 : 0x222a3b, foc ? kb_a : kb_a * 235 / 255);
+            if (!strcmp(k, "SPC")) gfx_icon("space", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, fg, kb_a);
+            else if (!strcmp(k, "DEL")) gfx_icon("delete", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, fg, kb_a);
+            else if (!strcmp(k, "GO")) gfx_icon("corner-down-left", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, g_nres ? fg : C_MUTED, kb_a);
+            else gfx_text(FONT_BODY, kx + (KEY_W - gfx_text_width(FONT_BODY, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_BODY)) / 2, k, fg, kb_a, 0);
+        }
+    /* hints */
+    x = 16;
+    if (!g_sfocus) {
+        x = hint_btn(x, 'x', "Type");
+        x = hint_btn(x, 's', "Delete");
+        x = hint_btn(x, 't', "Space");
+        x = hint_btn(x, 'o', "Close");
+        if (g_nres) hint_cap(SCREEN_W - 16 - gfx_text_width(FONT_BADGE, "START") - 15 - gfx_text_width(FONT_SMALL, "Results"), "START", "Results", C_SUB);
+    } else {
+        LEntry *e = g_nres ? g_res[g_ssel] : NULL;
+        x = hint_btn(x, 'x', e && (e->type == LT_ROM || e->type == LT_GAME) ? "Play" : "Open");
+        x = hint_btn(x, 's', e && e->fav ? "Unfavourite" : "Favourite");
+        x = hint_btn(x, 'o', "Keyboard");
+    }
+    (void)x;
+}
+
+/* ---- the details card -------------------------------------------------------------------------- */
+
+static void info_row(int x, int y, const char *icon, const char *text, int w, int a)
+{
+    gfx_icon(icon, 14, x, y + 1, C_MUTED, a);
+    gfx_text(FONT_SMALL, x + 22, y + (16 - gfx_line_height(FONT_SMALL)) / 2, text, C_SUB, a, w - 22);
+}
+
+static void draw_details(float dt)
+{
+    LEntry *e = g_det;
+    int a, cx = 24, cy = 24, cw = SCREEN_W - 48, ch = 216, tx, ty, tw, i;
+    char s[400];
+    if (!e) return;
+    g_overlay_a = ease(g_overlay_a, 1.0f, 18.0f, dt, 0.01f);
+    a = (int)(g_overlay_a * 255);
+    gfx_rect(0, 0, SCREEN_W, SCREEN_H, 0x05070c, a * 170 / 255);
+    cy += (int)lroundf((1 - g_overlay_a) * 10);
+    gfx_shadow(NINE_SHADOW14, cx, cy + 6, cw, ch, 0x000000, a * 200 / 255);
+    gfx_nine(NINE_R14, cx, cy, cw, ch, 0x1a2030, a * 250 / 255);
+    draw_cover(e, cx + 16, cy + 16, a);
+    tx = cx + 16 + COVER_SIZE + 18; ty = cy + 16; tw = cx + cw - 16 - tx;
+    gfx_text(FONT_H1, tx, ty, e->title, C_TEXT, a, tw);
+    ty += gfx_line_height(FONT_H1) + 2;
+    switch (e->type) {
+    case LT_ROM: snprintf(s, sizeof(s), "%s game", L.sys[e->sys].name); break;
+    case LT_APP: snprintf(s, sizeof(s), "App"); break;
+    case LT_TOOL: snprintf(s, sizeof(s), "Tool"); break;
+    default: snprintf(s, sizeof(s), "Game"); break;
+    }
+    if (e->desc[0]) { gfx_text(FONT_BODY, tx, ty, e->desc, C_SUB, a, tw); }
+    else gfx_text(FONT_BODY, tx, ty, s, C_SUB, a, tw);
+    ty += 26;
+    if (e->type == LT_ROM) {
+        const char *base = strrchr(e->exec, '/');
+        char sz[32];
+        human_size(e->size, sz, sizeof(sz));
+        if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
+        info_row(tx, ty, "hard-drive", sz, tw, a); ty += 20;
+        info_row(tx, ty, "file-text", base ? base + 1 : e->exec, tw, a); ty += 20;
+        { const char *x = L.sys[e->sys].exec, *sp = strchr(x, ' '); snprintf(s, sizeof(s), "%.*s", sp ? (int)(sp - x) : (int)strlen(x), x); }
+        info_row(tx, ty, "cpu", s, tw, a); ty += 20;
+    } else {
+        info_row(tx, ty, e->pspexp ? "zap" : "monitor", e->pspexp ? "Drawn by the PSP; hold START + SELECT to quit" : "Shown through the mirror", tw, a); ty += 20;
+        if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
+        info_row(tx, ty, "folder-open", e->dir[0] ? e->dir : "/", tw, a); ty += 20;
+        if (e->pkg[0]) snprintf(s, sizeof(s), "Package %s", e->pkg);
+        else snprintf(s, sizeof(s), "library/%s.entry", e->id + 2);
+        info_row(tx, ty, "package", s, tw, a); ty += 20;
+    }
+    for (i = 0; i < L.nrecent; i++) if (!strcmp(L.recent[i], e->id)) break;
+    if (i < L.nrecent) { snprintf(s, sizeof(s), i == 0 ? "Played last" : "Played recently (#%d)", i + 1); info_row(tx, ty, "history", s, tw, a); ty += 20; }
+    if (e->fav) { info_row(tx, ty, "star", "Favourite", tw, a); }
+    /* buttons along the card's foot */
+    {
+        int bx = tx, by = cy + ch - 30;
+        gfx_button('x', bx, by); bx += 18; bx += gfx_text(FONT_SMALL, bx, by - 1, e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open", C_SUB, a, 0) + 14;
+        gfx_button('s', bx, by); bx += 18; bx += gfx_text(FONT_SMALL, bx, by - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, a, 0) + 14;
+        gfx_button('o', bx, by); bx += 18; gfx_text(FONT_SMALL, bx, by - 1, "Close", C_SUB, a, 0);
+    }
+}
+
+static void draw_toast(float dt, uint64_t now)
+{
+    int w, x, y = HINT_Y - 36, a, ic = g_toast_icon[0] ? 20 : 0;
+    g_toast_a = ease(g_toast_a, g_toast[0] && now < g_toast_until ? 1.0f : 0.0f, 14.0f, dt, 0.01f);
+    if (!g_toast[0] || g_toast_a <= 0.01f) return;
+    a = (int)(g_toast_a * 255);
+    w = gfx_text_width(FONT_BODY, g_toast) + 28 + ic;
+    if (w > SCREEN_W - 40) w = SCREEN_W - 40;
+    x = (SCREEN_W - w) / 2;
+    y += (int)lroundf((1 - g_toast_a) * 8);
+    gfx_shadow(NINE_SHADOW10, x, y + 3, w, 26, 0x000000, a * 170 / 255);
+    gfx_nine(NINE_R10, x, y, w, 26, 0x2a3142, a * 245 / 255);
+    if (ic) gfx_icon(g_toast_icon, 14, x + 12, y + 6, C_ACCENT, a);
+    gfx_text(FONT_BODY, x + 14 + ic, y + (26 - gfx_line_height(FONT_BODY)) / 2, g_toast, C_TEXT, a, w - 28 - ic);
+}
+
+static void draw_running(void)
+{
+    int w, cx = (SCREEN_W - COVER_SIZE) / 2;
+    const char *sub = "is running", *h = "Hold START + SELECT in the game to quit it";
+    gfx_shadow(NINE_SHADOW14, cx, 40 + 8, COVER_SIZE, COVER_SIZE, 0x000000, 180);
+    draw_cover(&g_running_e, cx, 40, 255);
+    w = gfx_text_width(FONT_H1, g_running_e.title);
+    if (w > SCREEN_W - 40) w = SCREEN_W - 40;
+    gfx_text(FONT_H1, (SCREEN_W - w) / 2, 180, g_running_e.title, C_TEXT, 255, SCREEN_W - 40);
+    w = gfx_text_width(FONT_BODY, sub);
+    gfx_text(FONT_BODY, (SCREEN_W - w) / 2, 212, sub, C_SUB, 255, 0);
+    w = gfx_text_width(FONT_SMALL, h);
+    gfx_text(FONT_SMALL, (SCREEN_W - w) / 2, HINT_Y - 1, h, C_MUTED, 255, 0);
 }
 
 void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
 {
+    float dt = g_last_frame ? (float)(now - g_last_frame) / 1e6f : 0.016f;
+    (void)psp_connected;
+    if (dt > 0.1f) dt = 0.1f;
+    g_last_frame = now;
+    g_anim = 0;
     g_ctx = ctx;
-    g_sn = 0;
+    gfx_frame(ctx);
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, SCREEN_W, SCREEN_H);
-    rect(0, 0, SCREEN_W, SCREEN_H, C_BG, 255);
-    if (!g_have_font) {
-        pspexp_present(ctx);
-        g_dirty = 0;
-        return;
+    gfx_backdrop();
+    if (g_running) draw_running();
+    else if (g_mode == M_SEARCH) draw_search(dt);
+    else if (g_ncat) {
+        draw_status();
+        draw_rail(dt);
+        draw_list(dt);
+        draw_hints();
+        if (g_mode == M_DETAILS) draw_details(dt);
     }
-    if (g_running && g_running_e) {
-        char s[160];
-        int w;
-        snprintf(s, sizeof(s), "%s", g_running_e->name);
-        w = text_width(&F_TITLE, s, -1);
-        if (!icon_draw(g_running_e->icon, SCREEN_W / 2 - 40, 70, 80, 255)) generated_cover(g_running_e, SCREEN_W / 2 - 40, 70, 80, 255);
-        text_draw(&F_TITLE, (SCREEN_W - w) / 2, 164, s, C_TEXT, 0);
-        w = text_width(&F_UI, "is running", -1);
-        text_draw(&F_UI, (SCREEN_W - w) / 2, 192, "is running", C_MUTED, 0);
-        text_flush();
-        pspexp_present(ctx);
-        g_dirty = 0;
-        return;
-    }
-    draw_status(now, psp_connected);
-    draw_rail();
-    draw_list();
-    draw_hints();
-    if (g_toast[0] && now < g_toast_until) {
-        int w = text_width(&F_UI, g_toast, -1) + 24;
-        if (w > SCREEN_W - 32) w = SCREEN_W - 32;
-        card((SCREEN_W - w) / 2, SCREEN_H - 50, w, 26, C_CARD_HI, 240);
-        text_draw(&F_UI, (SCREEN_W - w) / 2 + 12, SCREEN_H - 46, g_toast, C_TEXT, w - 24);
-    }
-    text_flush();
+    draw_toast(dt, now);
     pspexp_present(ctx);
     g_dirty = 0;
-    g_last_anim = now;
 }
 
-/* ---- init ---------------------------------------------------------------------------- */
+/* ---- init ------------------------------------------------------------------------------- */
 
-int launcher_init(PspExpContext *ctx, const char *roots, const char *skin)
+int launcher_init(PspExpContext *ctx, const char *assets)
 {
-    const char *home = getenv("HOME") ? getenv("HOME") : "/tmp";
-    char cfg[1024];
-    FILE *f;
-    int i, c;
+    int i;
     g_ctx = ctx;
-    snprintf(g_skin, sizeof(g_skin), "%s", skin ? skin : "");
-    snprintf(g_config_dir, sizeof(g_config_dir), "%s/.config/pspexp-launcher", home);
-    /* accent from the skin's config.cfg ([Colors] High = #rrggbb) */
-    snprintf(cfg, sizeof(cfg), "%s/config.cfg", g_skin);
-    if ((f = fopen(cfg, "r"))) {
-        char line[128];
-        while (fgets(line, sizeof(line), f)) {
-            char *h = strstr(line, "High");
-            if (h && (h = strchr(h, '#'))) { C_ACCENT = (uint32_t)strtoul(h + 1, NULL, 16); break; }
-        }
-        fclose(f);
-    }
-    fonts_init(ctx, skin);
-    load_roots(roots);
-    list_load("recent", g_recent, &g_nrecent, MAX_RECENT);
-    list_load("favourites", g_favs, &g_nfavs, 64);
-    for (c = 0; c < g_ncats; c++) for (i = 0; i < g_cats[c].n; i++) g_cats[c].e[i].fav = list_find(g_favs, g_nfavs, g_cats[c].e[i].path) >= 0;
-    build_recent_cat();
-    if (g_ncats == 0) { fprintf(stderr, "[launcher] nothing to show in %s\n", roots); return -1; }
-    /* start on the first real category, not Recent */
-    open_category(g_recent_cat == 0 && g_ncats > 1 ? 1 : 0);
-    g_rail_x = g_rail_target = 0;
-    g_sel_y = g_sel_target = LIST_Y;
-    fprintf(stderr, "[launcher] %d categories, %d icons, font %s\n", g_ncats, g_nicons, g_have_font ? "ok" : "missing");
+    g_wifi_cmd = getenv("PSPEXP_WIFI_MODE_CMD");
+    if (!g_wifi_cmd && access("/usr/local/bin/pspexp-wifi-mode", X_OK) == 0) g_wifi_cmd = "/usr/local/bin/pspexp-wifi-mode";
+    if (gfx_init(ctx, assets) < 0) { fprintf(stderr, "[launcher] no fonts in %s\n", assets); return -1; }
+    lib_load(&L);
+    g_nofetch = getenv("PSPEXP_LAUNCHER_NO_FETCH") != NULL || !lib_setting_int(&L, "boxart", 1);
+    cats_build();
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i;   /* start on Games */
+    fprintf(stderr, "[launcher] library %s: %d entries, %d systems, %d categories\n", L.home, L.n, L.nsys, g_ncat);
     return 0;
 }
