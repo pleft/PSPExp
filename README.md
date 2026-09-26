@@ -145,22 +145,31 @@ about four times as much.
 
 ## ClockworkPi GameShell as the host
 
-`scripts/build-gameshell.sh` cross-compiles the tools as static ARMv7
-binaries and the SDL layer as a library for the GameShell OS image's own SDL2
-programs; `scripts/gameshell-prep-image.sh` puts them into the card image
-before flashing (SSH key, console service with the launcher mirrored, udev
-rules, audio, Wi-Fi mode switch, launcher entries) and
-`scripts/install-gameshell.sh` installs or updates the same files on a
-running GameShell over SSH (the list is `scripts/gameshell/stage.sh`). With the
-PSP on the OTG port, the USB link measures 24–26 MB/s, the sprite demo runs
-at 60 fps up to 15,000 sprites, and the image's Chocolate Doom plays at
-35 fps: `pspexp-run chocolate-doom -iwad ~/games/ChocoDM/freedoom1.wad`.
-`pspexp-run` runs the game headless (SDL's X path costs Doom 15 fps). The
-image's OpenTyrian is an SDL 1.2 build, out of the SDL layer's reach:
-`scripts/build-gameshell.sh tyrian` compiles the SDL2 one on the GameShell
-and installs `pspexp-tyrian` (35 fps); the launcher's OpenTyrian entry runs
-it while the PSP console is up. `pspexp-wifi-mode psp|home` switches between
-the GameShell's own access point for the PSP and the home Wi-Fi.
+The GameShell becomes a PSPExp console: its own launcher, games and apps are
+removed, and the PSP shows the PSPExp launcher with **packages** that the
+PSP draws itself (docs/GameShell_Launcher_and_Shim.md).
+
+- `scripts/build-gameshell.sh` cross-compiles the tools (static ARMv7) and the
+  SDL layer (for the image's own SDL2 programs).
+- `scripts/gs-pkg build|install|remove|list ID` builds and installs packages
+  from the recipes in `scripts/gameshell/pkg/` (Freedoom, OpenTyrian so far);
+  a package is a folder in `/opt/pspexp/apps` with its `.entry` files, and the
+  launcher picks it up by itself. `pspexp-pkg` does the same on the GameShell.
+- `scripts/gameshell-prep-image.sh <image> [--wifi]` prepares a card image:
+  the tools, the console service with the launcher, udev and sudoers rules,
+  audio, the Wi-Fi mode switch, and every built package. On its first boot
+  the card removes ClockworkOS's own launcher and games
+  (`scripts/gameshell/clean-stock.sh`) and installs the packages
+  (`pspexp-firstboot`, logged to /var/log/pspexp-firstboot.log).
+- `scripts/install-gameshell.sh` puts the same files on a running GameShell
+  over SSH (the list is `scripts/gameshell/stage.sh`); a reboot then runs the
+  same first boot.
+
+With the PSP on the OTG port the USB link measures 24–26 MB/s, the sprite
+demo runs at 60 fps up to 15,000 sprites, and Freedoom and OpenTyrian play
+at 35 fps. `pspexp-wifi-mode psp|home` (also in the launcher's System page)
+switches between the GameShell's own access point for the PSP and the home
+Wi-Fi.
 
 ## The PSP as a console: `pspexp-term`
 

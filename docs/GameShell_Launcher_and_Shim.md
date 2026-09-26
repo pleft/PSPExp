@@ -76,117 +76,195 @@ The mirror grows a second backend beside `/dev/fb0`:
 
 ## 3. Stream (b): a launcher made for the PSP
 
-### 3.1 Why not port launchergo one-to-one
+### 3.1 Its own library, not launchergo's folders
 
-launchergo is a Go transcription of the 2018 pygame launcher: a 320x240 grid
-of icons, one page per folder, a title bar, and a plugin system in Go that
-nobody extends. Porting it keeps its limits. What is worth keeping is its
-**content model**, because every GameShell package targets it:
+The first prototype mirrored launchergo's menu tree and skin. That kept the
+2018 look (the skin's PNG icons) and the tree's mess: numbered folders, one
+folder per game, plugin folders, emulators nested inside categories. The
+launcher now keeps **its own library** (`tools/pspexp-term/launcher_lib.c`),
+flat files in `~/.config/pspexp-launcher/`:
 
-- `~/launchergo/Menu/GameShell/` and `~/apps/Menu/`: folders are categories,
-  `NN_Name` sorts, `.sh` files are launchable entries, `plugin.json` marks a
-  built-in page (Settings, Music, TinyCloud), `action.config` describes an
-  emulator entry (ROM folder + core), skins hold one PNG icon per entry.
+```
+library/<id>.entry     one game, app or tool
+    title=OpenTyrian
+    type=game                      game | app | tool
+    exec=/bin/sh '/home/cpi/apps/Menu/21_Indie Games/34_OpenTyrian/OpenTyrian.sh'
+    dir=/home/cpi/apps/Menu/21_Indie Games/34_OpenTyrian
+    pspexp=1                       hands the PSP over itself (no mirror)
+    icon=rocket  art=/path.png  tags=shooter  hidden=1     optional
+systems/<id>.system    one emulated system
+    name=Game Boy Advance
+    short=GBA
+    roms=/home/cpi/games/MGBA
+    ext=gb,gbc,gba,gbx
+    exec=retroarch -L /home/cpi/apps/emulators/mgba_libretro.so %ROM%
+    icon=gamepad-directional
+    thumbs=Nintendo - Game Boy Advance     libretro-thumbnails folder (box art)
+recent, favourites     entry ids, one per line
+imported               import sources already seen
+```
 
-The new launcher reads exactly that tree, so existing menus, games and skins
-show up unchanged.
+The **first start imports** the launchergo menus once: scripts and
+one-script folders become entries (typed by where they sat: Indie/Games ->
+game, Utils -> tool, RetroArch/TIC-80/PICO-8 -> app), `action.config`
+emulators become systems (known cores map to a proper name, badge, icon and
+thumbnail folder; the first emulator of a system wins, so MGBA beats GPSP),
+launchergo-only pages (Settings, Warehouse, TinyCloud, Music, Reload UI) are
+left out. After that the folders are not read again: entries are edited,
+added or deleted as files. **System > Rescan library** imports only sources
+not seen before (a deleted entry stays deleted) and rescans ROM folders.
+
+Scripts that only start a program known to run through the SDL layer (the
+Chocolate Doom family, e.g. launchergo's freeDM) are imported as
+`exec=pspexp-run chocolate-doom ...` with `env=PSPEXP_KEYS=...` and
+`pspexp=1`: the PSP draws them at 35 fps instead of the mirror at ~20.
+Entries may carry any number of `env=NAME=value` lines.
+
+ROMs are listed per system from its folder (one level deep, a `.cue`/`.m3u`
+hides its `.bin`/`.img`), titled from the No-Intro name ("Legend of Zelda,
+The - The Minish Cap (USA)" -> "The Legend of Zelda - The Minish Cap", tags
+"USA").
 
 ### 3.2 Where it runs
 
-The launcher becomes pspexp-term's **home view**, in its own source file
-(`tools/pspexp-term/launcher.c`), next to the terminal and the mirror. This
-reuses what pspexp-term already has and a separate program would have to
-duplicate: the USB link and reconnect logic, the built-in font upload, the
-button handling with auto-repeat, the XTEST/uinput keypad, the mirror, the
-release/reacquire handoff, the systemd service. Launching an entry:
+The launcher is pspexp-term's **home view** (`--launcher [ROOTS]
+[--assets DIR]`, on by default in the GameShell service), next to the
+terminal and the mirror, reusing the USB/Wi-Fi link, button handling, keypad,
+mirror and handoff. Launching: an entry with `pspexp=1` (or a command that
+uses `pspexp-run`) keeps the launcher's "running" screen while the PSP is
+handed over; anything else runs in the X session and the mirror shows it
+until it exits. Hold select cycles launcher / terminal / mirror; System >
+Console opens the terminal.
 
-1. **PSPExp-aware entry** (its script uses `pspexp-run`): the launcher releases
-   the PSP, runs the script, shows the launcher again when it exits.
-2. **Any other entry**: the launcher runs the script in the X session and
-   switches to the mirror view for the life of the process; the PSP's buttons
-   drive it through the keypad; when it exits, back to the launcher.
-
-Hold select still cycles views (launcher / terminal / mirror); hold start
-opens the launcher's own menu.
-
-### 3.3 The design
-
-480x272, 16:9, one hand on the d-pad. Principles: **one screen, no pages**;
-the whole library is reachable with the d-pad and cross in under 3 presses;
-large art, small chrome; instant (all textures cached on the PSP once).
+### 3.3 The look
 
 ```
- ┌──────────────────────────────────────────────────────────────┐
- │  21:47   Wi-Fi ▂▄▆   ▮▮▮▯ 76 %                     ⌕  ⚙      │  status strip (18 px)
- │                                                              │
- │   ◀  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐   ▶     │  category rail
- │      │Retro │  │Indie │  │ Pico │  │Music │  │Tools │        │  (icons, 56 px, the
- │      └──────┘  └──────┘  └──────┘  └──────┘  └──────┘        │   selected one lifted)
- │                                                              │
- │   ┌──────────────┐   Cave Story                              │  entry list of the
- │   │              │   nxengine · last played yesterday        │  selected category:
- │   │   cover /    │ ▶ freeDM                                  │  cover on the left,
- │   │   icon       │   chocolate-doom · PSP native ✔           │  rows on the right,
- │   │              │   RetroArch                               │  selected row expanded
- │   └──────────────┘   emulator frontend                       │  with one line of detail
- │                                                              │
- │   ✕ launch   ○ back   △ options   □ favourite      L R page  │  hint bar (16 px)
- └──────────────────────────────────────────────────────────────┘
+ 12:04 Sat 26 Sep                                        wifi  battery 76%
+ [Recent] [Fav] [GAMES] [GBA] [SNES] [MD] [Apps] [System]     rail: rounded tiles,
+                                                              the focused one lifted,
+ Game Boy Advance                                   5 games   filled with its colour
+ +-------------+  Advance Wars                                and glowing
+ |  box art or |  | Golden Sun                                list: the focused row
+ |  generated  |  | GBA / USA, Europe / 8.0 MB                expands with a detail
+ |  cover      |  Metroid Fusion                              line, accent bar
+ +-------------+  ...
+ (X) Play  ([]) Favourite  (/\) Details           Hold SELECT: console
 ```
 
-- **Category rail**: the top-level folders as icons on one horizontal rail;
-  left/right moves, the selected icon scales up 1.25x with a soft shadow, the
-  rail scrolls smoothly (eased, 150 ms) when it overflows.
-- **Entry list**: the selected category's entries; up/down moves, the selected
-  row expands to show its detail line; sub-folders open in place with a slide
-  (circle backs out). Emulator entries (`action.config`) list the ROM folder.
-- **Cover panel**: the entry's icon (skin PNG) or a generated cover: the
-  entry's initials on a colour derived from its name, so nothing is blank.
-- **Recent** as a pseudo-category first on the rail: the last 8 launched
-  entries, kept in `~/.config/pspexp-launcher/recent`.
-- **Favourites** (square toggles) shown as a small mark and grouped first.
-- **Search** (triangle on the status strip, or the first letter typed on the
-  on-screen keyboard of the terminal view): filters the list as you type.
-- **Status strip**: clock, Wi-Fi strength, battery from
-  `/sys/class/power_supply`, a PSP-link dot, storage free.
-- **Settings**: the existing `plugin.json` pages are not Go plugins here; the
-  launcher provides native pages for Wi-Fi (NetworkManager via `nmcli`),
-  brightness/volume (`amixer`), power (sleep, reboot, off), about. Anything
-  else in the old Settings folder stays reachable as scripts.
-- **Look**: dark theme, one accent colour (the skin's `High`, #33a6ff by
-  default), rounded cards drawn as 9-slice sprites, proportional UI font
-  rasterised on the host from the skin's `VarelaRound-Regular.ttf` into a
-  CLUT4 atlas (stb_truetype), bold weight for titles. Every element animates
-  with short eased moves (selection, scroll, open/close); nothing blinks.
-- **Cost**: a static screen sends nothing; a d-pad move sends a few quads
-  (< 1 KB). Icons are uploaded once as 4444 textures (56x56, 128x128 for the
-  cover) and stay in the PSP's cache; the font atlas is one CLUT4 texture.
+Nothing from the ClockworkOS skin is used. Everything that is not a flat
+rectangle is rendered on the host at its final pixel size, because the GE
+samples with nearest filtering (`launcher_gfx.c`):
 
-### 3.4 Status (2026-09-26): first prototype
+- **Text**: Inter Regular and SemiBold (SIL OFL) at five sizes in one CLUT8
+  atlas whose palette is white with 256 alpha levels, tinted per string.
+- **Icons**: Lucide (ISC), rendered through stb_truetype per icon and size
+  into 8888 textures, tinted. Systems show their short name on the rail tile.
+- **Cards and shadows**: anti-aliased rounded rectangles and Gaussian
+  shadows as 9-slices (corners 1:1, uniform edges stretched).
+- **Backdrop**: 480x272 dark gradient with three soft colour glows, Bayer
+  dithered to 5650, six textures.
+- **Covers** (128x128 8888, an LRU of 10 on the PSP): box art when there is
+  some, else generated: a gradient chosen by the title, a large faint icon,
+  a badge (GBA, GAME, APP) and the title set in SemiBold.
+- **Box art**: for ROMs of systems with `thumbs=`, fetched in the background
+  from thumbnails.libretro.com with curl once the selection rests for 0.5 s,
+  cached in `~/.cache/pspexp-launcher/boxart/<system>/` (a `.miss` file
+  stops retries). `PSPEXP_LAUNCHER_NO_FETCH=1` turns it off.
+- **PSP button badges** in their own colours in the hint bar.
+- **Motion**: every change is eased by time (rail scroll and lift, row
+  expansion and scroll, list slide on a category change, cover cross-fade,
+  toasts). A still screen sends nothing; an animating one about 6 KB per frame.
 
-`tools/pspexp-term/launcher.c` (the view) is in, enabled with
-`pspexp-term --launcher [ROOTS] [--skin DIR]` and on by default in the
-GameShell service. Done: the menu reader (roots, folders, plugin.json,
-action.config with the ROM list, skin icons beside the entry or in the skin),
-the TTF -> CLUT4 atlas at three sizes, PNG -> 4444 icons, the rail with the
-lifted selection and eased scroll, the list with cover, detail line, kind
-column, scrollbar and breadcrumb, launching (fork, log in
-/tmp/pspexp-launcher.log, mirror while a non-PSPExp program runs, back when
-it exits), Recent and favourites (`~/.config/pspexp-launcher/`), status strip
-(clock, battery from sysfs, Wi-Fi from /proc/net/wireless, PSP link), hints,
-toasts. Not yet: search, Settings pages, 9-slice cards, the X readback.
-`PSPEXP_TERM_KEYS="right,down,cross,..."` replays buttons for headless runs
-(`--sdl --shot N` under `SDL_VIDEODRIVER=dummy` writes the frames as BMP).
+**Search** (START): an on-screen keyboard (A-Z, 0-9, space, delete, go)
+under live results from the whole library, games, apps and every ROM;
+matches at the start of the title rank first, then at the start of a word,
+then anywhere, favourites a little higher. Cross types, square deletes,
+triangle adds a space, START or the go key moves to the results (cross
+plays, square favourites, circle returns to the keyboard), circle closes.
 
-### 3.5 Build-up order
+**Details** (triangle): a card over the list with the cover, the title, the
+system or type, and what is known: tags, size, file, emulator for ROMs;
+PSP-drawn or mirrored, folder and entry file for games and apps; when it was
+played and whether it is a favourite. Cross plays, square favourites.
 
-1. Content model: read the menu tree, `plugin.json`, `action.config`, skins;
-   unit-test on the Mac against a copy of the image's tree.
-2. Assets: TTF -> CLUT4 atlas, PNG -> 4444 texture (stb headers vendored in
-   `tools/pspexp-term/`), 9-slice cards. Test with the SDL executor on the Mac.
-3. The view: rail + list + cover + strips, d-pad navigation, animation.
-4. Launching with both handoffs; Recent and Favourites.
-5. Status strip sources; Settings pages.
-6. Image prep: the launcher view is the service's default; launchergo and X
-   still start for the non-PSPExp games (mirror).
+**System** runs Rescan library; Wi-Fi (PSP direct / home network, through
+`pspexp-wifi-mode`, shown when installed); Box art on/off (kept in
+`settings`); Console; Restart and Power off (asking for a second press);
+About. Root commands go through `sudo -n` with the rule
+`/etc/sudoers.d/pspexp` from the staging list. The fonts and icons are installed to
+`/usr/local/share/pspexp/launcher/`.
 
+### 3.4 Status (2026-09-26)
+
+Done and tested headless on the Mac (`tests/test_launcher_lib.c` for the
+library; the view with the SDL executor, `PSPEXP_TERM_KEYS` replaying buttons
+and `--shot N` writing frames); cross-built for the GameShell. Not yet
+deployed: the GameShell's sshd reset every connection that day. A volume
+page is not needed: the sound plays on the PSP, whose own buttons set it.
+Next: per-entry art for games and apps, the X readback for the Lima mode.
+
+## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
+
+The goal is a card image: the PSPExp launcher with preinstalled games,
+emulators and apps, nothing of ClockworkOS's own launcher. The stock content
+(launchergo and its menus, the Python launcher, the games, emulator cores,
+NW.js, skins, sample music, RetroArch, LOVE, mpd, aria2, shairport-sync and
+their now unused libraries) is removed; what the launcher shows comes only
+from **packages** and the user's own entry files. Nothing is mirrored any
+more (the mirror stays for the console and debugging).
+
+### 4.1 On the GameShell
+
+```
+/opt/pspexp/apps/<id>/          one installed package (owned by cpi)
+    package                     version, title, description, license,
+                                requires (commands that must exist)
+    <name>.entry                the launcher's entries (section 3.1 keys);
+                                exec runs in this folder
+    <name>.png / cover.png      optional art
+    systems/<id>.system         emulated systems (copied to /opt/pspexp/systems)
+    ...                         the program and its freely distributable data
+/opt/pspexp/systems/            systems from packages; roms=~/roms/<id> is
+                                created by the launcher
+/opt/pspexp/preinstall/         packages a card installs on its first boot
+~/roms/<system>/                the user's ROMs
+~/.config/pspexp-launcher/      recent, favourites, settings, library/, systems/
+```
+
+The launcher checks every 3 s whether a package, entry, system or ROM
+folder changed and reloads ("Library updated"); System > Refresh library
+does it at once.
+
+### 4.2 Packages
+
+`scripts/gs-pkg build ID` runs the recipe `scripts/gameshell/pkg/ID.sh`,
+which fills the package folder (downloads cached in build/gameshell/pkg-cache,
+helpers in `_lib.sh`) -> `build/gameshell/pkg/ID.tar.gz`. `gs-pkg install
+ID` copies it over and runs `pspexp-pkg install` (unpacks next to the apps
+folder, checks `requires`, replaces the old version in one rename, copies its
+systems). `gs-pkg remove`, `gs-pkg list`, and `pspexp-pkg` on the GameShell
+for a tarball from anywhere. Only titles the PSP draws (through pspexp-run)
+are packaged; data is only what may be redistributed.
+
+| id | contents | notes |
+|---|---|---|
+| freedoom | Freedoom 0.13 Phase 1 + 2 (two entries) | the GameShell's chocolate-doom package, Doom key map |
+| opentyrian | OpenTyrian (SDL2, compiled on the GameShell) + Tyrian 2.1 freeware data | run.sh writes its config on first start |
+
+Next: Cave Story (NXEngine-evo), SuperTux (SDL renderer), Wolf4SDL and
+OpenJazz shareware, then `pspexp-retro` (a small libretro frontend drawing
+through PSPExp) with one package per system.
+
+### 4.3 The card image and the first boot
+
+`scripts/gameshell-prep-image.sh` (and `install-gameshell.sh` for a running
+GameShell) stage every built package into `/opt/pspexp/preinstall` and
+enable `pspexp-firstboot.service`, which runs once before the login shell
+and the console: `clean-stock.sh` (idempotent; copies the small stock config
+files to ~/pspexp/stock-backup first), then `pspexp-pkg install` for each
+preinstalled package, then `/etc/pspexp/firstboot-done`. Verified on the
+board (reboot after install-gameshell: stock removed, 26 GB free, both
+packages installed, the launcher showing them) and on a copy of the stock
+image (the files, owners and service link in place, filesystem check clean).
+A public image still needs a release mode of the prep script: no personal
+SSH key, no Wi-Fi credentials.

@@ -53,9 +53,10 @@ cable pull, so pull the cable to read it after a session.
 | **Tyrian on the PSP** (OpenTyrian built in ../tyrian, freeware data) | `scripts/pspexp-tyrian` |
 | **the PSP as the host's console** (shell, on-screen keyboard; runs at boot on the Omega) | `build/host/pspexp-term` |
 | install the console as a service on a Pi (its keyboard and mouse type into it) | `scripts/install-pspexp-term.sh` (`remove` to uninstall) |
-| GameShell: build the tools and the SDL layer / OpenTyrian (compiled on the GameShell) | `scripts/build-gameshell.sh` / `GAMESHELL=cpi@<ip> scripts/build-gameshell.sh tyrian` |
-| GameShell: prepare a card image before flashing / install or update a running GameShell over SSH | `scripts/gameshell-prep-image.sh <image> [--wifi]` / `GAMESHELL=cpi@<ip> scripts/install-gameshell.sh [--tyrian]` |
-| GameShell: an image SDL2 game on the PSP (headless) / Doom / Tyrian | `pspexp-run <program>` / `pspexp-run chocolate-doom -iwad ~/games/ChocoDM/freedoom1.wad` / `pspexp-tyrian` |
+| GameShell: build the tools and the SDL layer / OpenTyrian's binary (compiled on the GameShell) | `scripts/build-gameshell.sh` / `GAMESHELL=cpi@<ip> scripts/build-gameshell.sh tyrian` |
+| GameShell: prepare a card image (packages included, stock removed on first boot) / update a running GameShell | `scripts/gameshell-prep-image.sh <image> [--wifi]` / `GAMESHELL=cpi@<ip> scripts/install-gameshell.sh` |
+| GameShell: packages (build, install, remove, list; recipes in scripts/gameshell/pkg) | `GAMESHELL=cpi@<ip> scripts/gs-pkg install freedoom opentyrian` / `scripts/gs-pkg list` |
+| GameShell: an SDL2 program on the PSP (headless) / the first-boot log | `pspexp-run <program>` / `cat /var/log/pspexp-firstboot.log` |
 | GameShell: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
 
 Every host program prints a stats line: fps, bytes/frame, batches, sprites,
