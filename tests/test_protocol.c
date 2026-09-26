@@ -100,7 +100,7 @@ static void test_expansion(void)
     CHECK_EQ(tv[3].color, 2);
     CHECK_EQ(pspexp_tiles_max_frame(tiles, 5), 1);
     CHECK_EQ(PSPEXP_GU_VERTEX2D_TYPE, 0x00800112u);
-    CHECK_EQ(PSPEXP_GU_VERTEX2D_4444_TYPE, 0x00800116u);
+    CHECK_EQ(PSPEXP_GU_VERTEX2D_4444_TYPE, 0x0080011Au);   /* GU_COLOR_4444 = 6 << 2 (0x116 was 5551) */
 
     /* Quads: explicit source rects, mirrored when u0 > u1. */
     {

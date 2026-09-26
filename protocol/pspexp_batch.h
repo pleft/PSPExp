@@ -74,8 +74,10 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpVertex2D) == 12, vertex2d_size);
  *   GU_TEXTURE_16BIT = 2 << 0, GU_COLOR_5650 = 4 << 2,
  *   GU_VERTEX_16BIT = 2 << 7, GU_TRANSFORM_2D = 1 << 23. */
 #define PSPEXP_GU_VERTEX2D_TYPE ((2u << 0) | (4u << 2) | (2u << 7) | (1u << 23))
-/* The 4444 variant: GU_COLOR_4444 = 5 << 2. */
-#define PSPEXP_GU_VERTEX2D_4444_TYPE ((2u << 0) | (5u << 2) | (2u << 7) | (1u << 23))
+/* The 4444 variant: GU_COLOR_4444 = 6 << 2 (5 << 2 is GU_COLOR_5551, which
+ * read every 4444 tint as 5551: wrong colours on the PSP, while the SDL
+ * executor, which decodes 4444 itself, looked right). */
+#define PSPEXP_GU_VERTEX2D_4444_TYPE ((2u << 0) | (6u << 2) | (2u << 7) | (1u << 23))
 
 /* Conservative record count per draw so no single draw approaches the GE
  * primitive-count field limits, and so the expansion scratch stays bounded. */
