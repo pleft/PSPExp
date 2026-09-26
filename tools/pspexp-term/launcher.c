@@ -490,7 +490,8 @@ static char g_link[160] = "not connected";
 void launcher_set_link(const char *desc) { snprintf(g_link, sizeof(g_link), "%s", desc ? desc : ""); g_dirty = 1; }
 
 typedef struct About {
-    char board[96], soc[96], cpu[96], mem[64], disk[64], data[96], os[96], kernel[96];
+    char board[96], soc[96], cpu[96], mem[64], os[96], kernel[96];
+    char disks[3][96]; int ndisks;   /* one line per storage device */
     char host[64], net[160], power[64], temp[32], uptime[48], library[96];
 } About;
 static About g_about;
@@ -578,11 +579,59 @@ static void human_bytes(unsigned long long b, char *out, size_t n)
     else snprintf(out, n, "%llu MB", b / 1000000ull);
 }
 
+/* what kind of storage a device is, by its name */
+static const char *disk_kind(const char *dev, const char *mnt)
+{
+    if (strstr(dev, "mmcblk")) return "SD card";
+    if (strstr(dev, "nvme")) return "SSD";
+    if (!strncmp(dev, "/dev/sd", 7)) return "USB disk";
+    if (strstr(dev, "overlay") || strstr(dev, "mtd") || strstr(dev, "ubi") || !strcmp(dev, "/dev/root")) return "Internal flash";
+    return !strcmp(mnt, "/") ? "System" : "Disk";
+}
+
+/* one line per mounted storage device: the root and anything under /mnt,
+ * /media, /opt (not /boot, not the kernel's own file systems) */
+static void about_disks(About *a)
+{
+    FILE *f = fopen("/proc/mounts", "r");
+    char dev[128], mnt[256], type[32], line[512];
+    dev_t seen[8];
+    int nseen = 0, k;
+    a->ndisks = 0;
+    if (!f) return;
+    /* the root first */
+    while (fgets(line, sizeof(line), f)) {
+        struct stat st;
+        struct statvfs sv;
+        char tot[32], fr[32];
+        if (sscanf(line, "%127s %255s %31s", dev, mnt, type) != 3) continue;
+        if (strcmp(mnt, "/") && strncmp(mnt, "/mnt/", 5) && strncmp(mnt, "/media/", 7) && strncmp(mnt, "/opt", 4)) continue;
+        if (!strcmp(type, "tmpfs") || !strcmp(type, "squashfs") || !strcmp(type, "autofs")) continue;
+        if (stat(mnt, &st) != 0 || statvfs(mnt, &sv) != 0 || sv.f_blocks == 0) continue;
+        /* small system partitions (the Omega's 512 KB settings flash) are not storage */
+        if (strcmp(mnt, "/") && (unsigned long long)sv.f_blocks * sv.f_frsize < 16ull * 1024 * 1024) continue;
+        for (k = 0; k < nseen; k++) if (seen[k] == st.st_dev) break;
+        if (k < nseen || nseen == 8) continue;
+        seen[nseen++] = st.st_dev;
+        if (a->ndisks == 3) continue;
+        human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tot, sizeof(tot));
+        human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, fr, sizeof(fr));
+        snprintf(a->disks[a->ndisks], sizeof(a->disks[0]), "%s: %s, %s free", disk_kind(dev, mnt), tot, fr);
+        if (!strcmp(mnt, "/") && a->ndisks > 0) {   /* keep the root on the first line */
+            char t[96];
+            memcpy(t, a->disks[a->ndisks], sizeof(t));
+            memmove(a->disks[1], a->disks[0], sizeof(a->disks[0]) * (size_t)a->ndisks);
+            memcpy(a->disks[0], t, sizeof(t));
+        }
+        a->ndisks++;
+    }
+    fclose(f);
+}
+
 static void about_collect(void)
 {
     About *a = &g_about;
     struct utsname u;
-    struct statvfs sv;
     char tmp[128], t2[64];
     int cores = 0, bat, i;
     memset(a, 0, sizeof(*a));
@@ -613,22 +662,7 @@ static void about_collect(void)
         human_bytes(tot, tmp, sizeof(tmp)); human_bytes(avail, t2, sizeof(t2));
         snprintf(a->mem, sizeof(a->mem), "%s, %s free", tmp, t2);
     }
-    if (statvfs("/", &sv) == 0) {
-        human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tmp, sizeof(tmp));
-        human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, t2, sizeof(t2));
-        snprintf(a->disk, sizeof(a->disk), "%s, %s free", tmp, t2);
-    }
-    {   /* the packages on another file system (the Omega's SD card): their space too */
-        struct stat rs, ds;
-        if (stat("/", &rs) == 0 && stat(L.root, &ds) == 0 && rs.st_dev != ds.st_dev && statvfs(L.root, &sv) == 0) {
-            char where[48];
-            const char *m = L.root;
-            human_bytes((unsigned long long)sv.f_blocks * sv.f_frsize, tmp, sizeof(tmp));
-            human_bytes((unsigned long long)sv.f_bavail * sv.f_frsize, t2, sizeof(t2));
-            snprintf(where, sizeof(where), "%s", !strncmp(m, "/mnt/mmcblk", 11) || strstr(m, "/sd") ? "SD card" : "data disk");
-            snprintf(a->data, sizeof(a->data), "%s, %s free (%s)", tmp, t2, where);
-        }
-    }
+    about_disks(a);
     if (read_quoted("/etc/os-release", "PRETTY_NAME", a->os, sizeof(a->os)) < 0)
         read_quoted("/etc/openwrt_release", "DISTRIB_DESCRIPTION", a->os, sizeof(a->os));
     snprintf(a->kernel, sizeof(a->kernel), "Linux %s", u.release);
@@ -1422,8 +1456,14 @@ static void draw_about(float dt)
         y = about_row(cx1 + 12, y, cw - 24, "zap", "CHIP", chip, a);
     }
     y = about_row(cx1 + 12, y, cw - 24, "layers", "MEMORY", b->mem, a);
-    y = about_row(cx1 + 12, y, cw - 24, "hard-drive", "STORAGE", b->disk, a);
-    y = about_row(cx1 + 12, y, cw - 24, "package", "GAMES AND APPS", b->data, a);
+    if (b->ndisks) {   /* one line per device */
+        int k;
+        gfx_icon("hard-drive", 14, cx1 + 12, y + 3, C_MUTED, a);
+        gfx_text(FONT_BADGE, cx1 + 34, y, "STORAGE", C_MUTED, a, cw - 46);
+        for (k = 0; k < b->ndisks; k++)
+            mtext(FONT_BODY, cx1 + 34, y + 11 + k * 17, b->disks[k], C_TEXT, a, cw - 46, g_open_at);
+        y += 28 + (b->ndisks - 1) * 17;
+    }
     {
         char sys[200];
         snprintf(sys, sizeof(sys), "%s, %s", b->os[0] ? b->os : "Linux", b->kernel);
