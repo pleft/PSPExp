@@ -16,10 +16,18 @@
 #      into build/gameshell/bin/opentyrian, which the opentyrian package
 #      (scripts/pspexp-pkg-build) ships; HOST=user@host (default cpi@gameshell).
 #      The launcher's own OpenTyrian is SDL 1.2, which the shim cannot reach.
+#   scripts/build-gameshell.sh retro    pspexp-retro and a libretro core (CORE=fceumm),
+#      compiled on the GameShell -> build/gameshell/bin/, for the nes package
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build/gameshell"
 WHAT="${1:-all}"
+
+if [ "$WHAT" = retro ]; then
+	INC="$OUT/gnu/src/SDL2-${SDL_VER:-2.30.12}/include"
+	[ -f "$INC/SDL.h" ] || { echo "SDL2 headers missing: run scripts/build-gameshell.sh shim first" >&2; exit 1; }
+	exec "$ROOT/scripts/build-retro-remote.sh" "${HOST:-${GAMESHELL:-cpi@gameshell}}" "$OUT/bin" "$INC"
+fi
 
 if [ "$WHAT" = tyrian ]; then
 	GS="${HOST:-${GAMESHELL:-cpi@gameshell}}"

@@ -22,7 +22,10 @@
  *   .system  name, short (a 2-5 letter badge), roms (folder, "~/" allowed;
  *            created when missing), ext (comma list), exec (%ROM% becomes
  *            the quoted ROM path), icon, thumbs (the libretro-thumbnails
- *            system folder, for box art), pspexp (1)
+ *            system folder, for box art), pspexp (1), pkg (the package that
+ *            installed it: exec then runs in that package's directory, so it
+ *            can name the package's own player, "./pspexp-retro ..."; without
+ *            it, in the ROM's folder), env (NAME=value, one per line)
  *
  * Ids: "p:<pkg>/<stem>" for package entries, "e:<stem>" for hand-made ones,
  * "r:<system>:<rom path>" for ROMs. lib_changed() notices installs, removals
@@ -50,6 +53,8 @@ typedef struct LEntry {
 typedef struct LSystem {
     char id[48], name[64], shortname[8];
     char roms[256], ext[96], exec[512], icon[32], thumbs[96];
+    char pkg[64], dir[256];           /* pkg: its package; dir: where exec runs ("" = the ROM's folder) */
+    char env[400];                    /* NAME=value pairs for exec */
     int pspexp;
     LEntry *roms_list; int nroms, scanned;
 } LSystem;

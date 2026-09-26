@@ -161,6 +161,16 @@ Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU) and
 `opentyrian` (a static OpenTyrian, `scripts/build-omega.sh tyrian`). The
 launcher starts in about 2 s there and uses under 4 MB of memory.
 
+## Emulators on the launcher
+
+`tools/pspexp-retro` is a libretro player that is a plain SDL2 program: one
+core, one ROM, no menus. The launcher is the menu (a rail tile per system,
+ROM lists, box art); the SDL layer puts the player on the PSP like any other
+game, at the core's native size, scaled by the PSP's GE, 256-colour pages as
+CLUT8. Packages bring the player, a core and a `.system` file: the NES with
+FCEUmm first (`scripts/gameshell/pkg/nes.sh`); ROMs go in `~/roms/<system>`.
+Details: docs/GameShell_Launcher_and_Shim.md, section 6.
+
 ## ClockworkPi GameShell as the host
 
 The GameShell becomes a PSPExp console: its own launcher, games and apps are
@@ -236,6 +246,7 @@ compatibility/sdl-pspexp/ injected library: any SDL2 program on the PSP (v0.4)
 examples/sdl-game/        plain SDL2 test game for it (renderer and window-surface paths)
 tools/pspexp-term/   the PSP as a console: terminal, mirror, the PSPExp launcher
 tools/pspexp-sdl-server/  SDL executor behind TCP 3838: a stand-in PSP for screenshots
+tools/pspexp-retro/  libretro player (plain SDL2): emulated systems for the launcher
 tools/usb-bench/     transport benchmark
 tests/               unit tests (ctest)
 docs/                architecture

@@ -65,7 +65,9 @@ int main(void)
     put("home/.config/pspexp-launcher/library/notes.entry", "title=Notes\ntype=app\nexec=nano\nicon=file-text\n");
     /* an emulated system with ROMs in ~/roms, and one without a ROM folder yet */
     put("root/systems/gba.system", "name=Game Boy Advance\nshort=GBA\nroms=~/roms/gba\next=gba,gb\nexec=pspexp-retro /opt/pspexp/cores/mgba.so %ROM%\nthumbs=Nintendo - Game Boy Advance\npspexp=1\n");
-    put("root/systems/snes.system", "name=Super Nintendo\nshort=SNES\nroms=~/roms/snes\next=sfc\nexec=pspexp-retro snes9x.so %ROM%\n");
+    put("root/systems/snes.system", "name=Super Nintendo\nshort=SNES\nroms=~/roms/snes\next=sfc\nexec=./pspexp-retro snes9x %ROM%\n"
+        "pkg=snes\nenv=PSPEXP_RETRO_ASPECT=pixel\n");
+    put("home/roms/snes/Super Game (Europe).sfc", "x");
     put("home/roms/gba/Legend of Zelda, The - The Minish Cap (USA).gba", "x");
     put("home/roms/gba/Golden Sun (USA, Europe).gba", "xx");
     put("home/roms/gba/readme.txt", "not a rom");
@@ -113,6 +115,20 @@ int main(void)
         }
     }
 
+    /* a system from a package runs in that package, with its environment */
+    s = sys_index(&L, "snes");
+    CHECK(s >= 0);
+    if (s >= 0) {
+        lib_scan_roms(&L, s);
+        CHECK_EQ(L.sys[s].nroms, 1);
+        if (L.sys[s].nroms == 1) {
+            snprintf(p, sizeof(p), "%s/root/apps/snes", base);
+            CHECK(!strcmp(L.sys[s].roms_list[0].dir, p));
+            lib_command(&L, &L.sys[s].roms_list[0], cmd, sizeof(cmd));
+            { const char *want = "PSPEXP_RETRO_ASPECT='pixel' exec ./pspexp-retro snes9x '"; CHECK(!strncmp(cmd, want, strlen(want))); }
+        }
+    }
+
     /* favourites and recent persist as ids */
     CHECK_EQ(lib_fav_toggle(&L, "p:opentyrian/opentyrian"), 1);
     lib_recent_push(&L, "p:freedoom/phase1");
@@ -140,7 +156,7 @@ int main(void)
     CHECK_EQ(lib_changed(&L), 1);
     n = lib_reload(&L);
     CHECK_EQ(L.n, 5);
-    CHECK_EQ(n, 5 + 2);
+    CHECK_EQ(n, 5 + 3);   /* games and apps, GBA and SNES ROMs */
     CHECK_EQ(lib_changed(&L), 0);
     sleep(1);
     put("home/roms/gba/Metroid Fusion (USA).gba", "x");

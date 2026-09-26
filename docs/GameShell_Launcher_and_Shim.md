@@ -1,6 +1,6 @@
 # GameShell: games through the shim, and a new launcher
 
-**Status:** 2026-09-26: the shim path and the launcher are done (capture for GL programs is not); the launcher runs on the GameShell, the Omega2+ and the Pi 400 (3.2). Two streams that together make the GameShell a
+**Status:** 2026-09-26: the shim path and the launcher are done (capture for GL programs is not); the launcher runs on the GameShell, the Omega2+ and the Pi 400 (3.2); emulators through pspexp-retro (6), tested on the Mac. Two streams that together make the GameShell a
 complete PSPExp host: (a) every game reaches the PSP the best way it can, and
 (b) the PSP shows a launcher built for it instead of a mirrored 320x240 menu.
 
@@ -363,3 +363,100 @@ Verified on the board: boot, systemd with no failed units, first boot, the
 power chip and battery, USB gadget networking, Wi-Fi, the launcher, Freedoom
 through the SDL layer and the START + SELECT exit (against PPSSPP). Not yet:
 the PSP over USB host mode on this kernel, the PSP-direct Wi-Fi mode.
+
+## 6. Emulators: pspexp-retro (2026-09-27)
+
+Emulated systems use the same path as every other game: a plain SDL2
+program, put on the PSP by the SDL layer. No RetroArch: the launcher is the
+only menu.
+
+### 6.1 The player
+
+`tools/pspexp-retro` (`pspexp-retro CORE ROM`) loads one libretro core and
+plays one ROM. It has no menus or settings screens; it never uses PSPExp
+itself (on the Mac it plays in a window).
+
+- **Video.** The core's frame at its own size (256x224 for the NES) goes into
+  one streaming texture; `SDL_RenderSetLogicalSize` gives the core's aspect,
+  so the PSP's GE scales it to the screen and the board scales nothing. A
+  frame the core repeats is not updated at all; the SDL layer then sends only
+  the texture pages that changed, as CLUT8 when a page has at most 256
+  colours. XRGB8888 cores go through an ARGB8888 texture, the layer's fast
+  path (nothing converted before comparing).
+- **Audio.** Resampled in the player to 44.1 kHz stereo, the PSP's rate, with
+  integer linear interpolation (no floating point per sample: FPU-less
+  boards), through an SDL audio callback that the SDL layer paces. The ratio
+  follows the buffer by up to +-0.5 %, so the core's clock (60.1 fps for the
+  NES, 32040 Hz for the SNES) and the PSP's 60 Hz display never drift apart.
+- **Input.** The PSP's controller as the SDL layer offers it: cross = B,
+  circle = A, square = Y, triangle = X (a Nintendo pad's layout), L / R,
+  START / SELECT, the d-pad and the nub. On a keyboard: arrows, x, z, s, a,
+  q, w, Return, right Shift; Escape quits. Holding START + SELECT on the PSP
+  leaves, as in every game.
+- **Battery saves.** The cartridge's SRAM in
+  `~/.local/share/pspexp-retro/saves/<rom>.srm`, written every 10 s when it
+  changed and at exit. BIOS files for systems that need them go in
+  `~/.config/pspexp-retro/system/`.
+- **Core options.** The core's defaults, overridden by `KEY=value` lines in
+  `~/.config/pspexp-retro/<core>.opt` or `PSPEXP_RETRO_OPT="k=v;k=v"`.
+  `PSPEXP_RETRO_ASPECT=pixel` gives square pixels.
+- **Cores.** A path, or a name looked up as `NAME_libretro.so` in
+  `$PSPEXP_RETRO_CORES`, next to the player, `/opt/pspexp/cores` and the
+  distribution's libretro directories. On the Omega2+ (static musl: no
+  dlopen) the core is linked in: one program per core,
+  `pspexp-retro-<core>`. Software cores only (no OpenGL).
+
+Not in yet: save states and an in-game pause overlay.
+
+### 6.2 Systems on the launcher
+
+A package installs a `.system` file (section 3.1). Two keys exist for this:
+`pkg=<package>` runs the command in that package's directory, so it can
+start the package's own player, and `env=NAME=value` sets variables for it.
+The NES package's file, as built for the GameShell:
+
+```
+name=Nintendo Entertainment System
+short=NES
+roms=~/roms/nes
+ext=nes,fds,unf,unif
+exec=pspexp-run ./pspexp-retro ./fceumm_libretro.so %ROM%
+pkg=nes
+env=SDL_VIDEODRIVER=dummy
+env=SDL_AUDIODRIVER=dummy
+thumbs=Nintendo - Nintendo Entertainment System
+pspexp=1
+```
+
+The launcher shows a rail tile per system that has ROMs, lists the ROMs
+with No-Intro names cleaned up, fetches box art by `thumbs=`, and starts
+the command with the ROM's path in place of `%ROM%`. When it starts a
+PSPExp program (`pspexp=1`) it now lets go of the PSP itself and takes it
+back when the program ends, so a program started without `pspexp-exec`
+does not wait for a PSP the launcher holds.
+
+### 6.3 Packages and builds
+
+| Board | Player and core | Built by |
+|---|---|---|
+| GameShell | `pspexp-retro` + `fceumm_libretro.so`, compiled on the board, the SDL layer preloaded (`pspexp-run`) | `scripts/build-gameshell.sh retro` |
+| Raspberry Pi | the same, compiled on the Pi | `scripts/install-pi.sh retro` |
+| Omega2+ | `pspexp-retro-fceumm`: one static program, core and SDL layer linked in, run through `pspexp-exec` | `scripts/build-omega.sh retro` |
+
+`scripts/build-retro-remote.sh` does the on-board builds for the GameShell
+and the Pi. Core sources live next to the repository in
+`../retro/libretro-<core>` (`git clone https://github.com/libretro/libretro-fceumm`;
+`CORE=` picks another). The package: `scripts/gameshell/pkg/nes.sh`,
+installed with `BOARD=<board> HOST=<host> scripts/pspexp-pkg-build install nes`.
+No ROMs are included; the card image can carry free homebrew later (for
+example Nova the Squirrel, GPL-3.0).
+
+### 6.4 Status (2026-09-27)
+
+Tested on the Mac with the stand-in PSP: FCEUmm plays Nova the Squirrel at
+60 fps, 256-colour pages, correct colours and aspect; the full launcher flow
+works (NES tile, ROM list, start, leave, the launcher takes the PSP back).
+The Omega2+ player and package build. Not yet run on a board or on the real
+PSP: the GameShell and Pi builds need the boards on. Next systems: Game Boy
+and Game Boy Color (Gambatte), GBA (mGBA), SNES (Snes9x), Mega Drive
+(Genesis Plus GX); on the Omega probably only NES and Game Boy.

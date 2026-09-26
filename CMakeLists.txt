@@ -108,6 +108,12 @@ if(SDL2_FOUND)
   endif()
   target_include_directories(sdl-game PRIVATE ${SDL2_INCLUDE_DIRS})
   target_compile_options(sdl-game PRIVATE ${SDL2_CFLAGS_OTHER})
+
+  # libretro player: a plain SDL2 program (the SDL layer puts it on the PSP)
+  add_executable(pspexp-retro tools/pspexp-retro/main.c)
+  target_link_libraries(pspexp-retro PRIVATE ${SDL2_LINK_LIBRARIES} ${CMAKE_DL_LIBS})
+  target_include_directories(pspexp-retro PRIVATE ${SDL2_INCLUDE_DIRS})
+  target_compile_options(pspexp-retro PRIVATE ${SDL2_CFLAGS_OTHER})
 endif()
 
 # --- tools and examples -----------------------------------------------------

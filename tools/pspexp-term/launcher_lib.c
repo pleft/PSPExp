@@ -123,6 +123,11 @@ static void system_kv(void *u, const char *k, const char *v)
     else if (!strcmp(k, "exec")) snprintf(s->exec, sizeof(s->exec), "%s", v);
     else if (!strcmp(k, "icon")) snprintf(s->icon, sizeof(s->icon), "%s", v);
     else if (!strcmp(k, "thumbs")) snprintf(s->thumbs, sizeof(s->thumbs), "%s", v);
+    else if (!strcmp(k, "pkg") && !strchr(v, '/')) snprintf(s->pkg, sizeof(s->pkg), "%s", v);
+    else if (!strcmp(k, "env") && strchr(v, '=') && strlen(s->env) + strlen(v) + 2 < sizeof(s->env)) {
+        if (s->env[0]) strcat(s->env, " ");
+        strcat(s->env, v);
+    }
     else if (!strcmp(k, "pspexp")) s->pspexp = atoi(v);
 }
 
@@ -197,6 +202,7 @@ static void load_system_dir(Library *L, const char *dir)
         if (read_kv(p, system_kv, s) < 0 || !s->exec[0] || !s->roms[0]) continue;
         snprintf(s->id, sizeof(s->id), "%s", id);
         if (!s->name[0]) snprintf(s->name, sizeof(s->name), "%s", id);
+        if (s->pkg[0]) snprintf(s->dir, sizeof(s->dir), "%s/apps/%s", L->root, s->pkg);
         expand_home(s->roms, sizeof(s->roms));
         if (!is_dir(s->roms)) mkdir_p(s->roms);   /* shows the user where ROMs go */
         L->nsys++;
@@ -241,7 +247,8 @@ static void add_rom(LSystem *s, int sys, const char *dir, const char *file)
     e->type = LT_ROM; e->sys = sys; e->size = (long long)st.st_size; e->pspexp = s->pspexp;
     snprintf(e->id, sizeof(e->id), "r:%s:%s", s->id, p);
     snprintf(e->exec, sizeof(e->exec), "%s", p);   /* the ROM path; lib_command builds the command */
-    snprintf(e->dir, sizeof(e->dir), "%s", dir);
+    snprintf(e->dir, sizeof(e->dir), "%s", s->dir[0] ? s->dir : dir);
+    snprintf(e->env, sizeof(e->env), "%s", s->env);
     dot = strrchr(file, '.');
     snprintf(e->title, sizeof(e->title), "%.*s", dot ? (int)(dot - file) : (int)strlen(file), file);
     /* "Super Mario World (USA) (Rev 1)" -> title "Super Mario World", tags "USA, Rev 1" */

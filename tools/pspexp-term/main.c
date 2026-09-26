@@ -1608,6 +1608,7 @@ static void draw_pointer(void) {}
 
 /* ---- programs started from the launcher ------------------------------------------- */
 
+static void release_psp(void);
 static void launch_child(const char *cmd, const char *cwd, int aware)
 {
     pid_t pid = fork();
@@ -1634,6 +1635,10 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
     }
     g_launch_pid = pid;
     g_launch_aware = aware;
+    /* a PSPExp program needs the PSP to itself: let go of it now, not only
+     * when a wrapper (pspexp-exec, pspexp-run) asks with SIGUSR1: a player or
+     * game started without one would otherwise wait for a PSP we hold */
+    if (aware && pid > 0) release_psp();
     fprintf(stderr, "[pspexp-term] launcher: started pid %d (%s): %s\n", (int)pid, aware ? "PSPExp-aware" : "mirrored", cmd);
     if (!aware && mirror_available()) { g_view_launcher = 0; g_view_mirror = 1; mirror_invalidate(); }
 }
@@ -1643,6 +1648,7 @@ static void launch_done(int status)
     int code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
     fprintf(stderr, "[pspexp-term] launcher: pid %d ended (%d)\n", (int)g_launch_pid, code);
     g_launch_pid = 0;
+    if (g_launch_aware) g_acquire_req = 1;   /* ours again (pspexp-exec's SIGUSR2 may have said so already) */
     if (g_view_mirror) { keypad_release_all(); g_view_mirror = 0; }
     g_view_launcher = 1;
     launcher_child_exited(code);

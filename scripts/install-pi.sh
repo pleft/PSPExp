@@ -13,11 +13,17 @@
 #   PI=user@host scripts/install-pi.sh tyrian   OpenTyrian (SDL2) compiled on
 #       the Pi from ../tyrian/opentyrian into build/pi/bin/opentyrian, which
 #       the opentyrian package ships (BOARD=pi scripts/pspexp-pkg-build build opentyrian)
+#   PI=user@host scripts/install-pi.sh retro    pspexp-retro and a libretro core,
+#       compiled on the Pi into build/pi/bin/, for the nes package
 # Needs on the Pi: sudo without a password prompt, and the build packages
 # (scripts/build-pi.sh installs them: cmake, libsdl2-dev, libusb-1.0-0-dev).
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PI="${PI:-${HOST:-pi@raspberrypi.local}}"
+
+if [ "$1" = retro ]; then   # pspexp-retro and a libretro core (CORE=fceumm), compiled on the Pi
+	exec "$ROOT/scripts/build-retro-remote.sh" "$PI" "$ROOT/build/pi/bin"
+fi
 
 if [ "$1" = tyrian ]; then
 	SRC="$ROOT/../tyrian/opentyrian"

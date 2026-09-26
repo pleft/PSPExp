@@ -59,6 +59,7 @@ cable pull, so pull the cable to read it after a session.
 | GameShell: an SDL2 program on the PSP (headless) / the first-boot log | `pspexp-run <program>` / `cat /var/log/pspexp-firstboot.log` |
 | GameShell: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
 | Omega2+: build the tools / Doom / OpenTyrian (static, SDL layer linked in) | `scripts/build-omega.sh` / `scripts/build-omega.sh doom` / `scripts/build-omega.sh tyrian` |
+| emulators: the player on the Mac / NES player builds (Omega, GameShell, Pi) / the NES package | `build/host/pspexp-retro CORE ROM` / `scripts/build-omega.sh retro`, `scripts/build-gameshell.sh retro`, `PI=user@<ip> scripts/install-pi.sh retro` / `BOARD=<board> HOST=<host> scripts/pspexp-pkg-build install nes` |
 | Omega2+: install the console and launcher / packages built for it | `OMEGA=omega scripts/install-omega.sh` / `BOARD=omega HOST=root@<omega> scripts/pspexp-pkg-build install freedoom opentyrian` |
 | Raspberry Pi: install the console and launcher / packages built for it | `PI=user@<ip> scripts/install-pi.sh` / `BOARD=pi HOST=user@<ip> scripts/pspexp-pkg-build install freedoom opentyrian` |
 | installers ship the existing build: after a source change | `scripts/build-gameshell.sh` / `scripts/build-omega.sh` first (`install-pi.sh` builds on the Pi) |
