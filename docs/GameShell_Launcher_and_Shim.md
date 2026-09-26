@@ -1,6 +1,6 @@
 # GameShell: games through the shim, and a new launcher
 
-**Status:** 2026-09-26: both streams done; the launcher runs on the GameShell, the Omega2+ and the Pi 400 (3.2). Two streams that together make the GameShell a
+**Status:** 2026-09-26: the shim path and the launcher are done (capture for GL programs is not); the launcher runs on the GameShell, the Omega2+ and the Pi 400 (3.2). Two streams that together make the GameShell a
 complete PSPExp host: (a) every game reaches the PSP the best way it can, and
 (b) the PSP shows a launcher built for it instead of a mirrored 320x240 menu.
 
