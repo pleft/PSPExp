@@ -1604,8 +1604,12 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
     pid_t pid = fork();
     if (pid < 0) return;
     if (pid == 0) {
-        int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
+        int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | O_APPEND, 0644), i;
         if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+        /* nothing of the console's reaches the program: its PSP link (a
+         * copy would keep the connection open after the console lets go),
+         * the terminal, the audio FIFO, input devices */
+        for (i = 3; i < 1024; i++) close(i);
         if (chdir(cwd) != 0) { /* run anyway */ }
         if (!getenv("DISPLAY")) setenv("DISPLAY", ":0", 1);
         setsid();

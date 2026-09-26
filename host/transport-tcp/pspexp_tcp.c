@@ -114,6 +114,10 @@ PspExpTransport *pspexp_tcp_open(const PspExpTcpOptions *o, char *err, size_t er
     for (ai = res; ai; ai = ai->ai_next) {
         fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (fd < 0) continue;
+        /* not inherited by programs this process starts: a child holding a
+         * copy keeps the connection alive after we close ours, and the
+         * runtime (one client at a time) then turns the next client away */
+        fcntl(fd, F_SETFD, FD_CLOEXEC);
         {
             struct timeval tv = { opt.connect_timeout_ms / 1000, (opt.connect_timeout_ms % 1000) * 1000 };
             setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));

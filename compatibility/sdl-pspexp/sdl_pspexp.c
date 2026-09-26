@@ -321,10 +321,19 @@ static void connect_once(void)
         logf_("built without USB support");
 #endif
     }
-    if (!S.transport) { logf_("%s", err[0] ? err : "no transport"); return; }
+    /* No PSP yet (a runtime still busy with the previous client, a Wi-Fi
+     * hiccup): stay active without a link; try_reconnect() keeps trying once
+     * a second, so the game appears on the PSP as soon as it answers instead
+     * of running unseen. (sdl mode: the executor window failed, give up.) */
+    if (!S.transport && S.mode == 2) { logf_("%s", err[0] ? err : "no transport"); return; }
     S.ctx = pspexp_create(S.transport, NULL);
     pspexp_set_log(S.ctx, lib_log, NULL);
-    if (pspexp_connect(S.ctx, 5000) < 0) { logf_("no HELLO from the runtime"); pspexp_destroy(S.ctx); S.ctx = NULL; return; }
+    if (!S.transport) logf_("%s: retrying every second", err[0] ? err : "no PSP yet");
+    else if (pspexp_connect(S.ctx, 5000) < 0) {
+        logf_("no HELLO from the runtime: retrying every second");
+        pspexp_set_transport(S.ctx, NULL);
+        S.transport = NULL;
+    }
     S.active = 1;
     atexit(shim_exit);
     S.amu = SDL_CreateMutex();
