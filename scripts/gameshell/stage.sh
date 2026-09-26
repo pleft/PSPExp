@@ -12,8 +12,6 @@
 # Mode, uid and gid are octal / numeric (cpi is 1000). gs_stage sets the
 # globals S R M B G: callers keep their own names clear of them.
 
-GS_TYRIAN_DIR="/home/cpi/apps/Menu/21_Indie Games/34_OpenTyrian"
-
 gs_stage() {
 	S="$1"; R="$S/root"; M="$S/manifest"
 	B="$ROOT/build/gameshell"; G="$ROOT/scripts/gameshell"
@@ -28,14 +26,40 @@ gs_stage() {
 	gs_copy "$ROOT/scripts/pspexp-exec" 0755 0 0 /usr/local/bin/pspexp-exec
 	gs_copy "$B/lib/libsdl-pspexp.so" 0644 0 0 /usr/local/lib/libsdl-pspexp.so
 	gs_copy "$G/pspexp-run" 0755 0 0 /usr/local/bin/pspexp-run
-	gs_copy "$G/pspexp-tyrian" 0755 0 0 /usr/local/bin/pspexp-tyrian
-	# OpenTyrian (SDL2) is compiled on a GameShell (build-gameshell.sh tyrian),
-	# which keeps a copy here for the next card
-	[ -x "$B/bin/opentyrian" ] && gs_copy "$B/bin/opentyrian" 0755 1000 1000 /home/cpi/pspexp/opentyrian
+	gs_rm /usr/local/bin/pspexp-tyrian   # replaced by the opentyrian package
 
-	# the console at boot: the PSPExp launcher as the home view (the menu tree
-	# and skin of launchergo, drawn for the PSP); programs it starts that do
-	# not use the PSP themselves are mirrored, the PSP's buttons as their keypad
+	# PSPExp packages: the launcher's games and apps (scripts/gs-pkg on the
+	# Mac, pspexp-pkg here), owned by cpi so installing needs no root
+	gs_dir 0755 1000 1000 /opt/pspexp
+	gs_dir 0755 1000 1000 /opt/pspexp/apps
+	gs_dir 0755 1000 1000 /opt/pspexp/systems
+	gs_copy "$G/pspexp-pkg" 0755 0 0 /usr/local/bin/pspexp-pkg
+	# the card's first boot: the stock launcher and games removed, the bundled
+	# packages (every build/gameshell/pkg/*.tar.gz) installed; once
+	gs_dir 0755 0 0 /usr/local/lib/pspexp
+	gs_copy "$G/clean-stock.sh" 0755 0 0 /usr/local/lib/pspexp/clean-stock.sh
+	gs_copy "$G/pspexp-firstboot" 0755 0 0 /usr/local/bin/pspexp-firstboot
+	gs_copy "$G/pspexp-firstboot.service" 0644 0 0 /etc/systemd/system/pspexp-firstboot.service
+	gs_link /etc/systemd/system/pspexp-firstboot.service /etc/systemd/system/multi-user.target.wants/pspexp-firstboot.service
+	if [ "${GS_PREINSTALL:-1}" = 1 ]; then
+		gs_dir 0755 1000 1000 /opt/pspexp/preinstall
+		for p in "$B"/pkg/*.tar.gz; do
+			[ -f "$p" ] && gs_copy "$p" 0644 1000 1000 "/opt/pspexp/preinstall/$(basename "$p")"
+		done
+	fi
+
+	# the launcher's fonts and icons (Inter, Lucide: open licences, kept beside
+	# them) and the commands its System page may run without a password
+	gs_dir 0755 0 0 /usr/local/share/pspexp
+	gs_dir 0755 0 0 /usr/local/share/pspexp/launcher
+	for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
+		gs_copy "$ROOT/tools/pspexp-term/assets/$f" 0644 0 0 "/usr/local/share/pspexp/launcher/$f"
+	done
+	echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home' > "$S/pspexp.sudoers"
+	gs_copy "$S/pspexp.sudoers" 0440 0 0 /etc/sudoers.d/pspexp
+
+	# the console at boot: the PSPExp launcher as the home view, showing the
+	# installed packages (/opt/pspexp) and the user's own entries
 	cat > "$S/pspexp-term.service" <<U
 [Unit]
 Description=PSPExp console on the PSP (pspexp-term)
@@ -44,7 +68,7 @@ After=multi-user.target
 [Service]
 User=cpi
 WorkingDirectory=/home/cpi
-Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/games
 ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash --launcher --mirror /dev/fb0 --usb --tcp 192.168.50.2
 Restart=always
 RestartSec=2
@@ -112,25 +136,6 @@ A
 		sed 's|^if \[ -f ~/launchergo/.cpirc \]; then|# PSPExp: the PSP console'"'"'s shell (PSPEXP_TERM=1) must not start the X session\
 if [ -f ~/launchergo/.cpirc ] \&\& [ -z "$PSPEXP_TERM" ]; then|' "$S/bashrc" > "$S/bashrc.new"
 		gs_copy "$S/bashrc.new" 0644 1000 1000 /home/cpi/.bashrc
-	fi
-
-	# The launcher's OpenTyrian entry: the SDL2 build on the PSP while the
-	# console runs (the stock one is SDL 1.2, out of the SDL layer's reach),
-	# the stock build otherwise; the stock script is kept as .orig
-	gs_fetch "$GS_TYRIAN_DIR/OpenTyrian.sh" "$S/tyrian.sh"
-	# already PSPExp's: rebuilt from the stock copy (a newer PSPExp version)
-	grep -q pspexp "$S/tyrian.sh" 2>/dev/null && gs_fetch "$GS_TYRIAN_DIR/OpenTyrian.sh.orig" "$S/tyrian.sh"
-	if [ -s "$S/tyrian.sh" ] && ! grep -q pspexp "$S/tyrian.sh"; then
-		gs_copy "$S/tyrian.sh" 0755 1000 1000 "$GS_TYRIAN_DIR/OpenTyrian.sh.orig"
-		{
-			echo '# PSPExp: with the PSP console running, the SDL2 build on the PSP (pspexp-tyrian);'
-			echo '# otherwise the stock SDL 1.2 build (this script before PSPExp: OpenTyrian.sh.orig)'
-			echo 'if [ -f /tmp/pspexp-term.pid ] && kill -0 $(cat /tmp/pspexp-term.pid) 2>/dev/null && [ -x /home/cpi/pspexp/opentyrian ]; then'
-			echo '	exec /usr/local/bin/pspexp-tyrian'
-			echo 'fi'
-			cat "$S/tyrian.sh"
-		} > "$S/tyrian.sh.new"
-		gs_copy "$S/tyrian.sh.new" 0755 1000 1000 "$GS_TYRIAN_DIR/OpenTyrian.sh"
 	fi
 }
 

@@ -1,0 +1,17 @@
+#!/bin/sh
+# The first boot of a PSPExp GameShell card (pspexp-firstboot.service, once):
+# removes ClockworkOS's own launcher, games and apps (clean-stock.sh), then
+# installs every package in /opt/pspexp/preinstall. /etc/pspexp/firstboot-done
+# marks it done; delete that file to run it again. Log: /var/log/pspexp-firstboot.log
+DONE=/etc/pspexp/firstboot-done
+[ -f "$DONE" ] && exit 0
+exec >>/var/log/pspexp-firstboot.log 2>&1
+echo "== $(date): PSPExp first boot"
+sh /usr/local/lib/pspexp/clean-stock.sh || echo "clean-stock failed: $?"
+for f in /opt/pspexp/preinstall/*.tar.gz; do
+	[ -f "$f" ] || continue
+	if su cpi -s /bin/sh -c "pspexp-pkg install '$f'"; then rm -f "$f"; else echo "not installed: $f"; fi
+done
+mkdir -p /etc/pspexp
+date > "$DONE"
+echo "== done"

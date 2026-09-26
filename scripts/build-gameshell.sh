@@ -12,8 +12,9 @@
 #   scripts/build-gameshell.sh tools    only the static tools
 #   scripts/build-gameshell.sh shim     only the shim
 #   scripts/build-gameshell.sh tyrian   OpenTyrian (SDL2) for the PSP, compiled
-#      on the GameShell itself (its gcc, its libSDL2) from ../tyrian/opentyrian,
-#      installed with pspexp-tyrian; GAMESHELL=user@host (default cpi@gameshell).
+#      on the GameShell itself (its gcc, its libSDL2) from ../tyrian/opentyrian
+#      into build/gameshell/bin/opentyrian, which the opentyrian package
+#      (scripts/gs-pkg) ships; GAMESHELL=user@host (default cpi@gameshell).
 #      The launcher's own OpenTyrian is SDL 1.2, which the shim cannot reach.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,17 +33,13 @@ if [ "$WHAT" = tyrian ]; then
 		ssh "$GS" 'rm -rf ~/pspexp/tyrian-src && mkdir -p ~/pspexp/tyrian-src && tar -C ~/pspexp/tyrian-src -xf -'
 	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$INC" -cf - . ; } 2>/dev/null |
 		ssh "$GS" 'rm -rf ~/pspexp/sdl2-include && mkdir -p ~/pspexp/sdl2-include/SDL2 && tar -C ~/pspexp/sdl2-include/SDL2 -xf -'
-	scp -q "$ROOT/scripts/gameshell/pspexp-tyrian" "$GS:/tmp/pspexp-tyrian"
 	ssh "$GS" 'set -e; ln -sf /lib/arm-linux-gnueabihf/libSDL2-2.0.so.0 ~/pspexp/libSDL2.so
 		make -C ~/pspexp/tyrian-src -j4 WITH_NETWORK=false \
 			SDL_CPPFLAGS="-I$HOME/pspexp/sdl2-include/SDL2 -D_REENTRANT -include stdlib.h -include string.h -include math.h -include stdio.h" \
 			SDL_LDFLAGS="-L$HOME/pspexp" SDL_LDLIBS="-lSDL2 -lm" 2>&1 | grep -E "error|implicit" || true
-		cp ~/pspexp/tyrian-src/opentyrian ~/pspexp/opentyrian
-		sudo install -m 755 /tmp/pspexp-tyrian /usr/local/bin/pspexp-tyrian
-		ls -la ~/pspexp/opentyrian'
-	# a copy for the next card (gameshell-prep-image.sh puts it there)
-	mkdir -p "$OUT/bin"; scp -q "$GS:pspexp/opentyrian" "$OUT/bin/opentyrian"
-	echo "on the GameShell: pspexp-tyrian"
+		ls -la ~/pspexp/tyrian-src/opentyrian'
+	mkdir -p "$OUT/bin"; scp -q "$GS:pspexp/tyrian-src/opentyrian" "$OUT/bin/opentyrian"
+	echo "build/gameshell/bin/opentyrian: package it with scripts/gs-pkg build opentyrian"
 	exit 0
 fi
 

@@ -4,18 +4,19 @@
 # scripts/gameshell/stage.sh), then reloads systemd and udev and restarts
 # the PSP console. The Wi-Fi mode is not switched (see pspexp-wifi-mode).
 #   scripts/build-gameshell.sh
-#   GAMESHELL=user@host scripts/install-gameshell.sh [--tyrian]
+#   GAMESHELL=user@host scripts/install-gameshell.sh
 # GAMESHELL defaults to cpi@gameshell; cpi needs sudo without a password
-# (the GameShell OS default). --tyrian first compiles OpenTyrian (SDL2) on the
-# GameShell (build-gameshell.sh tyrian).
+# (the GameShell OS default). Games and apps are packages: scripts/gs-pkg.
+# Removing ClockworkOS's own launcher and games, once: scripts/gameshell/clean-stock.sh.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GS="${GAMESHELL:-cpi@gameshell}"
 . "$ROOT/scripts/gameshell/stage.sh"
-[ "$1" = --tyrian ] && GAMESHELL="$GS" "$ROOT/scripts/build-gameshell.sh" tyrian
 ssh -o ConnectTimeout=8 "$GS" 'sudo -n true' 2>/dev/null || { echo "cannot run sudo on $GS without a password" >&2; exit 1; }
 
 gs_fetch() { ssh "$GS" "cat '$1' 2>/dev/null" > "$2" || : ; }
+# after its first boot a GameShell gets packages with scripts/gs-pkg, not the bundle
+ssh "$GS" 'test -f /etc/pspexp/firstboot-done' 2>/dev/null && export GS_PREINSTALL=0
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 gs_stage "$W/stage"

@@ -1,0 +1,14 @@
+[Unit]
+Description=PSPExp first boot: remove the stock launcher and games, install the bundled packages
+ConditionPathExists=!/etc/pspexp/firstboot-done
+After=local-fs.target
+Before=getty@tty1.service pspexp-term.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pspexp-firstboot
+TimeoutStartSec=20min
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
