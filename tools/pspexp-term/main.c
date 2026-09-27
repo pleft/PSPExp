@@ -18,7 +18,11 @@
  *   start         Tab (completion)
  *   L (held)      Shift                              R (held)  Ctrl
  *   nub           arrow keys (history, cursor, vi)
- *   R + up/down   scroll back through the history (R + left/right: a page)
+ *   L tap         the context menu: keys and commands for the shell or for
+ *                 the full-screen program (vi, less, top), terminal actions
+ *                 (~/.config/pspexp-term/menu, see term_menu.h)
+ *   L + nub       scroll back like a mouse wheel (further: faster)
+ *   R + up/down   scroll back a line (R + left/right: a page)
  *
  * Linux hosts: a real keyboard and mouse (the Raspberry Pi 400's own, or USB
  * ones on the Omega's dock) are read from /dev/input and type into the same
@@ -46,6 +50,9 @@
 #include "../../host/libpspexp/pspexp.h"
 #include "../../host/libpspexp/pspexp_font.h"
 #include "launcher.h"
+#include "term_menu.h"
+#include "term_fonts.h"
+#include "term_themes.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
 #ifdef PSPEXP_HAVE_USB
@@ -77,37 +84,40 @@
 
 /* ---- geometry ----------------------------------------------------------- */
 
-#define COLS        80
-#define ROWS_FULL   34          /* 272 / 8 */
-#define ROWS_KB     25          /* 200 px of terminal above the keyboard */
-#define CELL_W      6
-#define CELL_H      8
-#define KB_Y        (ROWS_KB * CELL_H)
+#define COLS_MAX    80          /* the terminal's font decides: 480 / its width */
+#define ROWS_MAX    34          /* 272 / 8, the smallest font */
+#define UI_W        6           /* the keyboard's and the menu's own font (built in) */
+#define UI_H        8
+#define KB_Y        200         /* the on-screen keyboard's top */
 #define KB_H        (272 - KB_Y)
 #define SCROLLBACK  1000
+
+static int g_cw = 6, g_ch = 8;  /* the terminal font's cell (term_fonts.h) */
+static int g_font, g_theme;     /* TERM_FONTS[g_font], TERM_THEMES[g_theme] */
 
 #define FONT_ID     1
 #define FONT_PAL_ID 2
 
 /* ---- terminal state ------------------------------------------------------ */
 
-enum { A_BOLD = 1, A_UNDER = 2, A_REVERSE = 4 };
+enum { A_BOLD = 1, A_UNDER = 2, A_REVERSE = 4, A_FGRGB = 8, A_BGRGB = 16 };
 
-typedef struct Cell { uint8_t ch, attr; uint16_t fg, bg; } Cell;   /* colours: 5650 */
-typedef struct Line { Cell c[COLS]; } Line;
+/* ch: 32..126 ASCII, 0x80..0x9f line drawing and blocks (drawn by
+ * box_glyph), 0xa0..0xff Latin-1. fg / bg: a palette index (0..255), DEF_FG /
+ * DEF_BG (the theme's own), or with A_FGRGB / A_BGRGB a 5650 colour: the
+ * theme is applied when drawing, so a new one recolours what is on screen */
+typedef struct Cell { uint8_t ch, attr; uint16_t fg, bg; } Cell;
+typedef struct Line { Cell c[COLS_MAX]; } Line;
 
-static const uint32_t PALETTE[16] = {
-    0x000000, 0xcd3131, 0x0dbc79, 0xe5e510, 0x3b78ff, 0xbc3fbc, 0x11a8cd, 0xd0d0d0,
-    0x767676, 0xf14c4c, 0x23d18b, 0xf5f543, 0x5c8cff, 0xd670d6, 0x29b8db, 0xffffff,
-};
-#define DEF_FG 7
-#define DEF_BG 0
+#define DEF_FG 256
+#define DEF_BG 257
 
 typedef struct Pen { int fg, bg; uint16_t fg_rgb, bg_rgb; uint8_t attr; } Pen;   /* fg/bg: palette index, -2 = direct rgb */
 
 typedef struct Term {
-    int rows;                       /* 34 or 25 */
-    Line screen[ROWS_FULL], alt[ROWS_FULL];
+    int rows, cols;                 /* the font and the keyboard decide */
+    Line screen[ROWS_MAX], alt[ROWS_MAX];
+    int dec_graphics, charset_g0;   /* ESC ( 0: DEC line drawing for G0 */
     int on_alt;
     int cx, cy, wrap_pending;
     int saved_cx, saved_cy; Pen saved_pen;
@@ -130,10 +140,15 @@ static volatile sig_atomic_t g_release_req, g_acquire_req, g_child_died;
 
 static uint16_t rgb565(uint32_t rgb) { return pspexp_color_5650((uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8), (uint8_t)rgb); }
 
+static const TermTheme *theme(void) { return &TERM_THEMES[g_theme]; }
+
+/* a palette index, DEF_FG / DEF_BG, through the current theme */
 static uint16_t color_of(int idx, uint16_t direct)
 {
     if (idx == -2) return direct;
-    if (idx < 16) return rgb565(PALETTE[idx]);
+    if (idx == DEF_FG) return rgb565(theme()->fg);
+    if (idx == DEF_BG) return rgb565(theme()->bg);
+    if (idx < 16) return rgb565(theme()->ansi[idx]);
     if (idx < 232) {                /* 6x6x6 cube */
         int i = idx - 16, r = i / 36, g = (i / 6) % 6, b = i % 6;
         static const uint8_t lv[6] = { 0, 95, 135, 175, 215, 255 };
@@ -142,12 +157,16 @@ static uint16_t color_of(int idx, uint16_t direct)
     { uint8_t v = (uint8_t)(8 + (idx - 232) * 10); return pspexp_color_5650(v, v, v); }
 }
 
+static uint16_t cell_fg(const Cell *c) { return (c->attr & A_FGRGB) ? c->fg : color_of(c->fg, 0); }
+static uint16_t cell_bg(const Cell *c) { return (c->attr & A_BGRGB) ? c->bg : color_of(c->bg, 0); }
+
 static Cell blank_cell(void)
 {
     Cell c;
     c.ch = ' '; c.attr = 0;
-    c.fg = color_of(DEF_FG, 0);
-    c.bg = T.pen.bg == DEF_BG ? 0 : color_of(T.pen.bg, T.pen.bg_rgb);   /* erase uses the current background */
+    c.fg = DEF_FG;
+    if (T.pen.bg == -2) { c.bg = T.pen.bg_rgb; c.attr |= A_BGRGB; }   /* erase uses the current background */
+    else c.bg = (uint16_t)T.pen.bg;
     return c;
 }
 
@@ -155,7 +174,7 @@ static void clear_line(Line *l, int from, int to)
 {
     int x;
     Cell b = blank_cell();
-    for (x = from; x < to && x < COLS; x++) l->c[x] = b;
+    for (x = from; x < to && x < COLS_MAX; x++) l->c[x] = b;
 }
 
 static Line *line(int y) { return T.on_alt ? &T.alt[y] : &T.screen[y]; }
@@ -180,7 +199,7 @@ static void scroll_up(int top, int bottom, int n)
     while (n-- > 0) {
         if (top == 0 && bottom == T.rows - 1) push_scrollback(line(0));
         for (y = top; y < bottom; y++) *line(y) = *line(y + 1);
-        clear_line(line(bottom), 0, COLS);
+        clear_line(line(bottom), 0, T.cols);
     }
     T.dirty = 1;
 }
@@ -190,7 +209,7 @@ static void scroll_down(int top, int bottom, int n)
     int y;
     while (n-- > 0) {
         for (y = bottom; y > top; y--) *line(y) = *line(y - 1);
-        clear_line(line(top), 0, COLS);
+        clear_line(line(top), 0, T.cols);
     }
     T.dirty = 1;
 }
@@ -204,7 +223,7 @@ static void term_reset(int rows)
     T.cx = T.cy = 0; T.wrap_pending = 0;
     T.top = 0; T.bottom = rows - 1;
     T.cursor_visible = 1; T.autowrap = 1; T.app_cursor = 0; T.on_alt = 0;
-    for (y = 0; y < ROWS_FULL; y++) { clear_line(&T.screen[y], 0, COLS); clear_line(&T.alt[y], 0, COLS); }
+    for (y = 0; y < ROWS_MAX; y++) { clear_line(&T.screen[y], 0, COLS_MAX); clear_line(&T.alt[y], 0, COLS_MAX); }
     T.dirty = 1;
 }
 
@@ -214,7 +233,7 @@ static void term_reset(int rows)
 static void term_resize(int rows)
 {
     int d, y;
-    if (rows == T.rows) return;
+    if (rows == T.rows) goto tell;
     if (rows < T.rows) {
         d = T.cy - (rows - 1);
         if (d > 0) {
@@ -233,19 +252,21 @@ static void term_resize(int rows)
             T.sb_count -= d;
             T.cy += d;
         }
-        for (y = T.rows + d; y < rows; y++) clear_line(&T.screen[y], 0, COLS);
+        for (y = T.rows + d; y < rows; y++) clear_line(&T.screen[y], 0, T.cols);
     }
-    for (y = T.rows; y < rows; y++) clear_line(&T.alt[y], 0, COLS);
+    for (y = T.rows; y < rows; y++) clear_line(&T.alt[y], 0, T.cols);
     T.rows = rows;
     T.top = 0; T.bottom = rows - 1;
     if (T.cy >= rows) T.cy = rows - 1;
     T.view = 0;
+tell:
     T.dirty = 1;
+    if (T.cx >= T.cols) T.cx = T.cols - 1;
     if (g_master >= 0) {
         struct winsize ws;
         memset(&ws, 0, sizeof(ws));
-        ws.ws_row = (unsigned short)rows; ws.ws_col = COLS;
-        ws.ws_xpixel = COLS * CELL_W; ws.ws_ypixel = (unsigned short)(rows * CELL_H);
+        ws.ws_row = (unsigned short)rows; ws.ws_col = (unsigned short)T.cols;
+        ws.ws_xpixel = (unsigned short)(T.cols * g_cw); ws.ws_ypixel = (unsigned short)(rows * g_ch);
         ioctl(g_master, TIOCSWINSZ, &ws);
         if (g_child > 0) kill(-g_child, SIGWINCH);
     }
@@ -275,9 +296,11 @@ static void put_char(uint8_t ch)
     c = &line(T.cy)->c[T.cx];
     c->ch = ch;
     c->attr = T.pen.attr;
-    c->fg = color_of((T.pen.attr & A_BOLD) && T.pen.fg >= 0 && T.pen.fg < 8 ? T.pen.fg + 8 : T.pen.fg, T.pen.fg_rgb);
-    c->bg = T.pen.bg == DEF_BG ? 0 : color_of(T.pen.bg, T.pen.bg_rgb);
-    if (T.cx == COLS - 1) { if (T.autowrap) T.wrap_pending = 1; }
+    if (T.pen.fg == -2) { c->fg = T.pen.fg_rgb; c->attr |= A_FGRGB; }
+    else c->fg = (uint16_t)((T.pen.attr & A_BOLD) && T.pen.fg >= 0 && T.pen.fg < 8 ? T.pen.fg + 8 : T.pen.fg);
+    if (T.pen.bg == -2) { c->bg = T.pen.bg_rgb; c->attr |= A_BGRGB; }
+    else c->bg = (uint16_t)T.pen.bg;
+    if (T.cx == T.cols - 1) { if (T.autowrap) T.wrap_pending = 1; }
     else T.cx++;
     T.dirty = 1;
 }
@@ -296,7 +319,7 @@ static int P0(int i) { return i < T.nparams ? T.params[i] : 0; }
 static void clamp_cursor(void)
 {
     if (T.cx < 0) T.cx = 0;
-    if (T.cx >= COLS) T.cx = COLS - 1;
+    if (T.cx >= T.cols) T.cx = T.cols - 1;
     if (T.cy < 0) T.cy = 0;
     if (T.cy >= T.rows) T.cy = T.rows - 1;
     T.wrap_pending = 0;
@@ -349,7 +372,7 @@ static void set_mode(int on)
                 int y;
                 if (p == 1049) { T.saved_cx = T.cx; T.saved_cy = T.cy; T.saved_pen = T.pen; }
                 T.on_alt = 1;
-                for (y = 0; y < ROWS_FULL; y++) clear_line(&T.alt[y], 0, COLS);
+                for (y = 0; y < ROWS_MAX; y++) clear_line(&T.alt[y], 0, COLS_MAX);
             } else if (!on && T.on_alt) {
                 T.on_alt = 0;
                 if (p == 1049) { T.cx = T.saved_cx; T.cy = T.saved_cy; T.pen = T.saved_pen; clamp_cursor(); }
@@ -375,15 +398,15 @@ static void csi(char f)
     case 'H': case 'f': T.cy = P(0, 1) - 1; T.cx = P(1, 1) - 1; clamp_cursor(); break;
     case 'J':
         n = P0(0);
-        if (n == 0) { clear_line(line(T.cy), T.cx, COLS); for (y = T.cy + 1; y < T.rows; y++) clear_line(line(y), 0, COLS); }
-        else if (n == 1) { clear_line(line(T.cy), 0, T.cx + 1); for (y = 0; y < T.cy; y++) clear_line(line(y), 0, COLS); }
-        else { for (y = 0; y < T.rows; y++) clear_line(line(y), 0, COLS); }
+        if (n == 0) { clear_line(line(T.cy), T.cx, T.cols); for (y = T.cy + 1; y < T.rows; y++) clear_line(line(y), 0, T.cols); }
+        else if (n == 1) { clear_line(line(T.cy), 0, T.cx + 1); for (y = 0; y < T.cy; y++) clear_line(line(y), 0, T.cols); }
+        else { for (y = 0; y < T.rows; y++) clear_line(line(y), 0, T.cols); }
         T.dirty = 1; break;
     case 'K':
         n = P0(0);
-        if (n == 0) clear_line(line(T.cy), T.cx, COLS);
+        if (n == 0) clear_line(line(T.cy), T.cx, T.cols);
         else if (n == 1) clear_line(line(T.cy), 0, T.cx + 1);
-        else clear_line(line(T.cy), 0, COLS);
+        else clear_line(line(T.cy), 0, T.cols);
         T.dirty = 1; break;
     case 'L': if (T.cy >= T.top && T.cy <= T.bottom) scroll_down(T.cy, T.bottom, P(0, 1)); break;
     case 'M': if (T.cy >= T.top && T.cy <= T.bottom) scroll_up(T.cy, T.bottom, P(0, 1)); break;
@@ -391,14 +414,14 @@ static void csi(char f)
     case 'T': scroll_down(T.top, T.bottom, P(0, 1)); break;
     case 'P': {
         Line *l = line(T.cy); int k = P(0, 1), x;
-        if (k > COLS - T.cx) k = COLS - T.cx;
-        for (x = T.cx; x < COLS - k; x++) l->c[x] = l->c[x + k];
-        clear_line(l, COLS - k, COLS); T.dirty = 1; break;
+        if (k > T.cols - T.cx) k = T.cols - T.cx;
+        for (x = T.cx; x < T.cols - k; x++) l->c[x] = l->c[x + k];
+        clear_line(l, T.cols - k, T.cols); T.dirty = 1; break;
     }
     case '@': {
         Line *l = line(T.cy); int k = P(0, 1), x;
-        if (k > COLS - T.cx) k = COLS - T.cx;
-        for (x = COLS - 1; x >= T.cx + k; x--) l->c[x] = l->c[x - k];
+        if (k > T.cols - T.cx) k = T.cols - T.cx;
+        for (x = T.cols - 1; x >= T.cx + k; x--) l->c[x] = l->c[x - k];
         clear_line(l, T.cx, T.cx + k); T.dirty = 1; break;
     }
     case 'X': clear_line(line(T.cy), T.cx, T.cx + P(0, 1)); T.dirty = 1; break;
@@ -418,9 +441,79 @@ static void csi(char f)
         else if (P0(0) == 5) pty_puts("\033[0n");
         break;
     case 'c': if (!T.private_mode) pty_puts("\033[?6c"); break;
-    case 't': if (P0(0) == 18) { snprintf(buf, sizeof(buf), "\033[8;%d;%dt", T.rows, COLS); pty_puts(buf); } break;
+    case 't': if (P0(0) == 18) { snprintf(buf, sizeof(buf), "\033[8;%d;%dt", T.rows, T.cols); pty_puts(buf); } break;
     default: break;
     }
+}
+
+/* ---- characters beyond ASCII ------------------------------------------------ */
+
+/* the line-drawing and block characters drawn for any cell size (box_glyph),
+ * cell codes 0x80 + i; arms: left, right, up, down; 1 single, 2 double */
+typedef struct BoxChar { uint16_t cp; uint8_t l, r, u, d; uint8_t block; } BoxChar;
+enum { BK_NONE, BK_FULL, BK_TOP, BK_BOTTOM, BK_LEFT, BK_RIGHT, BK_LIGHT, BK_MEDIUM, BK_DARK };
+static const BoxChar BOX[] = {
+    { 0x2500, 1,1,0,0, 0 }, { 0x2502, 0,0,1,1, 0 }, { 0x250c, 0,1,0,1, 0 }, { 0x2510, 1,0,0,1, 0 },
+    { 0x2514, 0,1,1,0, 0 }, { 0x2518, 1,0,1,0, 0 }, { 0x251c, 0,1,1,1, 0 }, { 0x2524, 1,0,1,1, 0 },
+    { 0x252c, 1,1,0,1, 0 }, { 0x2534, 1,1,1,0, 0 }, { 0x253c, 1,1,1,1, 0 },
+    { 0x2550, 2,2,0,0, 0 }, { 0x2551, 0,0,2,2, 0 }, { 0x2554, 0,2,0,2, 0 }, { 0x2557, 2,0,0,2, 0 },
+    { 0x255a, 0,2,2,0, 0 }, { 0x255d, 2,0,2,0, 0 }, { 0x2560, 0,2,2,2, 0 }, { 0x2563, 2,0,2,2, 0 },
+    { 0x2566, 2,2,0,2, 0 }, { 0x2569, 2,2,2,0, 0 }, { 0x256c, 2,2,2,2, 0 },
+    { 0x2588, 0,0,0,0, BK_FULL }, { 0x2580, 0,0,0,0, BK_TOP }, { 0x2584, 0,0,0,0, BK_BOTTOM },
+    { 0x258c, 0,0,0,0, BK_LEFT }, { 0x2590, 0,0,0,0, BK_RIGHT }, { 0x2591, 0,0,0,0, BK_LIGHT },
+    { 0x2592, 0,0,0,0, BK_MEDIUM }, { 0x2593, 0,0,0,0, BK_DARK },
+};
+#define NBOX ((int)(sizeof(BOX) / sizeof(BOX[0])))
+
+/* a Unicode character -> a cell code: Latin-1 as itself, line drawing and
+ * blocks (heavy and rounded ones as light), a few look-alikes, else '?' */
+static uint8_t glyph_code(uint32_t cp)
+{
+    static const struct { uint16_t from, to; } alias[] = {
+        { 0x2501, 0x2500 }, { 0x2503, 0x2502 }, { 0x250f, 0x250c }, { 0x2513, 0x2510 }, { 0x2517, 0x2514 },
+        { 0x251b, 0x2518 }, { 0x2523, 0x251c }, { 0x252b, 0x2524 }, { 0x2533, 0x252c }, { 0x253b, 0x2534 },
+        { 0x254b, 0x253c }, { 0x256d, 0x250c }, { 0x256e, 0x2510 }, { 0x256f, 0x2518 }, { 0x2570, 0x2514 },
+        { 0x2552, 0x250c }, { 0x2553, 0x250c }, { 0x2555, 0x2510 }, { 0x2556, 0x2510 }, { 0x2558, 0x2514 },
+        { 0x2559, 0x2514 }, { 0x255b, 0x2518 }, { 0x255c, 0x2518 }, { 0x2574, 0x2500 }, { 0x2576, 0x2500 },
+        { 0x2575, 0x2502 }, { 0x2577, 0x2502 },
+    };
+    size_t i;
+    if (cp >= 32 && cp < 127) return (uint8_t)cp;
+    if (cp >= 0xa0 && cp <= 0xff) return (uint8_t)cp;
+    for (i = 0; i < sizeof(alias) / sizeof(alias[0]); i++) if (alias[i].from == cp) { cp = alias[i].to; break; }
+    for (i = 0; i < (size_t)NBOX; i++) if (BOX[i].cp == cp) return (uint8_t)(0x80 + i);
+    switch (cp) {
+    case 0x2018: case 0x2019: case 0x2032: return '\'';
+    case 0x201c: case 0x201d: case 0x2033: return '"';
+    case 0x2010: case 0x2011: case 0x2012: case 0x2013: case 0x2014: case 0x2212: return '-';
+    case 0x2022: case 0x2219: case 0x22c5: case 0x25cf: return 0xb7;   /* bullets: the middle dot */
+    case 0x2026: return '.';
+    case 0x2190: case 0x25c0: case 0x25c2: return '<';
+    case 0x2192: case 0x25b6: case 0x25b8: return '>';
+    case 0x2191: case 0x25b2: return '^';
+    case 0x2193: case 0x25bc: return 'v';
+    case 0x2713: case 0x2714: return 'v';
+    case 0x2717: case 0x2718: return 'x';
+    case 0x00a0: return ' ';
+    default: return '?';
+    }
+}
+
+/* DEC special graphics (ESC ( 0), what curses draws boxes with on terminals
+ * without Unicode */
+static uint8_t dec_graphic(uint8_t b)
+{
+    uint32_t cp;
+    switch (b) {
+    case 'j': cp = 0x2518; break; case 'k': cp = 0x2510; break; case 'l': cp = 0x250c; break;
+    case 'm': cp = 0x2514; break; case 'n': cp = 0x253c; break; case 'q': cp = 0x2500; break;
+    case 't': cp = 0x251c; break; case 'u': cp = 0x2524; break; case 'v': cp = 0x2534; break;
+    case 'w': cp = 0x252c; break; case 'x': cp = 0x2502; break; case 'a': cp = 0x2592; break;
+    case '0': cp = 0x2588; break; case '`': return '+'; case '~': return 0xb7; case 'f': return 0xb0;
+    case 'g': return 0xb1; case 'y': return '<'; case 'z': return '>'; case '_': return ' ';
+    default: return b;
+    }
+    return glyph_code(cp);
 }
 
 enum { S_GROUND, S_ESC, S_CSI, S_OSC, S_OSC_ESC, S_CHARSET };
@@ -433,16 +526,24 @@ static void term_feed(const uint8_t *p, size_t n)
         switch (T.state) {
         case S_GROUND:
             if (T.utf8_left) {
-                if ((b & 0xC0) == 0x80) { if (--T.utf8_left == 0) put_char('?'); continue; }
+                if ((b & 0xC0) == 0x80) {
+                    T.utf8 = (T.utf8 << 6) | (b & 0x3F);
+                    if (--T.utf8_left == 0) put_char(glyph_code(T.utf8));
+                    continue;
+                }
                 T.utf8_left = 0;
             }
-            if (b >= 0xC0 && b < 0xF8) { T.utf8_left = b >= 0xF0 ? 3 : b >= 0xE0 ? 2 : 1; continue; }
+            if (b >= 0xC0 && b < 0xF8) {
+                T.utf8_left = b >= 0xF0 ? 3 : b >= 0xE0 ? 2 : 1;
+                T.utf8 = b & (b >= 0xF0 ? 0x07 : b >= 0xE0 ? 0x0F : 0x1F);
+                continue;
+            }
             if (b >= 0x80) { put_char('?'); continue; }
-            if (b >= 32 && b < 127) { put_char(b); continue; }
+            if (b >= 32 && b < 127) { put_char(T.dec_graphics && b >= 0x5f ? dec_graphic(b) : b); continue; }
             switch (b) {
             case 7: g_bell = 1; break;
             case 8: if (T.cx > 0) T.cx--; T.wrap_pending = 0; T.dirty = 1; break;
-            case 9: T.cx = (T.cx / 8 + 1) * 8; if (T.cx >= COLS) T.cx = COLS - 1; T.wrap_pending = 0; T.dirty = 1; break;
+            case 9: T.cx = (T.cx / 8 + 1) * 8; if (T.cx >= T.cols) T.cx = T.cols - 1; T.wrap_pending = 0; T.dirty = 1; break;
             case 10: case 11: case 12: newline(); break;
             case 13: T.cx = 0; T.wrap_pending = 0; T.dirty = 1; break;
             case 27: T.state = S_ESC; break;
@@ -454,7 +555,8 @@ static void term_feed(const uint8_t *p, size_t n)
             switch (b) {
             case '[': T.state = S_CSI; T.nparams = 0; T.private_mode = 0; T.param_started = 0; memset(T.params, 0, sizeof(T.params)); break;
             case ']': T.state = S_OSC; break;
-            case '(': case ')': case '*': case '+': T.state = S_CHARSET; break;
+            case '(': T.state = S_CHARSET; T.charset_g0 = 1; break;
+            case ')': case '*': case '+': T.state = S_CHARSET; T.charset_g0 = 0; break;
             case '7': T.saved_cx = T.cx; T.saved_cy = T.cy; T.saved_pen = T.pen; break;
             case '8': T.cx = T.saved_cx; T.cy = T.saved_cy; T.pen = T.saved_pen; clamp_cursor(); break;
             case 'D': newline(); break;
@@ -464,7 +566,7 @@ static void term_feed(const uint8_t *p, size_t n)
             default: break;   /* ESC = / ESC > (keypad modes) and others */
             }
             break;
-        case S_CHARSET: T.state = S_GROUND; break;
+        case S_CHARSET: if (T.charset_g0) T.dec_graphics = b == '0'; T.state = S_GROUND; break;
         case S_CSI:
             if (b >= '0' && b <= '9') {
                 if (T.nparams == 0) T.nparams = 1;
@@ -575,8 +677,8 @@ static PspExpContext *ctx;
 static PspExpFont font;
 static int have_font, blink_on = 1;
 
-typedef struct Batch { PspExpSpriteRec r[COLS * ROWS_FULL + 512]; int n; } Batch;
-static Batch g_batch;
+typedef struct Batch { PspExpSpriteRec r[COLS_MAX * ROWS_MAX + 512]; int n; } Batch;
+static Batch g_batch, g_tbatch;   /* the UI font's glyphs, the terminal font's */
 
 static void glyph(int x, int y, uint8_t ch, uint16_t color)
 {
@@ -588,51 +690,150 @@ static void glyph(int x, int y, uint8_t ch, uint16_t color)
     g_batch.n++;
 }
 
-static void text(int x, int y, const char *s, uint16_t color) { for (; *s; s++, x += CELL_W) glyph(x, y, (uint8_t)*s, color); }
+static void text(int x, int y, const char *s, uint16_t color) { for (; *s; s++, x += UI_W) glyph(x, y, (uint8_t)*s, color); }
+
+/* ---- the terminal font: Spleen glyphs plus line drawing, one CLUT4 atlas ---- */
+
+#define TFONT_ID 3
+#define TF_COLS 16
+static int have_tfont;
+
+/* the frame of a cell code in the atlas: ASCII, Latin-1, then BOX[] */
+static int tframe(uint8_t ch)
+{
+    if (ch >= 0x80 && ch < 0x80 + NBOX) return TERM_FONT_GLYPHS + (ch - 0x80);
+    return term_font_index(ch);
+}
+
+/* a line-drawing or block character for a w x h cell */
+static void box_glyph(const BoxChar *b, int w, int h, uint8_t *px /* w*h, 1 = on */)
+{
+    int cx = (w - 1) / 2, cy = (h - 1) / 2, x, y;
+    memset(px, 0, (size_t)(w * h));
+#define SET(X, Y) do { int X_ = (X), Y_ = (Y); if (X_ >= 0 && X_ < w && Y_ >= 0 && Y_ < h) px[Y_ * w + X_] = 1; } while (0)
+    if (b->block) {
+        for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+            int on = 0;
+            switch (b->block) {
+            case BK_FULL: on = 1; break;
+            case BK_TOP: on = y < h / 2; break;
+            case BK_BOTTOM: on = y >= h / 2; break;
+            case BK_LEFT: on = x < w / 2; break;
+            case BK_RIGHT: on = x >= w / 2; break;
+            case BK_LIGHT: on = (x % 2 == 0) && (y % 2 == 0); break;
+            case BK_MEDIUM: on = (x + y) % 2 == 0; break;
+            case BK_DARK: on = !((x % 2 == 0) && (y % 2 == 0)); break;
+            }
+            if (on) px[y * w + x] = 1;
+        }
+        return;
+    }
+    /* each arm from the centre to the edge; a double arm is two lines, one
+     * pixel either side of the centre line; they meet at the centre */
+    if (b->l) for (x = 0; x <= cx; x++) { if (b->l == 1) SET(x, cy); else { SET(x, cy - 1); SET(x, cy + 1); } }
+    if (b->r) for (x = cx; x < w; x++) { if (b->r == 1) SET(x, cy); else { SET(x, cy - 1); SET(x, cy + 1); } }
+    if (b->u) for (y = 0; y <= cy; y++) { if (b->u == 1) SET(cx, y); else { SET(cx - 1, y); SET(cx + 1, y); } }
+    if (b->d) for (y = cy; y < h; y++) { if (b->d == 1) SET(cx, y); else { SET(cx - 1, y); SET(cx + 1, y); } }
+    /* double corners and joins: close the inner gap */
+    if ((b->l == 2 || b->r == 2) && (b->u == 2 || b->d == 2)) {
+        SET(cx - 1, cy - 1); SET(cx + 1, cy - 1); SET(cx - 1, cy + 1); SET(cx + 1, cy + 1);
+    }
+#undef SET
+}
+
+/* uploads TERM_FONTS[g_font] as TFONT_ID (re-uploaded on a change; the
+ * library replays it after reconnects) */
+static void tfont_upload(void)
+{
+    static uint8_t pixels[128 * 256 / 2];
+    static PspExpFrame frames[TERM_FONT_GLYPHS + NBOX];
+    const TermFont *f = &TERM_FONTS[g_font];
+    int n = TERM_FONT_GLYPHS + NBOX, i, x, y, aw = 128, ah;
+    uint8_t cell[16 * 16];
+    PspExpTextureDesc desc;
+    ah = ((n + TF_COLS - 1) / TF_COLS) * f->h;
+    ah = ah <= 64 ? 64 : ah <= 128 ? 128 : 256;
+    memset(pixels, 0, sizeof(pixels));
+    for (i = 0; i < n; i++) {
+        int ox = (i % TF_COLS) * f->w, oy = (i / TF_COLS) * f->h;
+        if (i < TERM_FONT_GLYPHS) {
+            for (y = 0; y < f->h; y++) for (x = 0; x < f->w; x++) cell[y * f->w + x] = (f->bits[i * f->h + y] >> (7 - x)) & 1;
+        } else box_glyph(&BOX[i - TERM_FONT_GLYPHS], f->w, f->h, cell);
+        for (y = 0; y < f->h; y++) for (x = 0; x < f->w; x++)
+            if (cell[y * f->w + x]) { int idx = (oy + y) * aw + ox + x; pixels[idx / 2] |= (uint8_t)(1u << ((idx & 1) * 4)); }
+        frames[i].u0 = (uint16_t)ox; frames[i].v0 = (uint16_t)oy; frames[i].w = f->w; frames[i].h = f->h;
+    }
+    if (have_tfont) pspexp_release(ctx, TFONT_ID);
+    memset(&desc, 0, sizeof(desc));
+    desc.width = (uint16_t)aw; desc.height = (uint16_t)ah; desc.format = PSPEXP_TEX_T4;
+    desc.layout = PSPEXP_LAYOUT_LINEAR; desc.priority = PSPEXP_PRIORITY_HIGH; desc.palette = FONT_PAL_ID;
+    have_tfont = pspexp_upload_texture(ctx, TFONT_ID, &desc, pixels, (size_t)(aw * ah / 2), frames, (uint32_t)n) == 0;
+    g_cw = f->w; g_ch = f->h;
+}
+
+static void tglyph(int x, int y, uint8_t ch, uint16_t color)
+{
+    int fr;
+    if (ch == ' ' || (fr = tframe(ch)) < 0) return;
+    if (g_tbatch.n >= (int)(sizeof(g_tbatch.r) / sizeof(g_tbatch.r[0]))) return;
+    g_tbatch.r[g_tbatch.n].x = (int16_t)x; g_tbatch.r[g_tbatch.n].y = (int16_t)y;
+    g_tbatch.r[g_tbatch.n].frame = (uint16_t)fr;
+    g_tbatch.r[g_tbatch.n].color = color ? color : 0x0001;   /* 0 would mean "no tint" */
+    g_tbatch.n++;
+}
+
+/* the on-screen rows: the keyboard takes the bottom 72 px when shown */
+static int rows_full(void) { return 272 / g_ch > ROWS_MAX ? ROWS_MAX : 272 / g_ch; }
+static int rows_kb(void) { return KB_Y / g_ch; }
 
 static void draw_terminal(int rows)
 {
     int y, x;
+    uint16_t tbg = rgb565(theme()->bg);
     for (y = 0; y < rows; y++) {
         const Line *l;
         int src = y - T.view;   /* with scrollback: rows above the screen come from the history */
         if (src < 0) l = sb_line(-src); else l = line(src);
-        /* backgrounds: runs of equal non-black colour */
-        for (x = 0; x < COLS;) {
+        /* backgrounds: runs of one colour other than the theme's */
+        for (x = 0; x < T.cols;) {
             const Cell *c = &l->c[x];
-            uint16_t bg = (c->attr & A_REVERSE) ? c->fg : c->bg;
+            uint16_t bg = (c->attr & A_REVERSE) ? cell_fg(c) : cell_bg(c);
             int x1 = x + 1;
-            while (x1 < COLS) {
+            while (x1 < T.cols) {
                 const Cell *d = &l->c[x1];
-                uint16_t bg2 = (d->attr & A_REVERSE) ? d->fg : d->bg;
+                uint16_t bg2 = (d->attr & A_REVERSE) ? cell_fg(d) : cell_bg(d);
                 if (bg2 != bg) break;
                 x1++;
             }
-            if (bg) pspexp_fill_rect(ctx, (int16_t)(x * CELL_W), (int16_t)(y * CELL_H), (int16_t)((x1 - x) * CELL_W), CELL_H, bg, 255);
+            if (bg != tbg) pspexp_fill_rect(ctx, (int16_t)(x * g_cw), (int16_t)(y * g_ch), (int16_t)((x1 - x) * g_cw), (int16_t)g_ch, bg, 255);
             x = x1;
         }
-        for (x = 0; x < COLS; x++) {
+        for (x = 0; x < T.cols; x++) {
             const Cell *c = &l->c[x];
-            uint16_t fg = (c->attr & A_REVERSE) ? (c->bg ? c->bg : 0) : c->fg;
-            if ((c->attr & A_REVERSE) && !c->bg) fg = 0;
-            glyph(x * CELL_W, y * CELL_H, c->ch, fg ? fg : 0x0001);
-            if (c->attr & A_UNDER) pspexp_fill_rect(ctx, (int16_t)(x * CELL_W), (int16_t)(y * CELL_H + 7), CELL_W, 1, fg, 255);
+            uint16_t fg = (c->attr & A_REVERSE) ? cell_bg(c) : cell_fg(c);
+            tglyph(x * g_cw, y * g_ch, c->ch, fg);
+            if (c->attr & A_UNDER) pspexp_fill_rect(ctx, (int16_t)(x * g_cw), (int16_t)(y * g_ch + g_ch - 1), (int16_t)g_cw, 1, fg, 255);
         }
     }
     if (T.view == 0 && T.cursor_visible && blink_on && T.cy < rows)
-        pspexp_fill_rect(ctx, (int16_t)(T.cx * CELL_W), (int16_t)(T.cy * CELL_H + 6), CELL_W, 2, rgb565(0xffffff), 200);
-    if (T.view > 0) {
-        char s[40];
-        snprintf(s, sizeof(s), " SCROLLBACK -%d ", T.view);
-        pspexp_fill_rect(ctx, (int16_t)(480 - (int)strlen(s) * CELL_W), 0, (int16_t)(strlen(s) * CELL_W), CELL_H, rgb565(0xe5e510), 255);
-        text(480 - (int)strlen(s) * CELL_W, 0, s, 0x0001);
-    }
+        pspexp_fill_rect(ctx, (int16_t)(T.cx * g_cw), (int16_t)(T.cy * g_ch + g_ch - 2), (int16_t)g_cw, 2, rgb565(theme()->cursor), 200);
+}
+
+/* while scrolled back: a label at the top right (UI font) */
+static void draw_scroll_label(void)
+{
+    char s[40];
+    if (T.view <= 0) return;
+    snprintf(s, sizeof(s), " SCROLLBACK -%d ", T.view);
+    pspexp_fill_rect(ctx, (int16_t)(477 - (int)strlen(s) * UI_W), 0, (int16_t)(strlen(s) * UI_W), UI_H, rgb565(theme()->accent), 255);
+    text(477 - (int)strlen(s) * UI_W, 0, s, rgb565(theme()->accent_text));
 }
 
 static void draw_keyboard(void)
 {
     int r, i;
-    pspexp_fill_rect(ctx, 0, KB_Y, 480, KB_H, rgb565(0x202830), 255);
+    const TermTheme *th = theme();
+    pspexp_fill_rect(ctx, 0, KB_Y, 480, KB_H, rgb565(th->panel), 255);
     for (r = 0; r < KROWS; r++) {
         int x = 0, y = KB_Y + r * KEY_H;
         for (i = 0; i < KCOUNT[r]; i++) {
@@ -640,28 +841,267 @@ static void draw_keyboard(void)
             int w = k->w * 16, sel = r == kb_row && i == kb_col;
             int shifted = sticky_shift || held_shift;
             int active = (k->kind == K_SHIFT && shifted) || (k->kind == K_CTRL && (sticky_ctrl || held_ctrl));
-            uint16_t bg = sel ? rgb565(0xe0a020) : active ? rgb565(0x3b78ff) : rgb565(0x3a4450);
-            uint16_t fg = sel ? rgb565(0x101010) : rgb565(0xe8e8e8);
+            uint16_t bg = rgb565(sel ? th->accent : active ? th->active : th->key);
+            uint16_t fg = rgb565(sel ? th->accent_text : th->key_text);
             /* with Shift active the keys show what they will type */
             const char *label = (shifted && k->sout && k->kind == 0 && k->out && !k->out[1]) ? k->sout : k->label;
             int len = (int)strlen(label);
             pspexp_fill_rect(ctx, (int16_t)(x + 1), (int16_t)(y + 1), (int16_t)(w - 2), KEY_H - 2, bg, 255);
-            text(x + (w - len * CELL_W) / 2, y + (KEY_H - CELL_H) / 2 + 1, label, fg);
+            text(x + (w - len * UI_W) / 2, y + (KEY_H - UI_H) / 2 + 1, label, fg);
             x += w;
         }
     }
 }
 
+/* ---- settings: ~/.config/pspexp-term/settings -------------------------------- */
+
+static void settings_path(char *out, size_t n, const char *file)
+{
+    const char *home = getenv("HOME");
+    snprintf(out, n, "%s/.config/pspexp-term/%s", home ? home : ".", file);
+}
+
+static void settings_load(void)
+{
+    char path[512], line[160];
+    FILE *f;
+    settings_path(path, sizeof(path), "settings");
+    if (!(f = fopen(path, "r"))) return;
+    while (fgets(line, sizeof(line), f)) {
+        char *v = strchr(line, '='), *e;
+        int i;
+        if (!v) continue;
+        *v++ = 0;
+        e = v + strlen(v); while (e > v && (e[-1] == '\n' || e[-1] == '\r')) *--e = 0;
+        if (!strcmp(line, "theme") && (i = term_theme_find(v)) >= 0) g_theme = i;
+        if (!strcmp(line, "font")) for (i = 0; i < TERM_FONT_COUNT; i++) if (!strcmp(TERM_FONTS[i].name, v)) g_font = i;
+    }
+    fclose(f);
+}
+
+static void settings_save(void)
+{
+    char path[512], dir[512];
+    FILE *f;
+    settings_path(dir, sizeof(dir), "");
+    { char parent[512]; snprintf(parent, sizeof(parent), "%s", dir); *strrchr(parent, '/') = 0; *strrchr(parent, '/') = 0; mkdir(parent, 0755); }
+    mkdir(dir, 0755);
+    settings_path(path, sizeof(path), "settings");
+    if (!(f = fopen(path, "w"))) return;
+    fprintf(f, "theme=%s\nfont=%s\n", TERM_THEMES[g_theme].name, TERM_FONTS[g_font].name);
+    fclose(f);
+}
+
+static int term_rows(void) { return kb_shown ? rows_kb() : rows_full(); }
+
+/* a new terminal font: its atlas, the columns and rows, the shell told */
+static void font_apply(int i)
+{
+    g_font = i;
+    tfont_upload();
+    T.cols = 480 / g_cw > COLS_MAX ? COLS_MAX : 480 / g_cw;
+    term_resize(term_rows());
+}
+
+/* ---- the context menu (a tap of L) --------------------------------------------- */
+
+static TermMenu g_menu;
+static int g_menu_open, g_menu_sel, g_menu_top;
+static int g_help_open;   /* the controls, on screen */
+/* the list shown: the menu itself, or a choice of themes or fonts (moving
+ * through them tries each at once; circle puts the old one back) */
+enum { ML_MAIN, ML_THEMES, ML_FONTS };
+static int g_menu_list, g_menu_undo;
+/* the rows shown: a heading, then its items; heading rows have item NULL */
+typedef struct MenuRow { const char *heading; const TermMenuItem *item; } MenuRow;
+static MenuRow g_rows[80];
+static int g_nrows;
+static TermMenuItem g_choice[16];
+
+static void menu_build(void)
+{
+    int sec = T.on_alt ? TM_FULL : TM_SHELL, i;
+    g_nrows = 0;
+    if (g_menu_list == ML_THEMES || g_menu_list == ML_FONTS) {
+        int n = g_menu_list == ML_THEMES ? TERM_THEME_COUNT : TERM_FONT_COUNT;
+        g_rows[g_nrows++] = (MenuRow){ g_menu_list == ML_THEMES ? "Theme" : "Font size", NULL };
+        for (i = 0; i < n && i < 16; i++) {
+            if (g_menu_list == ML_THEMES) snprintf(g_choice[i].label, sizeof(g_choice[i].label), "%s", TERM_THEMES[i].name);
+            else snprintf(g_choice[i].label, sizeof(g_choice[i].label), "%s  (%d x %d characters)", TERM_FONTS[i].name,
+                          480 / TERM_FONTS[i].w > COLS_MAX ? COLS_MAX : 480 / TERM_FONTS[i].w, 272 / TERM_FONTS[i].h > ROWS_MAX ? ROWS_MAX : 272 / TERM_FONTS[i].h);
+            g_choice[i].kind = TM_ACTION;
+            snprintf(g_choice[i].arg, sizeof(g_choice[i].arg), "choose");
+            g_rows[g_nrows++] = (MenuRow){ NULL, &g_choice[i] };
+        }
+        g_menu_undo = g_menu_list == ML_THEMES ? g_theme : g_font;
+        g_menu_sel = 1 + g_menu_undo;
+        g_menu_top = 0;
+        return;
+    }
+    g_rows[g_nrows++] = (MenuRow){ T.on_alt ? "Full-screen program" : "Shell", NULL };
+    for (i = 0; i < g_menu.n[sec]; i++) g_rows[g_nrows++] = (MenuRow){ NULL, &g_menu.item[sec][i] };
+    g_rows[g_nrows++] = (MenuRow){ "Terminal", NULL };
+    for (i = 0; i < g_menu.n[TM_ALWAYS]; i++) g_rows[g_nrows++] = (MenuRow){ NULL, &g_menu.item[TM_ALWAYS][i] };
+    g_menu_sel = 1;
+    g_menu_top = 0;
+}
+
+static void menu_open(void)
+{
+    char path[512];
+    settings_path(path, sizeof(path), "menu");
+    term_menu_load(&g_menu, path);   /* read each time: edits apply at once */
+    g_menu_list = ML_MAIN;
+    menu_build();
+    g_menu_open = 1;
+    T.dirty = 1;
+}
+
+/* in a choice list: try the highlighted one */
+static void menu_preview(void)
+{
+    int i = g_menu_sel - 1;
+    if (g_menu_list == ML_THEMES && i != g_theme) { g_theme = i; T.dirty = 1; }
+    if (g_menu_list == ML_FONTS && i != g_font) font_apply(i);
+}
+
+static void menu_move(int d)
+{
+    int i = g_menu_sel;
+    do { i = (i + d + g_nrows) % g_nrows; } while (!g_rows[i].item && i != g_menu_sel);
+    g_menu_sel = i;
+    if (g_menu_list != ML_MAIN) menu_preview();
+    T.dirty = 1;
+}
+
+/* circle: a choice list goes back to the old value and to the menu */
+static void menu_back(void)
+{
+    if (g_menu_list == ML_THEMES) g_theme = g_menu_undo;
+    else if (g_menu_list == ML_FONTS) { if (g_font != g_menu_undo) font_apply(g_menu_undo); }
+    else { g_menu_open = 0; T.dirty = 1; return; }
+    g_menu_list = ML_MAIN;
+    menu_build();
+    T.dirty = 1;
+}
+
+static void menu_run(const TermMenuItem *it)
+{
+    T.dirty = 1;
+    if (g_menu_list != ML_MAIN) {   /* a theme or font chosen: kept */
+        settings_save();
+        g_menu_open = 0;
+        return;
+    }
+    if (!strcmp(it->arg, "themes") && it->kind == TM_ACTION) { g_menu_list = ML_THEMES; menu_build(); return; }
+    if (!strcmp(it->arg, "fonts") && it->kind == TM_ACTION) { g_menu_list = ML_FONTS; menu_build(); return; }
+    g_menu_open = 0;
+    if (it->kind == TM_KEYS) { pty_write(it->arg, (size_t)it->len); T.view = 0; return; }
+    if (!strcmp(it->arg, "scroll-top")) T.view = T.on_alt ? 0 : T.sb_count;
+    else if (!strcmp(it->arg, "scroll-bottom")) T.view = 0;
+    else if (!strcmp(it->arg, "keyboard")) { kb_shown = !kb_shown; term_resize(term_rows()); }
+    else if (!strcmp(it->arg, "keys")) g_help_open = 1;
+    else fprintf(stderr, "[pspexp-term] menu: unknown action @%s\n", it->arg);
+}
+
+/* ---- the controls, on screen (menu: Controls...) ---------------------------------- */
+
+static const char *const HELP[][2] = {
+    { "#", "Typing" },
+    { "D-pad", "move on the keyboard (hidden: arrow keys)" },
+    { "Cross", "type the highlighted key" },
+    { "Circle", "Backspace" },
+    { "Square", "Space" },
+    { "Triangle", "Enter" },
+    { "Start", "Tab (completion)" },
+    { "Nub", "arrow keys (history, cursor)" },
+    { "L held", "Shift" },
+    { "R held", "Ctrl" },
+    { "#", "Screen" },
+    { "Select", "keyboard on / off" },
+    { "Select held", "switch to the launcher" },
+    { "L + nub", "scroll back, like a mouse wheel" },
+    { "R + up/down", "scroll back a line" },
+    { "R + left/right", "scroll back a page" },
+    { "#", "Menu" },
+    { "L tapped", "this menu: keys, commands, settings" },
+    { "D-pad", "choose; left / right: a page" },
+    { "Cross", "run it       Circle: back / close" },
+};
+
+static void draw_help(void)
+{
+    const TermTheme *th = theme();
+    int n = (int)(sizeof(HELP) / sizeof(HELP[0])), i, x0 = 40, y0 = 14, w = 400, h = n * 11 + 30;
+    pspexp_fill_rect(ctx, (int16_t)(x0 - 1), (int16_t)(y0 - 1), (int16_t)(w + 2), (int16_t)(h + 2), rgb565(th->accent), 255);
+    pspexp_fill_rect(ctx, (int16_t)x0, (int16_t)y0, (int16_t)w, (int16_t)h, rgb565(th->panel), 250);
+    text(x0 + 8, y0 + 6, "Controls", rgb565(th->accent));
+    for (i = 0; i < n; i++) {
+        int y = y0 + 20 + i * 11;
+        if (!strcmp(HELP[i][0], "#")) { text(x0 + 8, y, HELP[i][1], rgb565(th->heading)); continue; }
+        text(x0 + 20, y, HELP[i][0], rgb565(th->accent));
+        text(x0 + 20 + 16 * UI_W, y, HELP[i][1], rgb565(th->key_text));
+    }
+    text(x0 + w - 26 * UI_W, y0 + h - 12, "any button closes this", rgb565(th->heading));
+}
+
+#define MENU_W 34                      /* characters */
+#define MENU_ROWS 28                   /* at most, on screen */
+static void draw_menu(void)
+{
+    const TermTheme *th = theme();
+    int shown = g_nrows < MENU_ROWS ? g_nrows : MENU_ROWS, i;
+    int w = MENU_W * UI_W + 8, h = shown * 9 + 8, x0 = 480 - w - 6, y0 = (272 - h) / 2;
+    if (g_menu_sel < g_menu_top + 1) g_menu_top = g_menu_sel > 0 ? g_menu_sel - 1 : 0;
+    if (g_menu_sel >= g_menu_top + shown) g_menu_top = g_menu_sel - shown + 1;
+    pspexp_fill_rect(ctx, (int16_t)(x0 - 1), (int16_t)(y0 - 1), (int16_t)(w + 2), (int16_t)(h + 2), rgb565(th->accent), 255);
+    pspexp_fill_rect(ctx, (int16_t)x0, (int16_t)y0, (int16_t)w, (int16_t)h, rgb565(th->panel), 245);
+    for (i = 0; i < shown; i++) {
+        const MenuRow *r = &g_rows[g_menu_top + i];
+        int y = y0 + 4 + i * 9;
+        if (!r->item) {
+            text(x0 + 4, y, r->heading, rgb565(th->heading));
+            pspexp_fill_rect(ctx, (int16_t)(x0 + 6 + (int)strlen(r->heading) * UI_W), (int16_t)(y + 4),
+                             (int16_t)(w - 10 - (int)strlen(r->heading) * UI_W), 1, rgb565(th->key), 255);
+            continue;
+        }
+        if (g_menu_top + i == g_menu_sel) {
+            pspexp_fill_rect(ctx, (int16_t)(x0 + 2), (int16_t)(y - 1), (int16_t)(w - 4), 9, rgb565(th->accent), 255);
+            text(x0 + 10, y, r->item->label, rgb565(th->accent_text));
+        } else text(x0 + 10, y, r->item->label, rgb565(th->key_text));
+    }
+    if (g_menu_top > 0) text(x0 + w - 10, y0 + 4, "^", rgb565(th->heading));
+    if (g_menu_top + shown < g_nrows) text(x0 + w - 10, y0 + h - 12, "v", rgb565(th->heading));
+}
+
+/* while scrolled back: where in the history the screen is */
+static void draw_scrollbar(int rows)
+{
+    int track = rows * g_ch, total = T.sb_count + rows, len, pos;
+    if (T.view <= 0 || T.sb_count <= 0) return;
+    len = track * rows / total; if (len < 6) len = 6;
+    pos = (track - len) * (T.sb_count - T.view) / T.sb_count;
+    pspexp_fill_rect(ctx, 477, 0, 3, (int16_t)track, rgb565(theme()->key), 200);
+    pspexp_fill_rect(ctx, 477, (int16_t)pos, 3, (int16_t)len, rgb565(theme()->accent), 255);
+}
+
 static void render(void)
 {
-    int rows = kb_shown ? ROWS_KB : ROWS_FULL;
-    g_batch.n = 0;
+    int rows = term_rows();
+    g_batch.n = 0; g_tbatch.n = 0;
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, 480, 272);
-    pspexp_fill_rect(ctx, 0, 0, 480, 272, 0, 255);
-    if (have_font) {
+    pspexp_fill_rect(ctx, 0, 0, 480, 272, rgb565(theme()->bg), 255);
+    if (have_font && have_tfont) {
         draw_terminal(rows);
+        if (g_tbatch.n) pspexp_draw_sprite_batch(ctx, TFONT_ID, g_tbatch.r, (uint32_t)g_tbatch.n);
         if (kb_shown) draw_keyboard();
+        draw_scroll_label();
+        if (g_batch.n) pspexp_draw_sprite_batch(ctx, font.atlas, g_batch.r, (uint32_t)g_batch.n);
+        g_batch.n = 0;
+        draw_scrollbar(rows);
+        if (g_menu_open) draw_menu();   /* over everything: its own text batch */
+        if (g_help_open) draw_help();
         if (g_batch.n) pspexp_draw_sprite_batch(ctx, font.atlas, g_batch.r, (uint32_t)g_batch.n);
     }
     draw_pointer();
@@ -736,7 +1176,7 @@ static void spawn_shell(void)
 {
     struct winsize ws;
     memset(&ws, 0, sizeof(ws));
-    ws.ws_row = (unsigned short)T.rows; ws.ws_col = COLS;
+    ws.ws_row = (unsigned short)T.rows; ws.ws_col = T.cols;
     g_child = forkpty(&g_master, NULL, NULL, &ws);
     if (g_child < 0) { perror("forkpty"); exit(1); }
     if (g_child == 0) {
@@ -834,6 +1274,7 @@ static int fire(int v, int held, uint64_t now, int repeat)
 }
 
 static uint32_t g_prev_buttons;
+static int g_prev_l_held;
 static int g_prev_select_held, g_prev_select_released, g_select_tap;
 static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons drive the keypad */
 static int mirror_available(void);
@@ -910,10 +1351,54 @@ static void handle_input(void)
     if (g_view_launcher) { launcher_input(b, pressed, up, down, left, right, now); return; }
     if (shift != held_shift || ctrl != held_ctrl) { held_shift = shift; held_ctrl = ctrl; if (kb_shown) T.dirty = 1; }
 
-    if (g_select_tap) { kb_shown = !kb_shown; term_resize(kb_shown ? ROWS_KB : ROWS_FULL); }
+    /* L tapped alone (no other button, no nub, under 0.4 s): the context menu;
+     * held, it stays Shift */
+    {
+        static uint64_t l_down; static int l_used;
+        int nub = ax < -60 || ax > 60 || ay < -60 || ay > 60;
+        if (pressed & PSPEXP_BUTTON_LTRIGGER) { l_down = now; l_used = 0; }
+        if (shift && ((b & ~PSPEXP_BUTTON_LTRIGGER) || nub)) l_used = 1;
+        if (!shift && (g_prev_l_held) && !l_used && now - l_down < 400000u) {
+            if (g_menu_open) { g_menu_open = 0; T.dirty = 1; } else menu_open();
+        }
+        g_prev_l_held = shift;
+    }
+    if (g_help_open) {
+        if (pressed || up || down || left || right) { g_help_open = 0; T.dirty = 1; }
+        return;
+    }
+    if (g_menu_open) {
+        if (up) menu_move(-1);
+        if (down) menu_move(1);
+        if (left) { int k; for (k = 0; k < 8; k++) menu_move(-1); }
+        if (right) { int k; for (k = 0; k < 8; k++) menu_move(1); }
+        if (fire(V_CROSS, b & PSPEXP_BUTTON_CROSS, now, 0) && g_rows[g_menu_sel].item) menu_run(g_rows[g_menu_sel].item);
+        else if (pressed & PSPEXP_BUTTON_CIRCLE) menu_back();
+        if (g_select_tap) { while (g_menu_open) menu_back(); }
+        return;
+    }
+
+    /* L + nub: scroll like a wheel, faster the further it is pushed */
+    if (shift && !T.on_alt && (ay < -30 || ay > 30)) {
+        static uint64_t last; static float acc;
+        float dt = last && now - last < 200000u ? (now - last) / 1e6f : 0.016f;
+        float v = (float)((ay < 0 ? -ay : ay) - 30) / 97.0f;   /* 0..1 */
+        acc += (ay < 0 ? 1.0f : -1.0f) * v * v * 120.0f * dt;   /* up to 120 lines a second */
+        last = now;
+        if (acc >= 1.0f || acc <= -1.0f) {
+            T.view += (int)acc;
+            acc -= (float)(int)acc;
+            if (T.view > T.sb_count) T.view = T.sb_count;
+            if (T.view < 0) T.view = 0;
+            T.dirty = 1;
+        }
+        ax = ay = 0;   /* not arrows too */
+    }
+
+    if (g_select_tap) { kb_shown = !kb_shown; term_resize(term_rows()); }
 
     if (ctrl && (up || down || left || right)) {   /* R + direction: scrollback */
-        int page = (kb_shown ? ROWS_KB : ROWS_FULL) - 1;
+        int page = term_rows() - 1;
         if (up) T.view++;
         if (down) T.view--;
         if (left) T.view += page;
@@ -1486,7 +1971,7 @@ static void host_key(int code, int value)
     default: break;
     }
     if (value == 0) return;   /* 1 press, 2 auto-repeat */
-    if (kb_shown) { kb_shown = 0; term_resize(ROWS_FULL); }   /* a real keyboard: no need for the on-screen one */
+    if (kb_shown) { kb_shown = 0; term_resize(term_rows()); }   /* a real keyboard: no need for the on-screen one */
     if (k_shift && (code == KEY_PAGEUP || code == KEY_PAGEDOWN)) {   /* Shift+PgUp/PgDn: scrollback */
         int page = T.rows - 1;
         T.view += code == KEY_PAGEUP ? page : -page;
@@ -1529,7 +2014,7 @@ static void host_key(int code, int value)
 static void mouse_report(int button, int press, int motion)
 {
     char buf[40];
-    int cx = m_x / CELL_W + 1, cy = m_y / CELL_H + 1;
+    int cx = m_x / g_cw + 1, cy = m_y / g_ch + 1;
     if (!T.mouse_mode || T.view) return;
     if (cy > T.rows) return;
     if (motion) button += 32;
@@ -1753,7 +2238,10 @@ int main(int argc, char **argv)
         } else if ((f = fopen(pidfile, "w"))) { fprintf(f, "%d\n", (int)getpid()); fclose(f); }
     }
 
-    term_reset(kb_shown ? ROWS_KB : ROWS_FULL);
+    settings_load();
+    g_cw = TERM_FONTS[g_font].w; g_ch = TERM_FONTS[g_font].h;
+    T.cols = 480 / g_cw > COLS_MAX ? COLS_MAX : 480 / g_cw;
+    term_reset(term_rows());
     spawn_shell();
     audio_fifo_open(fifo_path);
 
@@ -1785,6 +2273,7 @@ int main(int argc, char **argv)
     }
     /* uploaded once, replayed by the library after every reconnect */
     have_font = pspexp_font_builtin_upload(ctx, FONT_ID, FONT_PAL_ID, &font) == 0;
+    tfont_upload();   /* after the UI font: it uses the same palette */
     if (g_launcher_on) {
         if (!g_launcher_assets) g_launcher_assets = getenv("PSPEXP_LAUNCHER_ASSETS");
         if (!g_launcher_assets) g_launcher_assets = access("/usr/local/share/pspexp/launcher/lucide.ttf", R_OK) == 0 ? "/usr/local/share/pspexp/launcher"

@@ -124,7 +124,7 @@ if(PSPEXP_HAVE_USB)
   target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
 endif()
 
-add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
+add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
   tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c)
 target_compile_definitions(pspexp-term PRIVATE PSPEXP_LAUNCHER_ASSET_DIR="${CMAKE_SOURCE_DIR}/tools/pspexp-term/assets")
 target_link_libraries(pspexp-term PRIVATE pspexp pspexp_null pspexp_tcp)
@@ -169,6 +169,8 @@ if(PSPEXP_BUILD_TESTS)
   add_test(NAME launcher_lib COMMAND test_launcher_lib)
   add_executable(test_launcher_board tests/test_launcher_board.c tools/pspexp-term/launcher_board.c)
   add_test(NAME launcher_board COMMAND test_launcher_board)
+  add_executable(test_term_menu tests/test_term_menu.c tools/pspexp-term/term_menu.c)
+  add_test(NAME term_menu COMMAND test_term_menu)
   add_executable(test_runtime tests/test_runtime.c)
   target_link_libraries(test_runtime PRIVATE pspexp pspexp_null)
   add_test(NAME runtime COMMAND test_runtime)
