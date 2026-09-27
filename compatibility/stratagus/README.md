@@ -29,7 +29,7 @@ CMakeLists.txt                 WITH_PSPEXP / PSPEXP_DIR: add_subdirectory(PSPExp
 ```
 
 `stratagus-pspexp.patch` here mirrors that branch (regenerate with
-`scripts/export-stratagus-patch.sh`).
+`scripts/dev/export-stratagus-patch.sh`).
 
 ## How the mapping works
 
@@ -72,7 +72,7 @@ surfaces / 0.5 MiB for Warcraft; palette variants (up to 64 per graphic)
 stop being uploaded once colour cycling has been seen once.
 
 Verified without hardware: with `PSPEXP=tcp:127.0.0.1:3838` and the PSP
-runtime under PPSSPP (`scripts/run-ppsspp.sh`), the emulated GE renders the
+runtime under PPSSPP (`scripts/dev/run-ppsspp.sh`), the emulated GE renders the
 game; `PSPEXP_SHOT_EVERY=N` saves its framebuffer every N frames.
 
 Not yet mirrored: the enhanced/bilinear fog modes (War1gus uses the legacy

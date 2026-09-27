@@ -1,6 +1,6 @@
 /*
  * pspexp-term launcher view: the PSP's home screen when a GameShell (or any
- * Linux host) runs pspexp-term --launcher (docs/GameShell_Launcher_and_Shim.md).
+ * Linux host) runs pspexp-term --launcher (docs/Launcher_and_Boards.md).
  *
  * What it shows comes from its own library (launcher_lib.h): installed
  * PSPExp packages in /opt/pspexp and hand-made entry files, one per game

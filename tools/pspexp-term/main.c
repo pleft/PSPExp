@@ -40,7 +40,7 @@
  *
  * Hand-over: another PSPExp program (a game) can take the PSP while the
  * terminal keeps running: SIGUSR1 releases the PSP, SIGUSR2 takes it back
- * (scripts/pspexp-exec does both around a command).
+ * (scripts/board/pspexp-exec does both around a command).
  */
 #define _GNU_SOURCE
 #include "../../host/libpspexp/pspexp.h"

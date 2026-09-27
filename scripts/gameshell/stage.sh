@@ -1,6 +1,6 @@
 # Everything PSPExp installs on a ClockworkPi GameShell, in one place, for
-# both installers: scripts/gameshell-prep-image.sh (writes it into an image
-# before flashing) and scripts/install-gameshell.sh (a running GameShell over
+# both installers: scripts/gameshell/prep-stock-image.sh (writes it into an image
+# before flashing) and scripts/gameshell/install.sh (a running GameShell over
 # SSH). Sourced, not run. The caller defines
 #   gs_fetch PATH OUT   copy the target's PATH to local OUT (empty if missing)
 # and calls gs_stage DIR, which fills DIR/root/<path> with the files and
@@ -16,24 +16,24 @@ gs_stage() {
 	S="$1"; R="$S/root"; M="$S/manifest"
 	B="$ROOT/build/gameshell"; G="$ROOT/scripts/gameshell"
 	rm -rf "$S"; mkdir -p "$R"; : > "$M"
-	[ -x "$B/bin/pspexp-term" ] || { echo "run scripts/build-gameshell.sh first" >&2; return 1; }
-	[ -f "$B/lib/libsdl-pspexp.so" ] || { echo "run scripts/build-gameshell.sh (the shim) first" >&2; return 1; }
+	[ -x "$B/bin/pspexp-term" ] || { echo "run scripts/gameshell/build.sh first" >&2; return 1; }
+	[ -f "$B/lib/libsdl-pspexp.so" ] || { echo "run scripts/gameshell/build.sh (the shim) first" >&2; return 1; }
 	gs_dir 0755 0 0 /etc/pspexp
 	gs_dir 0755 1000 1000 /home/cpi/pspexp
 
 	# tools, the SDL layer and its run wrappers
 	for f in pspexp-term pspexp-bench pspexp-sprite-demo; do gs_copy "$B/bin/$f" 0755 0 0 "/usr/local/bin/$f"; done
-	gs_copy "$ROOT/scripts/pspexp-exec" 0755 0 0 /usr/local/bin/pspexp-exec
+	gs_copy "$ROOT/scripts/board/pspexp-exec" 0755 0 0 /usr/local/bin/pspexp-exec
 	gs_copy "$B/lib/libsdl-pspexp.so" 0644 0 0 /usr/local/lib/libsdl-pspexp.so
-	gs_copy "$G/pspexp-run" 0755 0 0 /usr/local/bin/pspexp-run
+	gs_copy "$ROOT/scripts/board/pspexp-run" 0755 0 0 /usr/local/bin/pspexp-run
 	gs_rm /usr/local/bin/pspexp-tyrian   # replaced by the opentyrian package
 
-	# PSPExp packages: the launcher's games and apps (scripts/pspexp-pkg-build on the
+	# PSPExp packages: the launcher's games and apps (scripts/packages/pspexp-pkg-build on the
 	# Mac, pspexp-pkg here), owned by cpi so installing needs no root
 	gs_dir 0755 1000 1000 /opt/pspexp
 	gs_dir 0755 1000 1000 /opt/pspexp/apps
 	gs_dir 0755 1000 1000 /opt/pspexp/systems
-	gs_copy "$G/pspexp-pkg" 0755 0 0 /usr/local/bin/pspexp-pkg
+	gs_copy "$ROOT/scripts/board/pspexp-pkg" 0755 0 0 /usr/local/bin/pspexp-pkg
 	# the card's first boot: the stock launcher and games removed, the bundled
 	# packages (every build/gameshell/pkg/*.tar.gz) installed; once
 	gs_dir 0755 0 0 /usr/local/lib/pspexp

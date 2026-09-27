@@ -8,10 +8,10 @@ produces is streamed to the PSP, and the PSP's controls come back as a game
 controller and/or keyboard events.
 
 ```sh
-scripts/pspexp-run <program> [args...]            # PSP over USB (default)
-scripts/pspexp-run --tcp:127.0.0.1:3838 <program> # runtime under PPSSPP
-scripts/pspexp-run --null <program>               # no PSP: just check it runs
-PSPEXP=sdl scripts/pspexp-run <program>           # PSPExp SDL executor in a 2nd window
+scripts/dev/pspexp-run <program> [args...]            # PSP over USB (default)
+scripts/dev/pspexp-run --tcp:127.0.0.1:3838 <program> # runtime under PPSSPP
+scripts/dev/pspexp-run --null <program>               # no PSP: just check it runs
+PSPEXP=sdl scripts/dev/pspexp-run <program>           # PSPExp SDL executor in a 2nd window
 ```
 
 The launcher sets `DYLD_INSERT_LIBRARIES` (macOS) or `LD_PRELOAD` (Linux)
@@ -27,8 +27,8 @@ sprites, primitives, a streaming texture, queued audio, keyboard and game
 controller input.
 
 ```sh
-scripts/pspexp-run build/host/sdl-game               # renderer path
-scripts/pspexp-run build/host/sdl-game --surface     # window-surface path
+scripts/dev/pspexp-run build/host/sdl-game               # renderer path
+scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 ```
 
 ## What is mirrored
@@ -72,7 +72,7 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | `PSPEXP_AUDIO=psp` | drive the game's audio callback from the shim's own thread on a precise clock instead of the host device's cadence; the default when the host audio driver is SDL's `dummy` (headless hosts: the dummy driver runs slow and jittery and the PSP underruns) |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
-| `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/bench-shim.sh` |
+| `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/dev/bench-shim.sh` |
 
 Stats lines are printed every 2 s: fps, bytes per frame (draw commands),
 batches, sprites, PSP CPU and GE time, uploads, errors, audio buffered /
@@ -97,7 +97,7 @@ renderer-less program's window surface. Three things keep that small:
 - **No padding.** Pages are cut at power-of-two sizes, which the protocol
   requires, instead of being padded up to them.
 
-Measured 2026-09-26 with `scripts/bench-shim.sh` (Chocolate Doom's timedemo
+Measured 2026-09-26 with `scripts/dev/bench-shim.sh` (Chocolate Doom's timedemo
 of Freedoom Phase 1, 40 s per mode; "old" is the shim before these changes):
 
 | host, link | old | new | link data per frame |
@@ -117,7 +117,7 @@ PSP-1000's Wi-Fi (about 0.25 MB/s) full-motion games stay slow: a moving
 
 ## Doom
 
-`scripts/pspexp-doom` runs Chocolate Doom (`brew install chocolate-doom`)
+`scripts/dev/pspexp-doom` runs Chocolate Doom (`brew install chocolate-doom`)
 with Freedoom's WAD (unzip a release from https://freedoom.github.io/ into
 `../doom/`, or pass a WAD path) and the PSP controls mapped to Doom's keys:
 nub and d-pad move and turn, cross fires, circle uses, square runs, L / R
@@ -128,7 +128,7 @@ strafe, triangle is Enter, start is Escape, select is the map. Doom's
 
 ## OpenTyrian
 
-`scripts/pspexp-tyrian` runs OpenTyrian built from source
+`scripts/dev/pspexp-tyrian` runs OpenTyrian built from source
 (`git clone https://github.com/opentyrian/opentyrian ../tyrian/opentyrian
 && make -C ../tyrian/opentyrian`) with the freeware Tyrian 2.1 data
 (https://camanis.net/tyrian/tyrian21.zip unzipped into `../tyrian/data/`).

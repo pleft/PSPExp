@@ -3,8 +3,8 @@
 # mainline kernel from build-kernel.sh, the board's own U-Boot, and PSPExp
 # with its packages. Built on this machine in containers (OrbStack/Docker):
 #
-#   scripts/build-gameshell.sh                   (the tools and the SDL layer)
-#   scripts/pspexp-pkg-build build freedoom opentyrian     (the packages to bundle)
+#   scripts/gameshell/build.sh                   (the tools and the SDL layer)
+#   scripts/packages/pspexp-pkg-build build freedoom opentyrian     (the packages to bundle)
 #   scripts/gameshell/base/build-kernel.sh
 #   scripts/gameshell/base/build-image.sh STOCK.img [options]
 #       -> build/gameshell-base/pspexp-gameshell.img  (write it to a card)

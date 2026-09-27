@@ -3,7 +3,7 @@
  * nothing else (no folder trees of the old GameShell launcher):
  *
  *   /opt/pspexp/apps/<pkg>/NAME.entry       installed PSPExp packages
- *                                           (scripts/pspexp-pkg-build, pspexp-pkg)
+ *                                           (scripts/packages/pspexp-pkg-build, pspexp-pkg)
  *   /opt/pspexp/systems/<id>.system         emulated systems they install
  *   ~/.config/pspexp-launcher/library/NAME.entry  hand-made entries
  *   ~/.config/pspexp-launcher/systems/NAME.system hand-made systems

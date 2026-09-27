@@ -24,9 +24,9 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | host-baked text: built-in 6x8 CLUT4 font, `pspexp_draw_text` (v0.3 item pulled forward) | done, shown in the demo HUD |
 | per-batch palette, flip, 4444 alpha tints, translucent rects, lines, quad batches (v0.2 needs) | done, tested |
 | audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** |
-| TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
+| TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
-| **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
+| **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
 
 ## Build
 
@@ -53,7 +53,7 @@ against the in-process Null executor as a CPU baseline.
 ## Without a PSP: the runtime under PPSSPP
 
 ```sh
-scripts/run-ppsspp.sh                                   # boots dist/PSPExp in the emulator (needs EnableWlan = True)
+scripts/dev/run-ppsspp.sh                                   # boots dist/PSPExp in the emulator (needs EnableWlan = True)
 build/host/pspexp-sprite-demo --tcp 127.0.0.1:3838 --clut --shot 120
 ```
 
@@ -99,8 +99,8 @@ program) into PSPExp commands, streams the program's audio, and feeds the
 PSP's controls back as a game controller and keyboard events:
 
 ```sh
-scripts/pspexp-run build/host/sdl-game        # the bundled SDL2 test game, on the PSP
-scripts/pspexp-run /path/to/any/sdl2/game     # yours
+scripts/dev/pspexp-run build/host/sdl-game        # the bundled SDL2 test game, on the PSP
+scripts/dev/pspexp-run /path/to/any/sdl2/game     # yours
 ```
 
 `compatibility/sdl-pspexp/README.md` lists what is mirrored (and what is
@@ -111,12 +111,12 @@ Doom is the showcase: `brew install chocolate-doom`, unzip a Freedoom
 release into `../doom/`, and
 
 ```sh
-scripts/pspexp-doom
+scripts/dev/pspexp-doom
 ```
 
 puts Chocolate Doom on the PSP with its controls mapped (nub and d-pad
 move, cross fires, circle uses, L / R strafe, start is the menu).
-`scripts/pspexp-tyrian` does the same for OpenTyrian (built from source,
+`scripts/dev/pspexp-tyrian` does the same for OpenTyrian (built from source,
 freeware data; see `compatibility/sdl-pspexp/README.md`); it plays at its
 full 35 fps on the PSP too. On the
 PSP-1000 over USB it runs at Doom's full 35 fps: 160 KB of frame texture
@@ -124,26 +124,26 @@ per frame, GE 2.2 ms, PSP CPU 0.06 ms, audio with no underruns.
 
 ## Raspberry Pi as the host
 
-`scripts/build-pi.sh` installs the Debian packages (including Chocolate
+`scripts/pi/build.sh` installs the Debian packages (including Chocolate
 Doom and Freedoom), builds the host tools and the SDL layer (and Stratagus
 when a WarCraft checkout is next to PSPExp), adds a udev rule for the PSP,
 and prints the run commands. Tested on a Raspberry Pi 400 over SSH with no
 desktop: the USB link measures the same 25 MB/s as on the Mac, and
-`scripts/pspexp-doom` plays Doom on the PSP at 35 fps with clean audio. The
+`scripts/dev/pspexp-doom` plays Doom on the PSP at 35 fps with clean audio. The
 launcher picks SDL's dummy drivers when there is no display, and the SDL
 layer paces the game's audio itself on such a host.
 
-The Pi also runs the PSPExp launcher: `PI=user@host scripts/install-pi.sh`
+The Pi also runs the PSPExp launcher: `HOST=user@host scripts/pi/install.sh`
 (from the Mac) copies the source to `~/pspexp/src` on the Pi, builds it
 there and installs the same layout as the GameShell: the console as a
 systemd service with the launcher, the SDL layer in `/usr/local/lib`,
 packages in `/opt/pspexp`. Packages:
-`BOARD=pi HOST=user@host scripts/pspexp-pkg-build install freedoom opentyrian`
+`BOARD=pi HOST=user@host scripts/packages/pspexp-pkg-build install freedoom opentyrian`
 (Freedoom runs Debian's Chocolate Doom; OpenTyrian is compiled on the Pi).
 
 ## Onion Omega2+ as the host
 
-`scripts/build-omega.sh` cross-compiles static soft-float MIPS binaries of
+`scripts/omega/build.sh` cross-compiles static soft-float MIPS binaries of
 the bench and the sprite demo on the Mac with Zig (libusb built from
 source), so the Omega needs nothing installed. From an Omega2+ the frame
 loop and the sprite demo run at 60 fps up to 5,000 sprites, with the
@@ -151,14 +151,14 @@ Omega's CPU about 90 % idle. Large transfers reach 21 MB/s; small ones are
 slower than on the Mac or the Pi because each USB transfer costs the Omega
 about four times as much.
 
-The Omega also runs the PSPExp launcher: `scripts/install-omega.sh` puts
+The Omega also runs the PSPExp launcher: `scripts/omega/install.sh` puts
 the console (`pspexp-term --launcher`), its fonts, the package manager and
 the init script on it, everything that grows on the SD card
 (`/mnt/mmcblk0p1/pspexp`: packages in `opt/`, settings and box art in
 `home/`). Packages are built per board:
-`BOARD=omega HOST=root@<omega> scripts/pspexp-pkg-build install freedoom` (a static
+`BOARD=omega HOST=root@<omega> scripts/packages/pspexp-pkg-build install freedoom` (a static
 Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU) and
-`opentyrian` (a static OpenTyrian, `scripts/build-omega.sh tyrian`). The
+`opentyrian` (a static OpenTyrian, `scripts/omega/build.sh tyrian`). The
 launcher starts in about 2 s there and uses under 4 MB of memory.
 
 ## Emulators on the launcher
@@ -168,34 +168,34 @@ core, one ROM, no menus. The launcher is the menu (a rail tile per system,
 ROM lists, box art); the SDL layer puts the player on the PSP like any other
 game, at the core's native size, scaled by the PSP's GE, 256-colour pages as
 CLUT8. Packages bring the player, a core and a `.system` file: the NES with
-FCEUmm first (`scripts/gameshell/pkg/nes.sh`); ROMs go in `~/roms/<system>`.
-Details: docs/GameShell_Launcher_and_Shim.md, section 6.
+FCEUmm first (`scripts/packages/recipes/nes.sh`); ROMs go in `~/roms/<system>`.
+Details: docs/Launcher_and_Boards.md, section 6.
 
 ## ClockworkPi GameShell as the host
 
 The GameShell becomes a PSPExp console: its own launcher, games and apps are
 removed, and the PSP shows the PSPExp launcher with **packages** that the
-PSP draws itself (docs/GameShell_Launcher_and_Shim.md).
+PSP draws itself (docs/Launcher_and_Boards.md).
 
-- `scripts/build-gameshell.sh` cross-compiles the tools (static ARMv7) and the
+- `scripts/gameshell/build.sh` cross-compiles the tools (static ARMv7) and the
   SDL layer (for the image's own SDL2 programs).
-- `scripts/pspexp-pkg-build build|install|remove|list ID` builds and installs packages
-  from the recipes in `scripts/gameshell/pkg/` (Freedoom, OpenTyrian so far);
+- `scripts/packages/pspexp-pkg-build build|install|remove|list ID` builds and installs packages
+  from the recipes in `scripts/packages/recipes/` (Freedoom, OpenTyrian so far);
   a package is a folder in `/opt/pspexp/apps` with its `.entry` files, and the
   launcher picks it up by itself. `pspexp-pkg` does the same on the GameShell.
-- `scripts/gameshell-prep-image.sh <image> [--wifi]` prepares a card image:
+- `scripts/gameshell/prep-stock-image.sh <image> [--wifi]` prepares a card image:
   the tools, the console service with the launcher, udev and sudoers rules,
   audio, the Wi-Fi mode switch, and every built package. On its first boot
   the card removes ClockworkOS's own launcher and games
   (`scripts/gameshell/clean-stock.sh`) and installs the packages
   (`pspexp-firstboot`, logged to /var/log/pspexp-firstboot.log).
-- `scripts/install-gameshell.sh` puts the same files on a running GameShell
+- `scripts/gameshell/install.sh` puts the same files on a running GameShell
   over SSH (the list is `scripts/gameshell/stage.sh`); a reboot then runs the
   same first boot.
 - `scripts/gameshell/base/build-kernel.sh` and `build-image.sh STOCK.img`
   build a card on a fresh base instead: Debian 13 and mainline Linux 6.18
   with our own device tree for the board, nothing of ClockworkOS but its
-  U-Boot and Wi-Fi firmware (docs/GameShell_Launcher_and_Shim.md, section 5).
+  U-Boot and Wi-Fi firmware (docs/Launcher_and_Boards.md, section 5).
 
 With the PSP on the OTG port the USB link measures 24–26 MB/s, the sprite
 demo runs at 60 fps up to 15,000 sprites, and Freedoom and OpenTyrian play
@@ -212,8 +212,8 @@ an on-screen keyboard. The bell beeps on the PSP and raw 44.1 kHz stereo
 written to `/tmp/pspexp-audio` plays there. On Linux a real keyboard and
 mouse (the Raspberry Pi 400's own, or USB ones on the Omega's dock) type into
 the same terminal and are grabbed while the PSP is connected. On a Pi,
-`scripts/install-pi.sh` installs it with the launcher (see above), or
-`scripts/install-pspexp-term.sh` as a plain console service for your user. On the Omega2+ it starts at boot
+`scripts/pi/install.sh` installs it with the launcher (see above), or
+`scripts/pi/install-console.sh` as a plain console service for your user. On the Omega2+ it starts at boot
 (`/etc/init.d/pspexp-term`) and waits for a PSP on USB; running a game from
 it (`doom`) hands the PSP to the game and takes it back afterwards
 (`pspexp-exec`).
@@ -235,19 +235,21 @@ it (`doom`) hands the PSP to the game and takes it back afterwards
 ```text
 protocol/            wire format, shared by host and PSP builds (plain C99)
 runtime/             command processor and resource cache, shared by all executors
-host/libpspexp/      application API
-host/executor-null/  validating executor, no rendering
-host/transport-usb/  libusb transport
-psp/transport-usb/   kernel USB driver (pspexp_usb.prx) + user stubs
-psp/runtime/         PSP runtime application (pspexp_runtime.prx)
-psp/boot/            EBOOT loader
-compatibility/stratagus/  Stratagus renderer backend: patch + notes (v0.2)
-compatibility/sdl-pspexp/ injected library: any SDL2 program on the PSP (v0.4)
-examples/sdl-game/        plain SDL2 test game for it (renderer and window-surface paths)
-tools/pspexp-term/   the PSP as a console: terminal, mirror, the PSPExp launcher
-tools/pspexp-sdl-server/  SDL executor behind TCP 3838: a stand-in PSP for screenshots
-tools/pspexp-retro/  libretro player (plain SDL2): emulated systems for the launcher
-tools/usb-bench/     transport benchmark
+host/                the host side: libpspexp (application API), executor-null
+                     (validating, no rendering), executor-sdl (a PSP in a window),
+                     transport-usb (libusb), transport-tcp (Wi-Fi)
+psp/                 the PSP side: runtime (pspexp_runtime.prx), executor-ge (the GE),
+                     transport-usb (kernel USB driver pspexp_usb.prx), transport-tcp,
+                     boot (EBOOT loader)
+compatibility/       existing programs on the PSP: sdl-pspexp (the SDL layer: any
+                     SDL2 program), stratagus (Warcraft's renderer backend)
+tools/               pspexp-term (the PSP as a console, with the launcher),
+                     pspexp-retro (emulator player), pspexp-sdl-server (a stand-in
+                     PSP for screenshots), usb-bench (pspexp-bench)
+examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)
-docs/                architecture
+scripts/             building, installing and packaging, one folder per board
+                     (scripts/README.md)
+docs/                architecture, the launcher and boards, the cheatsheet
+roms/                test ROMs, git-ignored: never committed or bundled
 ```

@@ -3,7 +3,7 @@
  * speaker and controller (section 12, "SDL -> PSPExp"; v0.4).
  *
  * Loaded into the program with DYLD_INSERT_LIBRARIES (macOS) or LD_PRELOAD
- * (Linux) by scripts/pspexp-run. It interposes the SDL_Render* API, the
+ * (Linux) by scripts/dev/pspexp-run. It interposes the SDL_Render* API, the
  * audio device and lets the game keep its own window; every draw is
  * mirrored into PSPExp commands, the mixed audio is streamed, and the PSP's
  * controls arrive as a virtual game controller and/or keyboard events.

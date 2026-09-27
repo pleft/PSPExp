@@ -2,7 +2,7 @@
 # Once, on a GameShell running ClockworkOS: remove its stock launcher, games,
 # emulators and apps, leaving the system, Wi-Fi, sound, SSH and everything
 # PSPExp installs. After this the PSP launcher shows only PSPExp packages
-# (scripts/pspexp-pkg-build). Run as root, by pspexp-firstboot on a card's first boot;
+# (scripts/packages/pspexp-pkg-build). Run as root, by pspexp-firstboot on a card's first boot;
 # by hand: ssh cpi@gameshell 'sudo sh -s' < scripts/gameshell/clean-stock.sh
 # Keeps: chocolate-doom (the freedoom package uses it), Xorg (installed, not
 # started), ~/pspexp (build trees), ~/.config/pspexp-launcher/settings.

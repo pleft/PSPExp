@@ -84,7 +84,7 @@ more (split into a bulk stream with fences, §19)?
 
 ## Without hardware: the PSP runtime under PPSSPP
 
-`scripts/run-ppsspp.sh` installs `dist/PSPExp` into PPSSPP's memory stick
+`scripts/dev/run-ppsspp.sh` installs `dist/PSPExp` into PPSSPP's memory stick
 (`~/.config/ppsspp/PSP/GAME/PSPExp`) and boots it. The USB driver cannot load
 in the emulator, so the runtime falls back to its TCP transport: it joins
 the emulated access point and listens on port 3838, which PPSSPP exposes on
