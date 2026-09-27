@@ -97,47 +97,64 @@ The mirror grows a second backend beside `/dev/fb0`:
 
 ### 3.1 Its own library, not launchergo's folders
 
-The first prototype mirrored launchergo's menu tree and skin. That kept the
-2018 look (the skin's PNG icons) and the tree's mess: numbered folders, one
-folder per game, plugin folders, emulators nested inside categories. The
-launcher now keeps **its own library** (`tools/pspexp-term/launcher_lib.c`),
-flat files in `~/.config/pspexp-launcher/`:
+The launcher keeps **its own library** (`tools/pspexp-term/launcher_lib.c`;
+its header is the reference). It reads two sources and nothing else:
 
 ```
-library/<id>.entry     one game, app or tool
-    title=OpenTyrian
-    type=game                      game | app | tool
-    exec=/bin/sh '/home/cpi/apps/Menu/21_Indie Games/34_OpenTyrian/OpenTyrian.sh'
-    dir=/home/cpi/apps/Menu/21_Indie Games/34_OpenTyrian
-    pspexp=1                       hands the PSP over itself (no mirror)
-    icon=rocket  art=/path.png  tags=shooter  hidden=1     optional
-systems/<id>.system    one emulated system
-    name=Game Boy Advance
-    short=GBA
-    roms=/home/cpi/games/MGBA
-    ext=gb,gbc,gba,gbx
-    exec=retroarch -L /home/cpi/apps/emulators/mgba_libretro.so %ROM%
-    icon=gamepad-directional
-    thumbs=Nintendo - Game Boy Advance     libretro-thumbnails folder (box art)
-recent, favourites     entry ids, one per line
-imported               import sources already seen
+<root>/apps/<package>/*.entry     games, apps and tools of installed packages
+<root>/systems/*.system           emulated systems those packages install
+~/.config/pspexp-launcher/library/*.entry     personal entries, made by hand
+~/.config/pspexp-launcher/systems/*.system    personal systems
+~/.config/pspexp-launcher/recent, favourites  entry ids, one per line
+~/.config/pspexp-launcher/settings            the launcher's options
 ```
 
-The **first start imports** the launchergo menus once: scripts and
-one-script folders become entries (typed by where they sat: Indie/Games ->
-game, Utils -> tool, RetroArch/TIC-80/PICO-8 -> app), `action.config`
-emulators become systems (known cores map to a proper name, badge, icon and
-thumbnail folder; the first emulator of a system wins, so MGBA beats GPSP),
-launchergo-only pages (Settings, Warehouse, TinyCloud, Music, Reload UI) are
-left out. After that the folders are not read again: entries are edited,
-added or deleted as files. **System > Rescan library** imports only sources
-not seen before (a deleted entry stays deleted) and rescans ROM folders.
+`<root>` is `/opt/pspexp` on the GameShell and the Pi and
+`/mnt/mmcblk0p1/pspexp/opt` on the Omega2+ (`PSPEXP_ROOT`); packages get there
+through `pspexp-pkg` (section 4.2). Both file kinds are `KEY=value` lines,
+`#` starts a comment. An entry, as the OpenTyrian package installs it:
 
-Scripts that only start a program known to run through the SDL layer (the
-Chocolate Doom family, e.g. launchergo's freeDM) are imported as
-`exec=pspexp-run chocolate-doom ...` with `env=PSPEXP_KEYS=...` and
-`pspexp=1`: the PSP draws them at 35 fps instead of the mirror at ~20.
-Entries may carry any number of `env=NAME=value` lines.
+```
+title=OpenTyrian
+type=game                          game | app | tool
+description=Tyrian 2.1: a vertical shooter, freeware since 2004
+icon=rocket                        a Lucide icon
+exec=./run.sh                      a shell command, run in the package directory
+env=PSPEXP_KEYS=cross=space,...    NAME=value, as many lines as needed
+env=PSPEXP_NUB=keys
+pspexp=1                           drawn by the PSP itself: no mirror
+```
+
+Other entry keys: `dir` (where `exec` runs; default the package directory),
+`art` (a PNG, relative to the package; `<entry>.png` or `cover.png` are
+found by themselves), `tags`, `hidden=1`. A system, as the NES package
+installs it (section 6.2):
+
+```
+name=Nintendo Entertainment System
+short=NES                          the rail tile's badge
+roms=~/roms/nes                    created when missing
+ext=nes
+exec=pspexp-run ./pspexp-retro ./quicknes_libretro.so %ROM%
+pkg=nes                            exec runs in that package's directory
+env=PSPEXP_KEYS=...
+thumbs=Nintendo - Nintendo Entertainment System   libretro-thumbnails folder
+pspexp=1
+```
+
+Ids are `p:<package>/<stem>` for package entries, `e:<stem>` for personal
+ones and `r:<system>:<rom path>` for ROMs; recent and favourites store them.
+A personal system file with the same name as a package's is used instead of
+it (to point it at another ROM folder, say); personal entries are listed
+next to the packages' ones. The
+launcher notices installs, removals and new ROMs by itself (directory times,
+checked every 3 s while connected); **System > Refresh library** reloads at
+once.
+
+(The first prototype imported launchergo's menu tree once into such files.
+That import is gone: since the stock launcher, games and emulators are
+removed from the GameShell (section 4), packages are the only source besides
+personal entries.)
 
 ROMs are listed per system from its folder (one level deep, a `.cue`/`.m3u`
 hides its `.bin`/`.img`), titled from the No-Intro name ("Legend of Zelda,
@@ -229,7 +246,7 @@ system or type, and what is known: tags, size, file, emulator for ROMs;
 PSP-drawn or mirrored, folder and entry file for games and apps; when it was
 played and whether it is a favourite. Cross plays, square favourites.
 
-**System** runs Rescan library; Wi-Fi (PSP direct / home network, through
+**System** runs Refresh library; Wi-Fi (PSP direct / home network, through
 `pspexp-wifi-mode`, shown when installed); Box art on/off (kept in
 `settings`); Console; Restart and Power off (asking for a second press);
 About. Root commands go through `sudo -n` with the rule
