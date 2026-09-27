@@ -74,7 +74,7 @@ pre.mermaid { background: var(--panel); border: 1px solid var(--rule); border-ra
 <div class="wrap">
   <header>
     <h1>PSPExp Cartridge</h1>
-    <p>A Raspberry Pi Zero 2 W, its battery and charger in a shell that sits on the PSP-1000's top edge between L and R, like a Game Boy cartridge. Drag to turn it, scroll or pinch to zoom.</p>
+    <p>A Raspberry Pi Zero 2 W, its battery and charger in a shell that sits on the PSP-1000's top edge between L and R, like a Game Boy cartridge. The shell starts see-through so the parts inside show. Drag to turn it, scroll or pinch to zoom.</p>
   </header>
 
   <div class="stage">
@@ -104,6 +104,7 @@ pre.mermaid { background: var(--panel); border: 1px solid var(--rule); border-ra
           <button type="button" data-view="top">Top</button>
         </div>
         <div class="seg">
+          <button type="button" id="xray" aria-pressed="true">See-through shell</button>
           <button type="button" id="section" aria-pressed="false">Cut through the plug</button>
         </div>
         <div class="seg" id="opens">
@@ -250,10 +251,10 @@ flowchart LR
   new ResizeObserver(resize).observe(view);
 
   const VIEWS = {
-    iso: [260, 210, 320], front: [0, 30, 420], back: [0, 30, -420], side: [420, 40, 0], top: [0, 420, 60]
+    iso: [170, 120, 210], front: [0, 40, 280], back: [0, 40, -280], side: [300, 40, 0], top: [0, 320, 50]
   };
   function setView(name) {
-    const c = new THREE.Vector3(params.USB_X, 80, 0);
+    const c = new THREE.Vector3(params.USB_X, 90, 0);
     const v = VIEWS[name]; camera.position.set(c.x + v[0], c.y + v[1] - 40, c.z + v[2]);
     controls.target.copy(c); controls.update();
     document.querySelectorAll("#views button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === name)));
@@ -288,6 +289,13 @@ flowchart LR
     Object.values(meshes).forEach(m => { m.material.clippingPlanes = on ? [clip] : []; m.material.needsUpdate = true; });
     if (on) setView("side");
   });
+  const xrayBtn = document.getElementById("xray");
+  function xray(on) {
+    xrayBtn.setAttribute("aria-pressed", String(on));
+    ["cart_front", "cart_back"].forEach(n => { const m = meshes[n]; if (!m) return;
+      m.material.transparent = on; m.material.opacity = on ? 0.28 : 1; m.material.depthWrite = !on; m.renderOrder = on ? 2 : 0; m.material.needsUpdate = true; });
+  }
+  xrayBtn.addEventListener("click", () => xray(xrayBtn.getAttribute("aria-pressed") !== "true"));
   document.getElementById("views").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b) setView(b.dataset.view); });
   function show(name, on) { if (meshes[name]) meshes[name].visible = on; const c = document.getElementById("show-" + name); if (c) c.checked = on; }
   document.getElementById("opens").addEventListener("click", ev => {
@@ -328,7 +336,7 @@ flowchart LR
                   ["Front lip / back lip", P.LIP_FRONT + " / " + P.LIP_BACK + " mm"], ["PSP-1000 body", P.PSP.join(" × ") + " mm"]];
     dims.innerHTML = rows.map(r => "<span>" + r[0] + "</span><span>" + r[1] + "</span>").join("");
     document.getElementById("loading").hidden = true;
-    resize(); setView("iso"); place(); requestAnimationFrame(tick);
+    xray(true); resize(); setView("iso"); place(); requestAnimationFrame(tick);
   }).catch(err => { document.getElementById("loading").textContent = "The model files did not load: " + err.message; });
 })();
 </script>
