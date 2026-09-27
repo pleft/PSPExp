@@ -599,6 +599,25 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
 int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
 int launcher_take_files(void) { int r = g_files_req; g_files_req = 0; return r; }
 
+int launcher_open_file(const char *path)
+{
+    LEntry e;
+    if (lib_rom_entry(&L, path, &e) < 0) return 0;
+    launch(&e, pspexp_time_us());
+    return 1;
+}
+
+const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }
+
+int launcher_system_for(const char *path, char *name, size_t n)
+{
+    LEntry e;
+    int i = lib_rom_entry(&L, path, &e);
+    if (i < 0) return 0;
+    snprintf(name, n, "%s", L.sys[i].shortname[0] ? L.sys[i].shortname : L.sys[i].name);
+    return 1;
+}
+
 void launcher_child_exited(int status)
 {
     char s[160];

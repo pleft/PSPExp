@@ -3,6 +3,7 @@
 #include "files_ops.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "launcher.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -296,6 +297,7 @@ static void open_file(Panel *p, const FEntry *e)
     char path[FOPS_PATH];
     int r;
     fops_join(path, sizeof(path), p->path, e->name);
+    if (launcher_open_file(path)) return;   /* a ROM: its emulator, as from the launcher */
     if (is_image(e)) {
         if (image_show((int)(e - p->list.e)) == 0) return;
         snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
@@ -309,7 +311,7 @@ static void open_file(Panel *p, const FEntry *e)
     if (r > 0) {
         char sz[32];
         fops_human(e->size, sz, sizeof(sz));
-        snprintf(g_msg, sizeof(g_msg), "Not a text file (%s). ROMs and packages will open here later.", sz);
+        snprintf(g_msg, sizeof(g_msg), "Not a text file (%s), and no installed system plays it.", sz);
     } else snprintf(g_msg, sizeof(g_msg), "Cannot read it: %s", strerror(errno));
     g_over = O_MESSAGE;
 }
@@ -422,6 +424,7 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
 {
     Panel *p = act();
     (void)b; (void)now;
+    if (launcher_running_title()) return;   /* a program is starting: nothing else meanwhile */
     switch (g_over) {
     case O_ACTIONS: case O_OPTIONS: {
         int n = g_over == O_ACTIONS ? NACT : NOPT;
@@ -493,6 +496,11 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
 
 int files_needs_frame(uint64_t now)
 {
+    {   /* a program started from here: its state shows over the panels */
+        static int was;
+        int is = launcher_running_title() != NULL;
+        if (is != was) { was = is; g_dirty = 1; }
+    }
     if (g_job_on && g_job.done) {   /* finished: collect it */
         fjob_finish(&g_job);
         g_job_on = 0;
@@ -691,7 +699,20 @@ void files_render(PspExpContext *ctx, uint64_t now)
     draw_panel(0);
     draw_panel(1);
     x = 12;
-    x = ui_hint_btn(x, 'x', "Open");
+    {   /* what cross does to the highlighted entry */
+        Panel *p = act();
+        const char *go = "Open";
+        static char play[40];
+        if (p->sel < p->list.n && !p->list.e[p->sel].is_dir) {
+            const FEntry *e = &p->list.e[p->sel];
+            char path[FOPS_PATH], sys[16];
+            fops_join(path, sizeof(path), p->path, e->name);
+            if (launcher_system_for(path, sys, sizeof(sys))) { snprintf(play, sizeof(play), "Play (%s)", sys); go = play; }
+            else if (is_image(e)) go = "View";
+            else go = "Read";
+        }
+        x = ui_hint_btn(x, 'x', go);
+    }
     x = ui_hint_btn(x, 'o', "Up");
     x = ui_hint_btn(x, 's', "Mark");
     x = ui_hint_btn(x, 't', "Actions");
@@ -725,6 +746,11 @@ void files_render(PspExpContext *ctx, uint64_t now)
         { int bx = (UI_SCREEN_W - 340) / 2 + 340 - 70, by = (UI_SCREEN_H - 110) / 2 - 8 + 88;
           gfx_button('x', bx, by); gfx_text(FONT_SMALL, bx + 18, by - 1, "OK", UI_TEXT, 255, 0); }
         break;
+    }
+    if (launcher_running_title()) {
+        char s[160];
+        snprintf(s, sizeof(s), "%s is starting; the PSP shows it when it is ready.", launcher_running_title());
+        draw_box("Starting", s, 70);
     }
     pspexp_present(ctx);
     g_dirty = 0;

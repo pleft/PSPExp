@@ -233,18 +233,45 @@ static int has_ext(const char *file, const char *exts)
     return 0;
 }
 
+static void rom_fill(LEntry *e, const LSystem *s, int sys, const char *dir, const char *file, long long size);
+
+int lib_rom_entry(const Library *L, const char *path, LEntry *out)
+{
+    const char *slash = strrchr(path, '/');
+    char dir[512];
+    struct stat st;
+    int i;
+    if (!slash || stat(path, &st) != 0 || S_ISDIR(st.st_mode)) return -1;
+    snprintf(dir, sizeof(dir), "%.*s", (int)(slash - path), path);
+    for (i = 0; i < L->nsys; i++)
+        if (L->sys[i].ext[0] && has_ext(slash + 1, L->sys[i].ext)) {
+            rom_fill(out, &L->sys[i], i, dir[0] ? dir : "/", slash + 1, (long long)st.st_size);
+            return i;
+        }
+    return -1;
+}
+
 static void add_rom(LSystem *s, int sys, const char *dir, const char *file)
 {
-    char p[800], *paren;
-    const char *dot;
+    char p[800];
     struct stat st;
     LEntry *e;
     snprintf(p, sizeof(p), "%s/%s", dir, file);
     if (stat(p, &st) != 0) return;
     s->roms_list = (LEntry *)realloc(s->roms_list, (size_t)(s->nroms + 1) * sizeof(LEntry));
     e = &s->roms_list[s->nroms++];
+    rom_fill(e, s, sys, dir, file, (long long)st.st_size);
+}
+
+/* a ROM's entry: the system's command, folder and environment, the title
+ * and tags from the file name */
+static void rom_fill(LEntry *e, const LSystem *s, int sys, const char *dir, const char *file, long long size)
+{
+    char p[800], *paren;
+    const char *dot;
+    snprintf(p, sizeof(p), "%s/%s", dir, file);
     memset(e, 0, sizeof(*e));
-    e->type = LT_ROM; e->sys = sys; e->size = (long long)st.st_size; e->pspexp = s->pspexp;
+    e->type = LT_ROM; e->sys = sys; e->size = size; e->pspexp = s->pspexp;
     snprintf(e->id, sizeof(e->id), "r:%s:%s", s->id, p);
     snprintf(e->exec, sizeof(e->exec), "%s", p);   /* the ROM path; lib_command builds the command */
     snprintf(e->dir, sizeof(e->dir), "%s", s->dir[0] ? s->dir : dir);

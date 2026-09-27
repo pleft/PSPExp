@@ -85,6 +85,9 @@ int  lib_is_fav(const Library *L, const char *id);
 
 /* the shell command that starts an entry */
 void lib_command(const Library *L, const LEntry *e, char *out, size_t n);
+/* the ROM entry for a file anywhere: the first system whose extensions
+ * match (its index), -1 when none plays it */
+int  lib_rom_entry(const Library *L, const char *path, LEntry *out);
 
 /* Box art: the libretro-thumbnails names of one system, from its directory
  * listing (the HTML of .../Named_Boxarts/): names without ".png", decoded.

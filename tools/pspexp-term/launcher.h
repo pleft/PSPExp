@@ -36,6 +36,14 @@ void launcher_child_exited(int status);
 int launcher_take_console(void);
 /* 1 once when the user picked System > Files: show the file manager */
 int launcher_take_files(void);
+/* a file opened from the file manager: a ROM starts in its system's
+ * emulator, as from the launcher's lists. 1 when started, 0 when no system
+ * plays it */
+int launcher_open_file(const char *path);
+/* the short name of the system that plays path ("NES"), 0 when none */
+int launcher_system_for(const char *path, char *name, size_t n);
+/* the title of what is starting or running, NULL when nothing is */
+const char *launcher_running_title(void);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);

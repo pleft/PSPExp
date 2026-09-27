@@ -1520,6 +1520,7 @@ static int mirror_available(void);
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
 static int g_view_launcher, g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
 static int g_view_files, g_files_from_launcher;   /* the file manager (files.c), and where it was opened from */
+static int g_launch_from_files;                   /* the running program was opened in the file manager */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself: no mirror while it runs */
@@ -2449,7 +2450,8 @@ static void launch_done(int status)
     g_launch_pid = 0;
     if (g_launch_aware) g_acquire_req = 1;   /* ours again (pspexp-exec's SIGUSR2 may have said so already) */
     if (g_view_mirror) { keypad_release_all(); g_view_mirror = 0; }
-    g_view_launcher = 1;
+    if (g_launch_from_files) { g_view_files = 1; g_view_launcher = 0; files_invalidate(); }   /* back where it was opened */
+    else g_view_launcher = 1;
     launcher_child_exited(code);
 }
 
@@ -2679,7 +2681,7 @@ int main(int argc, char **argv)
         if (g_launcher_on && g_launch_pid <= 0) {
             char cmd[1024], cwd[512];
             int aware;
-            if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) launch_child(cmd, cwd, aware);
+            if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) { g_launch_from_files = g_view_files; launch_child(cmd, cwd, aware); }
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
             if (launcher_take_files()) { files_show(NULL, 1); swallow(); }
         }
