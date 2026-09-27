@@ -32,6 +32,8 @@ static const char DEFAULTS[] =
     "Page up = \\e[5~\n"
     "Page down = \\e[6~\n"
     "[always]\n"
+    "Copy... = @copy\n"
+    "Paste = @paste\n"
     "New shell = @session-new\n"
     "Next shell = @session-next\n"
     "Scroll mode = @scroll-mode\n"

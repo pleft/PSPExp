@@ -22,7 +22,7 @@ int main(void)
     term_menu_defaults(&m);
     CHECK(m.n[TM_SHELL] >= 8 && m.n[TM_FULL] >= 8 && m.n[TM_ALWAYS] >= 3);
     CHECK(!strcmp(m.item[TM_SHELL][0].label, "Ctrl-C  stop") && m.item[TM_SHELL][0].len == 1 && m.item[TM_SHELL][0].arg[0] == 3);
-    CHECK(m.item[TM_ALWAYS][0].kind == TM_ACTION && !strcmp(m.item[TM_ALWAYS][0].arg, "session-new"));
+    CHECK(m.item[TM_ALWAYS][0].kind == TM_ACTION && !strcmp(m.item[TM_ALWAYS][0].arg, "copy"));
     {   /* quotes keep the spaces of "sudo " */
         int i, found = 0;
         for (i = 0; i < m.n[TM_SHELL]; i++)

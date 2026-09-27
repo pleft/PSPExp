@@ -28,6 +28,9 @@
  *   R + nub       scroll back like a mouse wheel (further: faster); with the
  *                 keyboard hidden the nub alone does
  *   L + select    scroll mode: the d-pad and nub scroll, nothing held
+ *   L + square    copy mode: the d-pad moves over the screen and scrollback,
+ *                 cross marks the start and copies to the cursor, triangle
+ *                 copies a line, circle cancels          L + circle  paste
  *
  * Linux hosts: a real keyboard and mouse (the Raspberry Pi 400's own, or USB
  * ones on the Omega's dock) are read from /dev/input and type into the same
@@ -100,6 +103,14 @@
 static int g_cw = 6, g_ch = 8;  /* the terminal font's cell (term_fonts.h) */
 static int g_font, g_theme;     /* TERM_FONTS[g_font], TERM_THEMES[g_theme] */
 static int g_scroll_mode;       /* the D-pad and nub scroll, nothing held (L + select) */
+/* copy mode (L + square): a cursor over the screen and the scrollback, in
+ * absolute lines (0 = the oldest line kept); cross marks, cross copies */
+static int g_copy_mode, g_copy_line, g_copy_col, g_copy_anchor, g_copy_aline, g_copy_acol;
+static char *g_clip; static size_t g_clip_len;   /* shared by every shell */
+/* buttons held when a mode or menu opened or closed: ignored until released,
+ * so the press that closed a menu does not also type */
+static uint32_t g_raw_buttons, g_swallow;
+static void swallow(void) { g_swallow |= g_raw_buttons; }
 
 #define FONT_ID     1
 #define FONT_PAL_ID 2
@@ -841,6 +852,117 @@ static void draw_terminal(int rows)
 }
 
 /* while scrolled back: a label at the top right (UI font) */
+/* ---- copy and paste ------------------------------------------------------------ */
+
+/* absolute line n: the scrollback's (oldest first), then the screen's */
+static const Line *abs_line(int n) { return n < T.sb_count ? sb_line(T.sb_count - n) : line(n - T.sb_count); }
+static int abs_lines(void) { return T.sb_count + T.rows; }
+
+/* keep the copy cursor on screen: move the view */
+static void copy_follow(void)
+{
+    int top = T.sb_count - T.view;          /* the absolute line at the screen's top */
+    if (g_copy_line < top) T.view = T.sb_count - g_copy_line;
+    else if (g_copy_line >= top + T.rows) T.view = T.sb_count - (g_copy_line - T.rows + 1);
+    if (T.view < 0) T.view = 0;
+    if (T.view > T.sb_count) T.view = T.sb_count;
+}
+
+static void copy_start(void)
+{
+    g_copy_line = T.sb_count + T.cy - T.view;
+    if (g_copy_line < 0) g_copy_line = 0;
+    g_copy_col = T.cx < T.cols ? T.cx : T.cols - 1;
+    g_copy_anchor = 0;
+    g_copy_mode = 1;
+    swallow();
+    T.dirty = 1;
+}
+
+/* a cell's character as UTF-8 */
+static size_t cell_utf8(uint8_t ch, char *out)
+{
+    uint32_t cp = ch;
+    if (ch >= 0x80 && ch < 0x80 + NBOX) cp = BOX[ch - 0x80].cp;
+    if (cp < 0x80) { out[0] = (char)cp; return 1; }
+    if (cp < 0x800) { out[0] = (char)(0xc0 | (cp >> 6)); out[1] = (char)(0x80 | (cp & 0x3f)); return 2; }
+    out[0] = (char)(0xe0 | (cp >> 12)); out[1] = (char)(0x80 | ((cp >> 6) & 0x3f)); out[2] = (char)(0x80 | (cp & 0x3f)); return 3;
+}
+
+/* the text from (l0, c0) to (l1, c1) inclusive, lines ending in '\n',
+ * trailing blanks of each line dropped */
+static void copy_range(int l0, int c0, int l1, int c1)
+{
+    size_t cap = (size_t)(l1 - l0 + 1) * (size_t)(T.cols * 3 + 1) + 1, o = 0;
+    int l;
+    char *buf = malloc(cap);
+    if (!buf) return;
+    for (l = l0; l <= l1; l++) {
+        const Line *ln = abs_line(l);
+        int from = l == l0 ? c0 : 0, to = l == l1 ? c1 : T.cols - 1, x, end = to;
+        while (end >= from && ln->c[end].ch == ' ') end--;   /* no trailing blanks */
+        for (x = from; x <= end; x++) o += cell_utf8(ln->c[x].ch ? ln->c[x].ch : ' ', buf + o);
+        if (l < l1) buf[o++] = '\n';
+    }
+    free(g_clip);
+    g_clip = buf; g_clip_len = o;
+}
+
+static void copy_input(uint32_t pressed, int up, int down, int left, int right)
+{
+    if (up && g_copy_line > 0) g_copy_line--;
+    if (down && g_copy_line < abs_lines() - 1) g_copy_line++;
+    if (left && g_copy_col > 0) g_copy_col--;
+    if (right && g_copy_col < T.cols - 1) g_copy_col++;
+    if (up || down || left || right) { copy_follow(); T.dirty = 1; }
+    if (pressed & PSPEXP_BUTTON_CROSS) {
+        if (!g_copy_anchor) { g_copy_anchor = 1; g_copy_aline = g_copy_line; g_copy_acol = g_copy_col; }
+        else {
+            int a = g_copy_aline * COLS_MAX + g_copy_acol, b = g_copy_line * COLS_MAX + g_copy_col;
+            if (a <= b) copy_range(g_copy_aline, g_copy_acol, g_copy_line, g_copy_col);
+            else copy_range(g_copy_line, g_copy_col, g_copy_aline, g_copy_acol);
+            g_copy_mode = 0; T.view = 0; swallow();
+        }
+        T.dirty = 1;
+    }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) { copy_range(g_copy_line, 0, g_copy_line, T.cols - 1); g_copy_mode = 0; T.view = 0; T.dirty = 1; swallow(); }
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { g_copy_mode = 0; T.view = 0; T.dirty = 1; swallow(); }
+}
+
+/* the copied text typed into the shell; a line break is Enter */
+static void paste(void)
+{
+    size_t i;
+    for (i = 0; i < g_clip_len; i++) { char c = g_clip[i] == '\n' ? '\r' : g_clip[i]; pty_write(&c, 1); }
+    T.view = 0;
+}
+
+/* copy mode: the selection over the text, and the cursor */
+static void draw_copy(int rows)
+{
+    const TermTheme *th = theme();
+    int top = T.sb_count - T.view, y;
+    int a = g_copy_aline * COLS_MAX + g_copy_acol, b = g_copy_line * COLS_MAX + g_copy_col, lo = a < b ? a : b, hi = a < b ? b : a;
+    if (g_copy_anchor)
+        for (y = 0; y < rows; y++) {
+            int l = top + y, x0 = -1, x;
+            for (x = 0; x <= T.cols; x++) {
+                int k = l * COLS_MAX + x, in = x < T.cols && k >= lo && k <= hi;
+                if (in && x0 < 0) x0 = x;
+                if (!in && x0 >= 0) { pspexp_fill_rect(ctx, (int16_t)(x0 * g_cw), (int16_t)(y * g_ch), (int16_t)((x - x0) * g_cw), (int16_t)g_ch, rgb565(th->accent), 110); x0 = -1; }
+            }
+        }
+    y = g_copy_line - top;
+    if (y >= 0 && y < rows) {
+        int x = g_copy_col * g_cw, yy = y * g_ch;
+        uint16_t c = rgb565(th->accent);
+        pspexp_fill_rect(ctx, (int16_t)x, (int16_t)yy, (int16_t)g_cw, 1, c, 255);
+        pspexp_fill_rect(ctx, (int16_t)x, (int16_t)(yy + g_ch - 1), (int16_t)g_cw, 1, c, 255);
+        pspexp_fill_rect(ctx, (int16_t)x, (int16_t)yy, 1, (int16_t)g_ch, c, 255);
+        pspexp_fill_rect(ctx, (int16_t)(x + g_cw - 1), (int16_t)yy, 1, (int16_t)g_ch, c, 255);
+    }
+}
+
 /* after a switch: which shell this is */
 static void draw_session_label(void)
 {
@@ -855,8 +977,9 @@ static void draw_session_label(void)
 static void draw_scroll_label(void)
 {
     char s[64];
-    if (T.view <= 0 && !g_scroll_mode) return;
-    if (g_scroll_mode) snprintf(s, sizeof(s), " SCROLL MODE -%d  circle: back ", T.view);
+    if (T.view <= 0 && !g_scroll_mode && !g_copy_mode) return;
+    if (g_copy_mode) snprintf(s, sizeof(s), g_copy_anchor ? " COPY: move, cross: copy  circle: cancel " : " COPY: move, cross: start  triangle: line ");
+    else if (g_scroll_mode) snprintf(s, sizeof(s), " SCROLL MODE -%d  circle: back ", T.view);
     else snprintf(s, sizeof(s), " SCROLLBACK -%d ", T.view);
     pspexp_fill_rect(ctx, (int16_t)(477 - (int)strlen(s) * UI_W), 0, (int16_t)(strlen(s) * UI_W), UI_H, rgb565(theme()->accent), 255);
     text(477 - (int)strlen(s) * UI_W, 0, s, rgb565(theme()->accent_text));
@@ -1010,6 +1133,7 @@ static void menu_move(int d)
 /* circle: a choice list goes back to the old value and to the menu */
 static void menu_back(void)
 {
+    swallow();
     if (g_menu_list == ML_THEMES) g_theme = g_menu_undo;
     else if (g_menu_list == ML_FONTS) { if (g_font != g_menu_undo) font_apply(g_menu_undo); }
     else { g_menu_open = 0; T.dirty = 1; return; }
@@ -1021,6 +1145,7 @@ static void menu_back(void)
 static void menu_run(const TermMenuItem *it)
 {
     T.dirty = 1;
+    swallow();
     if (g_menu_list != ML_MAIN) {   /* a theme or font chosen: kept */
         settings_save();
         g_menu_open = 0;
@@ -1037,6 +1162,8 @@ static void menu_run(const TermMenuItem *it)
     else if (!strcmp(it->arg, "session-next")) sess_step(1);
     else if (!strcmp(it->arg, "keys")) g_help_open = 1;
     else if (!strcmp(it->arg, "scroll-mode")) g_scroll_mode = !T.on_alt;
+    else if (!strcmp(it->arg, "copy")) copy_start();
+    else if (!strcmp(it->arg, "paste")) paste();
     else fprintf(stderr, "[pspexp-term] menu: unknown action @%s\n", it->arg);
 }
 
@@ -1057,6 +1184,8 @@ static const char *const HELP[][2] = {
     { "#", "Screen" },
     { "Select", "keyboard on / off   held: the launcher" },
     { "L + R + left/right", "the other shells (up to four)" },
+    { "L + Square", "copy: move, cross start / end, triangle line" },
+    { "L + Circle", "paste" },
     { "R + up/down", "scroll a line   left/right: a page" },
     { "R + nub", "scroll like a wheel (keyboard hidden:" },
     { "", "  the nub alone)" },
@@ -1132,6 +1261,7 @@ static void render(void)
     if (have_font && have_tfont) {
         draw_terminal(rows);
         if (g_tbatch.n) pspexp_draw_sprite_batch(ctx, TFONT_ID, g_tbatch.r, (uint32_t)g_tbatch.n);
+        if (g_copy_mode) draw_copy(rows);
         if (kb_shown) draw_keyboard();
         draw_scroll_label();
         draw_session_label();
@@ -1430,7 +1560,11 @@ static void handle_input(void)
 {
     const PspExpInput *in = pspexp_input(ctx);
     uint64_t now = pspexp_time_us();
-    uint32_t b = g_test_keys ? test_keys_buttons(now) : in->buttons, pressed = b & ~g_prev_buttons;
+    uint32_t b = g_test_keys ? test_keys_buttons(now) : in->buttons, pressed;
+    g_raw_buttons = b;
+    g_swallow &= b;          /* released: counts again */
+    b &= ~g_swallow;
+    pressed = b & ~g_prev_buttons;
     int shift = (b & PSPEXP_BUTTON_LTRIGGER) != 0, ctrl = (b & PSPEXP_BUTTON_RTRIGGER) != 0;
     int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
@@ -1468,7 +1602,7 @@ static void handle_input(void)
         g_prev_l_held = shift;
     }
     if (g_help_open) {
-        if (pressed || up || down || left || right) { g_help_open = 0; T.dirty = 1; }
+        if (pressed || up || down || left || right) { g_help_open = 0; T.dirty = 1; swallow(); }
         return;
     }
     if (g_menu_open) {
@@ -1481,6 +1615,11 @@ static void handle_input(void)
         if (g_select_tap) { while (g_menu_open) menu_back(); }
         return;
     }
+
+    if (g_copy_mode) { copy_input(pressed, up, down, left, right); return; }
+    /* L + square: copy mode; L + circle: paste */
+    if (shift && (pressed & PSPEXP_BUTTON_SQUARE)) { copy_start(); return; }
+    if (shift && (pressed & PSPEXP_BUTTON_CIRCLE)) { paste(); return; }
 
     /* L + R + left / right: the other shells (right past the last: a new one) */
     if (shift && ctrl && (left || right)) { sess_step(right ? 1 : -1); return; }
@@ -1517,7 +1656,7 @@ static void handle_input(void)
         if (T.view < 0) T.view = 0;
         if (up || down || left || right) T.dirty = 1;
         if (pressed & ~(PSPEXP_BUTTON_UP | PSPEXP_BUTTON_DOWN | PSPEXP_BUTTON_LEFT | PSPEXP_BUTTON_RIGHT | PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER)) {
-            g_scroll_mode = 0; T.dirty = 1;
+            g_scroll_mode = 0; T.dirty = 1; swallow();
             if (pressed & PSPEXP_BUTTON_CIRCLE) { T.view = 0; fire(V_CIRCLE, 1, now, 1); return; }   /* circle only leaves */
         } else return;
     }
