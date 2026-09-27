@@ -67,6 +67,23 @@ int  fops_is_remote(const char *path);
 /* the top of a drive: "/" or "ms0:/" (no ".." there) */
 int  fops_is_root(const char *path);
 
+/* ---- drives: the tabs over each panel ------------------------------------------ */
+
+#define FOPS_DRIVES 8
+
+typedef struct FDrive {
+    char root[FOPS_PATH];   /* "/", "/mnt/mmcblk0p1", "ms0:/" */
+    char name[32];          /* "Board", "SD card", "USB", a volume's label, "PSP" */
+    const char *icon;
+} FDrive;
+
+/* this board's drives: "/" first, then each storage mount (a /dev device;
+ * not /boot, loops or system folders), in mounts order. The mounts table
+ * is /proc/self/mounts, or the text given (tests). How many */
+int  fops_board_drives(FDrive *out, int max, const char *mounts_text);
+/* the drive that holds path: the longest root it starts with; -1 when none */
+int  fops_drive_of(const FDrive *d, int n, const char *path);
+
 /* ---- jobs ---------------------------------------------------------------- */
 
 enum { FJOB_COPY, FJOB_MOVE, FJOB_DELETE };

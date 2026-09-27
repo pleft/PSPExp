@@ -12,6 +12,11 @@
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/mount.h>
+#include <sys/param.h>
+#include <sys/ucred.h>
+#endif
 
 /* ---- the two kinds of path ------------------------------------------------------ */
 
@@ -208,6 +213,116 @@ int fops_conflicts(const char *dst, char (*names)[256], int n, char *first, size
         if (v_stat(p, &e) == 0) { if (!c && first) snprintf(first, fn, "%s", names[i]); c++; }
     }
     return c;
+}
+
+/* ---- drives -------------------------------------------------------------------- */
+
+/* /proc/mounts writes a space as \040 (octal) */
+static void unescape(char *s)
+{
+    char *o = s;
+    while (*s) {
+        if (s[0] == '\\' && s[1] >= '0' && s[1] <= '3' && s[2] >= '0' && s[2] <= '7' && s[3] >= '0' && s[3] <= '7') {
+            *o++ = (char)((s[1] - '0') * 64 + (s[2] - '0') * 8 + (s[3] - '0'));
+            s += 4;
+        } else *o++ = *s++;
+    }
+    *o = 0;
+}
+
+static int skip_mount(const char *dev, const char *dir)
+{
+    static const char *sys[] = { "/boot", "/efi", "/proc", "/sys", "/dev", "/run", "/snap", "/var", "/usr", "/tmp", "/etc", "/opt", "/srv", NULL };
+    int i;
+    if (strncmp(dev, "/dev/", 5) || !strncmp(dev, "/dev/loop", 9) || !strncmp(dev, "/dev/zram", 9)) return 1;
+    if (!strcmp(dir, "/")) return 1;
+    if (!strncmp(dir, "/run/media/", 11)) return 0;   /* desktops mount sticks there */
+    for (i = 0; sys[i]; i++) {
+        size_t l = strlen(sys[i]);
+        if (!strncmp(dir, sys[i], l) && (dir[l] == '/' || !dir[l])) return 1;
+    }
+    return 0;
+}
+
+static void add_drive(FDrive *out, int *n, int max, const char *root, const char *name, const char *icon)
+{
+    int i;
+    if (*n >= max) return;
+    for (i = 0; i < *n; i++) if (!strcmp(out[i].root, root)) return;   /* mounted twice (bind mounts) */
+    snprintf(out[*n].root, sizeof(out[*n].root), "%s", root);
+    snprintf(out[*n].name, sizeof(out[*n].name), "%s", name);
+    out[*n].icon = icon;
+    for (i = 0; i < *n; i++)   /* two alike ("USB", "USB"): the second by its folder */
+        if (!strcmp(out[i].name, out[*n].name)) { const char *b = strrchr(root, '/'); snprintf(out[*n].name, sizeof(out[*n].name), "%s", b && b[1] ? b + 1 : root); break; }
+    (*n)++;
+}
+
+int fops_board_drives(FDrive *out, int max, const char *mounts_text)
+{
+    int n = 0;
+    char *text = NULL;
+    add_drive(out, &n, max, "/", "Board", "hard-drive");
+    if (!mounts_text) {
+#if defined(__APPLE__)
+        struct statfs *m;
+        int k, c = getmntinfo(&m, MNT_NOWAIT);
+        for (k = 0; k < c; k++) {
+            const char *dir = m[k].f_mntonname;
+            if (strncmp(dir, "/Volumes/", 9) || (m[k].f_flags & MNT_DONTBROWSE)) continue;
+            add_drive(out, &n, max, dir, dir + 9, strncmp(m[k].f_mntfromname, "/dev/", 5) ? "cloud" : "hard-drive");
+        }
+        return n;
+#else
+        FILE *f = fopen("/proc/self/mounts", "r");
+        size_t cap = 0, len = 0;
+        if (!f) return n;
+        for (;;) {
+            char *nt;
+            if (len + 4097 > cap) { cap = cap ? cap * 2 : 16384; if (!(nt = realloc(text, cap))) break; text = nt; }
+            size_t r = fread(text + len, 1, cap - len - 1, f);
+            if (!r) break;
+            len += r;
+        }
+        fclose(f);
+        if (!text) return n;
+        text[len] = 0;
+        mounts_text = text;
+#endif
+    }
+    {
+        const char *line = mounts_text;
+        while (line && *line) {
+            char dev[FOPS_PATH], dir[FOPS_PATH];
+            const char *nl = strchr(line, '\n');
+            if (sscanf(line, "%1023s %1023s", dev, dir) == 2) {
+                unescape(dev); unescape(dir);
+                if (!skip_mount(dev, dir)) {
+                    const char *b = strrchr(dir, '/');
+                    int media = !strncmp(dir, "/media/", 7) || !strncmp(dir, "/run/media/", 11);
+                    if (media) add_drive(out, &n, max, dir, b && b[1] ? b + 1 : dir, !strncmp(dev, "/dev/sd", 7) ? "usb" : "hard-drive");
+                    else if (!strncmp(dev, "/dev/mmcblk", 11)) add_drive(out, &n, max, dir, "SD card", "hard-drive");
+                    else if (!strncmp(dev, "/dev/sd", 7)) add_drive(out, &n, max, dir, "USB", "usb");
+                    else add_drive(out, &n, max, dir, b && b[1] ? b + 1 : dir, "hard-drive");
+                }
+            }
+            line = nl ? nl + 1 : NULL;
+        }
+    }
+    free(text);
+    return n;
+}
+
+int fops_drive_of(const FDrive *d, int n, const char *path)
+{
+    int i, best = -1;
+    size_t bl = 0;
+    for (i = 0; i < n; i++) {
+        size_t l = strlen(d[i].root);
+        int match = !strcmp(d[i].root, "/") ? path[0] == '/' :
+                    !strncmp(path, d[i].root, l) && (path[l] == '/' || !path[l] || d[i].root[l - 1] == '/');
+        if (match && (best < 0 || l > bl)) { best = i; bl = l; }
+    }
+    return best;
 }
 
 /* ---- jobs -------------------------------------------------------------------- */

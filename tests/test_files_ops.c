@@ -229,6 +229,36 @@ int main(void)
         pspexp_null_destroy(nul);
     }
 
+    /* drives from a mounts table: an Omega's SD card, a desktop's stick
+     * (label with a space), two plain USB mounts; system ones left out */
+    {
+        FDrive d[FOPS_DRIVES];
+        const char *mounts =
+            "overlayfs:/overlay / overlay rw 0 0\n"
+            "proc /proc proc rw 0 0\n"
+            "/dev/mmcblk0p1 /boot vfat rw 0 0\n"
+            "/dev/mmcblk0p1 /mnt/mmcblk0p1 vfat rw 0 0\n"
+            "/dev/mmcblk0p1 /mnt/mmcblk0p1 vfat rw 0 0\n"
+            "/dev/sda1 /media/user/MY\\040STICK vfat rw 0 0\n"
+            "/dev/sdb1 /mnt/usb vfat rw 0 0\n"
+            "/dev/sdc1 /mnt/usb2 vfat rw 0 0\n"
+            "/dev/loop0 /snap/core squashfs ro 0 0\n"
+            "tmpfs /tmp tmpfs rw 0 0\n"
+            "/dev/mmcblk0p2 /var/log ext4 rw 0 0";
+        int n = fops_board_drives(d, FOPS_DRIVES, mounts);
+        CHECK_EQ(n, 5);
+        CHECK(!strcmp(d[0].root, "/") && !strcmp(d[0].name, "Board"));
+        CHECK(!strcmp(d[1].root, "/mnt/mmcblk0p1") && !strcmp(d[1].name, "SD card"));
+        CHECK(!strcmp(d[2].root, "/media/user/MY STICK") && !strcmp(d[2].name, "MY STICK") && !strcmp(d[2].icon, "usb"));
+        CHECK(!strcmp(d[3].name, "USB") && !strcmp(d[4].name, "usb2"));
+        CHECK_EQ(fops_drive_of(d, n, "/mnt/usb2/games"), 4);
+        CHECK_EQ(fops_drive_of(d, n, "/mnt/usb"), 3);
+        CHECK_EQ(fops_drive_of(d, n, "/mnt/usbx"), 0);
+        CHECK_EQ(fops_drive_of(d, n, "/home/user"), 0);
+        CHECK_EQ(fops_drive_of(d, n, "ms0:/PSP"), -1);
+        CHECK(fops_board_drives(d, FOPS_DRIVES, NULL) >= 1);   /* this machine's: "/" at least */
+    }
+
     /* clean up */
     for (i = 0; i < 1; i++) { job(FJOB_DELETE, "/tmp", "", strrchr(root, '/') + 1, &j); fjob_finish(&j); }
     CHECK(!exists(root));

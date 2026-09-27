@@ -15,6 +15,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -33,8 +34,8 @@ typedef struct Panel {
     FList list;
     int sel, top;
     char error[160];              /* the folder could not be read */
-    char back[FOPS_PATH];         /* on the PSP's stick: the board's folder to go back to */
-    char stick_back[FOPS_PATH];   /* on the board: the stick's folder to go back to */
+    char mem_root[FOPS_DRIVES + 1][FOPS_PATH], mem_path[FOPS_DRIVES + 1][FOPS_PATH];   /* the folder it had on each drive */
+    int nmem;
     int on_drives;                /* the highlight is on the drive tabs, not the list */
     char space[48];               /* on the PSP's stick: "1.2 GB free" */
 } Panel;
@@ -47,9 +48,9 @@ static char g_term_path[FOPS_PATH];
 static int g_caret;
 
 /* what is on top of the panels */
-enum { O_NONE, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE, O_INSTALLING };
+enum { O_NONE, O_DRIVES, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE, O_INSTALLING };
 static int g_over;
-static int g_msel;                /* the menu's highlighted row */
+static int g_msel;                /* the menu's highlighted row (the drive list's too) */
 
 /* a question waiting for yes / no */
 enum { Q_DELETE, Q_REPLACE_COPY, Q_REPLACE_MOVE, Q_INSTALL };
@@ -78,6 +79,7 @@ static int g_img_idx, g_img_w, g_img_h;
 static char **g_vlines; static int g_vn, g_vtop;
 static char g_vtitle[256];
 
+static void drives_refresh(void);
 static Panel *act(void) { return &g_p[g_act]; }
 static Panel *other(void) { return &g_p[!g_act]; }
 
@@ -144,6 +146,7 @@ static void panel_up(Panel *p)
 void files_open(const char *path)
 {
     const char *home = getenv("HOME");
+    drives_refresh();   /* before any panel: they are drawn with their drive */
     if (!g_p[0].path[0]) {   /* the first time: the other panel at home */
         snprintf(g_p[1].path, sizeof(g_p[1].path), "%s", home ? home : "/");
         panel_load(&g_p[1], NULL);
@@ -443,14 +446,14 @@ static void open_file(Panel *p, const FEntry *e)
 
 typedef struct MItem { const char *icon, *label; int id; } MItem;
 enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS,
-       P_DRIVE, P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_CLOSE };
+       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_CLOSE };
 static const MItem ACTIONS[] = {
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
     { "folder-plus", "New folder", A_MKDIR }, { "info", "Details", A_DETAILS },
 };
 static const MItem OPTIONS[] = {
-    { "memory-stick", "The PSP's memory stick", P_DRIVE }, { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
+    { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
     { "columns-2", "This folder in the other panel", P_SAME }, { "arrow-right-left", "Swap the panels", P_SWAP },
     { "square-terminal", "Terminal here", P_TERMINAL }, { "x", "Close the file manager", P_CLOSE },
 };
@@ -477,29 +480,51 @@ static void details(void)
     g_over = O_MESSAGE;
 }
 
-/* the panel onto the PSP's memory stick, or back to this board's folder */
-static void drive_switch(Panel *p)
+/* the drives the tabs show: this board's, then the PSP's memory stick */
+static FDrive g_drv[FOPS_DRIVES + 1];
+static int g_ndrv;
+
+static void drives_refresh(void)
 {
-    if (fops_is_remote(p->path)) {
-        const char *home = getenv("HOME");
-        snprintf(p->stick_back, sizeof(p->stick_back), "%s", p->path);
-        panel_cd(p, p->back[0] ? p->back : home ? home : "/", NULL);
-        return;
-    }
-    if (!files_psp_available()) {
+    g_ndrv = fops_board_drives(g_drv, FOPS_DRIVES, NULL);
+    snprintf(g_drv[g_ndrv].root, sizeof(g_drv[g_ndrv].root), "ms0:/");
+    snprintf(g_drv[g_ndrv].name, sizeof(g_drv[g_ndrv].name), "PSP");
+    g_drv[g_ndrv].icon = "memory-stick";
+    g_ndrv++;
+}
+
+static int drive_is_psp(int i) { return fops_is_remote(g_drv[i].root); }
+
+/* the tab of the panel's folder */
+static int drive_cur(const Panel *p)
+{
+    if (fops_is_remote(p->path)) return g_ndrv - 1;
+    { int i = fops_drive_of(g_drv, g_ndrv - 1, p->path); return i < 0 ? 0 : i; }
+}
+
+/* the panel onto drive i, where it last was on it (its top the first time,
+ * or when that folder is gone) */
+static void drive_go(Panel *p, int i)
+{
+    int cur = drive_cur(p), k, slot = -1;
+    if (i < 0 || i >= g_ndrv || i == cur) return;
+    if (drive_is_psp(i) && !files_psp_available()) {
         snprintf(g_msg_title, sizeof(g_msg_title), "The PSP's memory stick");
-        snprintf(g_msg, sizeof(g_msg), "The PSP does not share its memory stick yet: its PSPExp runtime is older. Copy the new one (dist/PSPExp) to ms0:/PSP/GAME/PSPExp/ and start it again.");
+        snprintf(g_msg, sizeof(g_msg), "The PSP does not share its memory stick yet: its PSPExp runtime is older (or the PSP is not connected). Copy the new one (dist/PSPExp) to ms0:/PSP/GAME/PSPExp/ and start it again.");
         g_over = O_MESSAGE;
         return;
     }
-    snprintf(p->back, sizeof(p->back), "%s", p->path);
-    if (p->stick_back[0]) {   /* where it was on the stick; its top when that is gone */
-        panel_cd(p, p->stick_back, NULL);
-        if (fops_is_remote(p->path)) return;
-        p->stick_back[0] = 0;
-        g_over = O_NONE;
-    }
-    panel_cd(p, "ms0:/", NULL);
+    /* remember this drive's folder */
+    for (k = 0; k < p->nmem; k++) if (!strcmp(p->mem_root[k], g_drv[cur].root)) { slot = k; break; }
+    if (slot < 0 && p->nmem < FOPS_DRIVES + 1) slot = p->nmem++;
+    if (slot >= 0) { snprintf(p->mem_root[slot], FOPS_PATH, "%s", g_drv[cur].root); snprintf(p->mem_path[slot], FOPS_PATH, "%s", p->path); }
+    for (k = 0; k < p->nmem; k++)
+        if (!strcmp(p->mem_root[k], g_drv[i].root)) {
+            panel_cd(p, p->mem_path[k], NULL);
+            if (drive_cur(p) == i && !p->error[0]) return;
+            g_over = O_NONE;   /* gone: the drive's top instead */
+        }
+    panel_cd(p, g_drv[i].root, NULL);
 }
 
 static void run_action(int id)
@@ -523,7 +548,6 @@ static void run_action(int id)
         break;
     case A_MKDIR: ui_kbd_reset(&g_kbd, "", 0, "Create"); g_kmode = K_MKDIR; g_over = O_KBD; break;
     case A_DETAILS: details(); break;
-    case P_DRIVE: drive_switch(p); break;
     case P_HIDDEN: g_hidden = !g_hidden; reload_all(); break;
     case P_SORT: g_sort = (g_sort + 1) % 3; reload_all(); break;
     case P_SAME: panel_cd(other(), p->path, NULL); break;
@@ -591,6 +615,13 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         else if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_over = O_NONE; g_dirty = 1; }
         return;
     }
+    case O_DRIVES:   /* the drop-down: every drive */
+        if (up) g_msel = (g_msel + g_ndrv - 1) % g_ndrv;
+        if (down) g_msel = (g_msel + 1) % g_ndrv;
+        if (pressed & PSPEXP_BUTTON_CROSS) { g_over = O_NONE; p->on_drives = 0; drive_go(p, g_msel); }
+        else if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) g_over = O_NONE;
+        g_dirty = 1;
+        return;
     case O_CONFIRM:
         if (pressed & PSPEXP_BUTTON_CROSS) {
             g_over = O_NONE;
@@ -633,17 +664,16 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     if (pressed & PSPEXP_BUTTON_LTRIGGER) { g_act = 0; g_dirty = 1; }
     if (pressed & PSPEXP_BUTTON_RTRIGGER) { g_act = 1; g_dirty = 1; }
     p = act();
-    if (p->on_drives) {   /* the drive tabs: left / right picks, down / cross back to the list */
-        int stick = fops_is_remote(p->path);
-        if ((left && stick) || (right && !stick)) drive_switch(p);
-        if (down || (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE))) p->on_drives = 0;
+    if (p->on_drives) {   /* the drive button: cross opens the list, down / circle back to the files */
+        if (pressed & PSPEXP_BUTTON_CROSS) { drives_refresh(); g_msel = drive_cur(p); g_over = O_DRIVES; }
+        else if (down || (pressed & PSPEXP_BUTTON_CIRCLE)) p->on_drives = 0;
         if (pressed & PSPEXP_BUTTON_TRIANGLE) { p->on_drives = 0; g_over = O_ACTIONS; g_msel = 0; }
         if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }
         if (pressed & PSPEXP_BUTTON_SELECT) g_exit = 1;
         g_dirty = 1;
         return;
     }
-    if (up && p->sel == 0) { p->on_drives = 1; g_dirty = 1; return; }   /* above the list: the drives */
+    if (up && p->sel == 0) { drives_refresh(); p->on_drives = 1; g_dirty = 1; return; }   /* above the list: the drive button */
     if (up) move_sel(p, -1);
     if (down) move_sel(p, 1);
     if (left) move_sel(p, -(ROWS - 1));
@@ -743,21 +773,17 @@ static void draw_panel(int k)
     gfx_nine(NINE_R10, x, PANEL_Y, PANEL_W, PANEL_H, UI_TILE, active ? 235 : 190);
     if (active) gfx_nine(NINE_R10, x, PANEL_Y, PANEL_W, 3, UI_ACCENT, 255);
     /* the folder: its name, then its path */
-    {   /* the drive tabs: this board, the PSP's memory stick; the shown one lit */
-        static const char *names[2] = { "Board", "PSP" }, *icons[2] = { "hard-drive", "memory-stick" };
-        int d, tx = x + 8;
-        for (d = 0; d < 2; d++) {
-            int on = d == stick, focus = active && p->on_drives && on, avail = d == 0 || files_psp_available();
-            int tw = 26 + gfx_text_width(FONT_SMALL, names[d]);
-            uint32_t col = focus ? 0xffffff : on ? UI_TEXT : avail ? UI_MUTED : 0x4a5163;
-            if (focus) gfx_nine(NINE_R6, tx, PANEL_Y + 5, tw, 17, UI_ACCENT, 200);
-            else if (on) gfx_nine(NINE_R6, tx, PANEL_Y + 5, tw, 17, 0xffffff, 26);
-            gfx_icon(icons[d], 12, tx + 6, PANEL_Y + 8, focus ? 0xffffff : on ? (active ? UI_ACCENT : UI_SUB) : col, 255);
-            gfx_text(FONT_SMALL, tx + 22, PANEL_Y + 6, names[d], col, 255, 0);
-            tx += tw + 4;
-        }
-        /* the folder's name after them */
-        gfx_text(FONT_SMALL, tx + 6, PANEL_Y + 6, base, active ? UI_SUB : UI_MUTED, 255, x + PANEL_W - 8 - (tx + 6));
+    {   /* the drive button: the panel's drive, its list below it on cross */
+        int cur = drive_cur(p), focus = active && p->on_drives, bw = 40 + gfx_text_width(FONT_SMALL, g_drv[cur].name), tx;
+        if (bw > 130) bw = 130;
+        gfx_nine(NINE_R6, x + 6, PANEL_Y + 5, bw, 17, focus ? UI_ACCENT : 0xffffff, focus ? 200 : 26);
+        gfx_icon(g_drv[cur].icon, 12, x + 12, PANEL_Y + 8, focus ? 0xffffff : active ? UI_ACCENT : UI_SUB, 255);
+        gfx_text(FONT_SMALL, x + 28, PANEL_Y + 6, g_drv[cur].name, focus ? 0xffffff : UI_TEXT, 255, bw - 40);
+        gfx_icon("chevron-down", 10, x + 6 + bw - 15, PANEL_Y + 9, focus ? 0xffffff : UI_MUTED, 255);
+        tx = x + 6 + bw + 8;
+        /* the folder's name after it (the path below has it too) */
+        if (strcmp(p->path, g_drv[cur].root))
+            gfx_text(FONT_SMALL, tx, PANEL_Y + 6, base, active ? UI_SUB : UI_MUTED, 255, x + PANEL_W - 8 - tx);
     }
     {   /* the path, its end kept when it does not fit */
         const char *shown = p->path;
@@ -806,12 +832,38 @@ static void draw_menu(const MItem *items, int n, const char *title)
         int ry = y + 28 + i * 20;
         char label[96];
         snprintf(label, sizeof(label), "%s", items[i].label);
-        if (items[i].id == P_DRIVE && fops_is_remote(act()->path)) snprintf(label, sizeof(label), "Back to this board's files");
         if (items[i].id == P_HIDDEN) snprintf(label, sizeof(label), "Hidden files: %s", g_hidden ? "shown" : "hidden");
         if (items[i].id == P_SORT) snprintf(label, sizeof(label), "Sort by %s", g_sort == FSORT_NAME ? "name" : g_sort == FSORT_SIZE ? "size" : "date");
         if (i == g_msel) gfx_nine(NINE_R6, x + 6, ry - 2, w - 12, 19, UI_ACCENT, 90);
-        gfx_icon(items[i].id == P_DRIVE && fops_is_remote(act()->path) ? "hard-drive" : items[i].icon, 13, x + 14, ry + 1, i == g_msel ? 0xffffff : UI_ACCENT, 255);
+        gfx_icon(items[i].icon, 13, x + 14, ry + 1, i == g_msel ? 0xffffff : UI_ACCENT, 255);
         gfx_text(FONT_SMALL, x + 36, ry, label, i == g_msel ? 0xffffff : UI_TEXT, 255, w - 48);
+    }
+}
+
+/* the drive list, dropped from the active panel's drive button */
+static void draw_drives(void)
+{
+    int x = 8 + g_act * (PANEL_W + PANEL_GAP) + 6, y = PANEL_Y + 24, w = PANEL_W - 12, rh = 30, h = 8 + g_ndrv * rh, i;
+    int cur = drive_cur(act());
+    gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
+    gfx_nine(NINE_R10, x, y, w, h, 0x232a3b, 250);
+    for (i = 0; i < g_ndrv; i++) {
+        int ry = y + 4 + i * rh, sel = i == g_msel, avail = !drive_is_psp(i) || files_psp_available();
+        char sub[FOPS_PATH + 48];
+        uint32_t tc = sel ? 0xffffff : avail ? UI_TEXT : 0x5a6275;
+        if (sel) gfx_nine(NINE_R6, x + 4, ry, w - 8, rh - 2, UI_ACCENT, 90);
+        gfx_icon(g_drv[i].icon, 14, x + 10, ry + 7, sel ? 0xffffff : avail ? UI_ACCENT : 0x5a6275, 255);
+        gfx_text(FONT_SMALL, x + 32, ry + 1, g_drv[i].name, tc, 255, w - 60);
+        if (i == cur) gfx_icon("check", 12, x + w - 22, ry + 8, sel ? 0xffffff : UI_ACCENT, 255);
+        /* where it is, and its free space (the board's drives: asked here, cheap) */
+        if (drive_is_psp(i)) snprintf(sub, sizeof(sub), "%s", avail ? "ms0:/  the PSP's memory stick" : "not shared by the PSP right now");
+        else {
+            struct statvfs sv;
+            char fr[32] = "";
+            if (statvfs(g_drv[i].root, &sv) == 0) fops_human((uint64_t)sv.f_bavail * sv.f_frsize, fr, sizeof(fr));
+            snprintf(sub, sizeof(sub), "%s%s%s%s", g_drv[i].root, fr[0] ? "  " : "", fr, fr[0] ? " free" : "");
+        }
+        gfx_text(FONT_BADGE, x + 32, ry + 15, sub, sel ? 0xdde3ff : UI_MUTED, 255, w - 60);
     }
 }
 
@@ -910,11 +962,14 @@ void files_render(PspExpContext *ctx, uint64_t now)
             else if (is_image(e)) go = "View";
             else go = "Read";
         }
-        if (!p->on_drives) x = ui_hint_btn(x, 'x', go);
+        if (!p->on_drives && g_over != O_DRIVES) x = ui_hint_btn(x, 'x', go);
     }
-    if (act()->on_drives) {
-        x = ui_hint_cap(x, "LEFT/RIGHT", "Drive", UI_SUB);
-        x = ui_hint_cap(x, "DOWN", "The list", UI_SUB);
+    if (g_over == O_DRIVES) {
+        x = ui_hint_btn(x, 'x', "Switch");
+        x = ui_hint_btn(x, 'o', "Close");
+    } else if (act()->on_drives) {
+        x = ui_hint_btn(x, 'x', "Drives");
+        x = ui_hint_cap(x, "DOWN", "The files", UI_SUB);
     } else {
         x = ui_hint_btn(x, 'o', "Up");
         x = ui_hint_btn(x, 's', "Mark");
@@ -923,6 +978,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
     x = ui_hint_cap(x, "START", "Options", UI_SUB);
     x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
     switch (g_over) {
+    case O_DRIVES: draw_drives(); break;
     case O_ACTIONS: draw_menu(ACTIONS, NACT, "Actions"); break;
     case O_OPTIONS: draw_menu(OPTIONS, NOPT, "Options"); break;
     case O_CONFIRM:

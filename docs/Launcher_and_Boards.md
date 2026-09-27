@@ -708,13 +708,13 @@ Files here at the shell's folder; select closes it.
 
 | | |
 |---|---|
-| d-pad | move (left / right: a page); up from the top row: the drive tabs |
+| d-pad | move (left / right: a page); up from the top row: the drive button |
 | L / R | the left / right panel |
 | cross | open: a folder; a picture full screen (left / right the others); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
 | circle | the folder above |
 | square | mark and move down |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
-| start | the PSP's memory stick (and back), hidden files, sort (name, size, date), same folder in both, swap, terminal here, close |
+| start | hidden files, sort (name, size, date), same folder in both, swap, terminal here, close |
 
 Copy, move and delete run on a thread (`files_ops.c`, tested by
 `tests/test_files_ops.c`) with progress and circle to cancel; a move
@@ -732,12 +732,22 @@ console comes back to the file manager afterwards. A package runs
 
 ### 7.3 The PSP's memory stick as a drive (2026-09-28)
 
-Each panel's header has drive tabs, **Board** and **PSP** (dimmed while the
-PSP does not offer its files), with the folder's name after them. Up from
-the top row moves onto the tabs; left / right switches the drive at once,
-and down (or cross / circle) returns to the list. Each panel remembers
-where it was on either drive. Start > The PSP's memory stick does the
-same. On the stick, the footer shows the free space. Copy, move, delete, rename
+Each panel's header starts with a drive button (the drive's icon and name,
+a chevron), then the folder's name. Up from the top row highlights it;
+cross drops down the list of every drive: **Board** (`/`), each storage
+mount of the board, then **PSP** (dimmed while the PSP does not share its
+files), each with where it is mounted and its free space, the shown one
+checked. Up / down and cross switch; circle closes; down from the button
+returns to the files. Each panel remembers its folder on every drive.
+
+The board's drives come from `/proc/self/mounts` (`getmntinfo` and
+`/Volumes` on a Mac), read again each time the button is reached, so a
+stick plugged in meanwhile shows. Only real devices (`/dev/...`, not loops
+or zram) count, and not `/`, `/boot`, `/efi` or system folders (`/proc`,
+`/sys`, `/dev`, `/run` but `/run/media`, `/var`, `/usr`, ...). Names:
+the volume label under `/media` or `/run/media`, "SD card" for an
+`mmcblk` device (the Omega's `/mnt/mmcblk0p1`), "USB" for `sd*` (a second
+one by its folder). On the stick, the footer shows the free space. Copy, move, delete, rename
 and new folder work on it and between it and the board; pictures and text
 open from it directly (fetched to `/tmp/pspexp-files-view`, up to 16 MB);
 ROMs and packages are copied to the board first.

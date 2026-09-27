@@ -2,8 +2,8 @@
  * pspexp-term's file manager view: two panels in the spirit of Midnight
  * Commander, drawn like the launcher (launcher_gfx), for the PSP's buttons:
  *
- *   d-pad         move (left / right: a page); up from the top row: the
- *                 drive tabs (Board, PSP), left / right switches drive
+ *   d-pad         move (left / right: a page); up from the top row: the drive
+ *                 button, cross there: every drive (the board's mounts, the PSP)
  *   L / R         the left / right panel
  *   cross         open: a folder, or a file (text: the viewer)
  *   circle        the folder above
