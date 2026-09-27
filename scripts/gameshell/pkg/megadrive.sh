@@ -5,6 +5,9 @@
 set -e
 . "$ROOT/scripts/gameshell/pkg/_lib.sh"
 D="$1"
+# not for the Omega2+: measured there, too slow to enjoy (Super Mario World
+# 46-51 of 50 fps with audio dropouts; Sonic 33 of 60 fps)
+[ "$BOARD" = omega ] && { echo "megadrive: not for the Omega2+ (too slow there); GameShell or Pi" >&2; exit 3; }
 retro_core "$D" picodrive
 retro_system "$D" md "Mega Drive" MD "md,gen,smd,bin" "Sega - Mega Drive - Genesis"
 cat > "$D/package" <<P

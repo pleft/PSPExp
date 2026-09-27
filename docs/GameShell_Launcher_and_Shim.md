@@ -461,7 +461,7 @@ Played on the Omega2+ with the real PSP over USB (the hardest board:
 | NES, QuickNES | full-speed game and sound, a steady 30 fps picture (20-28 while scrolling), a few audio clicks a minute; playable | 30 fps (VIDEO_DIV 2), CLUT8 pages |
 | Game Boy / Color, Gambatte | 59-60 fps, 56-59 shown, CPU half idle | 60 fps |
 | Mega Drive, PicoDrive | Sonic: 33 fps emulation, ~7 shown: unplayable | not for the Omega |
-| SNES, Snes9x 2005 | expected like the Mega Drive | not for the Omega |
+| SNES, Snes9x 2005 | Super Mario World (PAL): 46-51 of 50 fps, 13-25 shown, audio dropouts: not enjoyable | not for the Omega |
 
 What was learned there:
 
@@ -488,4 +488,4 @@ What was learned there:
 Compression was considered for the Omega and left for Wi-Fi: over USB a
 scrolling NES frame costs it about 3 ms to send, and compressing it would
 cost about as much. Next: the GameShell and the Pi, where SNES and Mega
-Drive belong.
+Drive belong. The SNES and Mega Drive recipes refuse to build for the Omega.
