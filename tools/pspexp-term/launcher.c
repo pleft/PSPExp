@@ -1096,6 +1096,33 @@ int launcher_needs_frame(uint64_t now)
 
 /* ---- drawing ------------------------------------------------------------------------------ */
 
+/* The board this runs on, as a small icon in its own colour (status bar,
+ * About): the GameShell a D-pad, the Omega2+ a microchip, a Pi 400/500 a
+ * keyboard, another Pi a circuit board, a Mac a laptop. */
+static struct { const char *icon; uint32_t colour; int done; } g_board;
+
+static void board_detect(void)
+{
+    char model[128] = "";
+    FILE *f;
+    struct utsname u;
+    if (g_board.done) return;
+    g_board.done = 1;
+    g_board.icon = "computer"; g_board.colour = C_SUB;
+    if ((f = fopen("/proc/device-tree/model", "r"))) { if (!fgets(model, sizeof(model), f)) model[0] = 0; fclose(f); }
+    if (!model[0] && (f = fopen("/proc/cpuinfo", "r"))) {   /* OpenWrt: "machine : Onion Omega2+" */
+        char l[256];
+        while (fgets(l, sizeof(l), f)) if (!strncmp(l, "machine", 7) && strchr(l, ':')) { snprintf(model, sizeof(model), "%s", strchr(l, ':') + 1); break; }
+        fclose(f);
+    }
+    if (strstr(model, "Clockwork") || strstr(model, "clockwork")) { g_board.icon = "gamepad-directional"; g_board.colour = 0xf59e0b; }
+    else if (strstr(model, "Omega")) { g_board.icon = "microchip"; g_board.colour = 0x34d399; }
+    else if (strstr(model, "Raspberry")) {
+        g_board.icon = (strstr(model, " 400") || strstr(model, " 500")) ? "keyboard" : "circuit-board";
+        g_board.colour = 0xf43f5e;
+    } else if (uname(&u) == 0 && !strcmp(u.sysname, "Darwin")) { g_board.icon = "laptop"; g_board.colour = 0xa5b4fc; }
+}
+
 static void draw_status(void)
 {
     char s[64];
@@ -1121,7 +1148,11 @@ static void draw_status(void)
         const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-zero";
         x -= 16;
         gfx_icon(ic, 16, x, 6, C_SUB, 255);
+        x -= 10;
     }
+    board_detect();
+    x -= 16;
+    gfx_icon(g_board.icon, 16, x, 6, g_board.colour, 255);
 }
 
 static void draw_rail(float dt)
@@ -1550,7 +1581,8 @@ static void draw_about(float dt)
     gfx_nine(NINE_R10, cx1, cy, cw, ch, 0x1a2030, a * 240 / 255);
     gfx_text(FONT_BADGE, cx1 + 12, cy + 9, "THIS BOARD", C_ACCENT, a, 0);
     y = cy + 26;
-    y = about_row(cx1 + 12, y, cw - 24, "cpu", "BOARD", b->board, a);
+    board_detect();
+    y = about_row(cx1 + 12, y, cw - 24, g_board.icon, "BOARD", b->board, a);
     {
         char chip[160];
         snprintf(chip, sizeof(chip), "%s%s%s", b->soc, b->soc[0] ? ", " : "", b->cpu);

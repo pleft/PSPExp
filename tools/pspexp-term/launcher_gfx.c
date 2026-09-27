@@ -362,6 +362,7 @@ static const IconName ICONS[] = {
     { "gem", 0xe242 }, { "tablet-smartphone", 0xe50a }, { "monitor-play", 0xe485 }, { "keyboard", 0xe284 },
     { "delete", 0xe0ae }, { "space", 0xe3dd }, { "corner-down-left", 0xe0a1 }, { "check", 0xe06c }, { "x", 0xe1b2 },
     { "toggle-left", 0xe18b }, { "toggle-right", 0xe18c }, { "image", 0xe0f6 }, { "image-off", 0xe1c0 }, { "router", 0xe3bf },
+    { "microchip", 0xe61a }, { "circuit-board", 0xe403 }, { "laptop", 0xe1cd }, { "computer", 0xe4e4 },
     { "radio-tower", 0xe404 }, { "folder-open", 0xe247 }, { "file-text", 0xe0cc }, { "tag", 0xe17f }, { "search-x", 0xe4ad },
     { "arrow-left", 0xe048 }, { "text-search", 0xe5ad },
 };
