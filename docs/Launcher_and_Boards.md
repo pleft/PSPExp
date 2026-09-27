@@ -708,7 +708,7 @@ Files here at the shell's folder; select closes it.
 
 | | |
 |---|---|
-| d-pad | move (left / right: a page) |
+| d-pad | move (left / right: a page); up from the top row: the drive tabs |
 | L / R | the left / right panel |
 | cross | open: a folder; a picture full screen (left / right the others); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
 | circle | the folder above |
@@ -732,9 +732,12 @@ console comes back to the file manager afterwards. A package runs
 
 ### 7.3 The PSP's memory stick as a drive (2026-09-28)
 
-Start > The PSP's memory stick turns the active panel into `ms0:/` (its
-header a memory-stick icon, its footer the free space); the same entry
-goes back to the board's folder it came from. Copy, move, delete, rename
+Each panel's header has drive tabs, **Board** and **PSP** (dimmed while the
+PSP does not offer its files), with the folder's name after them. Up from
+the top row moves onto the tabs; left / right switches the drive at once,
+and down (or cross / circle) returns to the list. Each panel remembers
+where it was on either drive. Start > The PSP's memory stick does the
+same. On the stick, the footer shows the free space. Copy, move, delete, rename
 and new folder work on it and between it and the board; pictures and text
 open from it directly (fetched to `/tmp/pspexp-files-view`, up to 16 MB);
 ROMs and packages are copied to the board first.

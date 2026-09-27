@@ -34,6 +34,8 @@ typedef struct Panel {
     int sel, top;
     char error[160];              /* the folder could not be read */
     char back[FOPS_PATH];         /* on the PSP's stick: the board's folder to go back to */
+    char stick_back[FOPS_PATH];   /* on the board: the stick's folder to go back to */
+    int on_drives;                /* the highlight is on the drive tabs, not the list */
     char space[48];               /* on the PSP's stick: "1.2 GB free" */
 } Panel;
 
@@ -480,6 +482,7 @@ static void drive_switch(Panel *p)
 {
     if (fops_is_remote(p->path)) {
         const char *home = getenv("HOME");
+        snprintf(p->stick_back, sizeof(p->stick_back), "%s", p->path);
         panel_cd(p, p->back[0] ? p->back : home ? home : "/", NULL);
         return;
     }
@@ -490,6 +493,12 @@ static void drive_switch(Panel *p)
         return;
     }
     snprintf(p->back, sizeof(p->back), "%s", p->path);
+    if (p->stick_back[0]) {   /* where it was on the stick; its top when that is gone */
+        panel_cd(p, p->stick_back, NULL);
+        if (fops_is_remote(p->path)) return;
+        p->stick_back[0] = 0;
+        g_over = O_NONE;
+    }
     panel_cd(p, "ms0:/", NULL);
 }
 
@@ -624,6 +633,17 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     if (pressed & PSPEXP_BUTTON_LTRIGGER) { g_act = 0; g_dirty = 1; }
     if (pressed & PSPEXP_BUTTON_RTRIGGER) { g_act = 1; g_dirty = 1; }
     p = act();
+    if (p->on_drives) {   /* the drive tabs: left / right picks, down / cross back to the list */
+        int stick = fops_is_remote(p->path);
+        if ((left && stick) || (right && !stick)) drive_switch(p);
+        if (down || (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE))) p->on_drives = 0;
+        if (pressed & PSPEXP_BUTTON_TRIANGLE) { p->on_drives = 0; g_over = O_ACTIONS; g_msel = 0; }
+        if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }
+        if (pressed & PSPEXP_BUTTON_SELECT) g_exit = 1;
+        g_dirty = 1;
+        return;
+    }
+    if (up && p->sel == 0) { p->on_drives = 1; g_dirty = 1; return; }   /* above the list: the drives */
     if (up) move_sel(p, -1);
     if (down) move_sel(p, 1);
     if (left) move_sel(p, -(ROWS - 1));
@@ -719,21 +739,35 @@ static void draw_panel(int k)
     const char *base = strrchr(p->path, '/');
     int stick = fops_is_remote(p->path);
     char s[96];
-    base = base && base[1] ? base + 1 : stick ? "Memory Stick" : p->path;
+    base = base && base[1] ? base + 1 : stick ? "" : p->path;
     gfx_nine(NINE_R10, x, PANEL_Y, PANEL_W, PANEL_H, UI_TILE, active ? 235 : 190);
     if (active) gfx_nine(NINE_R10, x, PANEL_Y, PANEL_W, 3, UI_ACCENT, 255);
     /* the folder: its name, then its path */
-    gfx_icon(stick ? "memory-stick" : "folder-open", 14, x + 8, PANEL_Y + 7, active ? UI_ACCENT : UI_MUTED, 255);
-    gfx_text(FONT_BODY, x + 28, PANEL_Y + 5, base, active ? UI_TEXT : UI_SUB, 255, PANEL_W - 36);
+    {   /* the drive tabs: this board, the PSP's memory stick; the shown one lit */
+        static const char *names[2] = { "Board", "PSP" }, *icons[2] = { "hard-drive", "memory-stick" };
+        int d, tx = x + 8;
+        for (d = 0; d < 2; d++) {
+            int on = d == stick, focus = active && p->on_drives && on, avail = d == 0 || files_psp_available();
+            int tw = 26 + gfx_text_width(FONT_SMALL, names[d]);
+            uint32_t col = focus ? 0xffffff : on ? UI_TEXT : avail ? UI_MUTED : 0x4a5163;
+            if (focus) gfx_nine(NINE_R6, tx, PANEL_Y + 5, tw, 17, UI_ACCENT, 200);
+            else if (on) gfx_nine(NINE_R6, tx, PANEL_Y + 5, tw, 17, 0xffffff, 26);
+            gfx_icon(icons[d], 12, tx + 6, PANEL_Y + 8, focus ? 0xffffff : on ? (active ? UI_ACCENT : UI_SUB) : col, 255);
+            gfx_text(FONT_SMALL, tx + 22, PANEL_Y + 6, names[d], col, 255, 0);
+            tx += tw + 4;
+        }
+        /* the folder's name after them */
+        gfx_text(FONT_SMALL, tx + 6, PANEL_Y + 6, base, active ? UI_SUB : UI_MUTED, 255, x + PANEL_W - 8 - (tx + 6));
+    }
     {   /* the path, its end kept when it does not fit */
         const char *shown = p->path;
         char cut[FOPS_PATH + 4];
-        while (gfx_text_width(FONT_BADGE, shown) > PANEL_W - 44 && strlen(shown) > 4) {
+        while (gfx_text_width(FONT_BADGE, shown) > PANEL_W - 28 && strlen(shown) > 4) {
             shown++;
             snprintf(cut, sizeof(cut), "...%s", shown);
-            if (gfx_text_width(FONT_BADGE, cut) <= PANEL_W - 36) { shown = cut; break; }
+            if (gfx_text_width(FONT_BADGE, cut) <= PANEL_W - 20) { shown = cut; break; }
         }
-        gfx_text(FONT_BADGE, x + 28, PANEL_Y + 20, shown, UI_MUTED, 255, PANEL_W - 36);
+        gfx_text(FONT_BADGE, x + 10, PANEL_Y + 23, shown, UI_MUTED, 255, PANEL_W - 20);
     }
     if (p->error[0]) { gfx_text(FONT_SMALL, x + 10, LIST_Y + 4, p->error, 0xff8080, 255, PANEL_W - 20); return; }
     /* keep the highlight in view */
@@ -744,7 +778,7 @@ static void draw_panel(int k)
         const FEntry *e = &p->list.e[p->top + i];
         int y = LIST_Y + i * ROW_H, sel = p->top + i == p->sel;
         uint32_t tc = e->marked ? 0xffd479 : e->is_dir ? UI_TEXT : UI_SUB;
-        if (sel && active) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, UI_ACCENT, 70);
+        if (sel && active && !p->on_drives) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, UI_ACCENT, 70);
         else if (sel) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, 0xffffff, 18);
         gfx_icon(icon_for(e), 12, x + 8, y + 2, e->marked ? 0xffd479 : e->is_dir ? UI_ACCENT : UI_MUTED, 255);
         if (!e->is_dir && !e->is_up) {
@@ -876,11 +910,16 @@ void files_render(PspExpContext *ctx, uint64_t now)
             else if (is_image(e)) go = "View";
             else go = "Read";
         }
-        x = ui_hint_btn(x, 'x', go);
+        if (!p->on_drives) x = ui_hint_btn(x, 'x', go);
     }
-    x = ui_hint_btn(x, 'o', "Up");
-    x = ui_hint_btn(x, 's', "Mark");
-    x = ui_hint_btn(x, 't', "Actions");
+    if (act()->on_drives) {
+        x = ui_hint_cap(x, "LEFT/RIGHT", "Drive", UI_SUB);
+        x = ui_hint_cap(x, "DOWN", "The list", UI_SUB);
+    } else {
+        x = ui_hint_btn(x, 'o', "Up");
+        x = ui_hint_btn(x, 's', "Mark");
+        x = ui_hint_btn(x, 't', "Actions");
+    }
     x = ui_hint_cap(x, "START", "Options", UI_SUB);
     x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
     switch (g_over) {
