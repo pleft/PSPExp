@@ -22,6 +22,8 @@ start_service() {
 		mkdir -p $DIR/home $DIR/opt/apps $DIR/opt/systems
 		cd $DIR/home
 		while :; do
+			# the clock's time zone: OpenWrt keeps it in /etc/TZ, musl reads it from TZ
+			export TZ=\$(cat /etc/TZ 2>/dev/null)
 			$DIR/pspexp-term --shell /bin/ash --launcher & C=\$!
 			wait \$C
 			echo 'pspexp-term exited; restarting in 2 s' >&2
