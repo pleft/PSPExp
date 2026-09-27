@@ -13,15 +13,17 @@
  * Controls (PSP):
  *   select        show / hide the on-screen keyboard (terminal 80x25 / 80x34)
  *   d-pad         move on the keyboard; arrow keys when it is hidden
- *   cross         type the highlighted key          circle  backspace
- *   square        space                              triangle  Enter
+ *   cross         type the highlighted key          square  Backspace
+ *   circle        space                              triangle  Enter
  *   start         Tab (completion)
  *   L (held)      Shift                              R (held)  Ctrl
  *   nub           arrow keys (history, cursor, vi) with the keyboard shown
  *   L tap         the context menu: keys and commands for the shell or for
  *                 the full-screen program (vi, less, top), terminal actions
  *                 (~/.config/pspexp-term/menu, see term_menu.h)
- *   L + triangle  Esc                                R + circle  Ctrl-C
+ *   L + triangle  Esc                                R + square  Ctrl-C
+ *   L + R + left/right   the other shells (sessions, up to four; right
+ *                 past the last opens a new one; `exit` closes one)
  *   R + up/down   scroll back a line (R + left/right: a page)
  *   R + nub       scroll back like a mouse wheel (further: faster); with the
  *                 keyboard hidden the nub alone does
@@ -135,11 +137,26 @@ typedef struct Term {
     int state; int params[16]; int nparams; int private_mode; int param_started;
     uint32_t utf8; int utf8_left;
     int dirty;
+    /* the session: its shell on a pseudo-terminal */
+    int master, used;
+    pid_t child;
 } Term;
 
-static Term T;
-static int g_master = -1;
-static pid_t g_child = -1;
+/* up to four shells (sessions), each its own screen, scrollback and program,
+ * all running; T is the one on the PSP (L + R + left / right switches) */
+#define NSESS 4
+static Term g_sess[NSESS];
+static Term *g_t = &g_sess[0];
+#define T (*g_t)
+#define g_master (T.master)
+#define g_child (T.child)
+static int g_sess_cur;
+static uint64_t g_sess_shown_until;   /* the "shell 2/3" label, after a switch */
+static int sess_count(void);
+static int sess_number(void);
+static int sess_new(void);
+static void sess_step(int d);
+static void term_resize_all(int rows);
 static volatile sig_atomic_t g_release_req, g_acquire_req, g_child_died;
 
 static uint16_t rgb565(uint32_t rgb) { return pspexp_color_5650((uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8), (uint8_t)rgb); }
@@ -824,6 +841,17 @@ static void draw_terminal(int rows)
 }
 
 /* while scrolled back: a label at the top right (UI font) */
+/* after a switch: which shell this is */
+static void draw_session_label(void)
+{
+    char s[40];
+    if (pspexp_time_us() >= g_sess_shown_until) return;
+    if (sess_count() == NSESS && g_sess_shown_until && sess_number() == 0) return;
+    snprintf(s, sizeof(s), " shell %d/%d%s ", sess_number(), sess_count(), sess_count() == NSESS ? " (all four open)" : "");
+    pspexp_fill_rect(ctx, (int16_t)(240 - (int)strlen(s) * UI_W / 2), 2, (int16_t)(strlen(s) * UI_W), UI_H + 2, rgb565(theme()->accent), 255);
+    text(240 - (int)strlen(s) * UI_W / 2, 3, s, rgb565(theme()->accent_text));
+}
+
 static void draw_scroll_label(void)
 {
     char s[64];
@@ -905,7 +933,7 @@ static void font_apply(int i)
     g_font = i;
     tfont_upload();
     T.cols = 480 / g_cw > COLS_MAX ? COLS_MAX : 480 / g_cw;
-    term_resize(term_rows());
+    term_resize_all(term_rows());
 }
 
 /* ---- the context menu (a tap of L) --------------------------------------------- */
@@ -1004,7 +1032,9 @@ static void menu_run(const TermMenuItem *it)
     if (it->kind == TM_KEYS) { pty_write(it->arg, (size_t)it->len); T.view = 0; return; }
     if (!strcmp(it->arg, "scroll-top")) T.view = T.on_alt ? 0 : T.sb_count;
     else if (!strcmp(it->arg, "scroll-bottom")) T.view = 0;
-    else if (!strcmp(it->arg, "keyboard")) { kb_shown = !kb_shown; term_resize(term_rows()); }
+    else if (!strcmp(it->arg, "keyboard")) { kb_shown = !kb_shown; term_resize_all(term_rows()); }
+    else if (!strcmp(it->arg, "session-new")) { if (!sess_new()) g_sess_shown_until = pspexp_time_us() + 1500000u; }
+    else if (!strcmp(it->arg, "session-next")) sess_step(1);
     else if (!strcmp(it->arg, "keys")) g_help_open = 1;
     else if (!strcmp(it->arg, "scroll-mode")) g_scroll_mode = !T.on_alt;
     else fprintf(stderr, "[pspexp-term] menu: unknown action @%s\n", it->arg);
@@ -1016,16 +1046,17 @@ static const char *const HELP[][2] = {
     { "#", "Typing" },
     { "D-pad", "move on the keyboard (hidden: arrow keys)" },
     { "Cross", "type the highlighted key" },
-    { "Circle", "Backspace" },
-    { "Square", "Space" },
+    { "Square", "Backspace" },
+    { "Circle", "Space" },
     { "Triangle", "Enter" },
     { "Start", "Tab (completion)" },
     { "L held / R held", "Shift / Ctrl" },
     { "L + Triangle", "Esc" },
-    { "R + Circle", "Ctrl-C (stop)" },
+    { "R + Square", "Ctrl-C (stop)" },
     { "Nub", "arrow keys (keyboard shown)" },
     { "#", "Screen" },
     { "Select", "keyboard on / off   held: the launcher" },
+    { "L + R + left/right", "the other shells (up to four)" },
     { "R + up/down", "scroll a line   left/right: a page" },
     { "R + nub", "scroll like a wheel (keyboard hidden:" },
     { "", "  the nub alone)" },
@@ -1103,6 +1134,7 @@ static void render(void)
         if (g_tbatch.n) pspexp_draw_sprite_batch(ctx, TFONT_ID, g_tbatch.r, (uint32_t)g_tbatch.n);
         if (kb_shown) draw_keyboard();
         draw_scroll_label();
+        draw_session_label();
         if (g_batch.n) pspexp_draw_sprite_batch(ctx, font.atlas, g_batch.r, (uint32_t)g_batch.n);
         g_batch.n = 0;
         draw_scrollbar(rows);
@@ -1195,6 +1227,72 @@ static void spawn_shell(void)
         _exit(127);
     }
     fcntl(g_master, F_SETFL, fcntl(g_master, F_GETFL) | O_NONBLOCK);
+}
+
+/* ---- sessions ---------------------------------------------------------------- */
+
+static int sess_count(void) { int i, n = 0; for (i = 0; i < NSESS; i++) n += g_sess[i].used; return n; }
+static int sess_number(void) { int i, n = 0; for (i = 0; i <= g_sess_cur; i++) n += g_sess[i].used; return n; }
+
+/* every session gets the new size (keyboard shown / hidden, a new font) */
+static void term_resize_all(int rows)
+{
+    Term *cur = g_t;
+    int i, cols = T.cols;
+    for (i = 0; i < NSESS; i++) if (g_sess[i].used) { g_t = &g_sess[i]; T.cols = cols; term_resize(rows); }
+    g_t = cur;
+}
+
+static void sess_show(int i)
+{
+    g_sess_cur = i;
+    g_t = &g_sess[i];
+    T.dirty = 1;
+    g_sess_shown_until = pspexp_time_us() + 1500000u;
+}
+
+/* a new shell in a free slot, shown; 0 when all four are in use */
+static int sess_new(void)
+{
+    int i, rows = T.rows, cols = T.cols;
+    for (i = 0; i < NSESS && g_sess[i].used; i++) ;
+    if (i == NSESS) return 0;
+    g_t = &g_sess[i];
+    memset(&T, 0, sizeof(T));
+    T.used = 1; T.master = -1; T.child = -1; T.cols = cols;
+    term_reset(rows);
+    spawn_shell();
+    sess_show(i);
+    return 1;
+}
+
+/* the next (d = 1) or previous (-1) session; right past the last opens a new one */
+static void sess_step(int d)
+{
+    int i = g_sess_cur, k;
+    for (k = 0; k < NSESS; k++) {
+        i = (i + d + NSESS) % NSESS;
+        if (d > 0 && i == 0 && sess_count() < NSESS && sess_new()) return;   /* wrapped: a new one first */
+        if (g_sess[i].used) { sess_show(i); return; }
+    }
+}
+
+/* a shell exited: its session closes (the last one gets a new shell) */
+static void sess_closed(int i)
+{
+    Term *cur = g_t;
+    g_t = &g_sess[i];
+    if (T.master >= 0) close(T.master);
+    T.master = -1; T.child = -1;
+    if (sess_count() == 1) {   /* the last one: a new shell in its place */
+        term_feed((const uint8_t *)"\r\n[shell exited; starting a new one]\r\n", 38);
+        spawn_shell();
+        g_t = cur;
+        return;
+    }
+    T.used = 0;
+    g_t = cur;
+    if (i == g_sess_cur) sess_step(-1);
 }
 
 static void on_sigchld(int s) { (void)s; g_child_died = 1; }
@@ -1384,6 +1482,9 @@ static void handle_input(void)
         return;
     }
 
+    /* L + R + left / right: the other shells (right past the last: a new one) */
+    if (shift && ctrl && (left || right)) { sess_step(right ? 1 : -1); return; }
+
     /* the wheel: R + nub, the nub alone when the keyboard is hidden, or in
      * scroll mode; faster the further it is pushed */
     if ((ctrl || !kb_shown || g_scroll_mode) && !T.on_alt && (ay < -30 || ay > 30)) {
@@ -1421,7 +1522,7 @@ static void handle_input(void)
         } else return;
     }
 
-    if (g_select_tap) { kb_shown = !kb_shown; term_resize(term_rows()); }
+    if (g_select_tap) { kb_shown = !kb_shown; term_resize_all(term_rows()); }
 
     if (ctrl && (up || down || left || right)) {   /* R + direction: scrollback */
         int page = term_rows() - 1;
@@ -1451,9 +1552,10 @@ static void handle_input(void)
     if (fire(N_RIGHT, ax > 60, now, 1)) send_arrow('C');
 
     if (fire(V_CROSS, b & PSPEXP_BUTTON_CROSS, now, 1) && kb_shown) { send_key(&KROWS_[kb_row][kb_col], shift, ctrl); T.view = 0; T.dirty = 1; }
-    if (ctrl && (pressed & PSPEXP_BUTTON_CIRCLE)) { pty_puts("\003"); T.view = 0; fire(V_CIRCLE, 1, now, 1); }   /* R + circle: Ctrl-C */
-    else if (!ctrl && fire(V_CIRCLE, b & PSPEXP_BUTTON_CIRCLE, now, 1)) { pty_puts("\177"); T.view = 0; }
-    if (pressed & PSPEXP_BUTTON_SQUARE) { pty_puts(" "); T.view = 0; }
+    /* square: Backspace (R + square: Ctrl-C); circle: Space (the user's choice) */
+    if (ctrl && (pressed & PSPEXP_BUTTON_SQUARE)) { pty_puts("\003"); T.view = 0; fire(V_CIRCLE, 1, now, 1); }
+    else if (!ctrl && fire(V_CIRCLE, b & PSPEXP_BUTTON_SQUARE, now, 1)) { pty_puts("\177"); T.view = 0; }
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { pty_puts(" "); T.view = 0; }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts(shift ? "\033" : "\r"); T.view = 0; }   /* L + triangle: Esc */
     if (pressed & PSPEXP_BUTTON_START) pty_puts("\t");
 }
@@ -1998,7 +2100,7 @@ static void host_key(int code, int value)
     default: break;
     }
     if (value == 0) return;   /* 1 press, 2 auto-repeat */
-    if (kb_shown) { kb_shown = 0; term_resize(term_rows()); }   /* a real keyboard: no need for the on-screen one */
+    if (kb_shown) { kb_shown = 0; term_resize_all(term_rows()); }   /* a real keyboard: no need for the on-screen one */
     if (k_shift && (code == KEY_PAGEUP || code == KEY_PAGEDOWN)) {   /* Shift+PgUp/PgDn: scrollback */
         int page = T.rows - 1;
         T.view += code == KEY_PAGEUP ? page : -page;
@@ -2265,6 +2367,8 @@ int main(int argc, char **argv)
         } else if ((f = fopen(pidfile, "w"))) { fprintf(f, "%d\n", (int)getpid()); fclose(f); }
     }
 
+    { int k; for (k = 0; k < NSESS; k++) { g_sess[k].master = -1; g_sess[k].child = -1; } }
+    g_sess[0].used = 1;
     settings_load();
     g_cw = TERM_FONTS[g_font].w; g_ch = TERM_FONTS[g_font].h;
     T.cols = 480 / g_cw > COLS_MAX ? COLS_MAX : 480 / g_cw;
@@ -2314,30 +2418,44 @@ int main(int argc, char **argv)
     }
 
     while (!g_quit) {
-        struct pollfd pfd[1];
+        struct pollfd pfd[NSESS];
         uint8_t buf[4096];
         uint64_t now;
         int connected;
 
-        /* shell output */
-        pfd[0].fd = g_master; pfd[0].events = POLLIN;
-        if (poll(pfd, 1, 8) > 0 && (pfd[0].revents & (POLLIN | POLLHUP))) {
-            for (;;) {
-                ssize_t n = read(g_master, buf, sizeof(buf));
-                if (n > 0) { term_feed(buf, (size_t)n); if (T.view) T.view = 0; continue; }
-                if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) g_child_died = 1;
-                break;
+        /* the shells' output, every session's (the ones not shown keep going) */
+        {
+            int np = 0, idx[NSESS], k;
+            Term *cur = g_t;
+            for (k = 0; k < NSESS; k++)
+                if (g_sess[k].used && g_sess[k].master >= 0) { pfd[np].fd = g_sess[k].master; pfd[np].events = POLLIN; idx[np++] = k; }
+            if (np && poll(pfd, (nfds_t)np, 8) > 0) {
+                for (k = 0; k < np; k++) {
+                    if (!(pfd[k].revents & (POLLIN | POLLHUP | POLLERR))) continue;
+                    g_t = &g_sess[idx[k]];
+                    for (;;) {
+                        ssize_t n = read(T.master, buf, sizeof(buf));
+                        if (n > 0) { term_feed(buf, (size_t)n); if (T.view && !g_scroll_mode) T.view = 0; continue; }
+                        if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) g_child_died = 1;
+                        break;
+                    }
+                }
+                g_t = cur;
+                if (g_sess[g_sess_cur].dirty) T.dirty = 1;
             }
         }
         if (g_child_died) {
-            int status;
-            if (waitpid(g_child, &status, WNOHANG) == g_child || g_master < 0) {
-                close(g_master); g_master = -1;
-                if (g_cmd) break;   /* --cmd: done when the command is */
-                term_feed((const uint8_t *)"\r\n[shell exited; starting a new one]\r\n", 38);
-                spawn_shell();
-            }
+            int status, k, cmd_done = 0;
             g_child_died = 0;
+            for (k = 0; k < NSESS; k++) {
+                Term *t = &g_sess[k];
+                if (!t->used || t->child <= 0) continue;
+                if (waitpid(t->child, &status, WNOHANG) == t->child) {
+                    if (g_cmd) { cmd_done = 1; break; }   /* --cmd: done when the command is */
+                    sess_closed(k);
+                }
+            }
+            if (cmd_done) break;
         }
 
         if (g_launch_pid > 0) {   /* a program started from the launcher */
@@ -2418,7 +2536,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (g_child > 0) kill(-g_child, SIGHUP);
+    { int k; for (k = 0; k < NSESS; k++) if (g_sess[k].used && g_sess[k].child > 0) kill(-g_sess[k].child, SIGHUP); }
     if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
         pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);
     }
