@@ -1,0 +1,267 @@
+<title>PSPExp Cartridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground: #e9ebee;
+  --panel: #f6f7f9;
+  --ink: #16181c;
+  --muted: #5b616b;
+  --rule: #cfd3d9;
+  --accent: #c2471f;
+  --view: #dfe2e6;
+  --focus: #2b64c9;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #121418; --panel: #1a1d22; --ink: #e8eaee; --muted: #9aa1ac;
+    --rule: #2c3038; --accent: #ec7a52; --view: #0d0f12; --focus: #7aa7ff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #121418; --panel: #1a1d22; --ink: #e8eaee; --muted: #9aa1ac;
+  --rule: #2c3038; --accent: #ec7a52; --view: #0d0f12; --focus: #7aa7ff;
+}
+body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 22px 40px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+h1 { font: 700 34px/1.05 var(--display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 68ch; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+.viewport { position: relative; background: var(--view); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; aspect-ratio: 4 / 3; max-width: 100%; }
+.viewport canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; left: 12px; bottom: 10px; font: 12px var(--mono); color: var(--muted); pointer-events: none; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; font: 13px var(--mono); color: var(--muted); }
+.controls { display: grid; gap: 16px; }
+.group { display: grid; gap: 8px; }
+.label { font: 600 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 500 14px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.parts { display: grid; gap: 4px; }
+.parts label { display: grid; grid-template-columns: 18px 14px 1fr; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.chip { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--rule); }
+.dims { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font: 13px var(--mono); }
+.dims span:nth-child(odd) { color: var(--muted); font-family: var(--body); }
+.dims span:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px 28px; }
+.notes section { display: grid; gap: 6px; align-content: start; }
+h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
+.notes p, .notes li { max-width: 62ch; }
+.notes ul, .notes ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.notes p { margin: 0; }
+.mono { font-family: var(--mono); font-size: 13px; }
+.measure { color: var(--accent); font-weight: 500; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>PSPExp Cartridge</h1>
+    <p>A Raspberry Pi Zero 2 W, its battery and charger in a shell that sits on the PSP-1000's top edge between L and R, like a Game Boy cartridge. Drag to turn it, scroll or pinch to zoom.</p>
+  </header>
+
+  <div class="stage">
+    <div class="viewport" id="viewport">
+      <div class="loading" id="loading">Loading the model…</div>
+      <div class="hud" id="hud"></div>
+    </div>
+
+    <div class="controls">
+      <div class="group">
+        <span class="label">Attach</span>
+        <button class="primary" id="play" type="button">Slide it onto the PSP</button>
+        <label class="label" for="lift">Height above the port</label>
+        <input id="lift" type="range" min="0" max="60" step="0.5" value="0">
+      </div>
+      <div class="group">
+        <span class="label">Open the shell</span>
+        <input id="explode" type="range" min="0" max="30" step="0.5" value="0" aria-label="Separate the two halves">
+      </div>
+      <div class="group">
+        <span class="label">View</span>
+        <div class="seg" id="views">
+          <button type="button" data-view="iso" aria-pressed="true">Three-quarter</button>
+          <button type="button" data-view="front">Front</button>
+          <button type="button" data-view="back">Back</button>
+          <button type="button" data-view="side">Side</button>
+          <button type="button" data-view="top">Top</button>
+        </div>
+        <div class="seg">
+          <button type="button" id="section" aria-pressed="false">Cut through the plug</button>
+        </div>
+      </div>
+      <div class="group">
+        <span class="label">Parts</span>
+        <div class="parts" id="parts"></div>
+      </div>
+      <div class="group">
+        <span class="label">Size</span>
+        <div class="dims" id="dims"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>How it attaches</h2>
+      <p>The underside is a saddle: a channel as thick as the PSP (23 mm plus 0.3 mm of play per side) with a 6 mm lip over the screen side and a 12 mm lip over the back. A 0.5 mm bump along each lip clicks over the faces and holds it. The front lip stays inside the bezel above the screen.</p>
+      <p>The Mini-B plug sits in the saddle's roof, in a pocket with 0.4 mm of float, so it lines up with the port by itself. The saddle carries the cartridge's weight and any knock, not the PSP's USB socket.</p>
+      <p>Cut through the plug to see the saddle's profile around the PSP.</p>
+    </section>
+    <section>
+      <h2>Inside</h2>
+      <ul>
+        <li><b>Front layer:</b> the Pi Zero 2 W on four 3 mm standoffs, chips facing inward. The microSD card is reachable through a slot in the left end.</li>
+        <li><b>Middle layer:</b> the plug cradle at the bottom, the charger module at the top right with its USB-C port in the top face, and vents over the Pi's processor.</li>
+        <li><b>Back layer:</b> a 1000 mAh LiPo (50 × 34 × 5 mm), about 3 hours of play (an estimate, to be measured).</li>
+        <li>Four wires go from the plug to the Pi's USB test pads. The Pi is the USB host and supplies the PSP's VBUS from its 5 V rail.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>To measure on a real PSP-1000</h2>
+      <p>These are estimates in the model. Each one is a single number in <span class="mono">cartridge.py</span>:</p>
+      <ul>
+        <li><span class="measure">USB_X</span>: where the Mini-B port sits along the top edge (the cartridge centres on it).</li>
+        <li><span class="measure">USB_Z</span>: where the port sits across the thickness.</li>
+        <li><span class="measure">SHOULDER_IN</span>: where L ends and R starts. The cartridge is 84 mm wide.</li>
+        <li><span class="measure">BEZEL_TOP</span>: the front face above the screen glass (the front lip must stay above it).</li>
+        <li>The thickness at the top edge where the lips sit, and how round the top edges are.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Parts to buy</h2>
+      <ul>
+        <li>Raspberry Pi Zero 2 W</li>
+        <li>LiPo 503450, 3.7 V 1000 mAh, with a protection board</li>
+        <li>USB-C charger and 5 V boost module, up to 23 × 36 × 5 mm</li>
+        <li>Mini-B male plug, solder type</li>
+        <li>Slide switch, 8.6 × 3.8 mm body (SS12D00 class)</li>
+        <li>4 × M2 × 8 screws, 4 × M2 heat-set inserts (3.2 mm), 4 × M2.5 × 4 self-tapping screws</li>
+      </ul>
+      <p>Print both halves in PETG, outer face down, 0.2 mm layers. The shell is about 31 cm³; the finished cartridge weighs roughly 75 g, against the PSP's 280 g.</p>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  const NAMES = {
+    psp_body: "PSP-1000", psp_screen: "Screen", psp_shoulders: "L and R", psp_controls: "Buttons",
+    cart_front: "Shell, front half", cart_back: "Shell, back half", part_pizero: "Pi Zero 2 W",
+    part_battery: "LiPo 1000 mAh", part_power: "Charger + 5 V boost", part_plug: "Mini-B plug", part_switch: "Power switch"
+  };
+  const PSP_PARTS = ["psp_body", "psp_screen", "psp_shoulders", "psp_controls"];
+  const view = document.getElementById("viewport");
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.localClippingEnabled = true;
+  view.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 4 / 3, 1, 3000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x404650, 0.75));
+  const key = new THREE.DirectionalLight(0xffffff, 0.75); key.position.set(120, 200, 260); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(-200, 80, -220); scene.add(rim);
+
+  const clip = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 85);
+  const meshes = {};
+  const cart = new THREE.Group(); scene.add(cart);
+  const psp = new THREE.Group(); scene.add(psp);
+  let params = null;
+
+  function parseSTL(buf) {
+    const dv = new DataView(buf); const n = dv.getUint32(80, true);
+    const pos = new Float32Array(n * 9); let o = 84;
+    for (let i = 0; i < n; i++) { o += 12; for (let k = 0; k < 9; k++) { pos[i * 9 + k] = dv.getFloat32(o, true); o += 4; } o += 2; }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.computeVertexNormals(); return g;
+  }
+
+  function resize() {
+    const r = view.getBoundingClientRect();
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(view);
+
+  const VIEWS = {
+    iso: [260, 210, 320], front: [0, 30, 420], back: [0, 30, -420], side: [420, 40, 0], top: [0, 420, 60]
+  };
+  function setView(name) {
+    const c = new THREE.Vector3(params.USB_X, 80, 0);
+    const v = VIEWS[name]; camera.position.set(c.x + v[0], c.y + v[1] - 40, c.z + v[2]);
+    controls.target.copy(c); controls.update();
+    document.querySelectorAll("#views button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === name)));
+  }
+
+  const lift = document.getElementById("lift"), explode = document.getElementById("explode"), hud = document.getElementById("hud");
+  function place() {
+    const l = +lift.value, e = +explode.value;
+    cart.position.y = l;
+    if (meshes.cart_front) meshes.cart_front.position.z = e;
+    if (meshes.cart_back) meshes.cart_back.position.z = -e;
+    hud.textContent = l === 0 ? "seated on the PSP" : l.toFixed(1) + " mm above the port";
+  }
+  lift.addEventListener("input", place); explode.addEventListener("input", place);
+
+  let anim = null;
+  document.getElementById("play").addEventListener("click", () => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { lift.value = 0; place(); return; }
+    lift.value = 60; explode.value = 0; place();
+    const t0 = performance.now(), dur = 1800;
+    anim = (t) => {
+      const k = Math.min(1, (t - t0) / dur); const ease = 1 - Math.pow(1 - k, 3);
+      lift.value = (60 * (1 - ease)).toFixed(1); place(); if (k >= 1) anim = null;
+    };
+  });
+
+  const sectionBtn = document.getElementById("section");
+  sectionBtn.addEventListener("click", () => {
+    const on = sectionBtn.getAttribute("aria-pressed") !== "true";
+    sectionBtn.setAttribute("aria-pressed", String(on));
+    Object.values(meshes).forEach(m => { m.material.clippingPlanes = on ? [clip] : []; m.material.needsUpdate = true; });
+    if (on) setView("side");
+  });
+  document.getElementById("views").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b) setView(b.dataset.view); });
+
+  function tick(t) { if (anim) anim(t); controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick); }
+
+  fetch("out/model.json").then(r => r.json()).then(a => {
+    params = a.params; clip.constant = params.USB_X;
+    const list = document.getElementById("parts");
+    a.parts.forEach(p => {
+      const bin = atob(p.stl), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const g = parseSTL(u8.buffer);
+      const isPsp = PSP_PARTS.includes(p.name);
+      const mat = new THREE.MeshStandardMaterial({ color: p.colour, roughness: isPsp ? 0.35 : 0.6, metalness: p.name === "part_plug" ? 0.7 : 0.05, side: THREE.DoubleSide });
+      const m = new THREE.Mesh(g, mat); meshes[p.name] = m; (isPsp ? psp : cart).add(m);
+    });
+    a.parts.forEach(p => {
+      const id = "show-" + p.name;
+      const row = document.createElement("label"); row.htmlFor = id;
+      row.innerHTML = '<input type="checkbox" checked id="' + id + '"><span class="chip" style="background:' + p.colour + '"></span><span>' + (NAMES[p.name] || p.name) + "</span>";
+      row.querySelector("input").addEventListener("change", ev => { meshes[p.name].visible = ev.target.checked; });
+      list.appendChild(row);
+    });
+    const P = params, dims = document.getElementById("dims");
+    const rows = [["Width along the top edge", P.CART_W + " mm"], ["Height above the PSP", P.CART_H + " mm"], ["Thickness", P.CART_T.toFixed(1) + " mm"],
+                  ["Front lip / back lip", P.LIP_FRONT + " / " + P.LIP_BACK + " mm"], ["PSP-1000 body", P.PSP.join(" × ") + " mm"]];
+    dims.innerHTML = rows.map(r => "<span>" + r[0] + "</span><span>" + r[1] + "</span>").join("");
+    document.getElementById("loading").hidden = true;
+    resize(); setView("iso"); place(); requestAnimationFrame(tick);
+  }).catch(err => { document.getElementById("loading").textContent = "The model files did not load: " + err.message; });
+})();
+</script>
