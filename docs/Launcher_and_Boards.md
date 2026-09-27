@@ -392,6 +392,13 @@ Every game package puts a 128x128 picture next to its entry
 (`scripts/packages/art/`, where the README lists each one's source and
 license), which the launcher shows as the cover.
 
+On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
+Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
+38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272
+upload, ~7 ms of texture work on the GameShell), "pretty playable"; Simutrans
+a steady 25 fps (its own rate), no underruns. The stand-in's GameShell numbers
+below were the Wi-Fi link to the Mac, not the board.
+
 Measured on the stand-in PSP: Cave Story 50 fps on the Pi, 31-36 on the
 GameShell, 26-32 on the Omega2+ (which also spends 35 s at start
 synthesising the sound effects in software floating point); Jazz's menu 38-47
