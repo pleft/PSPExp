@@ -13,6 +13,7 @@ set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GS="${HOST:-${GAMESHELL:-cpi@gameshell}}"
 . "$ROOT/scripts/gameshell/stage.sh"
+ssh -o ConnectTimeout=8 "$GS" true 2>/dev/null || { echo "cannot reach $GS over SSH (off, or not on the network?)" >&2; exit 1; }
 ssh -o ConnectTimeout=8 "$GS" 'sudo -n true' 2>/dev/null || { echo "cannot run sudo on $GS without a password" >&2; exit 1; }
 
 gs_fetch() { ssh "$GS" "cat '$1' 2>/dev/null" > "$2" || : ; }
