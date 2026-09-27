@@ -213,6 +213,7 @@ static LEntry g_running_e;
 static uint64_t g_confirm_until;
 static char g_confirm[32];
 static int g_bat = -2, g_chg, g_wifi = -2, g_minute = -1;
+static int g_wired;   /* the default route goes over a cable (Ethernet, USB networking) */
 static uint64_t g_status_at;
 static int g_nofetch;
 
@@ -1020,7 +1021,7 @@ static int read_int(const char *p, int *v) { FILE *f = fopen(p, "r"); int ok; if
 static void status_poll(uint64_t now)
 {
     static const char *dirs[] = { "/sys/class/power_supply/axp20x-battery", "/sys/class/power_supply/battery", "/sys/class/power_supply/BAT0", NULL };
-    int bat = -1, chg = 0, wifi = -1, i;
+    int bat = -1, chg = 0, wifi = -1, wired = 0, i;
     char p[160];
     time_t t = time(NULL);
     struct tm tmv;
@@ -1038,23 +1039,63 @@ static void status_poll(uint64_t now)
         }
         bat = -1;
     }
+    /* the network: the interface of the default route; a cable, or Wi-Fi
+     * with bars from the kernel's link quality (the Omega2+'s driver leaves
+     * that empty: its own RSSI, asked every 15 s, never during a game) */
     {
-        FILE *f = fopen("/proc/net/wireless", "r");
-        char line[256];
+        char iface[32] = "", line[256];
+        FILE *f = fopen("/proc/net/route", "r");
+        wired = 0;
         if (f) {
             while (fgets(line, sizeof(line), f)) {
-                char name[32]; int s; float link;
-                if (sscanf(line, " %31[^:]: %d %f", name, &s, &link) == 3) { wifi = link >= 55 ? 3 : link >= 35 ? 2 : link > 0 ? 1 : 0; break; }
+                char name[32]; unsigned long dest;
+                if (sscanf(line, "%31s %lx", name, &dest) == 2 && dest == 0) { snprintf(iface, sizeof(iface), "%s", name); break; }
             }
             fclose(f);
         }
-        if (wifi < 0) {   /* no wireless extensions in the kernel: up or not, strength unknown */
-            FILE *o = fopen("/sys/class/net/wlan0/operstate", "r");
-            char st[16] = "";
-            if (o) { if (fgets(st, sizeof(st), o) && !strncmp(st, "up", 2)) wifi = 2; fclose(o); }
+        if (iface[0]) {
+            char w[128];
+            struct stat st;
+            snprintf(w, sizeof(w), "/sys/class/net/%s/wireless", iface);
+            int wireless = stat(w, &st) == 0 || !strncmp(iface, "wlan", 4) || !strncmp(iface, "apcli", 5) || !strncmp(iface, "wl", 2);
+            if (!wireless) wired = 1;
+            else {
+                if ((f = fopen("/proc/net/wireless", "r"))) {
+                    while (fgets(line, sizeof(line), f)) {
+                        char name[32]; int s; float link;
+                        if (sscanf(line, " %31[^:]: %d %f", name, &s, &link) == 3 && !strcmp(name, iface) && link > 0) {
+                            wifi = link >= 55 ? 3 : link >= 35 ? 2 : 1;
+                            break;
+                        }
+                    }
+                    fclose(f);
+                }
+                if (wifi < 0 && !strncmp(iface, "apcli", 5)) {   /* MediaTek (Omega2+): iwpriv's RSSI */
+                    static uint64_t asked; static int last = 2;
+                    if (!g_running && (!asked || now - asked > 15000000u)) {
+                        FILE *pp;
+                        char cmd[96];
+                        asked = now;
+                        snprintf(cmd, sizeof(cmd), "iwpriv %s stat 2>/dev/null", iface);
+                        if ((pp = popen(cmd, "r"))) {
+                            while (fgets(line, sizeof(line), pp)) {
+                                int rssi;
+                                if (!strncmp(line, "RSSI", 4) && strchr(line, '=') && sscanf(strchr(line, '=') + 1, "%d", &rssi) == 1 && rssi < 0)
+                                    last = rssi >= -60 ? 3 : rssi >= -70 ? 2 : rssi >= -80 ? 1 : 0;
+                            }
+                            pclose(pp);
+                        }
+                    }
+                    wifi = last;
+                }
+                if (wifi < 0) wifi = 2;   /* connected, strength unknown */
+            }
+        } else {   /* no route: Wi-Fi off if there is a wireless interface at all */
+            struct stat st;
+            if (stat("/sys/class/net/wlan0", &st) == 0 || stat("/sys/class/net/apcli0", &st) == 0) wifi = 0;
         }
     }
-    if (bat != g_bat || chg != g_chg || wifi != g_wifi) { g_bat = bat; g_chg = chg; g_wifi = wifi; g_dirty = 1; }
+    if (bat != g_bat || chg != g_chg || wifi != g_wifi || wired != g_wired) { g_bat = bat; g_chg = chg; g_wifi = wifi; g_wired = wired; g_dirty = 1; }
 }
 
 /* ---- animation ----------------------------------------------------------------------------- */
@@ -1134,7 +1175,12 @@ static void draw_status(void)
     w = gfx_text(FONT_TITLE, 16, 4, s, C_TEXT, 255, 0);
     strftime(s, sizeof(s), "%a %d %b", &tmv);
     gfx_text(FONT_SMALL, 16 + w + 8, 8, s, C_MUTED, 255, 0);
+    /* right to left: the board (always last, so it never moves), power, network */
     x = SCREEN_W - 16;
+    board_detect();
+    x -= 16;
+    gfx_icon(g_board.icon, 16, x, 6, g_board.colour, 255);
+    x -= 12;
     if (g_bat >= 0) {
         const char *ic = g_chg ? "battery-charging" : g_bat > 70 ? "battery-full" : g_bat > 35 ? "battery-medium" : g_bat > 12 ? "battery-low" : "battery-warning";
         snprintf(s, sizeof(s), "%d%%", g_bat);
@@ -1142,17 +1188,19 @@ static void draw_status(void)
         gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
         x -= 20;
         gfx_icon(ic, 16, x, 6, g_bat <= 12 && !g_chg ? 0xf87171 : C_SUB, 255);
-        x -= 10;
+    } else {   /* mains or USB power */
+        x -= 16;
+        gfx_icon("plug", 16, x, 6, C_SUB, 255);
     }
-    if (g_wifi >= 0) {
-        const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-zero";
+    x -= 10;
+    if (g_wired) {
+        x -= 16;
+        gfx_icon("ethernet-port", 16, x, 6, C_SUB, 255);
+    } else if (g_wifi >= 0) {
+        const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-off";
         x -= 16;
         gfx_icon(ic, 16, x, 6, C_SUB, 255);
-        x -= 10;
     }
-    board_detect();
-    x -= 16;
-    gfx_icon(g_board.icon, 16, x, 6, g_board.colour, 255);
 }
 
 static void draw_rail(float dt)
