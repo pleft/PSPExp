@@ -16,6 +16,7 @@
 #include "launcher.h"
 #include "launcher_lib.h"
 #include "launcher_board.h"
+#include "launcher_ui.h"
 #ifdef __APPLE__
 #include "launcher_mac.h"
 #endif
@@ -170,6 +171,7 @@ static void cats_build(void)
     action(&g_actions[g_nactions++], "tz", "Time zone", "clock", "The board's time zone, for the clock");
     action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
     action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "This board's shell on the PSP");
+    action(&g_actions[g_nactions++], "files", "Files", "folder-open", "Browse, copy and move this board's files");
     action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart this board");
     action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut this board down");
     action(&g_actions[g_nactions++], "about", "About", "info", "This board, the PSP and the connection");
@@ -215,7 +217,7 @@ static char g_toast[160], g_toast_icon[32];
 static uint64_t g_toast_until;
 static float g_toast_a;
 static char g_launch_cmd[1200], g_launch_cwd[512];
-static int g_launch_pending, g_launch_aware, g_running, g_console_req;
+static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
 static LEntry g_running_e;
 static uint64_t g_confirm_until;
 static char g_confirm[32];
@@ -519,6 +521,8 @@ static void run_action(LEntry *e, uint64_t now)
         toast("refresh-cw", s, now);
     } else if (!strcmp(a, "console")) {
         g_console_req = 1;
+    } else if (!strcmp(a, "files")) {
+        g_files_req = 1;
     } else if (!strcmp(a, "boxart")) {
         g_nofetch = !g_nofetch;
         lib_setting_set(&L, "boxart", !g_nofetch);
@@ -593,6 +597,7 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
 }
 
 int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
+int launcher_take_files(void) { int r = g_files_req; g_files_req = 0; return r; }
 
 void launcher_child_exited(int status)
 {
@@ -1035,19 +1040,7 @@ static float g_pick_scroll;
 static pid_t g_scan_pid;
 static BoardNet g_nets[40];
 static BoardNet g_join;               /* the network the password is for */
-static char g_txt[64];                /* the password being typed: wiped after use */
-static int g_tpage, g_tx, g_ty, g_tshow;
-
-#define TK_COLS 13
-#define TK_ROWS 3
-static const char *TK[3][TK_ROWS] = {
-    { "abcdefghijklm", "nopqrstuvwxyz", "0123456789.-_" },
-    { "ABCDEFGHIJKLM", "NOPQRSTUVWXYZ", "0123456789.-_" },
-    { "!@#$%^&*()+=?", "[]{}<>/\\|~`'\"", ",;:0123456789" },
-};
-/* the fourth row: page keys, space, join */
-static const char *TK_CTRL[] = { "abc", "ABC", "#+=", "space", "Join" };
-#define TK_NCTRL 5
+static UiKbd g_kbd;                   /* the password being typed: wiped after use */
 
 static void scan_start(void)
 {
@@ -1112,8 +1105,8 @@ static void wifi_join(int with_password, uint64_t now)
     snprintf(ok, sizeof(ok), "Connected to %s", g_join.ssid);
     snprintf(fail, sizeof(fail), "Could not join %s%s", g_join.ssid,
              !g_join.secure ? "" : with_password ? " (the password?)" : " (square: a new password)");
-    bg_run_env(cmd, "wifi", ok, fail, "PSPEXP_WIFI_PSK", with_password ? g_txt : NULL);
-    memset(g_txt, 0, sizeof(g_txt));   /* the password lives on only in the board's network tool */
+    bg_run_env(cmd, "wifi", ok, fail, "PSPEXP_WIFI_PSK", with_password ? g_kbd.buf : NULL);
+    memset(g_kbd.buf, 0, sizeof(g_kbd.buf));   /* the password lives on only in the board's network tool */
     toast("wifi", "Joining the network...", now);
     g_mode = M_BROWSE;
     g_dirty = 1;
@@ -1140,40 +1133,23 @@ static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
             g_mode = M_BROWSE;
         } else {
             g_join = g_nets[g_pick_sel];
-            if (g_join.secure && !g_join.saved) { memset(g_txt, 0, sizeof(g_txt)); g_tpage = 0; g_tx = 0; g_ty = 0; g_tshow = 0; g_mode = M_TEXT; g_overlay_a = 0; }
+            if (g_join.secure && !g_join.saved) { ui_kbd_reset(&g_kbd, NULL, 1, "Join"); g_mode = M_TEXT; g_overlay_a = 0; }
             else wifi_join(0, now);   /* saved: what the board keeps; or open */
         }
     }
     /* square: a (new) password for a secured network, saved or not */
     if (g_pick_kind == PICK_WIFI && (pressed & PSPEXP_BUTTON_SQUARE) && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure) {
         g_join = g_nets[g_pick_sel];
-        memset(g_txt, 0, sizeof(g_txt)); g_tpage = 0; g_tx = 0; g_ty = 0; g_tshow = 0; g_mode = M_TEXT; g_overlay_a = 0;
+        ui_kbd_reset(&g_kbd, NULL, 1, "Join"); g_mode = M_TEXT; g_overlay_a = 0;
     }
     g_dirty = 1;
 }
 
 static void text_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
-    int cols = g_ty < TK_ROWS ? (int)strlen(TK[g_tpage][g_ty]) : TK_NCTRL;
-    size_t l = strlen(g_txt);
-    if (left) g_tx = (g_tx + cols - 1) % cols;
-    if (right) g_tx = (g_tx + 1) % cols;
-    if (up || down) {
-        g_ty = (g_ty + (up ? TK_ROWS : 1)) % (TK_ROWS + 1);
-        cols = g_ty < TK_ROWS ? (int)strlen(TK[g_tpage][g_ty]) : TK_NCTRL;
-        if (g_tx >= cols) g_tx = cols - 1;
-    }
-    if (pressed & PSPEXP_BUTTON_CROSS) {
-        if (g_ty < TK_ROWS) {
-            if (l + 1 < sizeof(g_txt)) { g_txt[l] = TK[g_tpage][g_ty][g_tx]; g_txt[l + 1] = 0; }
-        } else if (g_tx < 3) g_tpage = g_tx;
-        else if (g_tx == 3) { if (l + 1 < sizeof(g_txt)) { g_txt[l] = ' '; g_txt[l + 1] = 0; } }
-        else if (l) { wifi_join(1, now); return; }
-    }
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && l) g_txt[l - 1] = 0;
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) g_tshow = !g_tshow;
-    if ((pressed & PSPEXP_BUTTON_START) && l) { wifi_join(1, now); return; }
-    if (pressed & PSPEXP_BUTTON_CIRCLE) { memset(g_txt, 0, sizeof(g_txt)); g_mode = M_PICK; }
+    int r = ui_kbd_input(&g_kbd, pressed, up, down, left, right);
+    if (r == UIK_DONE) { wifi_join(1, now); return; }
+    if (r == UIK_CANCEL) { memset(g_kbd.buf, 0, sizeof(g_kbd.buf)); g_mode = M_PICK; }
     g_dirty = 1;
 }
 
@@ -1921,60 +1897,13 @@ static void draw_pick(float dt)
     (void)x;
 }
 
-/* the password: a field and a keyboard of three pages */
+/* the password: the shared keyboard (launcher_ui.c) */
 static void draw_text(float dt)
 {
-    int a, i, y, x0, fx = 16, fw = SCREEN_W - 32, kx, ky, x;
-    char shown[64], s[128];
-    size_t l = strlen(g_txt);
+    char title[128];
     g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
-    a = (int)(g_overlay_a * 255);
-    snprintf(s, sizeof(s), "Password for %s", g_join.ssid);
-    gfx_icon("lock", 18, 16, 13, C_ACCENT, a);
-    mtext(FONT_TITLE, 42, 11, s, C_TEXT, a, SCREEN_W - 58, g_open_at);
-    /* the field */
-    for (i = 0; i < (int)l && i < (int)sizeof(shown) - 1; i++) shown[i] = g_tshow ? g_txt[i] : '*';
-    shown[i] = 0;
-    gfx_nine(NINE_R10, fx, 44, fw, 30, 0x1d2334, a);
-    x = fx + 12;
-    if (l) x += gfx_text(FONT_TITLE, x, 44 + (30 - gfx_line_height(FONT_TITLE)) / 2, shown, C_TEXT, a, fw - 60);
-    else gfx_text(FONT_BODY, x, 44 + (30 - gfx_line_height(FONT_BODY)) / 2, "Type the password", C_MUTED, a, 0);
-    if (!g_caret) gfx_rect(x + 1, 51, 2, 16, C_ACCENT, a);
-    gfx_icon(g_tshow ? "eye" : "eye-off", 14, fx + fw - 24, 52, C_MUTED, a);
-    /* the keys */
-    x0 = (SCREEN_W - (TK_COLS * KEY_W + (TK_COLS - 1) * KEY_GAP)) / 2;
-    for (y = 0; y < TK_ROWS; y++) {
-        const char *row = TK[g_tpage][y];
-        int n = (int)strlen(row);
-        for (i = 0; i < n; i++) {
-            char k[2] = { row[i], 0 };
-            int foc = y == g_ty && i == g_tx;
-            kx = x0 + i * (KEY_W + KEY_GAP); ky = 92 + y * (KEY_H + KEY_GAP);
-            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, KEY_W, KEY_H, C_ACCENT, a * 120 / 255);
-            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x6f7ff5 : 0x222a3b, foc ? a : a * 235 / 255);
-            if (row[i] == ' ') gfx_icon("space", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, foc ? 0xffffff : C_TEXT, a);
-            else gfx_text(FONT_BODY, kx + (KEY_W - gfx_text_width(FONT_BODY, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_BODY)) / 2, k, foc ? 0xffffff : C_TEXT, a, 0);
-        }
-    }
-    {   /* the control row: page keys, space, join */
-        int total = TK_COLS * KEY_W + (TK_COLS - 1) * KEY_GAP, w = (total - (TK_NCTRL - 1) * KEY_GAP) / TK_NCTRL;
-        ky = 92 + TK_ROWS * (KEY_H + KEY_GAP);
-        for (i = 0; i < TK_NCTRL; i++) {
-            int foc = g_ty == TK_ROWS && i == g_tx, on = i < 3 && i == g_tpage;
-            const char *k = TK_CTRL[i];
-            kx = x0 + i * (w + KEY_GAP);
-            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, w, KEY_H, C_ACCENT, a * 120 / 255);
-            gfx_nine(NINE_R6, kx, ky, w, KEY_H, foc ? 0x6f7ff5 : on ? 0x3a4560 : i == 4 ? 0x1f5f4a : 0x222a3b, foc ? a : a * 235 / 255);
-            gfx_text(FONT_SMALL, kx + (w - gfx_text_width(FONT_SMALL, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_SMALL)) / 2, k, foc ? 0xffffff : C_TEXT, a, 0);
-        }
-    }
-    x = 16;
-    x = hint_btn(x, 'x', "Type");
-    x = hint_btn(x, 's', "Delete");
-    x = hint_btn(x, 't', g_tshow ? "Hide" : "Show");
-    x = hint_btn(x, 'o', "Cancel");
-    if (l) hint_cap(SCREEN_W - 16 - gfx_text_width(FONT_BADGE, "START") - 15 - gfx_text_width(FONT_SMALL, "Join"), "START", "Join", C_SUB);
-    (void)x;
+    snprintf(title, sizeof(title), "Password for %s", g_join.ssid);
+    ui_kbd_draw(&g_kbd, "lock", title, "Type the password", g_caret, (int)(g_overlay_a * 255));
 }
 
 static void draw_about(float dt)
@@ -2097,6 +2026,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
         if (o && !strncmp(o, "password:", 9)) {   /* the keyboard for a network, typing nothing */
             snprintf(g_join.ssid, sizeof(g_join.ssid), "%s", o + 9);
             g_join.secure = 1;
+            ui_kbd_reset(&g_kbd, NULL, 1, "Join");
             g_mode = M_TEXT; g_dirty = 1;
         }
     }

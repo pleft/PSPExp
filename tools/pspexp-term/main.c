@@ -61,6 +61,7 @@
 #include "term_menu.h"
 #include "term_fonts.h"
 #include "term_themes.h"
+#include "files.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
 #ifdef PSPEXP_HAVE_USB
@@ -1064,6 +1065,8 @@ static void font_apply(int i)
 static TermMenu g_menu;
 static int g_menu_open, g_menu_sel, g_menu_top;
 static int g_help_open;   /* the controls, on screen */
+static void files_show(const char *path, int from_launcher);
+static void shell_cwd(char *out, size_t n);
 /* the list shown: the menu itself, or a choice of themes or fonts (moving
  * through them tries each at once; circle puts the old one back) */
 enum { ML_MAIN, ML_THEMES, ML_FONTS };
@@ -1163,6 +1166,7 @@ static void menu_run(const TermMenuItem *it)
     else if (!strcmp(it->arg, "keys")) g_help_open = 1;
     else if (!strcmp(it->arg, "scroll-mode")) g_scroll_mode = !T.on_alt;
     else if (!strcmp(it->arg, "copy")) copy_start();
+    else if (!strcmp(it->arg, "files")) { char d[1024]; shell_cwd(d, sizeof(d)); files_show(d, 0); }
     else if (!strcmp(it->arg, "paste")) paste();
     else fprintf(stderr, "[pspexp-term] menu: unknown action @%s\n", it->arg);
 }
@@ -1514,6 +1518,7 @@ static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons
 static int mirror_available(void);
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
 static int g_view_launcher, g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
+static int g_view_files, g_files_from_launcher;   /* the file manager (files.c), and where it was opened from */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself: no mirror while it runs */
@@ -1521,6 +1526,7 @@ static int g_launch_aware;                   /* it hands the PSP over itself: no
 /* hold select: launcher -> terminal -> mirror -> launcher (the views that exist) */
 static void view_cycle(void)
 {
+    if (g_view_files) { g_view_files = 0; if (g_files_from_launcher) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1; return; }
     if (g_view_launcher) { g_view_launcher = 0; T.dirty = 1; }
     else if (!g_view_mirror) {
         if (mirror_available()) { g_view_mirror = 1; mirror_invalidate(); }
@@ -1530,6 +1536,27 @@ static void view_cycle(void)
         g_view_mirror = 0;
         if (g_launcher_on) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1;
     }
+}
+
+/* the file manager at path (NULL: home), over the launcher or the terminal */
+static void files_show(const char *path, int from_launcher)
+{
+    if (!g_launcher_on) return;   /* it draws with the launcher's graphics */
+    g_files_from_launcher = from_launcher;
+    g_view_files = 1; g_view_launcher = 0; g_view_mirror = 0;
+    files_open(path);
+}
+
+/* the shell's current folder (Linux: /proc), or "" */
+static void shell_cwd(char *out, size_t n)
+{
+    char link[64];
+    ssize_t l;
+    out[0] = 0;
+    if (g_child <= 0) return;
+    snprintf(link, sizeof(link), "/proc/%d/cwd", (int)g_child);
+    l = readlink(link, out, n - 1);
+    out[l > 0 ? l : 0] = 0;
 }
 
 /* PSPEXP_TERM_KEYS="right,down,cross,..." (tests, screenshots): each name is
@@ -1586,6 +1613,7 @@ static void handle_input(void)
         if (!mirror_available() && !g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
     }
     if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
+    if (g_view_files) { files_input(b, pressed, up, down, left, right, now); return; }
     if (g_view_launcher) { launcher_input(b, pressed, up, down, left, right, now); return; }
     if (shift != held_shift || ctrl != held_ctrl) { held_shift = shift; held_ctrl = ctrl; if (kb_shown) T.dirty = 1; }
 
@@ -2554,6 +2582,10 @@ int main(int argc, char **argv)
 #endif
         if (launcher_init(ctx, g_launcher_assets) < 0) g_launcher_on = 0;
         else { g_view_launcher = 1; g_view_mirror = 0; }   /* the home view; the mirror shows the programs it starts */
+        {   /* screenshots: PSPEXP_LAUNCHER_OPEN=files or files:/some/folder */
+            const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
+            if (g_launcher_on && o && !strncmp(o, "files", 5)) files_show(o[5] == ':' ? o + 6 : NULL, 1);
+        }
     }
 
     while (!g_quit) {
@@ -2635,11 +2667,30 @@ int main(int argc, char **argv)
             int aware;
             if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) launch_child(cmd, cwd, aware);
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; }
+            if (launcher_take_files()) { files_show(NULL, 1); }
+        }
+        if (g_view_files) {
+            char dir[1024];
+            if (files_take_exit()) view_cycle();
+            if (files_take_terminal(dir, sizeof(dir))) {   /* "terminal here": cd in the shell shown */
+                char cmd[1200], *o = cmd, *d;
+                g_view_files = 0; g_view_launcher = 0; T.dirty = 1;
+                o += sprintf(o, " cd '");
+                for (d = dir; *d && o < cmd + sizeof(cmd) - 8; d++) { if (*d == '\'') { memcpy(o, "'\\''", 4); o += 4; } else *o++ = *d; }
+                o += sprintf(o, "'\r");
+                pty_write(cmd, (size_t)(o - cmd));
+            }
         }
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u) { last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1; }
-        if (g_view_launcher) {
+        if (g_view_files) {
+            if (files_needs_frame(now) && pspexp_should_render(ctx)) {
+                files_render(ctx, now);
+                frames++;
+                if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
+            }
+        } else if (g_view_launcher) {
             if (launcher_needs_frame(now) && pspexp_should_render(ctx)) {
                 launcher_render(ctx, now, 1);
                 frames++;
