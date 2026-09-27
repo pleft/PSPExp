@@ -39,6 +39,7 @@ exec RUN_CMD --data=./data --no-joystick "$@"
 R
 sed -i.bak "s|RUN_CMD|$RUN|" "$D/run.sh" && rm -f "$D/run.sh.bak"
 chmod +x "$D/run.sh" "$D/opentyrian"
+cp "$ROOT/scripts/packages/art/opentyrian.png" "$D/opentyrian.png"   # the entry's cover
 cat > "$D/package" <<P
 version=2.1
 title=OpenTyrian

@@ -7,6 +7,7 @@
 #   scripts/omega/build.sh           bench + sprite demo
 #   scripts/omega/build.sh doom      also Chocolate Doom with sdl-pspexp built in
 #   scripts/omega/build.sh tyrian    also OpenTyrian (../tyrian/opentyrian) with sdl-pspexp
+#   scripts/omega/build.sh cavestory also Cave Story's NXEngine-evo with sdl-pspexp
 #   scripts/omega/build.sh retro     pspexp-retro with a libretro core linked in (CORE=fceumm:
 #                                    ../retro/libretro-fceumm) -> bin/pspexp-retro-<core>
 #                                    built in (uses the doom build's static SDL2)
@@ -214,6 +215,16 @@ if [ "$1" = "tyrian" ]; then
 		SDL_CPPFLAGS="-I$P/include/SDL2 -D_REENTRANT -include stdlib.h -include string.h -include math.h -include stdio.h -include $REN" \
 		SDL_LDFLAGS="-static" SDL_LDLIBS="$LIBS $P/lib/libSDL2.a -lm" > "$OUT/tyrian.log" 2>&1 || { grep -E "error" "$OUT/tyrian.log" | head -20; exit 1; }
 	cp "$W/opentyrian" "$OUT/bin/opentyrian"
+fi
+if [ "$1" = "cavestory" ]; then
+	# Cave Story (NXEngine-evo, scripts/packages/build-nxengine.sh): static, the
+	# SDL layer built in; every source sees the rename header, as for Tyrian
+	P="$OUT/prefix"
+	[ -f "$P/lib/libSDL2.a" ] || "$ROOT/scripts/omega/build.sh" doom
+	shim_static
+	W="$OUT/nxengine" CC="$OUT/zcc" CXX="$OUT/zcxx" AR="$OUT/zar" SDLINC="$P/include/SDL2" CFLAGS_X="-include $REN" \
+		OUTBIN="$OUT/bin/nxengine-evo" LINK="-static $LIBS $P/lib/libSDL2.a -lm" \
+		"$ROOT/scripts/packages/build-nxengine.sh"
 fi
 ls -la "$OUT/bin"
 echo "static $ZIG_TARGET ($ZIG_CPU) binaries in build/$CROSS_NAME/bin"

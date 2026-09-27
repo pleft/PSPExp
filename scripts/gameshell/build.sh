@@ -16,6 +16,8 @@
 #      into build/gameshell/bin/opentyrian, which the opentyrian package
 #      (scripts/packages/pspexp-pkg-build) ships; HOST=user@host (default cpi@gameshell).
 #      The launcher's own OpenTyrian is SDL 1.2, which the shim cannot reach.
+#   scripts/gameshell/build.sh cavestory   Cave Story's NXEngine-evo, cross-compiled
+#      here -> build/gameshell/bin/nxengine-evo (scripts/packages/build-nxengine.sh)
 #   scripts/gameshell/build.sh retro    pspexp-retro and a libretro core (CORE=<core>),
 #      cross-compiled here -> build/gameshell/bin/, for the emulator packages
 set -e
@@ -69,6 +71,32 @@ if [ "$WHAT" = retro ]; then
 	U=$(nm -D --undefined-only "$OUT/bin/${CORE}_libretro.so" 2>/dev/null | awk '{print $NF}' | grep -vE '@|^_|^(__cxa|__gxx|__aeabi|__stack_chk)' || true)
 	[ -z "$U" ] || { echo "${CORE}_libretro.so: undefined symbols (objects missing, see $R/core-$CORE.log):" >&2; echo "$U" | head -10 >&2; exit 1; }
 	ls -la "$OUT/bin/pspexp-retro" "$OUT/bin/${CORE}_libretro.so"
+	exit 0
+fi
+
+if [ "$WHAT" = cavestory ]; then
+	# Cave Story (NXEngine-evo) cross-compiled here (scripts/packages/build-nxengine.sh):
+	# its libraries static, SDL2 from the image (a stand-in libSDL2 to link
+	# against, as for pspexp-retro), C++'s library static -> build/gameshell/bin/nxengine-evo
+	INC="$OUT/gnu/src/SDL2-${SDL_VER:-2.30.12}/include"
+	[ -f "$INC/SDL.h" ] || { echo "SDL2 headers missing: run scripts/gameshell/build.sh shim first" >&2; exit 1; }
+	command -v zig >/dev/null || { echo "zig not found (brew install zig)" >&2; exit 1; }
+	R="$OUT/nxengine"; mkdir -p "$R" "$OUT/bin" "$ROOT/build/zig-cache"
+	T="arm-linux-gnueabihf.${GLIBC_VER:-2.35}"
+	for t in cc cxx; do
+		case $t in cc) cmd="zig cc -target $T -mcpu=cortex_a7" ;; cxx) cmd="zig c++ -target $T -mcpu=cortex_a7" ;; esac
+		printf '#!/bin/sh\nexport ZIG_GLOBAL_CACHE_DIR="%s" ZIG_LOCAL_CACHE_DIR="%s"\nexec %s "$@"\n' \
+			"$ROOT/build/zig-cache" "$ROOT/build/zig-cache" "$cmd" > "$R/z$t"
+		chmod +x "$R/z$t"
+	done
+	# first everything but the link, then the stand-in SDL2 from what the objects call
+	W="$R/work" CC="$R/zcc" CXX="$R/zcxx" AR="zig ar" SDLINC="$INC" OUTBIN="$R/nx-unlinked" LINK="-Wl,--version" \
+		"$ROOT/scripts/packages/build-nxengine.sh" >/dev/null 2>"$R/build.log" || true
+	ls "$R"/work/obj-nx/*.o >/dev/null 2>&1 || { tail -20 "$R/build.log"; exit 1; }
+	nm -u "$R"/work/obj-nx/*.o "$R"/work/lib/*.a 2>/dev/null | awk '{print $NF}' | grep '^SDL_' | sort -u | sed 's/.*/void &(void) {}/' > "$R/sdl-stub.c"
+	"$R/zcc" -shared -fPIC -Wl,-soname,libSDL2-2.0.so.0 "$R/sdl-stub.c" -o "$R/libSDL2.so"
+	W="$R/work" CC="$R/zcc" CXX="$R/zcxx" AR="zig ar" SDLINC="$INC" OUTBIN="$OUT/bin/nxengine-evo" LINK="-L$R -lSDL2 -lpthread -ldl -lm" \
+		"$ROOT/scripts/packages/build-nxengine.sh"
 	exit 0
 fi
 

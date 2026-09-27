@@ -71,6 +71,7 @@ packages, `BOARD=gameshell|omega|pi` (which build to package).
 |---|---|
 | build the tools and the SDL layer | `scripts/gameshell/build.sh` |
 | OpenTyrian / the emulator player and a core, compiled on the GameShell | `HOST=cpi@<ip> scripts/gameshell/build.sh tyrian` / `CORE=quicknes HOST=cpi@<ip> scripts/gameshell/build.sh retro` |
+| Cave Story's engine, cross-compiled here | `scripts/gameshell/build.sh cavestory` |
 | install or update a running GameShell | `HOST=cpi@<ip> scripts/gameshell/install.sh` |
 | the card image on the fresh base: kernel / image (Debian 13, Linux 6.18) | `scripts/gameshell/base/build-kernel.sh` / `scripts/gameshell/base/build-image.sh clockworkos_v0.6.img [--ssh-key F] [--wifi-from cpi@<ip>]` |
 | (older) prepare a stock ClockworkOS image | `scripts/gameshell/prep-stock-image.sh <image> [--wifi]` |
@@ -82,6 +83,7 @@ packages, `BOARD=gameshell|omega|pi` (which build to package).
 | goal | command |
 |---|---|
 | build the tools / Doom / OpenTyrian / an emulator (static, SDL layer linked in) | `scripts/omega/build.sh` / `... doom` / `... tyrian` / `CORE=quicknes scripts/omega/build.sh retro` |
+| Cave Story's engine (static, SDL layer linked in) | `scripts/omega/build.sh cavestory` |
 | install or update (the console, launcher, fonts, package tool) | `HOST=omega scripts/omega/install.sh` |
 | packages that suit it: Freedoom, OpenTyrian, NES (30 fps), Game Boy | `BOARD=omega HOST=omega scripts/packages/pspexp-pkg-build install freedoom opentyrian nes gameboy` |
 
@@ -91,6 +93,7 @@ packages, `BOARD=gameshell|omega|pi` (which build to package).
 |---|---|
 | install the console and launcher (builds on the Pi) | `HOST=user@<ip> scripts/pi/install.sh` |
 | OpenTyrian / the emulator player and a core, compiled on the Pi | `HOST=user@<ip> scripts/pi/install.sh tyrian` / `CORE=quicknes HOST=user@<ip> scripts/pi/install.sh retro` |
+| Cave Story's engine, compiled on the Pi (~30 min) | `HOST=user@<ip> scripts/pi/install.sh cavestory` |
 | on the Pi itself: a development build (host tools, Doom from apt) | `scripts/pi/build.sh` |
 | on the Pi itself: only the console as a service (no launcher) | `scripts/pi/install-console.sh` (`remove` to uninstall) |
 

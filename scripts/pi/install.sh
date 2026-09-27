@@ -10,6 +10,8 @@
 # The source is copied to ~/pspexp/src on the Pi and built there (its gcc, its
 # SDL2); a checkout of the repo on the Pi is left alone.
 #   HOST=user@host scripts/pi/install.sh          build + install + restart (PI= still read)
+#   HOST=user@host scripts/pi/install.sh cavestory   Cave Story (NXEngine-evo)
+#       compiled on the Pi -> build/pi/bin/nxengine-evo
 #   HOST=user@host scripts/pi/install.sh tyrian   OpenTyrian (SDL2) compiled on
 #       the Pi from ../tyrian/opentyrian into build/pi/bin/opentyrian, which
 #       the opentyrian package ships (BOARD=pi scripts/packages/pspexp-pkg-build build opentyrian)
@@ -34,6 +36,25 @@ if [ "$1" = tyrian ]; then
 		ls -la ~/pspexp/tyrian-src/opentyrian'
 	mkdir -p "$ROOT/build/pi/bin"; scp -q "$PI:pspexp/tyrian-src/opentyrian" "$ROOT/build/pi/bin/opentyrian"
 	echo "build/pi/bin/opentyrian: package it with BOARD=pi scripts/packages/pspexp-pkg-build build opentyrian"
+	exit 0
+fi
+
+if [ "$1" = cavestory ]; then
+	# NXEngine-evo (../cavestory/nxengine-evo) compiled on the Pi, portable
+	# (data/ next to the binary), 480x272 by default -> build/pi/bin/nxengine-evo
+	# (the game data is made on the Mac: cavestory_data in the recipes' _lib.sh)
+	SRC="$ROOT/../cavestory/nxengine-evo"
+	[ -f "$SRC/CMakeLists.txt" ] || { echo "NXEngine-evo source not found in $SRC (git clone https://github.com/nxengine/nxengine-evo)" >&2; exit 1; }
+	. "$ROOT/scripts/packages/recipes/_lib.sh"
+	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git --exclude build -cf - . ; } 2>/dev/null |
+		ssh "$PI" 'rm -rf ~/pspexp/cavestory-src && mkdir -p ~/pspexp/cavestory-src && tar -C ~/pspexp/cavestory-src -xf -'
+	ssh "$PI" "set -e; cd ~/pspexp/cavestory-src; $(cavestory_patch)
+		mkdir -p build && cd build
+		cmake .. -DCMAKE_BUILD_TYPE=Release -DPORTABLE=ON > ../cmake.log 2>&1 || { tail -20 ../cmake.log; exit 1; }
+		make -j4 nx > ../make.log 2>&1 || { grep -E 'error' ../make.log | head -20; exit 1; }"
+	mkdir -p "$ROOT/build/pi/bin"
+	scp -q "$PI:pspexp/cavestory-src/build/nxengine-evo" "$ROOT/build/pi/bin/nxengine-evo"
+	echo "build/pi/bin/nxengine-evo: package with BOARD=pi scripts/packages/pspexp-pkg-build build cavestory"
 	exit 0
 fi
 

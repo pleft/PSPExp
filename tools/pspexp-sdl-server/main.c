@@ -87,6 +87,7 @@ int main(int argc, char **argv)
         PspExpSdlExecutor *x;
         PspExpTransport *t;
         char err[200];
+        const char *why;
         int fd = accept(ls, (struct sockaddr *)&ca, &cl);
         if (fd < 0) continue;
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
@@ -98,21 +99,22 @@ int main(int argc, char **argv)
         x = pspexp_sdl_create(&o, err, sizeof(err));
         if (!x) { fprintf(stderr, "[sdl-server] %s\n", err); close(fd); return 1; }
         t = pspexp_sdl_transport(x);
+        why = "the runtime refused the first bytes";
         if (n > 0 && t->send(t, buf, (size_t)n) < 0) goto done;
         for (;;) {
             fd_set r; struct timeval tv = { 0, 2000 };
             FD_ZERO(&r); FD_SET(fd, &r);
             if (select(fd + 1, &r, NULL, NULL, &tv) > 0) {
                 ssize_t k = recv(fd, buf, sizeof(buf), 0);
-                if (k <= 0) break;
-                if (t->send(t, buf, (size_t)k) < 0) break;
+                if (k <= 0) { why = k == 0 ? "the host closed the connection" : "receive failed"; break; }
+                if (t->send(t, buf, (size_t)k) < 0) { why = "the runtime refused the data (see its log above)"; break; }
             }
             while ((n = t->recv(t, buf, sizeof(buf), 0)) > 0)
-                if (send_all(fd, buf, (size_t)n) < 0) goto done;
-            if (n < 0 || pspexp_sdl_quit_requested(x)) break;
+                if (send_all(fd, buf, (size_t)n) < 0) { why = "send to the host failed"; goto done; }
+            if (n < 0 || pspexp_sdl_quit_requested(x)) { why = "the window was closed"; break; }
         }
     done:
-        fprintf(stderr, "[sdl-server] client gone\n");
+        fprintf(stderr, "[sdl-server] client gone: %s\n", why);
         close(fd);
         pspexp_sdl_destroy(x);
     }

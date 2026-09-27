@@ -19,6 +19,10 @@ typedef struct Tcp {
     int fd;
     int dead;
     int verbose;
+    /* what arrived while a send was stuck: the peer may itself be blocked
+     * sending to us, and would stop reading (a deadlock) if we did not take it */
+    uint8_t *rx;
+    size_t rx_len, rx_off, rx_cap;
 } Tcp;
 
 static const uint8_t SYNC[PSPEXP_USB_SYNC_LEN] = PSPEXP_USB_SYNC_BYTES;
@@ -31,9 +35,28 @@ void pspexp_tcp_options_default(PspExpTcpOptions *o)
     o->connect_timeout_ms = 2000;
 }
 
+/* takes what the peer has sent into c->rx; -1 when the link is gone */
+static int take_incoming(Tcp *c)
+{
+    ssize_t n;
+    if (c->rx_off && c->rx_off == c->rx_len) c->rx_off = c->rx_len = 0;
+    if (c->rx_cap - c->rx_len < 16384) {
+        size_t ncap = c->rx_cap ? c->rx_cap * 2 : 65536;
+        uint8_t *nb = (uint8_t *)realloc(c->rx, ncap);
+        if (!nb) return -1;
+        c->rx = nb; c->rx_cap = ncap;
+    }
+    n = recv(c->fd, c->rx + c->rx_len, c->rx_cap - c->rx_len, 0);
+    if (n == 0) return -1;
+    if (n < 0) return (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) ? 0 : -1;
+    c->rx_len += (size_t)n;
+    return 0;
+}
+
 static int send_all(Tcp *c, const void *data, size_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
+    uint64_t stuck_since = 0;
     while (len > 0) {
 #ifdef MSG_NOSIGNAL
         ssize_t n = send(c->fd, p, len, MSG_NOSIGNAL);
@@ -43,15 +66,27 @@ static int send_all(Tcp *c, const void *data, size_t len)
         if (n < 0) {
             if (errno == EINTR) continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                fd_set w; struct timeval tv = { 3, 0 };
-                FD_ZERO(&w); FD_SET(c->fd, &w);
-                if (select(c->fd + 1, NULL, &w, NULL, &tv) <= 0) { c->dead = 1; return -1; }
+                /* the peer is not taking data: read what it sends meanwhile
+                 * (it may be waiting for us to), give up after 5 s of neither */
+                fd_set w, r; struct timeval tv = { 0, 100000 };
+                int k;
+                uint64_t now = pspexp_time_us();
+                if (!stuck_since) stuck_since = now;
+                else if (now - stuck_since > 5000000u) { c->dead = 1; return -1; }
+                FD_ZERO(&w); FD_SET(c->fd, &w); FD_ZERO(&r); FD_SET(c->fd, &r);
+                k = select(c->fd + 1, &r, &w, NULL, &tv);
+                if (k < 0 && errno != EINTR) { c->dead = 1; return -1; }
+                if (k > 0 && FD_ISSET(c->fd, &r)) {
+                    if (take_incoming(c) < 0) { c->dead = 1; return -1; }
+                    stuck_since = 0;
+                }
                 continue;
             }
             c->dead = 1;
             return -1;
         }
         p += n; len -= (size_t)n;
+        stuck_since = 0;
     }
     return 0;
 }
@@ -69,6 +104,13 @@ static long tr_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
     fd_set r;
     struct timeval tv;
     ssize_t n;
+    if (c->rx_off < c->rx_len) {   /* first what came in during a send */
+        size_t k = c->rx_len - c->rx_off;
+        if (k > cap) k = cap;
+        memcpy(buf, c->rx + c->rx_off, k);
+        c->rx_off += k;
+        return (long)k;
+    }
     if (c->dead) return -1;
     FD_ZERO(&r); FD_SET(c->fd, &r);
     tv.tv_sec = timeout_ms / 1000;
@@ -89,6 +131,7 @@ static void tr_close(PspExpTransport *t)
     Tcp *c = (Tcp *)t->user;
     if (!c) return;
     if (c->fd >= 0) close(c->fd);
+    free(c->rx);
     free(c);   /* `t` lives inside `c` */
 }
 
@@ -129,6 +172,10 @@ PspExpTransport *pspexp_tcp_open(const PspExpTcpOptions *o, char *err, size_t er
     freeaddrinfo(res);
     if (fd < 0) { snprintf(err, errlen, "connect %s:%u: %s", opt.host, opt.port, strerror(errno)); return NULL; }
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    {   /* connected: a send that cannot go on returns soon, to read meanwhile (send_all) */
+        struct timeval tv = { 0, 100000 };
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    }
 #ifdef SO_NOSIGPIPE
     setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));   /* EPIPE instead of a signal */
 #endif

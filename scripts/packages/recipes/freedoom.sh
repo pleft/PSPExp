@@ -44,4 +44,5 @@ env=SDL_VIDEODRIVER=dummy
 env=SDL_AUDIODRIVER=dummy
 pspexp=1
 E
+	cp "$ROOT/scripts/packages/art/freedoom-phase$n.png" "$D/phase$n.png"   # the entry's cover
 done

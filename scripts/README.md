@@ -23,13 +23,16 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
 
 packages/          what the launcher offers, for any board
   pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=)
-  recipes/           one recipe per package: freedoom, opentyrian, nes, gameboy,
-                     snes, megadrive; _lib.sh holds the shared helpers
+  recipes/           one recipe per package: freedoom, opentyrian, cavestory, nes,
+                     gameboy, snes, megadrive; _lib.sh holds the shared helpers
+  art/               the games' 128x128 launcher pictures (sources and licenses in its README)
+  build-nxengine.sh  Cave Story's engine and its libraries, cross-compiled with Zig
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board
 
 gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
-  build.sh           tools and the SDL layer (Zig cross build); tyrian, retro on the board
+  build.sh           tools and the SDL layer (Zig cross build); cavestory, retro cross-built;
+                     tyrian on the board
   install.sh         install or update a running GameShell
   stage.sh           the list of files every GameShell gets (install.sh, the card image)
   base/              the card image: Debian 13, Linux 6.18, device tree, kernel config
@@ -40,19 +43,20 @@ gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
                      PSP's own access point; USB networking
 
 omega/             Onion Omega2+ (MT7688 MIPS, OpenWrt): static builds, data on the SD card
-  build.sh           tools; doom, tyrian, retro (CORE=): static programs, SDL layer linked in
+  build.sh           tools; doom, tyrian, cavestory, retro (CORE=): static programs, SDL layer linked in
   install.sh         install or update: console, launcher, fonts, package tool, init script
   pspexp-term.init   the console at boot (/etc/init.d/pspexp-term)
   doom.sh            Doom from the console (older; the Freedoom package replaces it)
 
 pi/                Raspberry Pi (Debian, arm64)
   install.sh         from the Mac: build on the Pi, install the console and launcher;
-                     tyrian, retro build OpenTyrian and the emulator player on the Pi
+                     tyrian, cavestory, retro build OpenTyrian, Cave Story and the
+                     emulator player on the Pi
   build.sh           on the Pi: a development build (host tools, Doom from apt)
   install-console.sh, pspexp-term.service   on the Pi: only the console, as a service
 ```
 
 Build output goes to `build/<board>/` (binaries in `bin/`, packages in
 `pkg/`); nothing in `build/` is committed. Sources of third-party programs
-live next to the repository: `../tyrian/opentyrian`, `../doom/`,
+live next to the repository: `../tyrian/opentyrian`, `../cavestory/nxengine-evo`, `../doom/`,
 `../retro/libretro-<core>`, `../pspdev` (the PSP toolchain).

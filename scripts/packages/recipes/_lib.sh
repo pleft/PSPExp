@@ -77,3 +77,47 @@ S
 	[ "$BOARD" = omega ] && [ "${OMEGA_VIDEO_DIV:-1}" -gt 1 ] && echo "env=PSPEXP_RETRO_VIDEO_DIV=${OMEGA_VIDEO_DIV}" >> "$1/systems/$2.system"
 	return 0
 }
+
+# ---- Cave Story (NXEngine-evo) ----------------------------------------------
+# the freeware Cave Story (2004, English by Aeon Genesis), checked against the
+# SHA-512 NXEngine-evo's Flatpak pins; prints the cached zip's path
+cavestory_zip() {
+	_z=$(fetch "https://www.cavestory.org/downloads/cavestoryen.zip") || return 1
+	_h=$(shasum -a 512 "$_z" 2>/dev/null || sha512sum "$_z")
+	case "$_h" in
+	9c7c2c6c8114974df14b1dce379b86da48caf299716e1de3d743e47c3ac6a8c13c4a0ada85778e69f11c2428f991dcbfcb0020212279f9c1787260102988cbc3*) echo "$_z" ;;
+	*) echo "cavestoryen.zip: unexpected SHA-512" >&2; return 1 ;;
+	esac
+}
+# the one change to NXEngine-evo's source: the first start at 480x272 (the
+# PSP's screen, its resolution 6) instead of 640x480; a shell command, run in
+# the source tree
+cavestory_patch() {
+	echo "sed -i.orig 's|setfile->resolution     = 2; // 640x480 Windowed, should be safe value|setfile->resolution     = 6; // 480x272, the PSP screen (PSPExp)|' src/settings.cpp && grep -q 'resolution     = 6;' src/settings.cpp;"
+}
+# the PSP's buttons as Cave Story's keys: cross jumps (and accepts), square
+# and circle fire (circle also declines), L/R change weapon, triangle the
+# inventory, select the map, start the menu
+CAVESTORY_KEYS="cross=z,square=x,circle=x,l=a,r=s,triangle=q,select=w,start=escape,up=up,down=down,left=left,right=right"
+# the game data, the same on every board: NXEngine-evo's nxextract (built here
+# with the Mac's compiler; it needs only SDL's headers) turns the freeware
+# Doukutsu.exe into data files, and NXEngine-evo's own data goes over them;
+# prints the directory (build/cavestory-data)
+cavestory_data() {
+	_o="$ROOT/build/cavestory-data"
+	[ -f "$_o/Stage/Cave.pxm" ] && [ -f "$_o/sprites.sif" ] && { echo "$_o"; return 0; }
+	_s="$ROOT/../cavestory/nxengine-evo" _w="$ROOT/build/cavestory"
+	_inc="$ROOT/build/gameshell/gnu/src/SDL2-2.30.12/include"
+	[ -f "$_inc/SDL.h" ] || _inc="$ROOT/build/omega/prefix/include/SDL2"
+	mkdir -p "$_w"
+	if [ ! -x "$_w/nxextract" ]; then
+		c++ -w -std=c++14 -O2 -DHAVE_UNIX_LIKE -I"$_s" -I"$_s/deps" -I"$_inc" "$_s"/src/extract/*.cpp "$_s/src/common/misc.cpp" \
+			"$_s/src/Utils/Logger.cpp" "$_s/src/stagedata.cpp" -o "$_w/nxextract" >&2 || return 1
+	fi
+	_z=$(cavestory_zip) || return 1
+	rm -rf "$_w/game" "$_o" && mkdir -p "$_w/game" "$_o"
+	unzip -q "$_z" -d "$_w/game"
+	(cd "$_w/game/CaveStory" && "$_w/nxextract" >/dev/null) || return 1
+	cp -R "$_w/game/CaveStory/data/." "$_o/" && cp -R "$_s/data/." "$_o/"
+	echo "$_o"
+}

@@ -1404,6 +1404,13 @@ HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, in
 HOOK(SDL_Renderer *, SDL_CreateRenderer, (SDL_Window *win, int index, Uint32 flags))
 {
     SDL_Renderer *r = REAL(SDL_CreateRenderer)(win, index, flags);
+    if (!r && (flags & (SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC))) {
+        /* a headless board has only the software renderer, and the PSP draws
+         * anyway: a program that insists on acceleration (NXEngine) gets it */
+        fprintf(stderr, "[sdl-pspexp] no %s renderer here (%s): the software one\n",
+                (flags & SDL_RENDERER_ACCELERATED) ? "accelerated" : "vsync", SDL_GetError());
+        r = REAL(SDL_CreateRenderer)(win, -1, (flags & ~(SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)) | SDL_RENDERER_SOFTWARE);
+    }
     if (r && !S.ren) {
         S.ren = r;
         if (!S.win) { S.win = win; SDL_GetWindowSize(win, &S.win_w, &S.win_h); }
@@ -1816,6 +1823,16 @@ static int hide_focus_loss(void)
     static int checked, hide;
     if (!checked) { checked = 1; hide = S.active && !(getenv("PSPEXP_FOCUS") && !strcmp(getenv("PSPEXP_FOCUS"), "host")); }
     return hide;
+}
+
+/* the same for games that ask the window rather than watch events (NXEngine
+ * pauses while its window lacks input focus, which a headless one never has) */
+HOOK(Uint32, SDL_GetWindowFlags, (SDL_Window *win))
+{
+    Uint32 f = REAL(SDL_GetWindowFlags)(win);
+    if (hide_focus_loss() && win && win == S.win)
+        f = (f | SDL_WINDOW_SHOWN | SDL_WINDOW_INPUT_FOCUS) & ~(Uint32)(SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN);
+    return f;
 }
 
 static int drop_event(const SDL_Event *ev)

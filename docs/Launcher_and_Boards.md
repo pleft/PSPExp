@@ -377,10 +377,18 @@ are packaged; data is only what may be redistributed.
 |---|---|---|
 | freedoom | Freedoom 0.13 Phase 1 + 2 (two entries) | the GameShell's chocolate-doom package, Doom key map |
 | opentyrian | OpenTyrian (SDL2, compiled on the GameShell) + Tyrian 2.1 freeware data | run.sh writes its config on first start |
+| cavestory | NXEngine-evo + the freeware Cave Story (2004), its data made with NXEngine-evo's nxextract on the Mac | 480x272 by default (the PSP's screen, no scaling), 50 fps, drawn as PSP sprites (~12 KB a frame) |
 
-Next: Cave Story (NXEngine-evo), SuperTux (SDL renderer), Wolf4SDL and
-OpenJazz shareware, then `pspexp-retro` (a small libretro frontend drawing
-through PSPExp) with one package per system.
+Every game package puts a 128x128 picture next to its entry
+(`scripts/packages/art/`, where the README lists each one's source and
+license), which the launcher shows as the cover.
+
+Cave Story needed three things of the SDL layer that any game may: a
+software renderer when the program asks for an accelerated one and the board
+has none; its window reported focused and shown (`SDL_GetWindowFlags`: the
+game pauses otherwise, and a headless window is never focused); and the TCP
+link reading while a send is stuck (a large upload with the PSP sending
+back could wedge both sides).
 
 ### 4.3 The card image and the first boot
 
