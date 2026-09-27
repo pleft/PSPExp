@@ -89,11 +89,15 @@ cavestory_zip() {
 	*) echo "cavestoryen.zip: unexpected SHA-512" >&2; return 1 ;;
 	esac
 }
-# the one change to NXEngine-evo's source: the first start at 480x272 (the
-# PSP's screen, its resolution 6) instead of 640x480; a shell command, run in
-# the source tree
+# the changes to NXEngine-evo's source, as a shell command run in the source
+# tree: the first start at 480x272 (the PSP's screen, its resolution 6)
+# instead of 640x480; and dying before the first save starts over, as the
+# original does (NXEngine-evo stops with "savefile error" instead)
 cavestory_patch() {
-	echo "sed -i.orig 's|setfile->resolution     = 2; // 640x480 Windowed, should be safe value|setfile->resolution     = 6; // 480x272, the PSP screen (PSPExp)|' src/settings.cpp && grep -q 'resolution     = 6;' src/settings.cpp;"
+	cat <<'PATCH'
+sed -i.orig 's|setfile->resolution     = 2; // 640x480 Windowed, should be safe value|setfile->resolution     = 6; // 480x272, the PSP screen (PSPExp)|' src/settings.cpp && grep -q 'resolution     = 6;' src/settings.cpp &&
+perl -0pi -e 's/(if \(game_load\(settings->last_save_slot\)\)\n(\s*)\{\n)/$1$2  if (game.switchstage.mapno == LOAD_GAME) { game.switchstage.mapno = NEW_GAME; continue; } \/\/ no save yet: start over (PSPExp)\n/' src/main.cpp && grep -q 'start over (PSPExp)' src/main.cpp
+PATCH
 }
 # the PSP's buttons as Cave Story's keys: cross jumps (and accepts), square
 # and circle fire (circle also declines), L/R change weapon, triangle the
