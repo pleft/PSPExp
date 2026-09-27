@@ -28,6 +28,11 @@
  *     PSPEXP_RETRO_VIDEO_DIV=N draws only every Nth frame on purpose (2 on
  *     the Omega2+: a steady 30 fps picture, the game and sound at 60,
  *     instead of a picture that swings between smooth and choppy);
+ *   - on boards with more than one core the core runs on a worker thread,
+ *     one frame ahead, while the main thread hands the previous frame to SDL
+ *     (the SDL layer's texture work) and the PSP: the two halves overlap
+ *     instead of adding up (the GameShell's Cortex-A7s need it for 60 fps
+ *     Mega Drive). PSPEXP_RETRO_THREADS=0 keeps one thread;
  *   - sound resampled here to 44.1 kHz stereo, the PSP's rate (integer
  *     linear interpolation: no floating point per sample for FPU-less
  *     boards), through an SDL audio callback paced by the SDL layer's clock;
@@ -190,6 +195,14 @@ static struct {
     int running;
     int skip_video;                   /* this core frame is not shown (frame skip) */
     int video_div;                    /* show every Nth frame (PSPEXP_RETRO_VIDEO_DIV, default 1) */
+    /* the core on a worker thread (see threads_*) */
+    int threaded;
+    SDL_Thread *worker;
+    SDL_mutex *mu; SDL_cond *cv;
+    int job, job_done, quit;          /* frames to run (last one captured), 1 when done */
+    uint8_t *fbuf[2]; size_t fcap[2]; /* captured frames: [back] written by the worker */
+    int fw[2], fh[2], fpitch[2], fvalid[2], back;
+    int geom_pending; struct retro_game_geometry geom;
     /* stats, every 5 s: frames run / shown, core and present time */
     unsigned st_run, st_shown; Uint64 st_core, st_present, st_t0;
 } P;
@@ -279,6 +292,11 @@ static void core_log(enum retro_log_level level, const char *fmt, ...)
 
 static void set_geometry(const struct retro_game_geometry *g)
 {
+    if (P.threaded && P.worker && P.job && !P.job_done) {
+        /* called from inside a frame on the worker: SDL is the main thread's */
+        P.geom = *g; P.geom_pending = 1;
+        return;
+    }
     P.aspect = g->aspect_ratio > 0.0f ? g->aspect_ratio : (float)g->base_width / (float)g->base_height;
     if (P.ren && g->base_width && g->base_height) {
         int lh = (int)g->base_height;
@@ -361,6 +379,14 @@ static void video_refresh(const void *data, unsigned width, unsigned height, siz
 {
     SDL_Rect r;
     if (!data || data == RETRO_HW_FRAME_BUFFER_VALID || P.skip_video) return;   /* a dupe or a skipped frame */
+    if (P.threaded) {   /* on the worker: keep a copy for the main thread */
+        int b = P.back;
+        size_t n = pitch * height;
+        if (n > P.fcap[b]) { uint8_t *nb = (uint8_t *)realloc(P.fbuf[b], n); if (!nb) return; P.fbuf[b] = nb; P.fcap[b] = n; }
+        memcpy(P.fbuf[b], data, n);
+        P.fw[b] = (int)width; P.fh[b] = (int)height; P.fpitch[b] = (int)pitch; P.fvalid[b] = 1;
+        return;
+    }
     if ((int)width > P.tex_w || (int)height > P.tex_h) make_texture((int)width, (int)height);
     r.x = 0; r.y = 0; r.w = (int)width; r.h = (int)height;
     SDL_UpdateTexture(P.tex, &r, data, (int)pitch);
@@ -494,7 +520,9 @@ static void key_event(SDL_Keycode sym, int down)
     if (down) P.keys |= (uint16_t)(1u << id); else P.keys &= (uint16_t)~(1u << id);
 }
 
-static void input_poll(void)
+/* the pad as the main thread sees it (SDL is the main thread's); the core's
+ * input_poll only reads the result */
+static void input_compute(void)
 {
     uint16_t b = P.keys;
     if (P.pad) {
@@ -520,6 +548,8 @@ static void input_poll(void)
     }
     P.buttons = b;
 }
+
+static void input_poll(void) { }
 
 static int16_t input_state(unsigned port, unsigned device, unsigned index, unsigned id)
 {
@@ -582,6 +612,46 @@ static void srm_save(void)
 }
 
 /* ---- main --------------------------------------------------------------------- */
+
+/* ---- the core on a worker thread ------------------------------------------------ */
+
+static int worker_main(void *u)
+{
+    (void)u;
+    SDL_LockMutex(P.mu);
+    for (;;) {
+        int k, i;
+        while (!P.job && !P.quit) SDL_CondWait(P.cv, P.mu);
+        if (P.quit) break;
+        k = P.job;
+        SDL_UnlockMutex(P.mu);
+        for (i = 0; i < k; i++) {
+            P.skip_video = i < k - 1;   /* only the last one is shown */
+            C.run();
+        }
+        P.skip_video = 0;
+        SDL_LockMutex(P.mu);
+        P.job = 0; P.job_done = 1;
+        SDL_CondBroadcast(P.cv);
+    }
+    SDL_UnlockMutex(P.mu);
+    return 0;
+}
+
+static void job_start(int frames)
+{
+    SDL_LockMutex(P.mu);
+    P.job_done = 0; P.job = frames;
+    SDL_CondBroadcast(P.cv);
+    SDL_UnlockMutex(P.mu);
+}
+
+static void job_wait(void)
+{
+    SDL_LockMutex(P.mu);
+    while (P.job) SDL_CondWait(P.cv, P.mu);
+    SDL_UnlockMutex(P.mu);
+}
 
 static uint8_t *read_file(const char *path, size_t *n)
 {
@@ -690,7 +760,76 @@ int main(int argc, char **argv)
     freq = SDL_GetPerformanceFrequency();
     next = SDL_GetPerformanceCounter();
     last_save = SDL_GetTicks();
+    P.threaded = SDL_GetCPUCount() > 1 && !(getenv("PSPEXP_RETRO_THREADS") && !strcmp(getenv("PSPEXP_RETRO_THREADS"), "0"));
+    if (P.threaded) {
+        P.mu = SDL_CreateMutex(); P.cv = SDL_CreateCond();
+        P.worker = P.mu && P.cv ? SDL_CreateThread(worker_main, "pspexp-retro-core", NULL) : NULL;
+        if (!P.worker) P.threaded = 0;
+    }
+    fprintf(stderr, "pspexp-retro: %s\n", P.threaded ? "the core on its own thread" : "one thread");
     P.running = 1;
+    if (P.threaded) {   /* the first frame */
+        input_compute();
+        job_start(1);
+    }
+    while (P.running && P.threaded) {
+        SDL_Event e;
+        double backlog;
+        Uint64 frame = (Uint64)((double)freq / P.fps), t;
+        int k = 1, front;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) P.running = 0;
+            else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) P.running = 0;
+            else if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) key_event(e.key.keysym.sym, e.type == SDL_KEYDOWN);
+            else if (e.type == SDL_CONTROLLERDEVICEADDED) pad_open();
+            else if (e.type == SDL_CONTROLLERDEVICEREMOVED && P.pad && !SDL_GameControllerGetAttached(P.pad)) { SDL_GameControllerClose(P.pad); P.pad = NULL; }
+        }
+        t = SDL_GetPerformanceCounter();
+        job_wait();   /* the frame the worker ran while we presented the last one */
+        P.st_core += SDL_GetPerformanceCounter() - t;
+        if (P.geom_pending > 0) { P.geom_pending = 0; set_geometry(&P.geom); }
+        front = P.back; P.back ^= 1;
+        backlog = audio_backlog();
+        audio_rate_control(backlog);
+        if (SDL_GetTicks() - last_save > 10000) { srm_save(); last_save = SDL_GetTicks(); }   /* the worker is idle */
+        /* the next job: behind the clock, or sound short, frames without a picture first */
+        now = SDL_GetPerformanceCounter();
+        while (now > next + frame * (Uint64)k && k < 4 && !getenv("PSPEXP_RETRO_NOSKIP")) k++;
+        if (backlog < 0.5 && k < 4) k++;
+        k += P.video_div - 1;
+        next += frame * (Uint64)k;
+        P.st_run += (unsigned)k;
+        input_compute();
+        job_start(k);
+        /* meanwhile: the last frame to SDL and the PSP */
+        t = SDL_GetPerformanceCounter();
+        if (P.fvalid[front]) {
+            SDL_Rect r = { 0, 0, P.fw[front], P.fh[front] };
+            if (P.fw[front] > P.tex_w || P.fh[front] > P.tex_h) make_texture(P.fw[front], P.fh[front]);
+            SDL_UpdateTexture(P.tex, &r, P.fbuf[front], P.fpitch[front]);
+            P.fb_w = P.fw[front]; P.fb_h = P.fh[front];
+            P.fvalid[front] = 0;
+        }
+        present();
+        P.st_shown++;
+        P.st_present += SDL_GetPerformanceCounter() - t;
+        now = SDL_GetPerformanceCounter();
+        if (now < next) SDL_Delay((Uint32)((next - now) * 1000 / freq));
+        else if (now - next > freq / 4) next = now;
+        if (now - P.st_t0 > 5 * freq) {
+            double secs = (double)(now - P.st_t0) / (double)freq;
+            if (P.st_t0)
+                fprintf(stderr, "pspexp-retro: %.1f core fps, %.1f shown, core wait %.1f ms/frame, present %.1f ms, audio underruns %u\n",
+                        P.st_run / secs, P.st_shown / secs, P.st_shown ? (double)P.st_core * 1000.0 / freq / P.st_shown : 0.0,
+                        P.st_shown ? (double)P.st_present * 1000.0 / freq / P.st_shown : 0.0, P.underruns);
+            P.st_t0 = now; P.st_run = P.st_shown = 0; P.st_core = P.st_present = 0;
+        }
+    }
+    if (P.threaded) {
+        job_wait();
+        SDL_LockMutex(P.mu); P.quit = 1; SDL_CondBroadcast(P.cv); SDL_UnlockMutex(P.mu);
+        SDL_WaitThread(P.worker, NULL);
+    }
     while (P.running) {
         SDL_Event e;
         double backlog;
@@ -701,6 +840,7 @@ int main(int argc, char **argv)
             else if (e.type == SDL_CONTROLLERDEVICEADDED) pad_open();
             else if (e.type == SDL_CONTROLLERDEVICEREMOVED && P.pad && !SDL_GameControllerGetAttached(P.pad)) { SDL_GameControllerClose(P.pad); P.pad = NULL; }
         }
+        input_compute();
         /* behind the core's clock by more than a frame: run frames without
          * drawing them (at most 3 in a row, so something is shown) */
         {

@@ -503,6 +503,22 @@ The player takes about 8 % of one core. Box art: GoodTools-named ROMs
 ("(W) (REV01) [!]") do not match the libretro thumbnails' No-Intro names and
 get generated covers.
 
+On the GameShell (4x Cortex-A7 at 1 GHz; the players and cores
+cross-compiled on the Mac: the card image has no compiler):
+
+| Game | Emulation / shown | Audio underruns |
+|---|---|---|
+| Super Mario World (SNES PAL) | 50 / 41-50 fps | 11 a minute, isolated clicks |
+| Sonic the Hedgehog (Mega Drive), one thread | 60 / ~30 fps while running fast | 9 in 35 s |
+| Sonic the Hedgehog, the core on its own thread | 60 / 40-57 fps (typically ~44), a whole stage | 8, all at start-up |
+
+On a single thread the core (7-10 ms) and the SDL layer's texture work
+(9-10 ms) added up past the 16.7 ms frame, and the PSP's vsync halved the
+picture. With more than one core the player now runs the core one frame
+ahead on a worker thread while the main thread hands the last frame to SDL
+and the PSP; the Omega (one core) keeps the single thread. What limits the
+GameShell now is the texture work alone, 7-8 ms a frame.
+
 What was learned on the Omega:
 
 - **FCEUmm is too heavy for the Omega** (about 25 ms a frame with Super
