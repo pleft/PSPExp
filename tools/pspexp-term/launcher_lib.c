@@ -410,6 +410,139 @@ void lib_command(const Library *L, const LEntry *e, char *out, size_t n)
     } else snprintf(out + o, n - o, "%s", e->exec);
 }
 
+/* ---- box art names --------------------------------------------------------------------- */
+
+static int hexval(int c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
+
+int lib_thumbs_parse(const char *html, size_t len, char ***names)
+{
+    const char *p = html, *end = html + len;
+    int n = 0, cap = 0;
+    char **v = NULL;
+    *names = NULL;
+    while (p < end) {
+        const char *h = NULL, *q, *png;
+        const char *s;
+        for (s = p; s + 6 < end; s++) if (!memcmp(s, "href=\"", 6)) { h = s + 6; break; }
+        if (!h) break;
+        q = memchr(h, '"', (size_t)(end - h));
+        if (!q) break;
+        p = q + 1;
+        png = q - 4;
+        if (q - h < 5 || memcmp(png, ".png", 4)) continue;
+        if (n == cap) { char **nv = (char **)realloc(v, (size_t)(cap ? cap * 2 : 1024) * sizeof(char *)); if (!nv) break; v = nv; cap = cap ? cap * 2 : 1024; }
+        {
+            char *o = (char *)malloc((size_t)(png - h) + 1), *w = o;
+            const char *r;
+            if (!o) break;
+            for (r = h; r < png; r++) {
+                if (*r == '%' && r + 2 < png && hexval(r[1]) >= 0 && hexval(r[2]) >= 0) { *w++ = (char)(hexval(r[1]) * 16 + hexval(r[2])); r += 2; }
+                else if (*r == '&' && !strncmp(r, "&amp;", 5)) { *w++ = '&'; r += 4; }
+                else *w++ = *r;
+            }
+            *w = 0;
+            v[n++] = o;
+        }
+    }
+    *names = v;
+    return n;
+}
+
+void lib_thumbs_free(char **names, int n)
+{
+    int i;
+    for (i = 0; i < n; i++) free(names[i]);
+    free(names);
+}
+
+/* the title part of a name, as a comparison key: lower case letters and
+ * digits only, without "the" (No-Intro moves it: "Legend of Zelda, The") */
+static void title_key(const char *name, char *out, size_t n)
+{
+    char word[64];
+    size_t o = 0, w = 0;
+    const char *s;
+    for (s = name; ; s++) {
+        int c = (unsigned char)*s;
+        int end = !c || c == '(' || c == '[';
+        if (isalnum(c)) { if (w + 1 < sizeof(word)) word[w++] = (char)tolower(c); continue; }
+        if (c == '\'') continue;   /* "Link's" = "Links" */
+        /* a word ends */
+        word[w] = 0;
+        if (w && strcmp(word, "the") && o + w < n) { memcpy(out + o, word, w); o += w; }
+        w = 0;
+        if (end) break;
+    }
+    out[o] = 0;
+}
+
+/* the regions a ROM's tags ask for: GoodTools letters or No-Intro words */
+static void wanted_regions(const char *tags, int *usa, int *eur, int *jpn)
+{
+    char t[128], *tok, *save;
+    *usa = *eur = *jpn = 0;
+    snprintf(t, sizeof(t), "%s", tags ? tags : "");
+    for (tok = strtok_r(t, ", ", &save); tok; tok = strtok_r(NULL, ", ", &save)) {
+        if (!strcmp(tok, "U") || !strcmp(tok, "UE") || !strcmp(tok, "JU") || !strcasecmp(tok, "USA") || !strcmp(tok, "W") || !strcasecmp(tok, "World")) *usa = 1;
+        if (!strcmp(tok, "E") || !strcmp(tok, "UE") || !strcmp(tok, "JE") || !strcasecmp(tok, "Europe") || !strcmp(tok, "W") || !strcasecmp(tok, "World")) *eur = 1;
+        if (!strcmp(tok, "J") || !strcmp(tok, "JU") || !strcmp(tok, "JE") || !strcasecmp(tok, "Japan")) *jpn = 1;
+    }
+}
+
+/* the title without its subtitle ("Rayman 2 - The Great Escape" -> "Rayman 2") */
+static void main_title(const char *title, char *out, size_t n)
+{
+    const char *dash = strstr(title, " - ");
+    snprintf(out, n, "%.*s", dash ? (int)(dash - title) : (int)strlen(title), title);
+}
+
+static int match_pass(char *const *names, int n, const char *want, int usa, int eur, int jpn, int loose)
+{
+    char key[256], mt[256];
+    int i, best = -1, best_score = -1000000;
+    for (i = 0; i < n; i++) {
+        const char *nm = names[i], *paren;
+        int score = 0, extra = 0;
+        if (loose) {   /* only covers without a subtitle of their own */
+            main_title(nm, mt, sizeof(mt));
+            paren = strchr(nm, '(');
+            if (strlen(mt) < (paren ? (size_t)(paren - nm) - 1 : strlen(nm))) continue;
+        }
+        title_key(nm, key, sizeof(key));
+        if (strcmp(key, want)) continue;
+        paren = strchr(nm, '(');
+        if (paren) {
+            if ((usa && strstr(paren, "USA")) || (eur && strstr(paren, "Europe")) || (jpn && strstr(paren, "Japan"))) score += 100;
+            if (strstr(paren, "World")) score += (usa || eur) ? 90 : 20;
+            if (!usa && !eur && !jpn && (strstr(paren, "USA") || strstr(paren, "Europe"))) score += 50;   /* no region asked: the common ones */
+            if (strstr(paren, "Beta") || strstr(paren, "Proto") || strstr(paren, "Demo") || strstr(paren, "Sample") || strstr(paren, "Pirate") || strstr(paren, "Unl")) score -= 200;
+            { const char *c; for (c = paren; *c; c++) if (*c == '(') extra++; }
+        }
+        score -= extra * 5;
+        score -= (int)strlen(nm) / 10;
+        if (score > best_score) { best_score = score; best = i; }
+    }
+    return best;
+}
+
+int lib_thumbs_match(char *const *names, int n, const char *title, const char *tags)
+{
+    char want[256], mt[256];
+    int usa, eur, jpn, k;
+    title_key(title, want, sizeof(want));
+    if (!want[0]) return -1;
+    wanted_regions(tags, &usa, &eur, &jpn);
+    k = match_pass(names, n, want, usa, eur, jpn, 0);
+    if (k >= 0) return k;
+    /* the ROM's title without its subtitle, against covers that have none:
+     * "Rayman 2 - The Great Escape" finds "Rayman 2 (USA)", while two games
+     * of a series ("Zelda - A", "Zelda - B") are never taken for each other */
+    main_title(title, mt, sizeof(mt));
+    if (!strcmp(mt, title)) return -1;
+    title_key(mt, want, sizeof(want));
+    return want[0] ? match_pass(names, n, want, usa, eur, jpn, 1) : -1;
+}
+
 /* ---- settings ---------------------------------------------------------------------- */
 
 typedef struct SetQ { const char *key; int val, found; } SetQ;

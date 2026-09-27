@@ -240,7 +240,45 @@ static void art_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m
     snprintf(stem, sizeof(stem), "%.*s", dot ? (int)(dot - base) : (int)strlen(base), base);
     for (i = 0; stem[i]; i++) if (strchr("&*/:`<>?\\|\"", stem[i])) stem[i] = '_';   /* libretro-thumbnails naming */
     snprintf(png, n, "%s/.cache/pspexp-launcher/boxart/%s/%s.png", home, L.sys[e->sys].id, stem);
-    if (miss) snprintf(miss, m, "%s/.cache/pspexp-launcher/boxart/%s/%s.miss", home, L.sys[e->sys].id, stem);
+    /* ".nomatch": a miss of the title matching (older ".miss" files were
+     * exact-name misses and are ignored, so those ROMs get another try) */
+    if (miss) snprintf(miss, m, "%s/.cache/pspexp-launcher/boxart/%s/%s.nomatch", home, L.sys[e->sys].id, stem);
+}
+
+/* The thumbnails' names per system: its directory listing, fetched once into
+ * the cache (.names.html) and matched locally, so a ROM named any way finds
+ * its cover (lib_thumbs_match). */
+static struct { char **names; int n, loaded; } g_thumbs[32];
+
+static void thumbs_paths(int sys, char *html, size_t n, char *miss, size_t m)
+{
+    const char *home = getenv("HOME") ? getenv("HOME") : "/tmp";
+    snprintf(html, n, "%s/.cache/pspexp-launcher/boxart/%s/.names.html", home, L.sys[sys].id);
+    snprintf(miss, m, "%s/.cache/pspexp-launcher/boxart/%s/.names.miss", home, L.sys[sys].id);
+}
+
+/* 1 when the system's names are in memory, 0 while they still have to be
+ * fetched, -1 when there are none (the listing could not be fetched) */
+static int thumbs_ready(int sys)
+{
+    char html[700], miss[700];
+    struct stat st;
+    FILE *f;
+    if (sys < 0 || sys >= 32) return -1;
+    if (g_thumbs[sys].loaded) return g_thumbs[sys].n > 0 ? 1 : -1;
+    thumbs_paths(sys, html, sizeof(html), miss, sizeof(miss));
+    if (stat(html, &st) != 0) return stat(miss, &st) == 0 ? -1 : 0;
+    if ((f = fopen(html, "rb"))) {
+        char *buf = (char *)malloc((size_t)st.st_size + 1);
+        if (buf) {
+            size_t got = fread(buf, 1, (size_t)st.st_size, f);
+            g_thumbs[sys].n = lib_thumbs_parse(buf, got, &g_thumbs[sys].names);
+            free(buf);
+        }
+        fclose(f);
+    }
+    g_thumbs[sys].loaded = 1;
+    return g_thumbs[sys].n > 0 ? 1 : -1;
 }
 
 static void urlenc(const char *s, char *out, size_t n)
@@ -255,30 +293,66 @@ static void urlenc(const char *s, char *out, size_t n)
     out[o] = 0;
 }
 
-static void fetch_start(const LEntry *e)
+/* download URL to OUT in the background (MISS is touched when it fails) */
+static void fetch_url(const char *url, const char *out, const char *miss, const char *id)
 {
-    char png[700], miss[700], dir[700], sysenc[300], nameenc[600], url[1200], stem[400], *slash;
-    const char *base;
+    char dir[700], *slash;
     pid_t pid;
-    art_paths(e, png, sizeof(png), miss, sizeof(miss));
-    snprintf(dir, sizeof(dir), "%s", png);
+    snprintf(dir, sizeof(dir), "%s", out);
     if ((slash = strrchr(dir, '/'))) *slash = 0;
-    base = strrchr(png, '/') + 1;
-    urlenc(L.sys[e->sys].thumbs, sysenc, sizeof(sysenc));
-    snprintf(stem, sizeof(stem), "%.*s", (int)(strlen(base) - 4), base);
-    urlenc(stem, nameenc, sizeof(nameenc));
-    snprintf(url, sizeof(url), "https://thumbnails.libretro.com/%s/Named_Boxarts/%s.png", sysenc, nameenc);
     pid = fork();
     if (pid == 0) {
-        setenv("D", dir, 1); setenv("P", png, 1); setenv("M", miss, 1); setenv("U", url, 1);
+        setenv("D", dir, 1); setenv("P", out, 1); setenv("M", miss, 1); setenv("U", url, 1);
         execl("/bin/sh", "sh", "-c",
               /* curl where there is one; OpenWrt has wget (uclient-fetch) */
-              "mkdir -p \"$D\" && if command -v curl >/dev/null; then curl -fsSL --max-time 20 -o \"$P.part\" \"$U\"; "
-              "else wget -q -T 20 -O \"$P.part\" \"$U\"; fi && [ -s \"$P.part\" ] && mv \"$P.part\" \"$P\" || { rm -f \"$P.part\"; touch \"$M\"; }",
+              "mkdir -p \"$D\" && if command -v curl >/dev/null; then curl -fsSL --max-time 30 -o \"$P.part\" \"$U\"; "
+              "else wget -q -T 30 -O \"$P.part\" \"$U\"; fi && [ -s \"$P.part\" ] && mv \"$P.part\" \"$P\" || { rm -f \"$P.part\"; touch \"$M\"; }",
               (char *)NULL);
         _exit(127);
     }
-    if (pid > 0) { g_fetch_pid = pid; snprintf(g_fetch_id, sizeof(g_fetch_id), "%s", e->id); }
+    if (pid > 0) { g_fetch_pid = pid; snprintf(g_fetch_id, sizeof(g_fetch_id), "%s", id); }
+}
+
+static void fetch_start(const LEntry *e)
+{
+    char png[700], miss[700], sysenc[300], nameenc[600], url[1200];
+    int ready = thumbs_ready(e->sys);
+    const char *name = NULL;
+    urlenc(L.sys[e->sys].thumbs, sysenc, sizeof(sysenc));
+    if (ready == 0) {   /* first the system's list of covers */
+        char html[700], hmiss[700];
+        thumbs_paths(e->sys, html, sizeof(html), hmiss, sizeof(hmiss));
+        snprintf(url, sizeof(url), "https://thumbnails.libretro.com/%s/Named_Boxarts/", sysenc);
+        fetch_url(url, html, hmiss, "");
+        return;
+    }
+    art_paths(e, png, sizeof(png), miss, sizeof(miss));
+    if (ready > 0) {
+        int k = lib_thumbs_match(g_thumbs[e->sys].names, g_thumbs[e->sys].n, e->title, e->tags);
+        if (k < 0) {   /* no cover of that title: remember, do not ask again */
+            FILE *f;
+            char dir[700], *slash;
+            snprintf(dir, sizeof(dir), "%s", miss);
+            if ((slash = strrchr(dir, '/'))) { *slash = 0; mkdir(dir, 0755); }
+            if ((f = fopen(miss, "w"))) fclose(f);
+            return;
+        }
+        name = g_thumbs[e->sys].names[k];
+    } else {   /* no list: try the file's own name, as libretro-thumbnails spells it */
+        const char *base = strrchr(png, '/') + 1;
+        static char stem[400];
+        snprintf(stem, sizeof(stem), "%.*s", (int)(strlen(base) - 4), base);
+        name = stem;
+    }
+    {
+        char safe[400];
+        size_t i;
+        snprintf(safe, sizeof(safe), "%s", name);
+        for (i = 0; safe[i]; i++) if (strchr("&*/:`<>?\\|\"", safe[i])) safe[i] = '_';   /* libretro-thumbnails naming */
+        urlenc(safe, nameenc, sizeof(nameenc));
+    }
+    snprintf(url, sizeof(url), "https://thumbnails.libretro.com/%s/Named_Boxarts/%s.png", sysenc, nameenc);
+    fetch_url(url, png, miss, e->id);
 }
 
 static void fetch_poll(uint64_t now)
@@ -289,6 +363,7 @@ static void fetch_poll(uint64_t now)
         if (waitpid(g_fetch_pid, &st, WNOHANG) == g_fetch_pid) {
             g_fetch_pid = 0;
             if ((e = cur_entry()) && !strcmp(e->id, g_fetch_id)) g_dirty = 1;   /* the cover picks the art up */
+            if (!g_fetch_id[0]) g_sel_since = 0;   /* a system's cover list arrived: match the selection now */
         }
         return;
     }

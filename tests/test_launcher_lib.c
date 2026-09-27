@@ -172,6 +172,46 @@ int main(void)
     CHECK_EQ(L.n, 3);
     CHECK(lib_find(&L, "p:freedoom/phase1") == NULL);
 
+    /* box art names from a thumbnails listing, matched whatever the ROM's naming */
+    {
+        static const char html[] =
+            "<a href=\"../\">Parent</a><a href=\"Sonic%20The%20Hedgehog%20(Japan%2C%20Korea).png\">x</a>"
+            "<a href=\"Sonic%20The%20Hedgehog%20(USA%2C%20Europe).png\">x</a>"
+            "<a href=\"Sonic%20The%20Hedgehog%20(USA%2C%20Europe)%20(Beta).png\">x</a>"
+            "<a href=\"Sonic%20The%20Hedgehog%202%20(World).png\">x</a>"
+            "<a href=\"Legend%20of%20Zelda%2C%20The%20-%20Link's%20Awakening%20DX%20(USA%2C%20Europe)%20(Rev%202).png\">x</a>"
+            "<a href=\"Street%20Fighter%20II'%20-%20Special%20Champion%20Edition%20(Europe).png\">x</a>"
+            "<a href=\"Street%20Fighter%20II'%20-%20Special%20Champion%20Edition%20(USA).png\">x</a>"
+            "<a href=\"Tom%20%26amp%3B%20Jerry.png\">x</a><a href=\"notes.txt\">x</a>"
+            "<a href=\"Rayman%202%20(USA).png\">x</a><a href=\"Castlevania%20-%20Legends%20(USA).png\">x</a>";
+        char **nm;
+        int nn = lib_thumbs_parse(html, sizeof(html) - 1, &nm), k;
+        CHECK_EQ(nn, 10);
+        if (nn == 10) {
+            CHECK(!strcmp(nm[1], "Sonic The Hedgehog (USA, Europe)"));
+            /* GoodTools "(W) (REV01) [!]": the world-wide release, not the beta or the Japanese one */
+            k = lib_thumbs_match(nm, nn, "Sonic The Hedgehog", "W, REV01, !");
+            CHECK(k == 1);
+            k = lib_thumbs_match(nm, nn, "Sonic The Hedgehog 2", "W, REV01, !");
+            CHECK(k == 3);
+            /* the article moved, "Link's", a revision: still the DX cover */
+            k = lib_thumbs_match(nm, nn, "The Legend of Zelda - Link's Awakening DX", "U, V1.2, C, !");
+            CHECK(k == 4);
+            /* the ROM's region picks between otherwise equal covers */
+            k = lib_thumbs_match(nm, nn, "Street Fighter II' - Special Champion Edition", "E, !");
+            CHECK(k >= 0 && strstr(nm[k], "(Europe)") != NULL);
+            k = lib_thumbs_match(nm, nn, "Street Fighter II' - Special Champion Edition", "U");
+            CHECK(k >= 0 && strstr(nm[k], "(USA)") != NULL);
+            CHECK_EQ(lib_thumbs_match(nm, nn, "Super Castlevania IV", ""), -1);
+            /* a subtitle the collection does not have: the plain title */
+            k = lib_thumbs_match(nm, nn, "Rayman 2 - The Great Escape", "E, M5, C, !");
+            CHECK(k >= 0 && !strcmp(nm[k], "Rayman 2 (USA)"));
+            /* but never another game of a series */
+            CHECK_EQ(lib_thumbs_match(nm, nn, "Castlevania - Bloodlines", "U"), -1);
+        }
+        lib_thumbs_free(nm, nn);
+    }
+
     lib_free(&L);
     snprintf(cmd, sizeof(cmd), "rm -rf '%s'", base);
     if (system(cmd) != 0) fprintf(stderr, "cleanup failed\n");

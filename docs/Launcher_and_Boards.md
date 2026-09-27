@@ -200,9 +200,18 @@ samples with nearest filtering (`launcher_gfx.c`):
   some, else generated: a gradient chosen by the title, a large faint icon,
   a badge (GBA, GAME, APP) and the title set in SemiBold.
 - **Box art**: for ROMs of systems with `thumbs=`, fetched in the background
-  from thumbnails.libretro.com with curl once the selection rests for 0.5 s,
-  cached in `~/.cache/pspexp-launcher/boxart/<system>/` (a `.miss` file
-  stops retries). `PSPEXP_LAUNCHER_NO_FETCH=1` turns it off.
+  from thumbnails.libretro.com (curl, or wget on OpenWrt) once the selection
+  rests for 0.5 s, cached in `~/.cache/pspexp-launcher/boxart/<system>/`.
+  The system's list of covers (its directory listing, 0.4-4 MB) is fetched
+  once and matched locally, so ROMs named any way find theirs: titles are
+  compared without tags, articles and punctuation ("Legend of Zelda, The -
+  Link's Awakening (USA, Europe)" = "The Legend of Zelda - Link's
+  Awakening"), the ROM's region wins among equal titles ((E), (U), (J), (W)
+  or No-Intro words), betas and protos lose; a title whose subtitle the
+  collection lacks finds the plain one ("Rayman 2 - The Great Escape" ->
+  "Rayman 2 (USA)"), never another game of a series. A `.nomatch` file stops
+  retries. With GoodTools-named test ROMs: 28 of 28 found.
+  `PSPEXP_LAUNCHER_NO_FETCH=1` turns it off.
 - **PSP button badges** in their own colours in the hint bar.
 - **Motion**: every change is eased by time (rail scroll and lift, row
   expansion and scroll, list slide on a category change, cover cross-fade,

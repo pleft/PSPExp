@@ -86,6 +86,18 @@ int  lib_is_fav(const Library *L, const char *id);
 /* the shell command that starts an entry */
 void lib_command(const Library *L, const LEntry *e, char *out, size_t n);
 
+/* Box art: the libretro-thumbnails names of one system, from its directory
+ * listing (the HTML of .../Named_Boxarts/): names without ".png", decoded.
+ * Returns the count (names freed with lib_thumbs_free). */
+int  lib_thumbs_parse(const char *html, size_t len, char ***names);
+void lib_thumbs_free(char **names, int n);
+/* The best cover for a ROM, whatever its file's naming (No-Intro, GoodTools,
+ * by hand): titles compared without tags, articles and punctuation; among
+ * equal titles the region of the ROM's tags wins ((E) Europe, (U) USA,
+ * (J) Japan, (W) World), then the fewest extra tags (no betas, protos,
+ * revisions). -1 when no title matches. */
+int  lib_thumbs_match(char *const *names, int n, const char *title, const char *tags);
+
 /* settings: KEY=value in <home>/settings */
 int  lib_setting_int(const Library *L, const char *key, int def);
 void lib_setting_set(const Library *L, const char *key, int value);
