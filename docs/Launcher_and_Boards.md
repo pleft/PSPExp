@@ -482,7 +482,19 @@ Played on the Omega2+ with the real PSP over USB (the hardest board:
 | Mega Drive, PicoDrive | Sonic: 33 fps emulation, ~7 shown: unplayable | not for the Omega |
 | SNES, Snes9x 2005 | Super Mario World (PAL): 46-51 of 50 fps, 13-25 shown, audio dropouts: not enjoyable | not for the Omega |
 
-What was learned there:
+On the Raspberry Pi 400 (4x Cortex-A72 1.8 GHz, the PSP over USB), every
+system at the machine's own rate, every frame shown:
+
+| Game | Emulation / shown | Core per frame | Texture work | Audio underruns |
+|---|---|---|---|---|
+| Sonic the Hedgehog (Mega Drive, PicoDrive) | 59.9 / 59.9 fps | 2.2-2.5 ms | 1-3 ms | 2 (start-up) |
+| Super Mario World (SNES PAL, Snes9x 2005) | 50.3 / 50.3 fps | 3.0 ms | 1.4-2 ms | 4 (start-up) |
+
+The player takes about 8 % of one core. Box art: GoodTools-named ROMs
+("(W) (REV01) [!]") do not match the libretro thumbnails' No-Intro names and
+get generated covers.
+
+What was learned on the Omega:
 
 - **FCEUmm is too heavy for the Omega** (about 25 ms a frame with Super
   Mario Bros.); QuickNES takes about half, so the NES package uses QuickNES.
