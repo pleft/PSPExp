@@ -61,6 +61,14 @@ h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
 .notes p { margin: 0; }
 .mono { font-family: var(--mono); font-size: 13px; }
 .measure { color: var(--accent); font-weight: 500; }
+.notes .wide { grid-column: 1 / -1; }
+.notes .wide p, .notes .wide li { max-width: 80ch; }
+.table { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { font: 600 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--ink); }
+td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.n { font: 13px var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+pre.mermaid { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; margin: 0; }
 </style>
 
 <div class="wrap">
@@ -98,6 +106,10 @@ h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
         <div class="seg">
           <button type="button" id="section" aria-pressed="false">Cut through the plug</button>
         </div>
+        <div class="seg" id="opens">
+          <button type="button" data-open="front" aria-pressed="false">Open the front: the Pi</button>
+          <button type="button" data-open="back" aria-pressed="false">Open the back: power</button>
+        </div>
       </div>
       <div class="group">
         <span class="label">Parts</span>
@@ -111,20 +123,73 @@ h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
   </div>
 
   <div class="notes">
+    <section class="wide">
+      <h2>Inside, part by part</h2>
+      <p>Three layers, front to back. Open the front to see the Pi, open the back to see the power parts.</p>
+      <ul>
+        <li><b>Front layer:</b> the Pi Zero 2 W on four 3 mm posts, its chips facing inward so the vents in the top sit over the processor. The microSD card comes out through a slot in the left end.</li>
+        <li><b>Middle layer:</b> the Mini-B plug in its cradle at the bottom, the PowerBoost at the top right with its micro-USB charging port in the top face, the power switch at the top left, the battery gauge at the bottom left.</li>
+        <li><b>Back layer:</b> the battery, held by foam tape to the back half.</li>
+      </ul>
+    </section>
+    <section class="wide">
+      <h2>How it is wired</h2>
+<pre class="mermaid">
+flowchart LR
+  CHG["Charger cable<br/>micro-USB"] --> PB["PowerBoost 1000C<br/>charger + 5 V boost"]
+  BAT["LiPo 3.7 V<br/>1000 mAh"] <--> PB
+  SW["Slide switch"] -- "EN: off when shorted to GND" --> PB
+  PB -- "5 V to header pins 2 + 6" --> PI["Pi Zero 2 W<br/>USB host"]
+  PB -- "LBO: battery low" --> PI
+  BAT -. "cell voltage" .-> GA["MAX17048 gauge<br/>(optional)"]
+  GA -- "I2C: pins 3 + 5" --> PI
+  PI -- "D+ D- 5 V GND" --> PLUG["Mini-B plug"]
+  PLUG --> PSP["PSP-1000<br/>USB port"]
+</pre>
+      <ul>
+        <li><b>Power:</b> the battery charges from a micro-USB cable through the PowerBoost, which also boosts it to 5 V for the Pi. You can play while it charges.</li>
+        <li><b>On/off:</b> the switch pulls the PowerBoost's EN pin to ground to turn the 5 V off. Only a tiny signal current goes through it, and charging still works when it's off.</li>
+        <li><b>Low battery:</b> the PowerBoost's LBO pin drops at about 3.2 V. The Pi watches it on a GPIO pin and shuts down cleanly before the power goes.</li>
+        <li><b>The PSP link:</b> four wires go from the Pi's USB test pads (D+, D−) and its 5 V and ground to the plug. The data pair is twisted and under 8 cm. The plug's ID pin stays unconnected. One line in the Pi's <span class="mono">config.txt</span>, <span class="mono">dtoverlay=dwc2,dr_mode=host</span>, makes the port a host.</li>
+        <li><b>The PSP takes no power:</b> the PSP-1000 can't charge over USB, so the 5 V on the plug only tells it something is connected.</li>
+        <li><b>Battery level:</b> the optional gauge reads the cell and reports a percentage over I2C, for the launcher's status bar.</li>
+      </ul>
+    </section>
+    <section class="wide">
+      <h2>Parts to buy</h2>
+      <div class="table">
+        <table>
+          <thead><tr><th>Part</th><th>What it does</th><th>Size (mm)</th><th>Roughly</th></tr></thead>
+          <tbody>
+            <tr><td>Raspberry Pi Zero 2 W, no header</td><td>The computer: Linux, PSPExp, the games; the PSP's USB host</td><td class="n">65 × 30 × 5</td><td class="n">$15</td></tr>
+            <tr><td>microSD card, 16–32 GB, A1</td><td>The system and the games</td><td class="n">15 × 11</td><td class="n">$8</td></tr>
+            <tr><td>Adafruit PowerBoost 1000C</td><td>Charges the battery (1 A), makes 5 V (up to 1 A), play while charging, EN and LBO pins</td><td class="n">36.2 × 22.9 × 5</td><td class="n">$20</td></tr>
+            <tr><td>LiPo 503450, 3.7 V 1000 mAh, with protection, JST-PH plug</td><td>The battery. A 603450 (1200 mAh, 6 mm thick) also fits</td><td class="n">50 × 34 × 5</td><td class="n">$9</td></tr>
+            <tr><td>MAX17048 gauge breakout (optional)</td><td>Battery percentage for the launcher</td><td class="n">25.4 × 17.8</td><td class="n">$6</td></tr>
+            <tr><td>Mini-B male plug, 5 pin, solder type</td><td>Goes into the PSP's USB port</td><td class="n">6.9 × 3.1 shell</td><td class="n">$1</td></tr>
+            <tr><td>Slide switch, SS12D00 class</td><td>On/off through the EN pin</td><td class="n">8.6 × 3.8 body</td><td class="n">$0.50</td></tr>
+            <tr><td>Silicone wire, 28–30 AWG, about 30 cm</td><td>Everything above; twist the D+/D− pair</td><td class="n">—</td><td class="n">$2</td></tr>
+            <tr><td>4 × M2 × 8 screws, 4 × M2 heat-set inserts (3.2 mm), 4 × M2.5 × 4 self-tapping screws, foam tape, a 2 mm light pipe</td><td>Close the shell, hold the Pi and the battery, show the charge light</td><td class="n">—</td><td class="n">$5</td></tr>
+            <tr><td>PETG filament, about 40 g</td><td>The two halves</td><td class="n">—</td><td class="n">$1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>About $65 in all. The prices are rough guides, not quotes.</p>
+    </section>
+    <section class="wide">
+      <h2>Power and running time</h2>
+      <p>The battery holds 3.7 Wh, about 3.1 Wh after the boost. The Pi Zero 2 W draws about 0.6 W idle and up to about 3 W with all four cores busy; PSPExp games fall between the two. That gives an estimate of 1.5 to 4 hours of play, which needs measuring on the real cartridge.</p>
+      <p>Two open questions for the next round:</p>
+      <ul>
+        <li><b>Switching off:</b> the switch cuts power at once, which can corrupt the microSD card if it's writing. The fix is either a read-only system or a soft power button that asks the Pi to shut down first.</li>
+        <li><b>Heat:</b> the Pi's processor sits in a closed shell with only the top vents. It may need a small copper heat spreader.</li>
+      </ul>
+    </section>
     <section>
       <h2>How it attaches</h2>
       <p>The underside is a saddle: a channel as thick as the PSP (23 mm plus 0.3 mm of play per side) with a 6 mm lip over the screen side and a 12 mm lip over the back. A 0.5 mm bump along each lip clicks over the faces and holds it. The front lip stays inside the bezel above the screen.</p>
       <p>The Mini-B plug sits in the saddle's roof, in a pocket with 0.4 mm of float, so it lines up with the port by itself. The saddle carries the cartridge's weight and any knock, not the PSP's USB socket.</p>
       <p>Cut through the plug to see the saddle's profile around the PSP.</p>
-    </section>
-    <section>
-      <h2>Inside</h2>
-      <ul>
-        <li><b>Front layer:</b> the Pi Zero 2 W on four 3 mm standoffs, chips facing inward. The microSD card is reachable through a slot in the left end.</li>
-        <li><b>Middle layer:</b> the plug cradle at the bottom, the charger module at the top right with its USB-C port in the top face, and vents over the Pi's processor.</li>
-        <li><b>Back layer:</b> a 1000 mAh LiPo (50 × 34 × 5 mm), about 3 hours of play (an estimate, to be measured).</li>
-        <li>Four wires go from the plug to the Pi's USB test pads. The Pi is the USB host and supplies the PSP's VBUS from its 5 V rail.</li>
-      </ul>
     </section>
     <section>
       <h2>To measure on a real PSP-1000</h2>
@@ -137,18 +202,6 @@ h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
         <li>The thickness at the top edge where the lips sit, and how round the top edges are.</li>
       </ul>
     </section>
-    <section>
-      <h2>Parts to buy</h2>
-      <ul>
-        <li>Raspberry Pi Zero 2 W</li>
-        <li>LiPo 503450, 3.7 V 1000 mAh, with a protection board</li>
-        <li>USB-C charger and 5 V boost module, up to 23 × 36 × 5 mm</li>
-        <li>Mini-B male plug, solder type</li>
-        <li>Slide switch, 8.6 × 3.8 mm body (SS12D00 class)</li>
-        <li>4 × M2 × 8 screws, 4 × M2 heat-set inserts (3.2 mm), 4 × M2.5 × 4 self-tapping screws</li>
-      </ul>
-      <p>Print both halves in PETG, outer face down, 0.2 mm layers. The shell is about 31 cm³; the finished cartridge weighs roughly 75 g, against the PSP's 280 g.</p>
-    </section>
   </div>
 </div>
 
@@ -159,7 +212,7 @@ h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
   const NAMES = {
     psp_body: "PSP-1000", psp_screen: "Screen", psp_shoulders: "L and R", psp_controls: "Buttons",
     cart_front: "Shell, front half", cart_back: "Shell, back half", part_pizero: "Pi Zero 2 W",
-    part_battery: "LiPo 1000 mAh", part_power: "Charger + 5 V boost", part_plug: "Mini-B plug", part_switch: "Power switch"
+    part_battery: "LiPo 1000 mAh", part_power: "PowerBoost 1000C", part_plug: "Mini-B plug", part_switch: "Power switch", part_gauge: "Battery gauge"
   };
   const PSP_PARTS = ["psp_body", "psp_screen", "psp_shoulders", "psp_controls"];
   const view = document.getElementById("viewport");
@@ -236,6 +289,20 @@ h2 { font: 600 20px/1.2 var(--display); margin: 0; letter-spacing: .01em; }
     if (on) setView("side");
   });
   document.getElementById("views").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b) setView(b.dataset.view); });
+  function show(name, on) { if (meshes[name]) meshes[name].visible = on; const c = document.getElementById("show-" + name); if (c) c.checked = on; }
+  document.getElementById("opens").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    const on = b.getAttribute("aria-pressed") !== "true";
+    document.querySelectorAll("#opens button").forEach(x => x.setAttribute("aria-pressed", "false"));
+    Object.keys(meshes).forEach(n => show(n, true));
+    lift.value = 0; explode.value = 0; place();
+    if (on) {
+      b.setAttribute("aria-pressed", "true");
+      ["psp_body", "psp_screen", "psp_shoulders", "psp_controls"].forEach(n => show(n, false));
+      if (b.dataset.open === "front") { show("cart_front", false); setView("front"); }
+      else { show("cart_back", false); show("part_pizero", true); setView("back"); }
+    } else setView("iso");
+  });
 
   function tick(t) { if (anim) anim(t); controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick); }
 

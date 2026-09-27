@@ -60,10 +60,11 @@ Y0 = PSP_H            # the PSP's top edge
 # ---- what goes inside ----------------------------------------------------
 PI = dict(w=65.0, h=30.0, pcb=1.2, holes=(58.0, 23.0), hole_d=2.75, standoff=3.0)
 BATT = dict(w=50.0, h=34.0, t=5.0)           # LiPo 503450, 1000 mAh
-POWER = dict(w=23.0, h=36.0, t=5.0)          # USB-C charger + 5 V boost module
+POWER = dict(w=22.9, h=36.2, t=5.0)          # Adafruit PowerBoost 1000C (charger + 5 V boost)
+GAUGE = dict(w=25.4, h=17.8, t=3.0)          # MAX17048 battery gauge breakout (optional)
 PLUG = dict(shell_w=6.9, shell_t=3.1, shell_l=5.4, body_w=9.0, body_t=5.0, body_h=10.0, float=0.4)
 SWITCH = dict(w=8.6, t=3.8)                  # slide switch slot on the top face
-USBC = dict(w=9.4, t=3.6)                    # charging port on the top face
+CHARGE = dict(w=8.4, t=3.4)                  # the PowerBoost's micro-USB, in the top face
 M2_INSERT_D, M2_CLEAR_D, M2_HEAD_D = 3.2, 2.3, 4.2
 
 
@@ -167,9 +168,9 @@ def shell():
     # top face: charging port over the power module, power switch, LED
     yt0, yt1 = Y0 + CART_H - WALL - 1, Y0 + CART_H + 1
     px, pz = power_pos()
-    s = s - box(px - USBC["w"] / 2, yt0, pz - USBC["t"] / 2, px + USBC["w"] / 2, yt1, pz + USBC["t"] / 2)
+    s = s - box(px - CHARGE["w"] / 2, yt0, pz - CHARGE["t"] / 2, px + CHARGE["w"] / 2, yt1, pz + CHARGE["t"] / 2)
     s = s - box(CART_X - 28 - SWITCH["w"] / 2, yt0, -SWITCH["t"] / 2, CART_X - 28 + SWITCH["w"] / 2, yt1, SWITCH["t"] / 2)
-    s = s - cyl_y(CART_X - 14, 0, yt0, yt1, 1.1)
+    s = s - cyl_y(px - 8.5, 0, yt0, yt1, 1.1)   # window for a light pipe from the charge LEDs
     # vents over the Pi's processor (middle layer)
     for i in range(5):
         vx = CART_X - 12 + i * 4.0
@@ -235,6 +236,8 @@ def parts():
                             USB_X + p["shell_w"] / 2, ry, USB_Z + p["shell_t"] / 2)
                         + box(USB_X - p["body_w"] / 2, ry, USB_Z - p["body_t"] / 2,
                               USB_X + p["body_w"] / 2, ry + p["body_h"], USB_Z + p["body_t"] / 2))
+    out["part_gauge"] = box(CART_X - 36 + 3, Y0 + FIT + ROOF + 1.5, -GAUGE["t"] / 2,
+                            CART_X - 36 + 3 + GAUGE["w"], Y0 + FIT + ROOF + 1.5 + GAUGE["h"], GAUGE["t"] / 2)
     out["part_switch"] = box(CART_X - 28 - 4.3, ytop - 6, -1.8, CART_X - 28 + 4.3, ytop + 1.8, 1.8)
     return out
 
@@ -257,7 +260,7 @@ def write_stl(path, m):
 
 COLOURS = dict(psp_body="#2b2d31", psp_screen="#0b0c0e", psp_shoulders="#3a3d42", psp_controls="#55585e",
                cart_front="#c9cdd4", cart_back="#aeb3bb", part_pizero="#1f7a3a", part_battery="#3c6fc4",
-               part_power="#8a3fb8", part_plug="#b8b8b8", part_switch="#e0a030")
+               part_power="#8a3fb8", part_plug="#b8b8b8", part_switch="#e0a030", part_gauge="#2aa198")
 
 
 def main():
