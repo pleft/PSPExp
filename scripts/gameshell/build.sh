@@ -53,10 +53,21 @@ if [ "$WHAT" = retro ]; then
 	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git -cf - . ; } 2>/dev/null | tar -C "$W" -xf -
 	find "$W" \( -name '*.o' -o -name '*.so' -o -name '*.dylib' \) -delete
 	MK=Makefile.libretro; [ -f "$W/$MK" ] || MK=Makefile
-	make -C "$W" -f "$MK" -j8 platform=unix CC="$R/zcc" CXX="$R/zcxx" >"$R/core-$CORE.log" 2>&1 || true
+	# per core: PicoDrive picks ARM assembly (Cyclone, DrZ80, renderers) from
+	# the compiler's target name, which Zig's triple with a glibc version
+	# breaks: its portable C cores instead
+	case "$CORE" in
+	picodrive) EXTRA="ARCH=generic" ;;   # its C 68000 (FAME) and Z80 (CZ80) cores, no assembly
+	*) EXTRA= ;;
+	esac
+	make -C "$W" -f "$MK" -j8 platform=unix CC="$R/zcc" CXX="$R/zcxx" $EXTRA >"$R/core-$CORE.log" 2>&1 || true
 	OBJS=$(find "$W" -name '*.o' | sort)
 	[ -n "$OBJS" ] || { tail -20 "$R/core-$CORE.log"; exit 1; }
 	"$R/zcxx" -shared -fPIC -o "$OUT/bin/${CORE}_libretro.so" $OBJS -lm
+	# every symbol the core needs must come from the C library: anything else
+	# is an object its build left out (it would fail only when loaded)
+	U=$(nm -D --undefined-only "$OUT/bin/${CORE}_libretro.so" 2>/dev/null | awk '{print $NF}' | grep -vE '@|^_|^(__cxa|__gxx|__aeabi|__stack_chk)' || true)
+	[ -z "$U" ] || { echo "${CORE}_libretro.so: undefined symbols (objects missing, see $R/core-$CORE.log):" >&2; echo "$U" | head -10 >&2; exit 1; }
 	ls -la "$OUT/bin/pspexp-retro" "$OUT/bin/${CORE}_libretro.so"
 	exit 0
 fi
