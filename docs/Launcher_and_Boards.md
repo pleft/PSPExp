@@ -488,8 +488,8 @@ Played on the Omega2+ with the real PSP over USB (the hardest board:
 |---|---|---|
 | NES, QuickNES | with the SDL layer of 2026-09-27 evening (16-bit shadow for part-texture updates, word-wise compare, one USB transfer a frame): full-speed game and sound, 46.7 fps shown on average over the whole level 1 (38-60), fewer audio clicks than at 30 fps; before, only a 30 fps picture held (20-28 while scrolling) | 60 fps, CLUT8 pages |
 | Game Boy / Color, Gambatte | 59-60 fps, 56-59 shown, CPU half idle | 60 fps |
-| Mega Drive, PicoDrive | Sonic: 33 fps emulation, ~7 shown: unplayable | not for the Omega |
-| SNES, Snes9x 2005 | Super Mario World (PAL): 46-51 of 50 fps, 13-25 shown, audio dropouts: not enjoyable | not for the Omega |
+| Mega Drive, PicoDrive | Sonic, with the SDL layer of 2026-09-27 evening: 59.8 fps emulation (57 at worst), 34 fps shown on average (24 at worst), a whole level, some audio clicks; before: 33 fps emulation, ~7 shown | 60 fps |
+| SNES, Snes9x 2005 | Super Mario World (PAL), with the SDL layer of 2026-09-27 evening: 50.3 fps emulation (full), 38.4 shown on average, 8 audio underruns in a session; before: 46-51, 13-25 shown, ~130 underruns in 35 s | 50 fps |
 
 On the Raspberry Pi 400 (4x Cortex-A72 1.8 GHz, the PSP over USB), every
 system at the machine's own rate, every frame shown:
@@ -570,4 +570,4 @@ What was learned on the Omega:
 Compression was considered for the Omega and left for Wi-Fi: over USB a
 scrolling NES frame costs it about 3 ms to send, and compressing it would
 cost about as much. Next: the GameShell and the Pi, where SNES and Mega
-Drive belong. The SNES and Mega Drive recipes refuse to build for the Omega.
+Drive belong. (The SNES and Mega Drive were taken off the Omega on the morning of 2026-09-27 and are back on it since the evening's SDL layer.)
