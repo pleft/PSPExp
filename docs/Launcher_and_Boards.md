@@ -398,8 +398,9 @@ Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 upload, ~7 ms of texture work on the GameShell), "pretty playable"; Simutrans
 a steady 25 fps (its own rate), no underruns. From the Omega2+ (played the
 same day): Cave Story 42-50 fps after its 35 s start ("Loading..." on the
-PSP meanwhile), Jazz 22-48 fps in the levels with short stalls at loads,
-"impressively good for omega". The stand-in's numbers below were the Wi-Fi
+PSP meanwhile), Jazz 22-48 fps in the levels with stalls and broken sound
+at first; with its music mixed at 22050 Hz, linear, no effects (Omega build
+only) a steady 25-33 fps through level 1 and clean sound: "perfect". The stand-in's numbers below were the Wi-Fi
 link to the Mac, not the boards.
 
 Measured on the stand-in PSP: Cave Story 50 fps on the Pi, 31-36 on the
