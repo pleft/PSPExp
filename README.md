@@ -161,6 +161,16 @@ Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU) and
 `opentyrian` (a static OpenTyrian, `scripts/omega/build.sh tyrian`). The
 launcher starts in about 2 s there and uses under 4 MB of memory.
 
+### A status display on the Omega
+
+With Onion's OLED Expansion (SSD1306, 128x64, I2C 0x3C) the console shows
+what the board is doing: its name and IP address, the PSP link, the game
+running with its frame rate and audio drops (the SDL layer writes
+`/tmp/pspexp-status` every 2 s), CPU load, free memory and disk, the time.
+`pspexp-term --oled [/dev/i2c-N]` turns it on (the Omega's init script
+does); without a display, or when it stops answering, the console goes on
+without it.
+
 ## Emulators on the launcher
 
 `tools/pspexp-retro` is a libretro player that is a plain SDL2 program: one

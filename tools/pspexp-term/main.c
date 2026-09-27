@@ -46,6 +46,13 @@
 #include "../../host/libpspexp/pspexp.h"
 #include "../../host/libpspexp/pspexp_font.h"
 #include "launcher.h"
+#include "oled.h"
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <sys/statvfs.h>
+#include <time.h>
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
 #ifdef PSPEXP_HAVE_USB
@@ -1659,6 +1666,92 @@ static void launch_done(int status)
     launcher_child_exited(code);
 }
 
+/* ---- the OLED status panel (--oled) ---------------------------------------------- */
+
+static const char *g_oled_dev;
+
+/* this machine's first IPv4 address that is not loopback */
+static void first_ip(char *out, size_t n)
+{
+    struct ifaddrs *ifs, *a;
+    snprintf(out, n, "-");
+    if (getifaddrs(&ifs) != 0) return;
+    for (a = ifs; a; a = a->ifa_next)
+        if (a->ifa_addr && a->ifa_addr->sa_family == AF_INET && !(a->ifa_flags & IFF_LOOPBACK) && (a->ifa_flags & IFF_UP)) {
+            inet_ntop(AF_INET, &((struct sockaddr_in *)a->ifa_addr)->sin_addr, out, (socklen_t)n);
+            break;
+        }
+    freeifaddrs(ifs);
+}
+
+/* CPU busy since the last call, percent (/proc/stat) */
+static int cpu_busy(void)
+{
+    static unsigned long long lt, li;
+    unsigned long long u = 0, ni = 0, sy = 0, id = 0, io = 0, ir = 0, si = 0, t, busy = 0;
+    FILE *f = fopen("/proc/stat", "r");
+    if (!f) return -1;
+    if (fscanf(f, "cpu %llu %llu %llu %llu %llu %llu %llu", &u, &ni, &sy, &id, &io, &ir, &si) < 4) { fclose(f); return -1; }
+    fclose(f);
+    t = u + ni + sy + id + io + ir + si;
+    if (lt && t > lt) busy = 100 - (100 * (id + io - li)) / (t - lt);
+    lt = t; li = id + io;
+    return (int)busy;
+}
+
+static long mem_available_mb(void)
+{
+    char k[64]; long v; FILE *f = fopen("/proc/meminfo", "r");
+    if (!f) return -1;
+    while (fscanf(f, "%63s %ld kB", k, &v) == 2) if (!strcmp(k, "MemAvailable:")) { fclose(f); return v / 1024; }
+    fclose(f);
+    return -1;
+}
+
+/* every 2 s: what the board is doing, on the OLED */
+static void oled_status(int connected, uint64_t now)
+{
+    static uint64_t last;
+    char l[64], ip[48], host[64] = "";
+    const char *title = g_launcher_on ? launcher_running_title() : NULL;
+    int busy;
+    long mem;
+    struct statvfs sv;
+    time_t tt = time(NULL);
+    struct tm *tm = localtime(&tt);
+    if (!oled_active() || now - last < 2000000u) return;
+    last = now;
+    gethostname(host, sizeof(host) - 1);
+    snprintf(l, sizeof(l), "PSPExp %s", host); oled_line(0, l);
+    first_ip(ip, sizeof(ip));
+    snprintf(l, sizeof(l), "IP %s", ip); oled_line(1, l);
+    if (!connected && !g_released) oled_line(2, "PSP waiting...");
+    else if (g_link_tcp) { snprintf(l, sizeof(l), "PSP Wi-Fi %s", g_tcp.host ? g_tcp.host : ""); oled_line(2, l); }
+    else oled_line(2, "PSP USB");
+    if (title) { snprintf(l, sizeof(l), "> %s", title); oled_line(3, l); }
+    else oled_line(3, g_launcher_on ? "Launcher" : "Console");
+    /* the game's own numbers: the SDL layer writes them every 2 s */
+    oled_line(4, ""); oled_line(5, "");
+    if (title) {
+        FILE *f = fopen("/tmp/pspexp-status", "r");
+        struct stat st;
+        double fps = 0, kb = 0; unsigned under = 0;
+        if (f && stat("/tmp/pspexp-status", &st) == 0 && time(NULL) - st.st_mtime < 6 &&
+            fscanf(f, "fps=%lf kb=%lf underruns=%u", &fps, &kb, &under) >= 2) {
+            snprintf(l, sizeof(l), "  %.0f fps %.0f KB/frame", fps, kb); oled_line(4, l);
+            snprintf(l, sizeof(l), "  audio drops %u", under); oled_line(5, l);
+        }
+        if (f) fclose(f);
+    }
+    busy = cpu_busy(); mem = mem_available_mb();
+    snprintf(l, sizeof(l), "CPU %d%%  RAM %ldM free", busy < 0 ? 0 : busy, mem < 0 ? 0 : mem); oled_line(6, l);
+    if (statvfs(getenv("PSPEXP_ROOT") ? getenv("PSPEXP_ROOT") : "/", &sv) == 0)
+        snprintf(l, sizeof(l), "Disk %lluM free %02d:%02d", (unsigned long long)sv.f_bavail * sv.f_frsize / (1024 * 1024), tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
+    else snprintf(l, sizeof(l), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
+    oled_line(7, l);
+    oled_flush();
+}
+
 /* ---- main ------------------------------------------------------------------------ */
 
 static void usage(void)
@@ -1728,12 +1821,19 @@ int main(int argc, char **argv)
 #endif
         else if (!strcmp(argv[i], "--no-grab")) g_grab = 0;
         else if (!strcmp(argv[i], "--launcher")) g_launcher_on = 1;
+        else if (!strcmp(argv[i], "--oled")) {   /* a status panel on an SSD1306 OLED (optional: its I2C bus) */
+            g_oled_dev = (i + 1 < argc && !strncmp(argv[i + 1], "/dev/", 5)) ? argv[++i] : "/dev/i2c-0";
+        }
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) g_launcher_assets = argv[++i];
         else { usage(); return 1; }
     }
 
     if (!g_want_usb && !g_want_tcp && g_mode == MODE_USB) g_want_usb = 1;
     g_test_keys = getenv("PSPEXP_TERM_KEYS");
+    if (g_oled_dev) {
+        if (oled_open(g_oled_dev) == 0) { oled_line(0, "PSPExp starting"); oled_flush(); }
+        else fprintf(stderr, "[pspexp-term] no OLED on %s\n", g_oled_dev);
+    }
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, on_sigchld);
     signal(SIGUSR1, on_usr1);
@@ -1866,6 +1966,7 @@ int main(int argc, char **argv)
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u) { last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1; }
+        oled_status(connected, now);
         if (g_view_launcher) {
             if (launcher_needs_frame(now) && pspexp_should_render(ctx)) {
                 launcher_render(ctx, now, 1);
@@ -1911,6 +2012,7 @@ int main(int argc, char **argv)
 #ifdef PSPEXP_HAVE_SDL
     if (g_sdl) pspexp_sdl_destroy(g_sdl);
 #endif
+    oled_close();
     if (pidfile) {
         FILE *f = fopen(pidfile, "r");
         int who = 0;

@@ -1649,3 +1649,5 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     fprintf(stderr, "[launcher] library %s: %d entries, %d systems, %d categories\n", L.home, L.n, L.nsys, g_ncat);
     return 0;
 }
+
+const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }

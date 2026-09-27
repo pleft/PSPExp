@@ -22,7 +22,7 @@ start_service() {
 		mkdir -p $DIR/home $DIR/opt/apps $DIR/opt/systems
 		cd $DIR/home
 		while :; do
-			$DIR/pspexp-term --shell /bin/ash --launcher & C=\$!
+			$DIR/pspexp-term --shell /bin/ash --launcher --oled & C=\$!
 			wait \$C
 			echo 'pspexp-term exited; restarting in 2 s' >&2
 			sleep 2

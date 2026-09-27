@@ -37,5 +37,7 @@ int launcher_take_console(void);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);
+/* the title of the program started from the launcher, NULL when none runs */
+const char *launcher_running_title(void);
 
 #endif
