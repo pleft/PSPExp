@@ -47,6 +47,8 @@ cable pull, so pull the cable to read it after a session.
 | **Doom / Tyrian on the PSP** | `scripts/dev/pspexp-doom` / `scripts/dev/pspexp-tyrian` |
 | an emulator: one core, one ROM | `build/host/pspexp-retro CORE ROM` (through `scripts/dev/pspexp-run` for the PSP) |
 | **the PSP as this machine's console** | `build/host/pspexp-term` |
+| the PSP's memory stick from a shell (list, copy both ways, mkdir, rm, mv, free space) | `build/host/pspexp-ms [--tcp <host>] ls ms0:/PSP/GAME` / `get ms0:/X [file]` / `put file ms0:/PSP/GAME/X/` / `mkdir` / `rm` / `mv` / `df` |
+| a stand-in PSP whose memory stick is a folder (file manager, `pspexp-ms`) | `PSPEXP_MS0=<folder> build/host/pspexp-sdl-server` |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |
 | Warcraft on the PSP, main menu / straight into a map | `cd ../WarCraft && PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` / `... -r maps/4-middle-ground.smp` |
 | Warcraft with the Mac window shown / without a PSP | `PSPEXP_WINDOW=show ...` / `PSPEXP=sdl ...` |

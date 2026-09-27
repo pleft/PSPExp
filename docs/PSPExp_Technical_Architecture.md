@@ -484,9 +484,30 @@ RESOURCE   uploads, releases, residency
 AUDIO      cached SFX control, PCM stream
 INPUT      controller samples (PSP -> host)
 DEBUG      metrics, traces
+FILE       the PSP's memory stick (host -> PSP requests, one reply each)
 ```
 
-Future extensions could add networking, filesystem, compute/RPC, or other services without changing the fundamental graphics architecture.
+Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
+
+*The FILE channel (6), added 2026-09-28:*
+- **Requests:** FS_LIST, FS_READ, FS_WRITE, FS_MKDIR, FS_REMOVE,
+  FS_RENAME, FS_INFO and FS_STAT. Each carries a `PspExpFsRequest` (an id,
+  flags, an offset, a length and two 256-byte paths); FS_WRITE's data
+  follows the request.
+- **Replies:** FS_REPLY is a `PspExpFsReply` (the same id, a status that
+  is `PspExpFsError` when negative, and values). It is followed by up to 64
+  `PspExpFsEntry`s (a listing, a stat) or up to 64 KB of data (a read).
+- **Offering it:** the runtime announces the channel with the HELLO
+  feature bit `PSPEXP_FEATURE_FILES`. A runtime without the bit would drop
+  the link on the unknown channel, so hosts ask only when it is set.
+- **Accepted paths:** `ms0:/` and `ef0:/`, with no `..` parts.
+- **Where requests are answered:**
+  - on the PSP: `psp/runtime/pspexp_fs_psp.c` (sceIo);
+  - on desktop executors: `runtime/pspexp_fs_posix.c`, where a folder given
+    by `PSPEXP_MS0` plays the stick.
+- **Host API:** `pspexp_fs_*` in `libpspexp`. These calls block, pumping
+  the link while they wait. Users are the console's file manager (a drive,
+  docs/Launcher_and_Boards.md §7.3) and `tools/pspexp-ms`.
 
 ### 9.1 Capability negotiation
 

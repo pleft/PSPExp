@@ -220,15 +220,27 @@ it (`doom`) hands the PSP to the game and takes it back afterwards
 
 | PSP | console |
 |---|---|
-| select | show / hide the keyboard (80x25 / 80x34) |
+| cross / square / circle / triangle | the highlighted key / Backspace / Space / Enter |
+| start | Tab |
+| L held / R held | Shift / Ctrl |
+| L + triangle / R + square | Esc / Ctrl-C |
+| select | show / hide the keyboard (held: the launcher) |
 | d-pad | move on the keyboard; arrow keys when it is hidden |
-| cross | type the highlighted key |
-| circle / square / triangle / start | backspace / space / Enter / Tab |
-| L / R held | Shift / Ctrl |
-| nub | arrow keys |
-| R + up / down, left / right | scroll back a line / a page |
+| R + d-pad, R + nub | scroll back (a line or a page) |
+| L + R + left / right | the other shells (up to four) |
+| L + square / L + circle | copy mode / paste |
+| L tapped | the context menu: keys, commands, Files here, themes, fonts, the button list |
 | host keyboard (Linux) | types directly (US layout); Shift + PgUp / PgDn scroll back |
 | host mouse (Linux) | wheel scrolls back; clicks go to programs that ask for the mouse |
+
+The console also has a two-panel file manager (System > Files in the
+launcher, or Files here from the terminal's menu). It can copy, move,
+delete, rename and create folders; it shows pictures and reads text;
+opening a ROM starts it in its emulator, and a package gets installed.
+Each panel's drive button drops down every drive: the board's storage
+mounts and **the PSP's own memory stick**, reached over the link while
+the console runs (`tools/pspexp-ms` does the same from a shell). Buttons
+and details: docs/Launcher_and_Boards.md §7.
 
 ## Layout
 
@@ -243,9 +255,11 @@ psp/                 the PSP side: runtime (pspexp_runtime.prx), executor-ge (th
                      boot (EBOOT loader)
 compatibility/       existing programs on the PSP: sdl-pspexp (the SDL layer: any
                      SDL2 program), stratagus (Warcraft's renderer backend)
-tools/               pspexp-term (the PSP as a console, with the launcher),
+tools/               pspexp-term (the PSP as a console, with the launcher and a
+                     file manager whose drives include the PSP's memory stick),
                      pspexp-retro (emulator player), pspexp-sdl-server (a stand-in
-                     PSP for screenshots), usb-bench (pspexp-bench)
+                     PSP for screenshots), pspexp-ms (the memory stick from a
+                     shell), usb-bench (pspexp-bench)
 examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)
 scripts/             building, installing and packaging, one folder per board
