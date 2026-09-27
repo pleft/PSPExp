@@ -17,16 +17,48 @@
 #      (scripts/packages/pspexp-pkg-build) ships; HOST=user@host (default cpi@gameshell).
 #      The launcher's own OpenTyrian is SDL 1.2, which the shim cannot reach.
 #   scripts/gameshell/build.sh retro    pspexp-retro and a libretro core (CORE=<core>),
-#      compiled on the GameShell -> build/gameshell/bin/, for the emulator packages
+#      cross-compiled here -> build/gameshell/bin/, for the emulator packages
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/build/gameshell"
 WHAT="${1:-all}"
 
 if [ "$WHAT" = retro ]; then
+	# Cross-compiled here like the shim (the card image has no compiler):
+	# the core as a shared library, the player linked against a stand-in
+	# libSDL2-2.0.so.0 that only names the functions it uses; on the board the
+	# image's own SDL2 answers them. CORE=<core> (../retro/libretro-<core>).
+	CORE="${CORE:-quicknes}"
+	SRC="$ROOT/../retro/libretro-$CORE"
 	INC="$OUT/gnu/src/SDL2-${SDL_VER:-2.30.12}/include"
 	[ -f "$INC/SDL.h" ] || { echo "SDL2 headers missing: run scripts/gameshell/build.sh shim first" >&2; exit 1; }
-	exec "$ROOT/scripts/packages/build-retro-remote.sh" "${HOST:-${GAMESHELL:-cpi@gameshell}}" "$OUT/bin" "$INC"
+	[ -f "$SRC/Makefile.libretro" ] || [ -f "$SRC/Makefile" ] || { echo "core source not found in $SRC" >&2; exit 1; }
+	command -v zig >/dev/null || { echo "zig not found (brew install zig)" >&2; exit 1; }
+	R="$OUT/retro"; mkdir -p "$R" "$OUT/bin" "$ROOT/build/zig-cache"
+	T="arm-linux-gnueabihf.${GLIBC_VER:-2.35}"
+	for t in cc cxx; do
+		case $t in cc) cmd="zig cc -target $T -mcpu=cortex_a7" ;; cxx) cmd="zig c++ -target $T -mcpu=cortex_a7" ;; esac
+		printf '#!/bin/sh\nexport ZIG_GLOBAL_CACHE_DIR="%s" ZIG_LOCAL_CACHE_DIR="%s"\nexec %s "$@"\n' \
+			"$ROOT/build/zig-cache" "$ROOT/build/zig-cache" "$cmd" > "$R/z$t"
+		chmod +x "$R/z$t"
+	done
+	# the player, and the stand-in SDL2 from the functions it calls
+	"$R/zcc" -O2 -c -D_REENTRANT -I"$INC" "$ROOT/tools/pspexp-retro/main.c" -o "$R/pspexp-retro.o"
+	nm -u "$R/pspexp-retro.o" | awk '{print $NF}' | grep '^SDL_' | sort -u | sed 's/.*/void &(void) {}/' > "$R/sdl-stub.c"
+	"$R/zcc" -shared -fPIC -Wl,-soname,libSDL2-2.0.so.0 "$R/sdl-stub.c" -o "$R/libSDL2.so"
+	"$R/zcc" -o "$OUT/bin/pspexp-retro" "$R/pspexp-retro.o" -L"$R" -lSDL2 -ldl -lm
+	# the core: its objects by its own makefile, linked here (Zig's linker
+	# lacks some flags the core makefiles pass)
+	W="$R/src-$CORE"; rm -rf "$W"; mkdir -p "$W"
+	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git -cf - . ; } 2>/dev/null | tar -C "$W" -xf -
+	find "$W" \( -name '*.o' -o -name '*.so' -o -name '*.dylib' \) -delete
+	MK=Makefile.libretro; [ -f "$W/$MK" ] || MK=Makefile
+	make -C "$W" -f "$MK" -j8 platform=unix CC="$R/zcc" CXX="$R/zcxx" >"$R/core-$CORE.log" 2>&1 || true
+	OBJS=$(find "$W" -name '*.o' | sort)
+	[ -n "$OBJS" ] || { tail -20 "$R/core-$CORE.log"; exit 1; }
+	"$R/zcxx" -shared -fPIC -o "$OUT/bin/${CORE}_libretro.so" $OBJS -lm
+	ls -la "$OUT/bin/pspexp-retro" "$OUT/bin/${CORE}_libretro.so"
+	exit 0
 fi
 
 if [ "$WHAT" = tyrian ]; then

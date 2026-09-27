@@ -15,8 +15,9 @@ DOOM_KEYS="cross=lctrl,circle=space,square=lshift,triangle=return+y,l=comma,r=pe
 # retro_core DIR CORE        puts the player and CORE into the package DIR for
 #                            $BOARD (building them when missing) and sets
 #                            RETRO_EXEC (the system's exec) and RETRO_REQ
-#   gameshell, pi  pspexp-retro + CORE_libretro.so, compiled on the board
-#                  (build-gameshell.sh retro / install-pi.sh retro)
+#   gameshell      pspexp-retro + CORE_libretro.so, cross-compiled on the Mac
+#                  (scripts/gameshell/build.sh retro)
+#   pi             the same, compiled on the Pi (scripts/pi/install.sh retro)
 #   omega          pspexp-retro-CORE, one static program (build-omega.sh retro)
 # Core sources: ../retro/libretro-CORE next to the repository.
 retro_core() {
@@ -26,7 +27,7 @@ retro_core() {
 		_b="$ROOT/build/$BOARD/bin"
 		if [ ! -x "$_b/pspexp-retro" ] || [ ! -f "$_b/${_c}_libretro.so" ]; then
 			if [ "$BOARD" = pi ]; then CORE=$_c HOST="$HOST" "$ROOT/scripts/pi/install.sh" retro
-			else CORE=$_c HOST="$HOST" "$ROOT/scripts/gameshell/build.sh" retro; fi
+			else CORE=$_c "$ROOT/scripts/gameshell/build.sh" retro; fi   # cross-compiled on the Mac
 		fi
 		cp "$_b/pspexp-retro" "$_b/${_c}_libretro.so" "$_d/"
 		RETRO_EXEC="pspexp-run ./pspexp-retro ./${_c}_libretro.so %ROM%"
