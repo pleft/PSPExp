@@ -1071,10 +1071,11 @@ static void setup_vjoy(void)
 {
 #if SDL_VERSION_ATLEAST(2, 0, 14)
     char guid[64], mapping[256];
-    if (S.vjoy >= 0) return;
+    static int failed;   /* once: an SDL built without virtual joysticks (the Omega's) stays so */
+    if (S.vjoy >= 0 || failed) return;
     if (!SDL_WasInit(SDL_INIT_JOYSTICK)) return;   /* the game did not ask for joysticks */
     S.vjoy = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 2, 12, 1);
-    if (S.vjoy < 0) { logf_("virtual joystick: %s", SDL_GetError()); return; }
+    if (S.vjoy < 0) { failed = 1; logf_("virtual joystick: %s (PSPEXP_KEYS still works)", SDL_GetError()); return; }
     SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(S.vjoy), guid, sizeof(guid));
     snprintf(mapping, sizeof(mapping),
              "%s,PSP (PSPExp),a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,start:b6,back:b7,"

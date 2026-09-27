@@ -187,8 +187,10 @@ if [ "$1" = "retro" ]; then
 	[ -n "$OBJS" ] || { tail -20 "$OUT/retro-$CORE.log"; exit 1; }
 	rm -f "$OUT/libretro-$CORE.a"
 	"$OUT/zar" rcs "$OUT/libretro-$CORE.a" $OBJS
-	"$OUT/zcc" -O2 -static -DPSPEXP_RETRO_STATIC -D_REENTRANT -I"$P/include/SDL2" -include "$REN" \
-		"$ROOT/tools/pspexp-retro/main.c" "$OUT/libretro-$CORE.a" $LIBS "$P/lib/libSDL2.a" -lm \
+	# linked as C++: some cores are (Gambatte)
+	"$OUT/zcc" -O2 -c -DPSPEXP_RETRO_STATIC -D_REENTRANT -I"$P/include/SDL2" -include "$REN" \
+		"$ROOT/tools/pspexp-retro/main.c" -o "$OUT/pspexp-retro.o"
+	"$OUT/zcxx" -O2 -static "$OUT/pspexp-retro.o" "$OUT/libretro-$CORE.a" $LIBS "$P/lib/libSDL2.a" -lm \
 		-o "$OUT/bin/pspexp-retro-$CORE" 2>"$OUT/retro-link.log" || { head -30 "$OUT/retro-link.log"; exit 1; }
 fi
 if [ "$1" = "tyrian" ]; then
