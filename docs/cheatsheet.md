@@ -61,7 +61,7 @@ packages, `BOARD=gameshell|omega|pi` (which build to package).
 | what can be packaged (recipes in `scripts/packages/recipes/`) | `scripts/packages/pspexp-pkg-build recipes` |
 | build / install / remove / list packages | `BOARD=<board> HOST=<host> scripts/packages/pspexp-pkg-build install nes gameboy` / `remove ID` / `list` |
 | copy the test ROMs (`roms/<system>/`, git-ignored) to a board | `scripts/packages/push-roms.sh <host> [nes gb ...]` |
-| launcher screenshots from a board (stand-in PSP on the Mac) | board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` |
+| launcher screenshots from a board (stand-in PSP on the Mac) | board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` (or `tz`, `wifi`, `password:<name>`) |
 | installers ship the existing build: after a source change | the board's `build.sh` first (the Pi's `install.sh` builds on the Pi) |
 | on a board: an SDL2 program on the PSP / packages | `pspexp-run <program>` (glibc boards) / `pspexp-pkg list` |
 

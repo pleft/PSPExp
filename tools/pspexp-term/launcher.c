@@ -15,6 +15,7 @@
  */
 #include "launcher.h"
 #include "launcher_lib.h"
+#include "launcher_board.h"
 #include "launcher_gfx.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -161,6 +162,9 @@ static void cats_build(void)
     g_nactions = 0;
     action(&g_actions[g_nactions++], "rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
     if (g_wifi_cmd) action(&g_actions[g_nactions++], "wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
+    if (board_wifi_kind() != BOARD_WIFI_NONE)
+        action(&g_actions[g_nactions++], "wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
+    action(&g_actions[g_nactions++], "tz", "Time zone", "clock", "The board's time zone, for the clock");
     action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
     action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "This board's shell on the PSP");
     action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart this board");
@@ -187,7 +191,7 @@ static LEntry *cur_entry(void)
 
 /* ---- state ------------------------------------------------------------------------------ */
 
-enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT };
+enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT };
 static int g_mode;
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
@@ -420,7 +424,7 @@ static pid_t g_bg_pid;
 static char g_bg_ok[96], g_bg_fail[96], g_bg_icon[32];
 
 /* runs a command in the background; a toast says how it went */
-static void bg_run(const char *cmd, const char *icon, const char *ok, const char *fail)
+static void bg_run_env(const char *cmd, const char *icon, const char *ok, const char *fail, const char *env, const char *val)
 {
     pid_t pid;
     if (g_bg_pid > 0) return;
@@ -428,6 +432,7 @@ static void bg_run(const char *cmd, const char *icon, const char *ok, const char
     if (pid == 0) {
         int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
         if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+        if (env && val) setenv(env, val, 1);   /* a secret: in the command's environment only */
         setsid();
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);
@@ -439,13 +444,20 @@ static void bg_run(const char *cmd, const char *icon, const char *ok, const char
     snprintf(g_bg_icon, sizeof(g_bg_icon), "%s", icon);
 }
 
+static void bg_run(const char *cmd, const char *icon, const char *ok, const char *fail)
+{
+    bg_run_env(cmd, icon, ok, fail, NULL, NULL);
+}
+
 static void toast(const char *icon, const char *s, uint64_t now);
+static void board_refresh(void);
 
 static void bg_poll(uint64_t now)
 {
     int st;
     if (g_bg_pid <= 0 || waitpid(g_bg_pid, &st, WNOHANG) != g_bg_pid) return;
     g_bg_pid = 0;
+    board_refresh();   /* a setting may have changed: the rows show the new values */
     toast(g_bg_icon, WIFEXITED(st) && WEXITSTATUS(st) == 0 ? g_bg_ok : g_bg_fail, now);
 }
 
@@ -457,16 +469,41 @@ static int wifi_mode_psp(void)
     return !strncmp(m, "psp", 3);
 }
 
+/* ---- board settings: time zone, Wi-Fi network ------------------------------------------------ */
+
+static char g_cur_ssid[64], g_cur_tz[64];
+static int g_board_known;
+
+/* the board's current network and zone, read now (popen: not per frame) */
+static void board_refresh(void)
+{
+    int k;
+    board_wifi_current(board_wifi_kind(), g_cur_ssid, sizeof(g_cur_ssid));
+    board_tz_current(g_cur_tz, sizeof(g_cur_tz));
+    k = board_zone_find(g_cur_tz);
+    if (k >= 0) {   /* the launcher's own clock follows at once (musl reads only TZ) */
+        setenv("TZ", board_zone(k)->posix, 1);
+        tzset();
+    }
+    g_board_known = 1;
+}
+
 /* what a System row shows on its right */
 static const char *action_value(const LEntry *e)
 {
     const char *a = e->id + 2;
+    if (!g_board_known) board_refresh();
+    if (!strcmp(a, "wifinet")) return wifi_mode_psp() ? "PSP direct mode" : g_cur_ssid[0] ? g_cur_ssid : "Not connected";
+    if (!strcmp(a, "tz")) { int k = board_zone_find(g_cur_tz); return k >= 0 ? board_zone(k)->label : g_cur_tz[0] ? g_cur_tz : "UTC"; }
     if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
     return NULL;
 }
 
 /* ---- launching and actions ------------------------------------------------------------------- */
+
+enum { PICK_TZ, PICK_WIFI };
+static void pick_open(int kind, uint64_t now);
 
 static void run_action(LEntry *e, uint64_t now)
 {
@@ -514,6 +551,11 @@ static void run_action(LEntry *e, uint64_t now)
         g_launch_aware = 1;
         g_launch_pending = 1;
         toast("power", reboot ? "Restarting..." : "Powering off...", now);
+    } else if (!strcmp(a, "tz")) {
+        pick_open(PICK_TZ, now);
+    } else if (!strcmp(a, "wifinet")) {
+        if (wifi_mode_psp()) toast("wifi", "The Wi-Fi is the PSP's access point: switch it to the home network first", now);
+        else pick_open(PICK_WIFI, now);
     } else if (!strcmp(a, "about")) {
         about_collect();
         g_about_at = now;
@@ -898,6 +940,7 @@ static void search_type(const char *key)
 }
 
 static void toast(const char *icon, const char *s, uint64_t now);
+static void board_refresh(void);
 static void cats_build(void);
 
 static void search_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
@@ -954,6 +997,148 @@ static void details_input(uint32_t pressed, uint64_t now)
     g_dirty = 1;
 }
 
+/* ---- board settings: the picker (time zones, networks) and the password ------------------------- */
+
+static int g_pick_kind, g_pick_sel, g_pick_n, g_scanning;
+static float g_pick_scroll;
+static pid_t g_scan_pid;
+static BoardNet g_nets[40];
+static BoardNet g_join;               /* the network the password is for */
+static char g_txt[64];                /* the password being typed: wiped after use */
+static int g_tpage, g_tx, g_ty, g_tshow;
+
+#define TK_COLS 13
+#define TK_ROWS 3
+static const char *TK[3][TK_ROWS] = {
+    { "abcdefghijklm", "nopqrstuvwxyz", "0123456789.-_" },
+    { "ABCDEFGHIJKLM", "NOPQRSTUVWXYZ", "0123456789.-_" },
+    { "!@#$%^&*()+=?", "[]{}<>/\\|~`'\"", ",;:0123456789" },
+};
+/* the fourth row: page keys, space, join */
+static const char *TK_CTRL[] = { "abc", "ABC", "#+=", "space", "Join" };
+#define TK_NCTRL 5
+
+static void scan_start(void)
+{
+    char cmd[400];
+    pid_t pid;
+    if (g_scan_pid > 0) return;
+    board_wifi_scan_command(board_wifi_kind(), cmd, sizeof(cmd));
+    pid = fork();
+    if (pid == 0) {
+        int fd = open("/tmp/pspexp-wifi-scan.txt", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        if (fd >= 0) { dup2(fd, 1); close(fd); }
+        fd = open("/dev/null", O_WRONLY);
+        if (fd >= 0) { dup2(fd, 2); close(fd); }
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    if (pid > 0) { g_scan_pid = pid; g_scanning = 1; g_pick_n = 0; }
+}
+
+static void scan_poll(void)
+{
+    int st;
+    if (g_scan_pid <= 0 || waitpid(g_scan_pid, &st, WNOHANG) != g_scan_pid) return;
+    g_scan_pid = 0;
+    g_scanning = 0;
+    {
+        FILE *f = fopen("/tmp/pspexp-wifi-scan.txt", "r");
+        static char buf[32768];
+        size_t n = 0;
+        if (f) { n = fread(buf, 1, sizeof(buf) - 1, f); fclose(f); }
+        buf[n] = 0;
+        unlink("/tmp/pspexp-wifi-scan.txt");
+        g_pick_n = board_wifi_parse(board_wifi_kind(), buf, g_nets, (int)(sizeof(g_nets) / sizeof(g_nets[0])));
+    }
+    g_pick_sel = 0;
+    { int i; for (i = 0; i < g_pick_n; i++) if (!strcmp(g_nets[i].ssid, g_cur_ssid)) g_pick_sel = i; }
+    g_dirty = 1;
+}
+
+static void pick_open(int kind, uint64_t now)
+{
+    g_pick_kind = kind;
+    g_pick_scroll = 0;
+    board_refresh();
+    if (kind == PICK_TZ) {
+        int k = board_zone_find(g_cur_tz);
+        g_pick_n = board_zone_count();
+        g_pick_sel = k >= 0 ? k : 0;
+    } else {
+        g_pick_sel = 0;
+        scan_start();
+    }
+    g_mode = M_PICK; g_overlay_a = 0; g_open_at = now; g_sel_since = now;
+    g_dirty = 1;
+}
+
+static void wifi_join(uint64_t now)
+{
+    char cmd[900], ok[128], fail[128];
+    board_wifi_connect_command(board_wifi_kind(), &g_join, cmd, sizeof(cmd));
+    snprintf(ok, sizeof(ok), "Connected to %s", g_join.ssid);
+    snprintf(fail, sizeof(fail), "Could not join %s%s", g_join.ssid, g_join.secure ? " (the password?)" : "");
+    bg_run_env(cmd, "wifi", ok, fail, "PSPEXP_WIFI_PSK", g_join.secure ? g_txt : NULL);
+    memset(g_txt, 0, sizeof(g_txt));   /* the password lives on only in the board's network tool */
+    toast("wifi", "Joining the network...", now);
+    g_mode = M_BROWSE;
+    g_dirty = 1;
+}
+
+static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
+{
+    if (up && g_pick_n) { g_pick_sel = (pressed & PSPEXP_BUTTON_UP) ? (g_pick_sel + g_pick_n - 1) % g_pick_n : (g_pick_sel > 0 ? g_pick_sel - 1 : 0); g_sel_since = now; }
+    if (down && g_pick_n) { g_pick_sel = (pressed & PSPEXP_BUTTON_DOWN) ? (g_pick_sel + 1) % g_pick_n : (g_pick_sel + 1 < g_pick_n ? g_pick_sel + 1 : g_pick_sel); g_sel_since = now; }
+    if (pressed & PSPEXP_BUTTON_LTRIGGER) g_pick_sel = g_pick_sel > 6 ? g_pick_sel - 6 : 0;
+    if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_pick_n) g_pick_sel = g_pick_sel + 6 < g_pick_n ? g_pick_sel + 6 : g_pick_n - 1;
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; g_dirty = 1; return; }
+    if (g_pick_kind == PICK_WIFI && (pressed & PSPEXP_BUTTON_TRIANGLE)) scan_start();
+    if ((pressed & PSPEXP_BUTTON_CROSS) && g_pick_n && !g_scanning) {
+        if (g_pick_kind == PICK_TZ) {
+            const BoardZone *z = board_zone(g_pick_sel);
+            char cmd[400], ok[128];
+            board_tz_command(z, cmd, sizeof(cmd));
+            snprintf(ok, sizeof(ok), "Time zone: %s (%s)", z->label, z->offset);
+            bg_run(cmd, "clock", ok, "Could not set the time zone (see /tmp/pspexp-launcher.log)");
+            setenv("TZ", z->posix, 1);   /* the clock follows now */
+            tzset();
+            g_minute = -1;
+            g_mode = M_BROWSE;
+        } else {
+            g_join = g_nets[g_pick_sel];
+            if (g_join.secure) { memset(g_txt, 0, sizeof(g_txt)); g_tpage = 0; g_tx = 0; g_ty = 0; g_tshow = 0; g_mode = M_TEXT; g_overlay_a = 0; }
+            else wifi_join(now);
+        }
+    }
+    g_dirty = 1;
+}
+
+static void text_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
+{
+    int cols = g_ty < TK_ROWS ? (int)strlen(TK[g_tpage][g_ty]) : TK_NCTRL;
+    size_t l = strlen(g_txt);
+    if (left) g_tx = (g_tx + cols - 1) % cols;
+    if (right) g_tx = (g_tx + 1) % cols;
+    if (up || down) {
+        g_ty = (g_ty + (up ? TK_ROWS : 1)) % (TK_ROWS + 1);
+        cols = g_ty < TK_ROWS ? (int)strlen(TK[g_tpage][g_ty]) : TK_NCTRL;
+        if (g_tx >= cols) g_tx = cols - 1;
+    }
+    if (pressed & PSPEXP_BUTTON_CROSS) {
+        if (g_ty < TK_ROWS) {
+            if (l + 1 < sizeof(g_txt)) { g_txt[l] = TK[g_tpage][g_ty][g_tx]; g_txt[l + 1] = 0; }
+        } else if (g_tx < 3) g_tpage = g_tx;
+        else if (g_tx == 3) { if (l + 1 < sizeof(g_txt)) { g_txt[l] = ' '; g_txt[l + 1] = 0; } }
+        else if (l) { wifi_join(now); return; }
+    }
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && l) g_txt[l - 1] = 0;
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) g_tshow = !g_tshow;
+    if ((pressed & PSPEXP_BUTTON_START) && l) { wifi_join(now); return; }
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { memset(g_txt, 0, sizeof(g_txt)); g_mode = M_PICK; }
+    g_dirty = 1;
+}
+
 /* ---- input -------------------------------------------------------------------------------- */
 
 static void select_cat(int c, int dir, uint64_t now)
@@ -985,6 +1170,8 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     if (g_running || !g_ncat) return;
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
+    if (g_mode == M_PICK) { pick_input(pressed, up, down, now); return; }
+    if (g_mode == M_TEXT) { text_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_ABOUT) {
         if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_mode = M_BROWSE; g_dirty = 1; }
         return;
@@ -1126,10 +1313,12 @@ int launcher_needs_frame(uint64_t now)
         if (lib_changed(&L)) library_changed(now);
     }
     bg_poll(now);
+    scan_poll();
     fetch_poll(now);
     status_poll(now);
     if (g_confirm[0] && now > g_confirm_until) g_confirm[0] = 0;
-    if (g_mode == M_SEARCH && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
+    if ((g_mode == M_SEARCH || g_mode == M_TEXT) && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
+    if (g_mode == M_PICK && g_scanning && (int)((now / 300000u) & 3) != g_caret) { g_caret = (int)((now / 300000u) & 3); g_dirty = 1; }
     if (g_mode == M_ABOUT && now - g_about_at > 3000000u) { about_collect(); g_about_at = now; g_dirty = 1; }
     if (g_toast[0] && now >= g_toast_until && g_toast_a <= 0.01f) { g_toast[0] = 0; g_dirty = 1; }
     return g_dirty || g_anim || g_toast[0] != 0;
@@ -1611,6 +1800,125 @@ static int about_row(int x, int y, int w, const char *icon, const char *label, c
     return y + 28;
 }
 
+/* the picker: time zones or networks, a list over the backdrop */
+#define P_LIST_Y 48
+#define P_ROWS   8
+static void draw_pick(float dt)
+{
+    int a, i, fx = 16, fw = SCREEN_W - 32, x;
+    float target;
+    const char *title = g_pick_kind == PICK_TZ ? "Time zone" : "Wi-Fi networks";
+    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
+    a = (int)(g_overlay_a * 255);
+    gfx_icon(g_pick_kind == PICK_TZ ? "clock" : "wifi", 20, 16, 12, C_ACCENT, a);
+    gfx_text(FONT_TITLE, 44, 11, title, C_TEXT, a, 0);
+    if (g_pick_kind == PICK_WIFI && g_cur_ssid[0]) {
+        char s[96];
+        snprintf(s, sizeof(s), "on %s", g_cur_ssid);
+        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), 15, s, C_MUTED, a, 0);
+    }
+    if (g_pick_kind == PICK_WIFI && g_scanning) {
+        static const char *dots[] = { "Scanning", "Scanning.", "Scanning..", "Scanning..." };
+        gfx_icon("wifi", 24, SCREEN_W / 2 - 12, 110, C_MUTED, a * 200 / 255);
+        gfx_text(FONT_BODY, SCREEN_W / 2 - gfx_text_width(FONT_BODY, "Scanning...") / 2, 144, dots[g_caret & 3], C_SUB, a, 0);
+    } else if (!g_pick_n) {
+        const char *m = "No networks found";
+        gfx_icon("wifi-off", 24, SCREEN_W / 2 - 12, 110, C_MUTED, a * 200 / 255);
+        gfx_text(FONT_BODY, (SCREEN_W - gfx_text_width(FONT_BODY, m)) / 2, 144, m, C_SUB, a, 0);
+    } else {
+        target = (float)(g_pick_sel - P_ROWS / 2);
+        if (target > (float)(g_pick_n - P_ROWS)) target = (float)(g_pick_n - P_ROWS);
+        if (target < 0) target = 0;
+        g_pick_scroll = ease(g_pick_scroll, target, 16.0f, dt, 0.02f);
+        gfx_set_clip(fx - 4, P_LIST_Y - 2, fw + 8, P_ROWS * ROW + 4);
+        for (i = 0; i < g_pick_n; i++) {
+            int ry = P_LIST_Y + (int)lroundf((i - g_pick_scroll) * ROW), sel = i == g_pick_sel, right = fx + fw - 12;
+            const char *label, *value = NULL, *icon;
+            int current;
+            if (ry < P_LIST_Y - ROW || ry > P_LIST_Y + P_ROWS * ROW) continue;
+            if (g_pick_kind == PICK_TZ) {
+                const BoardZone *z = board_zone(i);
+                label = z->label; value = z->offset; current = !strcmp(z->iana, g_cur_tz); icon = current ? "check" : "clock";
+            } else {
+                const BoardNet *nw = &g_nets[i];
+                label = nw->ssid; current = !strcmp(nw->ssid, g_cur_ssid);
+                icon = nw->signal >= 67 ? "wifi" : nw->signal >= 34 ? "wifi-high" : nw->signal > 0 ? "wifi-low" : "wifi-zero";
+                if (nw->secure) { right -= 14; gfx_icon("lock", 12, right, ry + (ROW - 12) / 2, C_MUTED, a); right -= 6; }
+            }
+            if (sel) {
+                gfx_nine(NINE_R10, fx, ry, fw, ROW, 0xffffff, 26);
+                gfx_rect(fx, ry + 6, 3, ROW - 12, C_ACCENT, a);
+            }
+            gfx_icon(icon, 14, fx + 12, ry + (ROW - 14) / 2, current ? C_ACCENT : sel ? 0xffffff : C_MUTED, a);
+            if (value) { right -= gfx_text_width(FONT_SMALL, value); gfx_text(FONT_SMALL, right, ry + (ROW - gfx_line_height(FONT_SMALL)) / 2, value, C_MUTED, a, 0); right -= 10; }
+            if (sel) mtext(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, label, C_TEXT, a, right - fx - 40, g_sel_since);
+            else gfx_text(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, label, current ? C_TEXT : C_SUB, a, right - fx - 40);
+        }
+        gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    }
+    x = 16;
+    x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : "Join");
+    if (g_pick_kind == PICK_WIFI) x = hint_btn(x, 't', "Scan again");
+    x = hint_btn(x, 'o', "Back");
+    (void)x;
+}
+
+/* the password: a field and a keyboard of three pages */
+static void draw_text(float dt)
+{
+    int a, i, y, x0, fx = 16, fw = SCREEN_W - 32, kx, ky, x;
+    char shown[64], s[128];
+    size_t l = strlen(g_txt);
+    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
+    a = (int)(g_overlay_a * 255);
+    snprintf(s, sizeof(s), "Password for %s", g_join.ssid);
+    gfx_icon("lock", 18, 16, 13, C_ACCENT, a);
+    mtext(FONT_TITLE, 42, 11, s, C_TEXT, a, SCREEN_W - 58, g_open_at);
+    /* the field */
+    for (i = 0; i < (int)l && i < (int)sizeof(shown) - 1; i++) shown[i] = g_tshow ? g_txt[i] : '*';
+    shown[i] = 0;
+    gfx_nine(NINE_R10, fx, 44, fw, 30, 0x1d2334, a);
+    x = fx + 12;
+    if (l) x += gfx_text(FONT_TITLE, x, 44 + (30 - gfx_line_height(FONT_TITLE)) / 2, shown, C_TEXT, a, fw - 60);
+    else gfx_text(FONT_BODY, x, 44 + (30 - gfx_line_height(FONT_BODY)) / 2, "Type the password", C_MUTED, a, 0);
+    if (!g_caret) gfx_rect(x + 1, 51, 2, 16, C_ACCENT, a);
+    gfx_icon(g_tshow ? "eye" : "eye-off", 14, fx + fw - 24, 52, C_MUTED, a);
+    /* the keys */
+    x0 = (SCREEN_W - (TK_COLS * KEY_W + (TK_COLS - 1) * KEY_GAP)) / 2;
+    for (y = 0; y < TK_ROWS; y++) {
+        const char *row = TK[g_tpage][y];
+        int n = (int)strlen(row);
+        for (i = 0; i < n; i++) {
+            char k[2] = { row[i], 0 };
+            int foc = y == g_ty && i == g_tx;
+            kx = x0 + i * (KEY_W + KEY_GAP); ky = 92 + y * (KEY_H + KEY_GAP);
+            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, KEY_W, KEY_H, C_ACCENT, a * 120 / 255);
+            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x6f7ff5 : 0x222a3b, foc ? a : a * 235 / 255);
+            if (row[i] == ' ') gfx_icon("space", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, foc ? 0xffffff : C_TEXT, a);
+            else gfx_text(FONT_BODY, kx + (KEY_W - gfx_text_width(FONT_BODY, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_BODY)) / 2, k, foc ? 0xffffff : C_TEXT, a, 0);
+        }
+    }
+    {   /* the control row: page keys, space, join */
+        int total = TK_COLS * KEY_W + (TK_COLS - 1) * KEY_GAP, w = (total - (TK_NCTRL - 1) * KEY_GAP) / TK_NCTRL;
+        ky = 92 + TK_ROWS * (KEY_H + KEY_GAP);
+        for (i = 0; i < TK_NCTRL; i++) {
+            int foc = g_ty == TK_ROWS && i == g_tx, on = i < 3 && i == g_tpage;
+            const char *k = TK_CTRL[i];
+            kx = x0 + i * (w + KEY_GAP);
+            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, w, KEY_H, C_ACCENT, a * 120 / 255);
+            gfx_nine(NINE_R6, kx, ky, w, KEY_H, foc ? 0x6f7ff5 : on ? 0x3a4560 : i == 4 ? 0x1f5f4a : 0x222a3b, foc ? a : a * 235 / 255);
+            gfx_text(FONT_SMALL, kx + (w - gfx_text_width(FONT_SMALL, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_SMALL)) / 2, k, foc ? 0xffffff : C_TEXT, a, 0);
+        }
+    }
+    x = 16;
+    x = hint_btn(x, 'x', "Type");
+    x = hint_btn(x, 's', "Delete");
+    x = hint_btn(x, 't', g_tshow ? "Hide" : "Show");
+    x = hint_btn(x, 'o', "Cancel");
+    if (l) hint_cap(SCREEN_W - 16 - gfx_text_width(FONT_BADGE, "START") - 15 - gfx_text_width(FONT_SMALL, "Join"), "START", "Join", C_SUB);
+    (void)x;
+}
+
 static void draw_about(float dt)
 {
     About *b = &g_about;
@@ -1694,6 +2002,8 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
     if (g_running) draw_running();
     else if (g_mode == M_SEARCH) draw_search(dt);
     else if (g_mode == M_ABOUT) draw_about(dt);
+    else if (g_mode == M_PICK) draw_pick(dt);
+    else if (g_mode == M_TEXT) draw_text(dt);
     else if (g_ncat) {
         draw_status();
         draw_rail(dt);
@@ -1721,10 +2031,16 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i;   /* start on Games */
     /* screenshots and tests: open a page without replaying keys, which a slow
      * link can drop (a lost press in System could land on Power off) */
-    if (getenv("PSPEXP_LAUNCHER_OPEN") && !strcmp(getenv("PSPEXP_LAUNCHER_OPEN"), "about")) {
-        about_collect();
-        g_mode = M_ABOUT;
-        g_dirty = 1;
+    {
+        const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
+        if (o && !strcmp(o, "about")) { about_collect(); g_mode = M_ABOUT; g_dirty = 1; }
+        if (o && !strcmp(o, "tz")) pick_open(PICK_TZ, 0);
+        if (o && !strcmp(o, "wifi") && board_wifi_kind() != BOARD_WIFI_NONE) pick_open(PICK_WIFI, 0);
+        if (o && !strncmp(o, "password:", 9)) {   /* the keyboard for a network, typing nothing */
+            snprintf(g_join.ssid, sizeof(g_join.ssid), "%s", o + 9);
+            g_join.secure = 1;
+            g_mode = M_TEXT; g_dirty = 1;
+        }
     }
     fprintf(stderr, "[launcher] library %s: %d entries, %d systems, %d categories\n", L.home, L.n, L.nsys, g_ncat);
     return 0;

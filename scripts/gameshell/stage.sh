@@ -55,7 +55,7 @@ gs_stage() {
 	for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 		gs_copy "$ROOT/tools/pspexp-term/assets/$f" 0644 0 0 "/usr/local/share/pspexp/launcher/$f"
 	done
-	echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home' > "$S/pspexp.sudoers"
+	echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli' > "$S/pspexp.sudoers"
 	gs_copy "$S/pspexp.sudoers" 0440 0 0 /etc/sudoers.d/pspexp
 
 	# the console at boot: the PSPExp launcher as the home view, showing the

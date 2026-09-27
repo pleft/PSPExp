@@ -38,7 +38,7 @@ if [ "$1" = tyrian ]; then
 fi
 
 # the tracked files as they are in this tree (uncommitted edits included)
-(cd "$ROOT" && git ls-files -z | COPYFILE_DISABLE=1 xargs -0 tar --no-xattrs -cf - 2>/dev/null) |
+(cd "$ROOT" && git ls-files -z --cached --others --exclude-standard | COPYFILE_DISABLE=1 xargs -0 tar --no-xattrs -cf - 2>/dev/null) |
 	ssh "$PI" 'mkdir -p ~/pspexp/src && tar -C ~/pspexp/src -xf -'
 ssh "$PI" 'set -e; cd ~/pspexp/src
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
@@ -57,7 +57,7 @@ ssh "$PI" 'set -e; S=~/pspexp/src; U=$(id -un); H=$HOME
 		sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
 	done
 	sudo install -d -m 0755 -o $U -g $U /opt/pspexp /opt/pspexp/apps /opt/pspexp/systems
-	echo "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff" | sudo tee /etc/sudoers.d/pspexp >/dev/null
+	echo "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli" | sudo tee /etc/sudoers.d/pspexp >/dev/null
 	sudo chmod 0440 /etc/sudoers.d/pspexp
 	echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"054c\", ATTR{idProduct}==\"01ca\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
 	sudo udevadm control --reload-rules || true

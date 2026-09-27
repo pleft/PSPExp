@@ -247,11 +247,35 @@ PSP-drawn or mirrored, folder and entry file for games and apps; when it was
 played and whether it is a favourite. Cross plays, square favourites.
 
 **System** runs Refresh library; Wi-Fi (PSP direct / home network, through
-`pspexp-wifi-mode`, shown when installed); Box art on/off (kept in
-`settings`); Console; Restart and Power off (asking for a second press);
-About. Root commands go through `sudo -n` with the rule
-`/etc/sudoers.d/pspexp` from the staging list. The fonts and icons are installed to
-`/usr/local/share/pspexp/launcher/`.
+`pspexp-wifi-mode`, shown when installed); Wi-Fi network; Time zone; Box art
+on/off (kept in `settings`); Console; Restart and Power off (asking for a
+second press); About. Root commands go through `sudo -n` with the rule
+`/etc/sudoers.d/pspexp` (GameShell: the staging list; Pi: `install.sh`),
+which allows `timedatectl set-timezone` and `nmcli`. The fonts and icons are
+installed to `/usr/local/share/pspexp/launcher/`.
+
+The board's own settings (`launcher_board.c`), with each board's tools:
+
+| | Time zone | Wi-Fi network |
+|---|---|---|
+| GameShell, Pi | `timedatectl set-timezone` | NetworkManager: `nmcli dev wifi list --rescan yes`, `nmcli dev wifi connect` |
+| Omega2+ | `uci` `system.@system[0].zonename` and `.timezone` (POSIX rule), `/etc/init.d/system reload` | `ubus call onion wifi-scan`, `wifisetup add`/`edit`, then `priority -move top` |
+
+**Time zone** lists about 30 zones (city, UTC offset), the board's own
+ticked; cross sets it and the clock follows at once (the launcher sets its
+own `TZ`). **Wi-Fi network** (shown when the board has NetworkManager or
+Onion's wifisetup; in PSP direct mode it says to switch to the home network
+first) scans in the background and lists the networks by name, strongest
+first, with their signal and a lock for the secured ones; triangle scans
+again. A secured network opens a keyboard (three pages: lower case, upper
+case, symbols; square deletes, triangle shows or hides the password, START or
+Join joins, circle cancels). The join runs in the background and ends in a
+toast. The password is handed to the command in the environment variable
+`PSPEXP_WIFI_PSK`, which the shell expands into `nmcli`'s or `wifisetup`'s
+arguments: it is never written to a file or a log by the launcher and its
+buffer is wiped after the join, but it is visible in the process list while
+that command runs. The board's network tool stores it as it stores any
+network.
 
 **About** (System > About): two cards, this board and the PSP. Board: model
 (device tree, else /proc/cpuinfo: OpenWrt's "machine"), chip and cores, memory, storage,
@@ -290,7 +314,9 @@ PSPEXP_LAUNCHER_OPEN=about PSPEXP_TERM_KEYS=wait \
 
 `--shot N` saves every Nth frame sent; a still launcher sends few, so use
 1. `PSPEXP_TERM_KEYS` replays buttons (`left,down,cross,wait,...`) to reach
-other pages; `PSPEXP_LAUNCHER_OPEN=about` opens About without them. Do not
+other pages; `PSPEXP_LAUNCHER_OPEN` opens a page without them: `about`,
+`tz`, `wifi`, or `password:<network>` (the keyboard, joining nothing
+unless typed into). Do not
 replay keys into System on a slow link: a dropped press can land on Restart
 or Power off. A game started with `PSPEXP=tcp:<mac>:3838` draws to the same
 server, which is enough to check it runs but not its frame rate.
