@@ -170,6 +170,25 @@ void pspexp_set_transport(PspExpContext *ctx, PspExpTransport *transport);
 /* Ask the executor to save the displayed frame as pspexp-shot-<index>.bmp. */
 int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index);
 
+/* The PSP's memory stick (the FILE channel), when the runtime offers it
+ * (PSPEXP_FEATURE_FILES). Paths are the PSP's: "ms0:/PSP/GAME". Each call
+ * waits for its reply (pumping the link meanwhile, up to 15 s) and returns
+ * >= 0 or a PSPEXP_FSERR_* (PSPEXP_FSERR_LINK: no reply). Not in a frame,
+ * and from one thread: the one that drives ctx. */
+#define PSPEXP_FSERR_LINK (-100)
+int pspexp_fs_supported(const PspExpContext *ctx);
+/* entries from index first (up to max, PSPEXP_FS_LIST_MAX a reply); *more: some left */
+int pspexp_fs_list(PspExpContext *ctx, const char *path, uint32_t first, PspExpFsEntry *out, int max, int *more);
+int pspexp_fs_stat(PspExpContext *ctx, const char *path, PspExpFsEntry *out);
+/* up to len (PSPEXP_FS_CHUNK at most) bytes at offset; the count read */
+int pspexp_fs_read(PspExpContext *ctx, const char *path, uint64_t offset, void *buf, uint32_t len);
+/* len (PSPEXP_FS_CHUNK at most) bytes at offset; flags PSPEXP_FS_CREATE | PSPEXP_FS_TRUNCATE */
+int pspexp_fs_write(PspExpContext *ctx, const char *path, uint64_t offset, const void *data, uint32_t len, uint32_t flags);
+int pspexp_fs_mkdir(PspExpContext *ctx, const char *path);
+int pspexp_fs_remove(PspExpContext *ctx, const char *path);   /* a file or an empty folder */
+int pspexp_fs_rename(PspExpContext *ctx, const char *from, const char *to);
+int pspexp_fs_info(PspExpContext *ctx, const char *path, uint64_t *free_bytes, uint64_t *total_bytes);
+
 /* Raw access for tools and tests. */
 int pspexp_send_raw(PspExpContext *ctx, uint8_t channel, uint16_t opcode, const void *payload, size_t len);
 PspExpTransport *pspexp_transport(PspExpContext *ctx);

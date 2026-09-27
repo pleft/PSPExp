@@ -1,6 +1,7 @@
 /* pspexp-term's file manager view: see files.h */
 #include "files.h"
 #include "files_ops.h"
+#include "files_psp.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
 #include "launcher.h"
@@ -32,6 +33,8 @@ typedef struct Panel {
     FList list;
     int sel, top;
     char error[160];              /* the folder could not be read */
+    char back[FOPS_PATH];         /* on the PSP's stick: the board's folder to go back to */
+    char space[48];               /* on the PSP's stick: "1.2 GB free" */
 } Panel;
 
 static Panel g_p[2];
@@ -83,8 +86,13 @@ static void panel_load(Panel *p, const char *keep_name)
     int i;
     p->error[0] = 0;
     if (fops_list(p->path, g_hidden, g_sort, &p->list) < 0) {
-        snprintf(p->error, sizeof(p->error), "%s", strerror(errno));
+        snprintf(p->error, sizeof(p->error), "%s", fops_strerror(errno));
         p->list.n = 0;
+    }
+    p->space[0] = 0;
+    if (fops_is_remote(p->path) && !p->error[0]) {
+        uint64_t fr, tot;
+        if (files_psp_space(p->path, &fr, &tot) == 0 && tot) { char h[32]; fops_human(fr, h, sizeof(h)); snprintf(p->space, sizeof(p->space), "%s free", h); }
     }
     if (p->sel >= p->list.n) p->sel = p->list.n ? p->list.n - 1 : 0;
     if (keep_name && keep_name[0])
@@ -112,6 +120,7 @@ static void panel_cd(Panel *p, const char *path, const char *keep)
     snprintf(p->path, sizeof(p->path), "%s", path);
     p->sel = 0; p->top = 0;
     panel_load(p, keep);
+    if (fops_is_remote(path) && !files_psp_available()) return;   /* the PSP not there yet: shown when it is */
     if (p->error[0] && strcmp(old, path)) {   /* could not go in: stay, say why */
         snprintf(g_msg_title, sizeof(g_msg_title), "Cannot open the folder");
         snprintf(g_msg, sizeof(g_msg), "%s", p->error);
@@ -124,7 +133,7 @@ static void panel_cd(Panel *p, const char *path, const char *keep)
 static void panel_up(Panel *p)
 {
     char path[FOPS_PATH], name[256];
-    if (!strcmp(p->path, "/")) return;
+    if (fops_is_root(p->path)) return;
     snprintf(path, sizeof(path), "%s", p->path);
     snprintf(name, sizeof(name), "%s", fops_parent(path));
     panel_cd(p, path, name);
@@ -216,6 +225,39 @@ static void transfer(int kind)
     job_begin(kind);
 }
 
+/* ---- files on the PSP's stick, opened here ------------------------------------------- */
+
+#define VIEW_DIR "/tmp/pspexp-files-view"
+#define VIEW_MAX (16u * 1024u * 1024u)
+
+/* a path this board can open for the entry name of panel p: its own, or for
+ * the PSP's stick a copy fetched to VIEW_DIR (the previous one removed). 0,
+ * or -1 with the reason in err */
+static int local_path(const Panel *p, const FEntry *e, char *out, size_t n, char *err, size_t en)
+{
+    static char last[FOPS_PATH];
+    FJob j;
+    if (!fops_is_remote(p->path)) { fops_join(out, n, p->path, e->name); return 0; }
+    if (e->size > VIEW_MAX) { snprintf(err, en, "It is too large to open from the PSP (over 16 MB): copy it to the board first."); return -1; }
+    fops_join(out, n, VIEW_DIR, e->name);
+    if (!strcmp(out, last)) return 0;   /* fetched already (a picture shown again) */
+    if (last[0]) unlink(last);
+    last[0] = 0;
+    mkdir(VIEW_DIR, 0700);
+    memset(&j, 0, sizeof(j));
+    j.kind = FJOB_COPY;
+    snprintf(j.src, sizeof(j.src), "%s", p->path);
+    snprintf(j.dst, sizeof(j.dst), "%s", VIEW_DIR);
+    if (!(j.names = calloc(1, 256))) { snprintf(err, en, "out of memory"); return -1; }
+    snprintf(j.names[0], 256, "%s", e->name);
+    j.nnames = 1;
+    fjob_run(&j);   /* here: the link is this thread's */
+    fjob_finish(&j);
+    if (j.error[0]) { snprintf(err, en, "%s", j.error); return -1; }
+    snprintf(last, sizeof(last), "%s", out);
+    return 0;
+}
+
 /* ---- the text viewer ------------------------------------------------------------ */
 
 static void view_free(void)
@@ -277,8 +319,8 @@ static int is_image(const FEntry *e) { return !e->is_dir && !strcmp(icon_for(e),
 static int image_show(int i)
 {
     Panel *p = act();
-    char path[FOPS_PATH];
-    fops_join(path, sizeof(path), p->path, p->list.e[i].name);
+    char path[FOPS_PATH], err[160];
+    if (local_path(p, &p->list.e[i], path, sizeof(path), err, sizeof(err)) < 0) return -1;
     if (gfx_image_load(path, UI_SCREEN_W, UI_SCREEN_H, &g_img_w, &g_img_h) < 0) return -1;
     g_img_idx = i;
     p->sel = i;   /* back in the panel, the highlight is on the last one shown */
@@ -355,9 +397,20 @@ static void install_done(int status)
 /* a file is text by its name, or when its start has no NUL */
 static void open_file(Panel *p, const FEntry *e)
 {
-    char path[FOPS_PATH];
+    char path[FOPS_PATH], err[300];
     int r;
-    fops_join(path, sizeof(path), p->path, e->name);
+    if (fops_is_remote(p->path) && !is_image(e) && (is_package(e) || launcher_system_for(e->name, err, 16))) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
+        snprintf(g_msg, sizeof(g_msg), "This is on the PSP's memory stick: copy it to the board first (triangle, then Copy), and open it there.");
+        g_over = O_MESSAGE;
+        return;
+    }
+    if (local_path(p, e, path, sizeof(path), err, sizeof(err)) < 0) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
+        snprintf(g_msg, sizeof(g_msg), "%s", err);
+        g_over = O_MESSAGE;
+        return;
+    }
     if (launcher_open_file(path)) return;   /* a ROM: its emulator, as from the launcher */
     if (is_package(e)) {   /* a PSPExp package: install it, after asking */
         snprintf(g_inst_file, sizeof(g_inst_file), "%s", path);
@@ -388,14 +441,14 @@ static void open_file(Panel *p, const FEntry *e)
 
 typedef struct MItem { const char *icon, *label; int id; } MItem;
 enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS,
-       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_CLOSE };
+       P_DRIVE, P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_CLOSE };
 static const MItem ACTIONS[] = {
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
     { "folder-plus", "New folder", A_MKDIR }, { "info", "Details", A_DETAILS },
 };
 static const MItem OPTIONS[] = {
-    { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
+    { "memory-stick", "The PSP's memory stick", P_DRIVE }, { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
     { "columns-2", "This folder in the other panel", P_SAME }, { "arrow-right-left", "Swap the panels", P_SWAP },
     { "square-terminal", "Terminal here", P_TERMINAL }, { "x", "Close the file manager", P_CLOSE },
 };
@@ -415,9 +468,29 @@ static void details(void)
     localtime_r(&e->mtime, &tmv);
     strftime(when, sizeof(when), "%Y-%m-%d %H:%M", &tmv);
     snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
-    snprintf(g_msg, sizeof(g_msg), "%s%s\n%s\nchanged %s\npermissions %03o", e->is_dir ? "folder" : sz,
-             e->is_link ? " (a link)" : "", path, when, (unsigned)(e->mode & 0777));
+    if (fops_is_remote(p->path))
+        snprintf(g_msg, sizeof(g_msg), "%s on the PSP's memory stick\n%s\nchanged %s", e->is_dir ? "folder" : sz, path, when);
+    else snprintf(g_msg, sizeof(g_msg), "%s%s\n%s\nchanged %s\npermissions %03o", e->is_dir ? "folder" : sz,
+                  e->is_link ? " (a link)" : "", path, when, (unsigned)(e->mode & 0777));
     g_over = O_MESSAGE;
+}
+
+/* the panel onto the PSP's memory stick, or back to this board's folder */
+static void drive_switch(Panel *p)
+{
+    if (fops_is_remote(p->path)) {
+        const char *home = getenv("HOME");
+        panel_cd(p, p->back[0] ? p->back : home ? home : "/", NULL);
+        return;
+    }
+    if (!files_psp_available()) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "The PSP's memory stick");
+        snprintf(g_msg, sizeof(g_msg), "The PSP does not share its memory stick yet: its PSPExp runtime is older. Copy the new one (dist/PSPExp) to ms0:/PSP/GAME/PSPExp/ and start it again.");
+        g_over = O_MESSAGE;
+        return;
+    }
+    snprintf(p->back, sizeof(p->back), "%s", p->path);
+    panel_cd(p, "ms0:/", NULL);
 }
 
 static void run_action(int id)
@@ -441,11 +514,18 @@ static void run_action(int id)
         break;
     case A_MKDIR: ui_kbd_reset(&g_kbd, "", 0, "Create"); g_kmode = K_MKDIR; g_over = O_KBD; break;
     case A_DETAILS: details(); break;
+    case P_DRIVE: drive_switch(p); break;
     case P_HIDDEN: g_hidden = !g_hidden; reload_all(); break;
     case P_SORT: g_sort = (g_sort + 1) % 3; reload_all(); break;
     case P_SAME: panel_cd(other(), p->path, NULL); break;
     case P_SWAP: { Panel t = g_p[0]; g_p[0] = g_p[1]; g_p[1] = t; g_act = !g_act; break; }
-    case P_TERMINAL: g_term = 1; snprintf(g_term_path, sizeof(g_term_path), "%s", p->path); break;
+    case P_TERMINAL:
+        if (fops_is_remote(p->path)) {
+            snprintf(g_msg_title, sizeof(g_msg_title), "Terminal here");
+            snprintf(g_msg, sizeof(g_msg), "The terminal works in this board's folders, not on the PSP's memory stick.");
+            g_over = O_MESSAGE;
+        } else { g_term = 1; snprintf(g_term_path, sizeof(g_term_path), "%s", p->path); }
+        break;
     case P_CLOSE: g_exit = 1; break;
     }
     g_dirty = 1;
@@ -584,6 +664,12 @@ int files_needs_frame(uint64_t now)
         } else g_over = O_NONE;
         g_dirty = 1;
     }
+    {   /* a panel on the PSP's stick while the PSP was away: read it again when it is back */
+        static int had;
+        int has = files_psp_available(), k;
+        if (has && !had) for (k = 0; k < 2; k++) if (fops_is_remote(g_p[k].path) && g_p[k].error[0]) panel_load(&g_p[k], NULL);
+        had = has;
+    }
     if (g_inst_pid > 0) {
         int st;
         if (waitpid(g_inst_pid, &st, WNOHANG) == g_inst_pid) { install_done(st); g_dirty = 1; }
@@ -631,12 +717,13 @@ static void draw_panel(int k)
     int x = 8 + k * (PANEL_W + PANEL_GAP), active = k == g_act, i, marked = 0;
     uint64_t total = 0;
     const char *base = strrchr(p->path, '/');
+    int stick = fops_is_remote(p->path);
     char s[96];
-    base = base && base[1] ? base + 1 : p->path;
+    base = base && base[1] ? base + 1 : stick ? "Memory Stick" : p->path;
     gfx_nine(NINE_R10, x, PANEL_Y, PANEL_W, PANEL_H, UI_TILE, active ? 235 : 190);
     if (active) gfx_nine(NINE_R10, x, PANEL_Y, PANEL_W, 3, UI_ACCENT, 255);
     /* the folder: its name, then its path */
-    gfx_icon("folder-open", 14, x + 8, PANEL_Y + 7, active ? UI_ACCENT : UI_MUTED, 255);
+    gfx_icon(stick ? "memory-stick" : "folder-open", 14, x + 8, PANEL_Y + 7, active ? UI_ACCENT : UI_MUTED, 255);
     gfx_text(FONT_BODY, x + 28, PANEL_Y + 5, base, active ? UI_TEXT : UI_SUB, 255, PANEL_W - 36);
     {   /* the path, its end kept when it does not fit */
         const char *shown = p->path;
@@ -671,7 +758,7 @@ static void draw_panel(int k)
     for (i = 0; i < p->list.n; i++) if (p->list.e[i].marked) { marked++; if (!p->list.e[i].is_dir) total += p->list.e[i].size; }
     if (marked && total) { char sz[32]; fops_human(total, sz, sizeof(sz)); snprintf(s, sizeof(s), "%d marked, files %s", marked, sz); }
     else if (marked) snprintf(s, sizeof(s), "%d marked", marked);
-    else { int n = p->list.n - (p->list.n && p->list.e[0].is_up); snprintf(s, sizeof(s), "%d %s", n, n == 1 ? "item" : "items"); }
+    else { int n = p->list.n - (p->list.n && p->list.e[0].is_up); snprintf(s, sizeof(s), "%d %s%s%s", n, n == 1 ? "item" : "items", p->space[0] ? "   " : "", p->space); }
     gfx_text(FONT_BADGE, x + 10, PANEL_Y + PANEL_H - 14, s, marked ? 0xffd479 : UI_MUTED, 255, 0);
 }
 
@@ -685,10 +772,11 @@ static void draw_menu(const MItem *items, int n, const char *title)
         int ry = y + 28 + i * 20;
         char label[96];
         snprintf(label, sizeof(label), "%s", items[i].label);
+        if (items[i].id == P_DRIVE && fops_is_remote(act()->path)) snprintf(label, sizeof(label), "Back to this board's files");
         if (items[i].id == P_HIDDEN) snprintf(label, sizeof(label), "Hidden files: %s", g_hidden ? "shown" : "hidden");
         if (items[i].id == P_SORT) snprintf(label, sizeof(label), "Sort by %s", g_sort == FSORT_NAME ? "name" : g_sort == FSORT_SIZE ? "size" : "date");
         if (i == g_msel) gfx_nine(NINE_R6, x + 6, ry - 2, w - 12, 19, UI_ACCENT, 90);
-        gfx_icon(items[i].icon, 13, x + 14, ry + 1, i == g_msel ? 0xffffff : UI_ACCENT, 255);
+        gfx_icon(items[i].id == P_DRIVE && fops_is_remote(act()->path) ? "hard-drive" : items[i].icon, 13, x + 14, ry + 1, i == g_msel ? 0xffffff : UI_ACCENT, 255);
         gfx_text(FONT_SMALL, x + 36, ry, label, i == g_msel ? 0xffffff : UI_TEXT, 255, w - 48);
     }
 }
@@ -782,7 +870,8 @@ void files_render(PspExpContext *ctx, uint64_t now)
             const FEntry *e = &p->list.e[p->sel];
             char path[FOPS_PATH], sys[16];
             fops_join(path, sizeof(path), p->path, e->name);
-            if (launcher_system_for(path, sys, sizeof(sys))) { snprintf(play, sizeof(play), "Play (%s)", sys); go = play; }
+            if (fops_is_remote(p->path)) go = is_image(e) ? "View" : "Open";
+            else if (launcher_system_for(path, sys, sizeof(sys))) { snprintf(play, sizeof(play), "Play (%s)", sys); go = play; }
             else if (is_package(e)) go = "Install";
             else if (is_image(e)) go = "View";
             else go = "Read";

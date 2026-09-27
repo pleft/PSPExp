@@ -39,8 +39,33 @@ void fops_human(uint64_t bytes, char *out, size_t n);
 /* the name has no '/' and is not "." or ".." */
 int  fops_name_ok(const char *name);
 
+/* errno as words ("the PSP did not answer" for a link that went quiet) */
+const char *fops_strerror(int e);
+
 int  fops_mkdir(const char *path, char *err, size_t en);
 int  fops_rename(const char *from, const char *to, char *err, size_t en);
+
+/* ---- a drive reached through functions: the PSP's memory stick -------------- */
+
+/* Paths "ms0:/..." (and a PSP Go's "ef0:/...") go to these instead of this
+ * board's file system: listings, the jobs, mkdir and rename work on either
+ * side, a copy between them goes chunk by chunk. Each returns >= 0, or a
+ * negative errno. */
+typedef struct FRemote {
+    int (*list)(const char *dir, FList *out);   /* the entries as they are: no "..", unsorted */
+    int (*stat)(const char *path, FEntry *out);
+    int (*read)(const char *path, uint64_t off, void *buf, size_t len);   /* the bytes read */
+    int (*write)(const char *path, uint64_t off, const void *buf, size_t len, int first);   /* first: create / empty it */
+    int (*mkdir)(const char *path);
+    int (*remove)(const char *path);            /* a file or an empty folder */
+    int (*rename)(const char *from, const char *to);
+    size_t chunk;                               /* the most one read / write moves */
+} FRemote;
+
+void fops_set_remote(const FRemote *r);        /* NULL: none */
+int  fops_is_remote(const char *path);
+/* the top of a drive: "/" or "ms0:/" (no ".." there) */
+int  fops_is_root(const char *path);
 
 /* ---- jobs ---------------------------------------------------------------- */
 

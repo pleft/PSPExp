@@ -368,7 +368,7 @@ static const IconName ICONS[] = {
     { "toggle-left", 0xe18b }, { "toggle-right", 0xe18c }, { "image", 0xe0f6 }, { "image-off", 0xe1c0 }, { "router", 0xe3bf },
     { "microchip", 0xe61a }, { "circuit-board", 0xe403 }, { "laptop", 0xe1cd }, { "computer", 0xe4e4 },
     { "plug", 0xe37f }, { "ethernet-port", 0xe620 },
-    { "radio-tower", 0xe404 }, { "folder-open", 0xe247 }, { "file-text", 0xe0cc }, { "tag", 0xe17f }, { "search-x", 0xe4ad },
+    { "radio-tower", 0xe404 }, { "folder-open", 0xe247 }, { "memory-stick", 0xe445 }, { "file-text", 0xe0cc }, { "tag", 0xe17f }, { "search-x", 0xe4ad },
     { "arrow-left", 0xe048 }, { "text-search", 0xe5ad }, { "lock", 0xe10b }, { "eye", 0xe0ba }, { "eye-off", 0xe0bb }, { "rabbit", 0xe4f6 }, { "train-front", 0xe506 },
     { "file", 0xe0c0 }, { "file-image", 0xe31c }, { "file-archive", 0xe30d }, { "file-music", 0xe55e }, { "file-code", 0xe0c3 },
     { "corner-left-up", 0xe0a4 }, { "copy", 0xe09e }, { "trash-2", 0xe18e }, { "pencil", 0xe1f9 }, { "folder-plus", 0xe0d9 },

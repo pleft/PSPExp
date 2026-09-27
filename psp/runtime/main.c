@@ -14,6 +14,7 @@
 #include "../../runtime/pspexp_runtime.h"
 #include "../executor-ge/pspexp_ge.h"
 #include "pspexp_audio_psp.h"
+#include "pspexp_fs_psp.h"
 #include "../transport-usb/pspexp_usb_driver.h"
 #include "../transport-tcp/pspexp_tcp_psp.h"
 #include "../../protocol/pspexp_usb_link.h"
@@ -227,6 +228,7 @@ int main(int argc, char *argv[])
     pspexp_ge_init(&g_ge);
     pspexp_ge_ops(&g_ge, &ops);
     pspexp_audio_psp_ops(&ops);
+    pspexp_fs_psp_ops(&ops);   /* the memory stick as a drive of the board's file manager */
     ops.now_us = op_now;
     ops.screenshot = op_screenshot;
     ops.log = op_log;

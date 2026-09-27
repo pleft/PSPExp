@@ -53,7 +53,19 @@ enum PspExpOpcode {
     PSPEXP_OP_BENCH_REPORT   = 0x0504,  /* PSP -> host, PspExpBenchReport */
     PSPEXP_OP_BENCH_ECHO     = 0x0505,  /* either, payload returned unchanged */
     PSPEXP_OP_BENCH_UPLINK   = 0x0506,  /* host -> PSP, PspExpBenchUplink */
-    PSPEXP_OP_DEBUG_SCREENSHOT = 0x0507 /* host -> PSP, PspExpScreenshot: dump the displayed frame to a file */
+    PSPEXP_OP_DEBUG_SCREENSHOT = 0x0507, /* host -> PSP, PspExpScreenshot: dump the displayed frame to a file */
+
+    /* FILE (0x06xx), only with PSPEXP_FEATURE_FILES: host -> PSP PspExpFsRequest,
+     * PSP -> host FS_REPLY */
+    PSPEXP_OP_FS_LIST    = 0x0601,  /* path: its entries from index offset */
+    PSPEXP_OP_FS_READ    = 0x0602,  /* path, offset, length: the bytes */
+    PSPEXP_OP_FS_WRITE   = 0x0603,  /* path, offset, flags + data */
+    PSPEXP_OP_FS_MKDIR   = 0x0604,
+    PSPEXP_OP_FS_REMOVE  = 0x0605,  /* a file, or an empty folder */
+    PSPEXP_OP_FS_RENAME  = 0x0606,  /* path -> path2 */
+    PSPEXP_OP_FS_INFO    = 0x0607,  /* path's device: free and total bytes */
+    PSPEXP_OP_FS_STAT    = 0x0608,  /* path: one entry (count 1), or NOT_FOUND */
+    PSPEXP_OP_FS_REPLY   = 0x0610   /* PSP -> host, PspExpFsReply + entries / data */
 };
 
 #define PSPEXP_OPCODE_CHANNEL(op) ((uint8_t)((op) >> 8))

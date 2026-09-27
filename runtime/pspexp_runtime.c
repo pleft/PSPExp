@@ -97,6 +97,7 @@ void pspexp_runtime_free(PspExpRuntime *rt)
     pspexp_stream_free(&rt->in);
     pspexp_writer_free(&rt->out);
     free(rt->scratch);
+    free(rt->fs_buf); rt->fs_buf = NULL;
     rt->scratch = NULL;
 }
 
@@ -118,7 +119,7 @@ static void send_hello(PspExpRuntime *rt)
     h.max_batch_records = rt->cfg.max_batch_records;
     h.vram_budget = rt->cache.vram_budget;
     h.ram_budget = rt->cache.ram_budget;
-    h.features = rt->cfg.features;
+    h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -409,6 +410,71 @@ static void handle_bench(PspExpRuntime *rt, const PspExpMessage *m)
     }
 }
 
+/* ---- FILE: the memory stick for the host ------------------------------------------ */
+
+/* "ms0:/..." or "ef0:/..." (or the device alone), terminated, no ".." part */
+static int fs_path_ok(const char *p)
+{
+    const char *s;
+    if (!memchr(p, 0, PSPEXP_FS_PATH)) return 0;
+    if (strncmp(p, "ms0:", 4) && strncmp(p, "ef0:", 4)) return 0;
+    for (s = p; (s = strstr(s, "..")); s += 2)
+        if ((s == p || s[-1] == '/') && (s[2] == 0 || s[2] == '/')) return 0;
+    return 1;
+}
+
+static void handle_fs(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    const PspExpFsRequest *q;
+    PspExpFsReply *r;
+    uint32_t len = sizeof(PspExpFsReply);
+    uint64_t off;
+    uint16_t op = m->header->opcode;
+    if (pspexp_message_expect(m, sizeof(*q)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    q = (const PspExpFsRequest *)m->payload;
+    if (!rt->fs_buf && !(rt->fs_buf = (uint8_t *)malloc(sizeof(PspExpFsReply) + PSPEXP_FS_CHUNK))) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 1); return; }
+    r = (PspExpFsReply *)rt->fs_buf;
+    memset(r, 0, sizeof(*r));
+    r->req_id = q->req_id;
+    off = (uint64_t)q->offset_lo | ((uint64_t)q->offset_hi << 32);
+    if (!rt->ops.fs_list) r->status = PSPEXP_FSERR_UNSUPPORTED;
+    else if (!fs_path_ok(q->path) || (op == PSPEXP_OP_FS_RENAME && !fs_path_ok(q->path2))) r->status = PSPEXP_FSERR_PATH;
+    else switch (op) {
+    case PSPEXP_OP_FS_LIST: {
+        int more = 0, n = rt->ops.fs_list(rt->ops.user, q->path, q->offset_lo, (PspExpFsEntry *)(r + 1), PSPEXP_FS_LIST_MAX, &more);
+        if (n < 0) r->status = n;
+        else { r->count = (uint32_t)n; r->more = (uint32_t)more; len += (uint32_t)n * (uint32_t)sizeof(PspExpFsEntry); }
+        break;
+    }
+    case PSPEXP_OP_FS_STAT:
+        r->status = rt->ops.fs_stat ? rt->ops.fs_stat(rt->ops.user, q->path, (PspExpFsEntry *)(r + 1)) : PSPEXP_FSERR_UNSUPPORTED;
+        if (r->status >= 0) { r->count = 1; len += (uint32_t)sizeof(PspExpFsEntry); }
+        break;
+    case PSPEXP_OP_FS_READ: {
+        uint32_t want = q->length > PSPEXP_FS_CHUNK ? PSPEXP_FS_CHUNK : q->length;
+        r->status = rt->ops.fs_read ? rt->ops.fs_read(rt->ops.user, q->path, off, r + 1, want) : PSPEXP_FSERR_UNSUPPORTED;
+        if (r->status > 0) len += (uint32_t)r->status;
+        break;
+    }
+    case PSPEXP_OP_FS_WRITE:
+        if (q->length > m->length - (uint32_t)sizeof(*q) || q->length > PSPEXP_FS_CHUNK) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        r->status = rt->ops.fs_write ? rt->ops.fs_write(rt->ops.user, q->path, off, q + 1, q->length, q->flags) : PSPEXP_FSERR_UNSUPPORTED;
+        break;
+    case PSPEXP_OP_FS_MKDIR:  r->status = rt->ops.fs_mkdir ? rt->ops.fs_mkdir(rt->ops.user, q->path) : PSPEXP_FSERR_UNSUPPORTED; break;
+    case PSPEXP_OP_FS_REMOVE: r->status = rt->ops.fs_remove ? rt->ops.fs_remove(rt->ops.user, q->path) : PSPEXP_FSERR_UNSUPPORTED; break;
+    case PSPEXP_OP_FS_RENAME: r->status = rt->ops.fs_rename ? rt->ops.fs_rename(rt->ops.user, q->path, q->path2) : PSPEXP_FSERR_UNSUPPORTED; break;
+    case PSPEXP_OP_FS_INFO: {
+        uint64_t fr = 0, tot = 0;
+        r->status = rt->ops.fs_info ? rt->ops.fs_info(rt->ops.user, q->path, &fr, &tot) : PSPEXP_FSERR_UNSUPPORTED;
+        r->value_lo = (uint32_t)fr; r->value_hi = (uint32_t)(fr >> 32);
+        r->value2_lo = (uint32_t)tot; r->value2_hi = (uint32_t)(tot >> 32);
+        break;
+    }
+    default: r->status = PSPEXP_FSERR_UNSUPPORTED;
+    }
+    pspexp_writer_message(&rt->out, PSPEXP_CH_FILE, PSPEXP_OP_FS_REPLY, 0, r, len);
+}
+
 static void send_audio_status(PspExpRuntime *rt)
 {
     PspExpAudioStatus st;
@@ -548,6 +614,10 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
     case PSPEXP_OP_RESOURCE_UPLOAD_SOUND: case PSPEXP_OP_PLAY_SOUND: case PSPEXP_OP_STOP_SOUND:
     case PSPEXP_OP_AUDIO_STREAM: case PSPEXP_OP_AUDIO_STREAM_RESET:
         handle_audio(rt, m);
+        break;
+    case PSPEXP_OP_FS_LIST: case PSPEXP_OP_FS_READ: case PSPEXP_OP_FS_WRITE: case PSPEXP_OP_FS_MKDIR:
+    case PSPEXP_OP_FS_REMOVE: case PSPEXP_OP_FS_RENAME: case PSPEXP_OP_FS_INFO: case PSPEXP_OP_FS_STAT:
+        handle_fs(rt, m);
         break;
     case PSPEXP_OP_RESOURCE_RELEASE: {
         const PspExpResourceId *r;

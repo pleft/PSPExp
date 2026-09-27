@@ -64,6 +64,18 @@ typedef struct PspExpRuntimeOps {
     /* Optional diagnostics. */
     void (*log)(void *user, const char *msg);
     void (*screenshot)(void *user, uint16_t index);
+    /* Optional: the memory stick for the host (the FILE channel). With
+     * fs_list set, HELLO advertises PSPEXP_FEATURE_FILES. Paths arrive
+     * checked: "ms0:/..." or "ef0:/...", no ".." parts. Results: >= 0, or a
+     * PSPEXP_FSERR_*. */
+    int  (*fs_list)(void *user, const char *path, uint32_t first, PspExpFsEntry *out, int max, int *more);
+    int  (*fs_stat)(void *user, const char *path, PspExpFsEntry *out);
+    int  (*fs_read)(void *user, const char *path, uint64_t offset, void *buf, uint32_t len);
+    int  (*fs_write)(void *user, const char *path, uint64_t offset, const void *buf, uint32_t len, uint32_t flags);
+    int  (*fs_mkdir)(void *user, const char *path);
+    int  (*fs_remove)(void *user, const char *path);
+    int  (*fs_rename)(void *user, const char *from, const char *to);
+    int  (*fs_info)(void *user, const char *path, uint64_t *free_bytes, uint64_t *total_bytes);
 } PspExpRuntimeOps;
 
 typedef struct PspExpRuntimeConfig {
@@ -108,6 +120,7 @@ typedef struct PspExpRuntime {
     int      bench_active;
     uint32_t bench_bytes, bench_msgs, bench_start_us;
     uint32_t uplink_block, uplink_remaining;
+    uint8_t *fs_buf;                    /* FILE replies: allocated on the first request */
     uint8_t *scratch;            /* expansion scratch when vertex_alloc is NULL */
     size_t   scratch_cap;
     /* audio */

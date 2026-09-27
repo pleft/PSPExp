@@ -62,6 +62,7 @@
 #include "term_fonts.h"
 #include "term_themes.h"
 #include "files.h"
+#include "files_psp.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
 #ifdef PSPEXP_HAVE_USB
@@ -2578,6 +2579,7 @@ int main(int argc, char **argv)
         ctx = pspexp_create(NULL, NULL);
     }
     pspexp_set_log(ctx, log_fn, NULL);
+    files_psp_init(ctx);   /* the PSP's memory stick as a file-manager drive */
     if (g_mode == MODE_NULL || g_mode == MODE_SDL) {
         if (pspexp_connect(ctx, 5000) < 0) { fprintf(stderr, "no HELLO\n"); return 1; }
         launcher_set_link(g_mode == MODE_SDL ? "SDL window (a test executor)" : "none (null executor)");
@@ -2660,6 +2662,7 @@ int main(int argc, char **argv)
             last_try = now;
             if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; }   /* ignore buttons held while connecting */
         }
+        files_psp_service(ctx, 12000);   /* the file manager's requests to the PSP's stick (a copy on its thread) */
         if (!connected) continue;
 
         pspexp_pump(ctx, 0);

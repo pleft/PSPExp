@@ -52,6 +52,10 @@ struct PspExpContext {
     PspExpStats stats;
     PspExpLogFn log; void *log_user;
     PspExpMessageHook hook; void *hook_user;
+    /* the FILE channel: the last reply, matched to a request by its id */
+    uint32_t fs_next_id, fs_reply_id, fs_reply_len;
+    int fs_have;
+    uint8_t *fs_reply;
 };
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
@@ -197,6 +201,104 @@ int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index)
     return pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_DEBUG_SCREENSHOT, &sc, sizeof(sc));
 }
 
+/* ---- FILE: the PSP's memory stick ------------------------------------------------------ */
+
+int pspexp_fs_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_FILES) != 0;
+}
+
+/* one request and its reply: the status (or PSPEXP_FSERR_LINK), the reply's
+ * header in *rep, what follows it in out (up to cap; its length in *out_len) */
+static int fs_call(PspExpContext *ctx, uint16_t op, const char *path, const char *path2, uint64_t offset,
+                   uint32_t length, uint32_t flags, const void *data, PspExpFsReply *rep, void *out, uint32_t cap, uint32_t *out_len)
+{
+    static uint8_t *buf;
+    PspExpFsRequest *q;
+    uint64_t deadline;
+    uint32_t id, n = (uint32_t)sizeof(*q) + (data ? length : 0);
+    if (!pspexp_fs_supported(ctx)) return PSPEXP_FSERR_UNSUPPORTED;
+    if (strlen(path) >= PSPEXP_FS_PATH || (path2 && strlen(path2) >= PSPEXP_FS_PATH)) return PSPEXP_FSERR_PATH;
+    if (!buf && !(buf = (uint8_t *)malloc(sizeof(*q) + PSPEXP_FS_CHUNK + 16))) return PSPEXP_FSERR_IO;
+    q = (PspExpFsRequest *)buf;
+    memset(q, 0, sizeof(*q));
+    id = ++ctx->fs_next_id;
+    q->req_id = id;
+    q->flags = flags;
+    q->offset_lo = (uint32_t)offset; q->offset_hi = (uint32_t)(offset >> 32);
+    q->length = length;
+    strcpy(q->path, path);
+    if (path2) strcpy(q->path2, path2);
+    if (data && length) memcpy(buf + sizeof(*q), data, length);
+    ctx->fs_have = 0;
+    if (pspexp_send_raw(ctx, PSPEXP_CH_FILE, op, buf, PSPEXP_ALIGN_UP(n)) < 0) return PSPEXP_FSERR_LINK;
+    deadline = pspexp_time_us() + 15000000u;   /* a slow memory stick, a slow Wi-Fi: 15 s */
+    while (!(ctx->fs_have && ctx->fs_reply_id == id)) {
+        if (pspexp_pump(ctx, 20) < 0 || pspexp_time_us() > deadline) return PSPEXP_FSERR_LINK;
+    }
+    memcpy(rep, ctx->fs_reply, sizeof(*rep));
+    if (out) {
+        uint32_t have = ctx->fs_reply_len - (uint32_t)sizeof(*rep);
+        if (have > cap) have = cap;
+        memcpy(out, ctx->fs_reply + sizeof(*rep), have);
+        if (out_len) *out_len = have;
+    }
+    return rep->status;
+}
+
+int pspexp_fs_list(PspExpContext *ctx, const char *path, uint32_t first, PspExpFsEntry *out, int max, int *more)
+{
+    PspExpFsReply r;
+    uint32_t got = 0;
+    int st = fs_call(ctx, PSPEXP_OP_FS_LIST, path, NULL, first, 0, 0, NULL, &r, out, (uint32_t)max * (uint32_t)sizeof(PspExpFsEntry), &got);
+    if (st < 0) return st;
+    if (more) *more = (int)r.more;
+    return (int)(got / sizeof(PspExpFsEntry));
+}
+
+int pspexp_fs_stat(PspExpContext *ctx, const char *path, PspExpFsEntry *out)
+{
+    PspExpFsReply r;
+    return fs_call(ctx, PSPEXP_OP_FS_STAT, path, NULL, 0, 0, 0, NULL, &r, out, sizeof(*out), NULL);
+}
+
+int pspexp_fs_read(PspExpContext *ctx, const char *path, uint64_t offset, void *buf, uint32_t len)
+{
+    PspExpFsReply r;
+    uint32_t got = 0;
+    int st;
+    if (len > PSPEXP_FS_CHUNK) len = PSPEXP_FS_CHUNK;
+    st = fs_call(ctx, PSPEXP_OP_FS_READ, path, NULL, offset, len, 0, NULL, &r, buf, len, &got);
+    return st < 0 ? st : (int)(got < (uint32_t)st ? got : (uint32_t)st);
+}
+
+int pspexp_fs_write(PspExpContext *ctx, const char *path, uint64_t offset, const void *data, uint32_t len, uint32_t flags)
+{
+    PspExpFsReply r;
+    if (len > PSPEXP_FS_CHUNK) return PSPEXP_FSERR_PATH;
+    return fs_call(ctx, PSPEXP_OP_FS_WRITE, path, NULL, offset, len, flags, data ? data : "", &r, NULL, 0, NULL);
+}
+
+int pspexp_fs_mkdir(PspExpContext *ctx, const char *path)
+{ PspExpFsReply r; return fs_call(ctx, PSPEXP_OP_FS_MKDIR, path, NULL, 0, 0, 0, NULL, &r, NULL, 0, NULL); }
+
+int pspexp_fs_remove(PspExpContext *ctx, const char *path)
+{ PspExpFsReply r; return fs_call(ctx, PSPEXP_OP_FS_REMOVE, path, NULL, 0, 0, 0, NULL, &r, NULL, 0, NULL); }
+
+int pspexp_fs_rename(PspExpContext *ctx, const char *from, const char *to)
+{ PspExpFsReply r; return fs_call(ctx, PSPEXP_OP_FS_RENAME, from, to, 0, 0, 0, NULL, &r, NULL, 0, NULL); }
+
+int pspexp_fs_info(PspExpContext *ctx, const char *path, uint64_t *free_bytes, uint64_t *total_bytes)
+{
+    PspExpFsReply r;
+    int st = fs_call(ctx, PSPEXP_OP_FS_INFO, path, NULL, 0, 0, 0, NULL, &r, NULL, 0, NULL);
+    if (st >= 0) {
+        if (free_bytes) *free_bytes = (uint64_t)r.value_lo | ((uint64_t)r.value_hi << 32);
+        if (total_bytes) *total_bytes = (uint64_t)r.value2_lo | ((uint64_t)r.value2_hi << 32);
+    }
+    return st;
+}
+
 int pspexp_send_raw(PspExpContext *ctx, uint8_t channel, uint16_t opcode, const void *payload, size_t len)
 {
     pspexp_writer_reset(&ctx->msg);
@@ -295,6 +397,16 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
     case PSPEXP_OP_HELLO:
         on_hello(ctx, m);
         break;
+    case PSPEXP_OP_FS_REPLY: {
+        uint32_t cap = (uint32_t)sizeof(PspExpFsReply) + PSPEXP_FS_CHUNK;
+        if (m->length < sizeof(PspExpFsReply)) break;
+        if (!ctx->fs_reply && !(ctx->fs_reply = (uint8_t *)malloc(cap))) break;
+        ctx->fs_reply_len = m->length < cap ? m->length : cap;
+        memcpy(ctx->fs_reply, m->payload, ctx->fs_reply_len);
+        ctx->fs_reply_id = ((const PspExpFsReply *)m->payload)->req_id;
+        ctx->fs_have = 1;
+        break;
+    }
     case PSPEXP_OP_PRESENT_DONE: {
         const PspExpPresentDone *d;
         FrameRecord *rec;

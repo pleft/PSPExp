@@ -54,7 +54,8 @@ enum PspExpChannel {
     PSPEXP_CH_AUDIO    = 3,  /* cached SFX control, PCM stream (v0.3) */
     PSPEXP_CH_INPUT    = 4,  /* controller samples, PSP -> host */
     PSPEXP_CH_DEBUG    = 5,  /* metrics, traces, transport benchmark */
-    PSPEXP_CH_COUNT    = 6
+    PSPEXP_CH_FILE     = 6,  /* the PSP's memory stick, for the host (only with PSPEXP_FEATURE_FILES) */
+    PSPEXP_CH_COUNT    = 7
 };
 
 #define PSPEXP_FLAG_NONE 0u
@@ -192,6 +193,9 @@ enum PspExpExecutorKind {
 
 #define PSPEXP_FEATURE_BENCH      0x00000001u  /* answers DEBUG-channel benchmark messages */
 #define PSPEXP_FEATURE_TIMESTAMPS 0x00000002u  /* PRESENT_DONE/INPUT timestamps are meaningful */
+#define PSPEXP_FEATURE_FILES      0x00000004u  /* answers the FILE channel: the memory stick for the host.
+                                                  A host must not send on that channel otherwise: runtimes
+                                                  before it drop a link on a channel they do not know */
 
 /* Host -> PSP, reply to HELLO. */
 typedef struct PspExpHelloAck {
@@ -465,6 +469,62 @@ typedef struct PspExpScreenshot {
     uint8_t  reserved[14];
 } PspExpScreenshot;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpScreenshot) == 16, screenshot_size);
+
+/* ---- FILE channel: the PSP's memory stick for the host ------------------ */
+
+/* Paths are the PSP's: "ms0:/PSP/GAME" (memory stick), "ef0:/..." (PSP Go
+ * internal storage); the runtime refuses anything else. One request at a
+ * time is enough: the host waits for each reply (matched by req_id). */
+#define PSPEXP_FS_PATH       256
+#define PSPEXP_FS_NAME       112
+#define PSPEXP_FS_CHUNK      (64u * 1024u)   /* the most READ returns / WRITE carries */
+#define PSPEXP_FS_LIST_MAX   64              /* entries per LIST reply; more: ask again from index */
+
+/* host -> PSP, for every FS_* request; WRITE's data follows it */
+typedef struct PspExpFsRequest {
+    uint32_t req_id;
+    uint32_t flags;             /* WRITE: PSPEXP_FS_CREATE | PSPEXP_FS_TRUNCATE */
+    uint32_t offset_lo, offset_hi;   /* READ / WRITE: file offset; LIST: first entry index */
+    uint32_t length;            /* READ: bytes wanted (<= PSPEXP_FS_CHUNK); WRITE: bytes following */
+    uint32_t reserved[3];
+    char     path[PSPEXP_FS_PATH];
+    char     path2[PSPEXP_FS_PATH];  /* RENAME: the new path */
+} PspExpFsRequest;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpFsRequest) == 544, fs_request_size);
+
+#define PSPEXP_FS_CREATE   0x1u
+#define PSPEXP_FS_TRUNCATE 0x2u
+
+/* PSP -> host, FS_REPLY: the result, then (LIST) entries or (READ) data */
+typedef struct PspExpFsReply {
+    uint32_t req_id;
+    int32_t  status;            /* >= 0 ok (READ / WRITE: bytes), < 0 a PSPEXP_FSERR_* */
+    uint32_t count;             /* LIST: entries following */
+    uint32_t more;              /* LIST: 1 when entries remain after these */
+    uint32_t value_lo, value_hi;     /* INFO: free bytes */
+    uint32_t value2_lo, value2_hi;   /* INFO: total bytes */
+} PspExpFsReply;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpFsReply) == 32, fs_reply_size);
+
+typedef struct PspExpFsEntry {
+    uint32_t size_lo, size_hi;
+    uint32_t mtime;             /* seconds since 1970, 0 unknown */
+    uint32_t flags;             /* PSPEXP_FS_DIR */
+    char     name[PSPEXP_FS_NAME];
+} PspExpFsEntry;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpFsEntry) == 128, fs_entry_size);
+
+#define PSPEXP_FS_DIR 0x1u
+
+enum PspExpFsError {
+    PSPEXP_FSERR_IO        = -1,   /* the device failed */
+    PSPEXP_FSERR_NOT_FOUND = -2,
+    PSPEXP_FSERR_EXISTS    = -3,
+    PSPEXP_FSERR_NOT_EMPTY = -4,   /* REMOVE of a folder with something in it */
+    PSPEXP_FSERR_PATH      = -5,   /* not on a device the runtime serves, or too long */
+    PSPEXP_FSERR_FULL      = -6,
+    PSPEXP_FSERR_UNSUPPORTED = -7
+};
 
 /* ---- Texture helpers (pspexp_texture.c) ------------------------------- */
 

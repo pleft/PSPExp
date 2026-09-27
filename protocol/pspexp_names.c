@@ -10,6 +10,7 @@ const char *pspexp_channel_name(uint8_t channel)
     case PSPEXP_CH_AUDIO: return "AUDIO";
     case PSPEXP_CH_INPUT: return "INPUT";
     case PSPEXP_CH_DEBUG: return "DEBUG";
+    case PSPEXP_CH_FILE: return "FILE";
     default: return "?";
     }
 }
@@ -54,6 +55,15 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_BENCH_ECHO: return "BENCH_ECHO";
     case PSPEXP_OP_BENCH_UPLINK: return "BENCH_UPLINK";
     case PSPEXP_OP_DEBUG_SCREENSHOT: return "DEBUG_SCREENSHOT";
+    case PSPEXP_OP_FS_LIST: return "FS_LIST";
+    case PSPEXP_OP_FS_READ: return "FS_READ";
+    case PSPEXP_OP_FS_WRITE: return "FS_WRITE";
+    case PSPEXP_OP_FS_MKDIR: return "FS_MKDIR";
+    case PSPEXP_OP_FS_REMOVE: return "FS_REMOVE";
+    case PSPEXP_OP_FS_RENAME: return "FS_RENAME";
+    case PSPEXP_OP_FS_INFO: return "FS_INFO";
+    case PSPEXP_OP_FS_STAT: return "FS_STAT";
+    case PSPEXP_OP_FS_REPLY: return "FS_REPLY";
     default: return "?";
     }
 }

@@ -1,5 +1,6 @@
 #include "pspexp_sdl.h"
 #include "../libpspexp/pspexp_time.h"
+#include "../../runtime/pspexp_fs_posix.h"
 #include <SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -475,6 +476,7 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.audio_unlock = op_audio_unlock;
     ops.log = op_log;
     ops.screenshot = op_screenshot;
+    pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick (the stand-in PSP) */
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);
     if (pspexp_runtime_init(&x->rt, &ops, &cfg) < 0) { snprintf(err, errlen, "runtime init failed"); pspexp_sdl_destroy(x); return NULL; }
     x->transport.name = "sdl";

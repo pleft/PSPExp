@@ -714,7 +714,7 @@ Files here at the shell's folder; select closes it.
 | circle | the folder above |
 | square | mark and move down |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
-| start | hidden files, sort (name, size, date), same folder in both, swap, terminal here, close |
+| start | the PSP's memory stick (and back), hidden files, sort (name, size, date), same folder in both, swap, terminal here, close |
 
 Copy, move and delete run on a thread (`files_ops.c`, tested by
 `tests/test_files_ops.c`) with progress and circle to cancel; a move
@@ -729,4 +729,47 @@ match (`lib_rom_entry`, `launcher_open_file`), started as from the
 launcher's lists; a Starting box shows until the game has the PSP, and the
 console comes back to the file manager afterwards. A package runs
 `pspexp-pkg install` in the background, its message shown after.
+
+### 7.3 The PSP's memory stick as a drive (2026-09-28)
+
+Start > The PSP's memory stick turns the active panel into `ms0:/` (its
+header a memory-stick icon, its footer the free space); the same entry
+goes back to the board's folder it came from. Copy, move, delete, rename
+and new folder work on it and between it and the board; pictures and text
+open from it directly (fetched to `/tmp/pspexp-files-view`, up to 16 MB);
+ROMs and packages are copied to the board first.
+
+It is a protocol feature, not a USB mass-storage mode: the runtime keeps
+running and the link stays up.
+
+- **Protocol:** channel `FILE` (6) with FS_LIST, READ, WRITE, MKDIR,
+  REMOVE, RENAME, INFO and STAT, each answered by one FS_REPLY that
+  carries the request's id. Reads and writes are at most 64 KB each, and
+  a listing returns up to 64 entries (`PspExpFsRequest` / `Reply` /
+  `Entry` in `pspexp_protocol.h`).
+- **Runtime support:** a runtime offers the channel with the HELLO
+  feature bit `PSPEXP_FEATURE_FILES`. An older runtime would drop the link
+  on an unknown channel, so the host asks only when the bit is there.
+  Otherwise, the file manager asks for the new EBOOT.
+- **Accepted paths:** the runtime accepts `ms0:/` and `ef0:/` paths
+  without `..` parts.
+- **Where requests are answered:**
+  - on the PSP: `psp/runtime/pspexp_fs_psp.c` (sceIo);
+  - on the SDL stand-in and null executor: `runtime/pspexp_fs_posix.c`,
+    where a folder named by `PSPEXP_MS0` plays the stick.
+- **Host library:** blocking calls `pspexp_fs_list/stat/read/write/mkdir/remove/rename/info`,
+  which pump the link while they wait (up to 15 s).
+- **File manager:** `files_ops.c` sends paths that start with `ms0:` or
+  `ef0:` to an `FRemote` table. `files_psp.c` implements that table over
+  the link. A copy runs on its job thread, but the link belongs to the main
+  loop, so each request waits until `files_psp_service()` runs it (up to
+  12 ms per turn).
+- **Command line:** `build/host/pspexp-ms [--tcp HOST] ls|get|put|mkdir|rm|mv|df`
+  does the same from a shell. For example, `pspexp-ms put EBOOT.PBP ms0:/PSP/GAME/X/`.
+- **Tests:**
+  - `tests/test_fs.c` covers the channel end to end;
+  - `tests/test_files_ops.c` covers copies both ways, moves, deletes, and a
+    lost link, through the broker from a real thread.
+- **Measured in PPSSPP:** a 5 MB round trip matches byte for byte, at about
+  3 MB/s (emulated; the real PSP over USB not yet measured).
 

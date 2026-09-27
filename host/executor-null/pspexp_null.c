@@ -1,5 +1,6 @@
 #include "pspexp_null.h"
 #include "../libpspexp/pspexp_time.h"
+#include "../../runtime/pspexp_fs_posix.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -115,6 +116,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.audio_start = op_audio_start;
     ops.audio_stop = op_audio_stop;
     ops.log = op_log;
+    pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick */
     if (pspexp_runtime_init(&x->rt, &ops, &c) < 0) { free(x); return NULL; }
     x->transport.name = "null";
     x->transport.user = x;
