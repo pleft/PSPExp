@@ -710,7 +710,7 @@ Files here at the shell's folder; select closes it.
 |---|---|
 | d-pad | move (left / right: a page) |
 | L / R | the left / right panel |
-| cross | open: a folder, or a text file in a viewer |
+| cross | open: a folder; a picture full screen (left / right the others); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
 | circle | the folder above |
 | square | mark and move down |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
@@ -721,6 +721,12 @@ Copy, move and delete run on a thread (`files_ops.c`, tested by
 across file systems is a copy and a delete; nothing is replaced or deleted
 without asking; a folder is never copied into itself. Renaming and new
 folders use the launcher's keyboard, shared since (`launcher_ui.c`).
-Next: images shown on the PSP, ROMs opened in their emulator, packages
-installed from the file manager.
+Pictures (PNG, JPEG, GIF, BMP, TGA) are fitted to the screen and
+box-filtered, or enlarged by whole factors up to 8x when small, dithered to
+5650 and sent as up to four 256x256 tiles with 64-wide frames (the GE's
+strip limit). A ROM goes to the first installed system whose extensions
+match (`lib_rom_entry`, `launcher_open_file`), started as from the
+launcher's lists; a Starting box shows until the game has the PSP, and the
+console comes back to the file manager afterwards. A package runs
+`pspexp-pkg install` in the background, its message shown after.
 

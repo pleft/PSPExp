@@ -6,6 +6,8 @@
 #include "launcher.h"
 
 #include <ctype.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,12 +42,12 @@ static char g_term_path[FOPS_PATH];
 static int g_caret;
 
 /* what is on top of the panels */
-enum { O_NONE, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE };
+enum { O_NONE, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE, O_INSTALLING };
 static int g_over;
 static int g_msel;                /* the menu's highlighted row */
 
 /* a question waiting for yes / no */
-enum { Q_DELETE, Q_REPLACE_COPY, Q_REPLACE_MOVE };
+enum { Q_DELETE, Q_REPLACE_COPY, Q_REPLACE_MOVE, Q_INSTALL };
 static int g_q;
 static char g_qtext[200];
 
@@ -58,6 +60,11 @@ static char g_msg[300], g_msg_title[64];
 enum { K_RENAME, K_MKDIR };
 static int g_kmode;
 static UiKbd g_kbd;
+
+/* a package being installed (pspexp-pkg install, in the background) */
+static pid_t g_inst_pid;
+static char g_inst_file[FOPS_PATH], g_inst_name[256];
+#define INSTALL_LOG "/tmp/pspexp-files-install.log"
 
 /* the picture viewer: which entry of the active panel, its size */
 static int g_img_idx, g_img_w, g_img_h;
@@ -291,6 +298,60 @@ static void image_step(int d)
     }
 }
 
+static int is_package(const FEntry *e)
+{
+    size_t l = strlen(e->name);
+    return !e->is_dir && ((l > 7 && !strcasecmp(e->name + l - 7, ".tar.gz")) || (l > 4 && !strcasecmp(e->name + l - 4, ".tgz")));
+}
+
+static void install_start(void)
+{
+    pid_t pid;
+    unlink(INSTALL_LOG);
+    pid = fork();
+    if (pid == 0) {
+        int fd = open(INSTALL_LOG, O_WRONLY | O_CREAT | O_TRUNC, 0644), i;
+        if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+        for (i = 3; i < 1024; i++) close(i);   /* not the PSP link */
+        execlp("pspexp-pkg", "pspexp-pkg", "install", g_inst_file, (char *)NULL);
+        fprintf(stderr, "pspexp-pkg is not installed on this board\n");
+        _exit(127);
+    }
+    if (pid < 0) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "Could not install");
+        snprintf(g_msg, sizeof(g_msg), "%s", strerror(errno));
+        g_over = O_MESSAGE;
+        return;
+    }
+    g_inst_pid = pid;
+    g_over = O_INSTALLING;
+}
+
+/* finished: what pspexp-pkg said, its last lines */
+static void install_done(int status)
+{
+    char out[600] = "";
+    FILE *f = fopen(INSTALL_LOG, "r");
+    if (f) { size_t n = fread(out, 1, sizeof(out) - 1, f); out[n] = 0; fclose(f); }
+    while (strlen(out) && (out[strlen(out) - 1] == '\n')) out[strlen(out) - 1] = 0;
+    g_inst_pid = 0;
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "Installed");
+        snprintf(g_msg, sizeof(g_msg), "%s\nThe launcher shows it in a moment.", out[0] ? out : g_inst_name);
+    } else {
+        const char *last = strrchr(out, '\n'), *m = last ? last + 1 : out[0] ? out : "pspexp-pkg failed", *at;
+        char nice[600];
+        if (!strncmp(m, "pspexp-pkg: ", 12)) m += 12;
+        /* the file by its name, not its whole path */
+        if ((at = strstr(m, g_inst_file))) snprintf(nice, sizeof(nice), "%.*s%s%s", (int)(at - m), m, g_inst_name, at + strlen(g_inst_file));
+        else snprintf(nice, sizeof(nice), "%s", m);
+        snprintf(g_msg_title, sizeof(g_msg_title), "Not installed");
+        snprintf(g_msg, sizeof(g_msg), "%s", nice);
+    }
+    g_over = O_MESSAGE;
+    reload_all();
+}
+
 /* a file is text by its name, or when its start has no NUL */
 static void open_file(Panel *p, const FEntry *e)
 {
@@ -298,6 +359,13 @@ static void open_file(Panel *p, const FEntry *e)
     int r;
     fops_join(path, sizeof(path), p->path, e->name);
     if (launcher_open_file(path)) return;   /* a ROM: its emulator, as from the launcher */
+    if (is_package(e)) {   /* a PSPExp package: install it, after asking */
+        snprintf(g_inst_file, sizeof(g_inst_file), "%s", path);
+        snprintf(g_inst_name, sizeof(g_inst_name), "%s", e->name);
+        snprintf(g_qtext, sizeof(g_qtext), "Install \"%s\" as a PSPExp package? An older version of it is replaced.", e->name);
+        g_q = Q_INSTALL; g_over = O_CONFIRM;
+        return;
+    }
     if (is_image(e)) {
         if (image_show((int)(e - p->list.e)) == 0) return;
         snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
@@ -437,13 +505,16 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     case O_CONFIRM:
         if (pressed & PSPEXP_BUTTON_CROSS) {
             g_over = O_NONE;
-            job_begin(g_q == Q_DELETE ? FJOB_DELETE : g_q == Q_REPLACE_COPY ? FJOB_COPY : FJOB_MOVE);
+            if (g_q == Q_INSTALL) install_start();
+            else job_begin(g_q == Q_DELETE ? FJOB_DELETE : g_q == Q_REPLACE_COPY ? FJOB_COPY : FJOB_MOVE);
         } else if (pressed & PSPEXP_BUTTON_CIRCLE) g_over = O_NONE;
         g_dirty = 1;
         return;
     case O_PROGRESS:
         if (pressed & PSPEXP_BUTTON_CIRCLE) g_job.cancel = 1;
         return;
+    case O_INSTALLING:
+        return;   /* it finishes by itself */
     case O_MESSAGE:
         if (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE)) { g_over = O_NONE; g_dirty = 1; }
         return;
@@ -512,6 +583,10 @@ int files_needs_frame(uint64_t now)
             g_over = O_MESSAGE;
         } else g_over = O_NONE;
         g_dirty = 1;
+    }
+    if (g_inst_pid > 0) {
+        int st;
+        if (waitpid(g_inst_pid, &st, WNOHANG) == g_inst_pid) { install_done(st); g_dirty = 1; }
     }
     if (g_over == O_PROGRESS) return 1;
     if (g_over == O_KBD && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
@@ -708,6 +783,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
             char path[FOPS_PATH], sys[16];
             fops_join(path, sizeof(path), p->path, e->name);
             if (launcher_system_for(path, sys, sizeof(sys))) { snprintf(play, sizeof(play), "Play (%s)", sys); go = play; }
+            else if (is_package(e)) go = "Install";
             else if (is_image(e)) go = "View";
             else go = "Read";
         }
@@ -722,9 +798,9 @@ void files_render(PspExpContext *ctx, uint64_t now)
     case O_ACTIONS: draw_menu(ACTIONS, NACT, "Actions"); break;
     case O_OPTIONS: draw_menu(OPTIONS, NOPT, "Options"); break;
     case O_CONFIRM:
-        draw_box(g_q == Q_DELETE ? "Delete" : "Replace", g_qtext, 96);
+        draw_box(g_q == Q_DELETE ? "Delete" : g_q == Q_INSTALL ? "Install" : "Replace", g_qtext, 96);
         { int bx = (UI_SCREEN_W - 340) / 2 + 16, by = (UI_SCREEN_H - 96) / 2 - 8 + 70;
-          gfx_button('x', bx, by); gfx_text(FONT_SMALL, bx + 18, by - 1, g_q == Q_DELETE ? "Delete" : "Replace", UI_TEXT, 255, 0);
+          gfx_button('x', bx, by); gfx_text(FONT_SMALL, bx + 18, by - 1, g_q == Q_DELETE ? "Delete" : g_q == Q_INSTALL ? "Install" : "Replace", UI_TEXT, 255, 0);
           gfx_button('o', bx + 110, by); gfx_text(FONT_SMALL, bx + 128, by - 1, "Keep", UI_TEXT, 255, 0); }
         break;
     case O_PROGRESS: {
@@ -739,6 +815,12 @@ void files_render(PspExpContext *ctx, uint64_t now)
         snprintf(line, sizeof(line), "%d / %d files   %s / %s", g_job.files_done, g_job.files_total, a, t);
         gfx_text(FONT_BADGE, bx + 16, by + 72, line, UI_MUTED, 255, 0);
         gfx_button('o', bx + w - 80, by + 72); gfx_text(FONT_SMALL, bx + w - 62, by + 71, "Cancel", UI_TEXT, 255, 0);
+        break;
+    }
+    case O_INSTALLING: {
+        char s[320];
+        snprintf(s, sizeof(s), "%s", g_inst_name);
+        draw_box("Installing", s, 64);
         break;
     }
     case O_MESSAGE:
