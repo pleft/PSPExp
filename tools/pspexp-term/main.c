@@ -1046,7 +1046,7 @@ static void draw_help(void)
         int y = y0 + 20 + i * 11;
         if (!strcmp(HELP[i][0], "#")) { text(x0 + 8, y, HELP[i][1], rgb565(th->heading)); continue; }
         text(x0 + 20, y, HELP[i][0], rgb565(th->accent));
-        text(x0 + 20 + 16 * UI_W, y, HELP[i][1], rgb565(th->key_text));
+        text(x0 + 20 + 17 * UI_W, y, HELP[i][1], rgb565(th->key_text));
     }
     text(x0 + w - 26 * UI_W, y0 + h - 12, "any button closes this", rgb565(th->heading));
 }
