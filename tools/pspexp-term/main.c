@@ -87,6 +87,7 @@
 #include <unistd.h>
 #if defined(__APPLE__)
 #include <util.h>
+#include <libproc.h>
 #else
 #include <pty.h>
 #endif
@@ -1526,6 +1527,7 @@ static int g_launch_aware;                   /* it hands the PSP over itself: no
 /* hold select: launcher -> terminal -> mirror -> launcher (the views that exist) */
 static void view_cycle(void)
 {
+    swallow();   /* the press that switched does not act in the new view */
     if (g_view_files) { g_view_files = 0; if (g_files_from_launcher) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1; return; }
     if (g_view_launcher) { g_view_launcher = 0; T.dirty = 1; }
     else if (!g_view_mirror) {
@@ -1544,19 +1546,30 @@ static void files_show(const char *path, int from_launcher)
     if (!g_launcher_on) return;   /* it draws with the launcher's graphics */
     g_files_from_launcher = from_launcher;
     g_view_files = 1; g_view_launcher = 0; g_view_mirror = 0;
+    swallow();
     files_open(path);
 }
 
-/* the shell's current folder (Linux: /proc), or "" */
+/* the shell's current folder (Linux: /proc; macOS: libproc), or "" */
 static void shell_cwd(char *out, size_t n)
 {
-    char link[64];
-    ssize_t l;
     out[0] = 0;
     if (g_child <= 0) return;
-    snprintf(link, sizeof(link), "/proc/%d/cwd", (int)g_child);
-    l = readlink(link, out, n - 1);
-    out[l > 0 ? l : 0] = 0;
+#ifdef __APPLE__
+    {
+        struct proc_vnodepathinfo vi;
+        if (proc_pidinfo(g_child, PROC_PIDVNODEPATHINFO, 0, &vi, sizeof(vi)) == (int)sizeof(vi))
+            snprintf(out, n, "%s", vi.pvi_cdir.vip_path);
+    }
+#else
+    {
+        char link[64];
+        ssize_t l;
+        snprintf(link, sizeof(link), "/proc/%d/cwd", (int)g_child);
+        l = readlink(link, out, n - 1);
+        out[l > 0 ? l : 0] = 0;
+    }
+#endif
 }
 
 /* PSPEXP_TERM_KEYS="right,down,cross,..." (tests, screenshots): each name is
@@ -2585,6 +2598,7 @@ int main(int argc, char **argv)
         {   /* screenshots: PSPEXP_LAUNCHER_OPEN=files or files:/some/folder */
             const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
             if (g_launcher_on && o && !strncmp(o, "files", 5)) files_show(o[5] == ':' ? o + 6 : NULL, 1);
+            if (g_launcher_on && o && !strcmp(o, "terminal")) { g_view_launcher = 0; T.dirty = 1; }
         }
     }
 
@@ -2666,8 +2680,8 @@ int main(int argc, char **argv)
             char cmd[1024], cwd[512];
             int aware;
             if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) launch_child(cmd, cwd, aware);
-            if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; }
-            if (launcher_take_files()) { files_show(NULL, 1); }
+            if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
+            if (launcher_take_files()) { files_show(NULL, 1); swallow(); }
         }
         if (g_view_files) {
             char dir[1024];
@@ -2675,6 +2689,7 @@ int main(int argc, char **argv)
             if (files_take_terminal(dir, sizeof(dir))) {   /* "terminal here": cd in the shell shown */
                 char cmd[1200], *o = cmd, *d;
                 g_view_files = 0; g_view_launcher = 0; T.dirty = 1;
+                swallow();
                 o += sprintf(o, " cd '");
                 for (d = dir; *d && o < cmd + sizeof(cmd) - 8; d++) { if (*d == '\'') { memcpy(o, "'\\''", 4); o += 4; } else *o++ = *d; }
                 o += sprintf(o, "'\r");
