@@ -1790,15 +1790,6 @@ static void end_frame(void)
                       (double)S.prof_flush / 1e6 / fr, (double)S.prof_flush_cpu / 1e6 / fr,
                       (double)S.prof_wait / 1e6 / fr, (double)S.prof_send / 1e6 / fr);
             S.prof_shadow = S.prof_convert = S.prof_write = S.prof_wait = S.prof_send = S.prof_flush = S.prof_flush_cpu = 0;
-            {   /* for a status display (pspexp-term --oled): small, replaced whole */
-                FILE *sf = fopen("/tmp/pspexp-status.new", "w");
-                if (sf) {
-                    fprintf(sf, "fps=%.1f kb=%.1f underruns=%u\n", S.frames * 1000.0 / (double)(now - S.last_report),
-                            (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, au->underruns);
-                    fclose(sf);
-                    rename("/tmp/pspexp-status.new", "/tmp/pspexp-status");
-                }
-            }
             logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)",
                   (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, S.pages_sent, S.pages_t8, S.pages_kept,
                   (double)S.up_ticks / 1e6 / fr);
