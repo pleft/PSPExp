@@ -112,6 +112,13 @@ int pspexp_audio_stream(PspExpContext *ctx, const int16_t *stereo, uint32_t fram
 int pspexp_audio_stream_reset(PspExpContext *ctx);
 const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx);
 int pspexp_release(PspExpContext *ctx, uint16_t id);
+/* Gather sends (uploads, palettes, audio, releases) into one buffer from
+ * pspexp_batch_begin until pspexp_batch_flush, which sends them as one
+ * transfer and stops gathering: links with a high cost per transfer (the
+ * GameShell's USB host: 15 page uploads a frame took 8-11 ms) pay it once.
+ * Order is kept; a message larger than the buffer goes out on its own. */
+void pspexp_batch_begin(PspExpContext *ctx);
+int  pspexp_batch_flush(PspExpContext *ctx);
 int pspexp_hint(PspExpContext *ctx, uint16_t id, uint8_t priority);
 PspExpResourceState pspexp_resource_state(const PspExpContext *ctx, uint16_t id, uint8_t *tier);
 int pspexp_memory_query(PspExpContext *ctx);

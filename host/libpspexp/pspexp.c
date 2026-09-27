@@ -29,6 +29,8 @@ struct PspExpContext {
     PspExpTransport *t;
     PspExpConfig cfg;
     uint8_t *pending_upload;            /* between pspexp_upload_texture_begin and _commit */
+    uint8_t *batch; size_t batch_len, batch_cap;   /* sends gathered into one transfer */
+    int batching;
     uint32_t pending_upload_len;
     PspExpStream in;
     PspExpWriter frame;
@@ -102,6 +104,7 @@ void pspexp_destroy(PspExpContext *ctx)
     for (i = 0; i < ctx->nres; i++) free(ctx->res[i].retained);
     free(ctx->res);
     free(ctx->rx);
+    free(ctx->batch);
     pspexp_stream_free(&ctx->in);
     pspexp_writer_free(&ctx->frame);
     pspexp_writer_free(&ctx->msg);
@@ -128,11 +131,50 @@ static void link_lost(PspExpContext *ctx)
     for (i = 0; i < ctx->nres; i++)
         if (ctx->res[i].state != PSPEXP_RES_FAILED) ctx->res[i].state = PSPEXP_RES_NONE;
     pspexp_stream_reset(&ctx->in);
+    ctx->batch_len = 0;   /* half a batch is worth nothing to a new link */
+}
+
+static int send_now(PspExpContext *ctx, const void *data, size_t len)
+{
+    if (!ctx->t) return -1;
+    if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
+    return 0;
+}
+
+int pspexp_batch_flush(PspExpContext *ctx)
+{
+    int rc = 0;
+    if (ctx->batch_len) rc = send_now(ctx, ctx->batch, ctx->batch_len);
+    ctx->batch_len = 0;
+    ctx->batching = 0;
+    return rc;
+}
+
+void pspexp_batch_begin(PspExpContext *ctx)
+{
+    if (!ctx->batch) {
+        ctx->batch_cap = 192u * 1024u;
+        ctx->batch = (uint8_t *)malloc(ctx->batch_cap);
+        if (!ctx->batch) { ctx->batch_cap = 0; return; }
+    }
+    ctx->batching = 1;
 }
 
 static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
 {
     if (!ctx->t) return -1;
+    if (ctx->batching) {
+        if (ctx->batch_len + len > ctx->batch_cap) {   /* full: out with what is there */
+            if (ctx->batch_len && send_now(ctx, ctx->batch, ctx->batch_len) < 0) { ctx->batch_len = 0; return -1; }
+            ctx->batch_len = 0;
+        }
+        if (len <= ctx->batch_cap) {
+            memcpy(ctx->batch + ctx->batch_len, data, len);
+            ctx->batch_len += len;
+            ctx->stats.bytes_sent += len;
+            return 0;
+        }
+    }
     if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
     ctx->stats.bytes_sent += len;
     return 0;

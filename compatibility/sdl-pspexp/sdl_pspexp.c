@@ -197,7 +197,8 @@ static struct {
     int no_delta, no_clut;             /* PSPEXP_DELTA=0 / PSPEXP_CLUT=0: every page, 16-bit (benchmarks) */
     uint64_t rep_bytes;                /* link bytes at the last report */
     uint64_t up_ticks, tot_up_ticks;
-    uint64_t prof_shadow, prof_convert, prof_write;   /* ns: compare, convert (wall), write */   /* ns of this thread's CPU converting textures (waits do not count) */
+    uint64_t prof_shadow, prof_convert, prof_write;   /* ns: compare, convert (wall), write */
+    uint64_t prof_wait, prof_send;    /* ns: waiting for the PSP's last frame, sending this one */   /* ns of this thread's CPU converting textures (waits do not count) */
     unsigned pages_sent, pages_t8, pages_kept;          /* since the last report */
     unsigned long tot_pages_sent, tot_pages_t8, tot_pages_kept;
     Uint64 first_frame;                /* performance counter at the first frame sent */
@@ -437,7 +438,10 @@ static void flush_quads(void)
 
 static void begin_frame(void)
 {
-    if (!S.frame_open) { pspexp_begin_frame(S.ctx); S.frame_open = 1; S.clip_sent = 0; }
+    if (!S.frame_open) {
+        pspexp_begin_frame(S.ctx); S.frame_open = 1; S.clip_sent = 0;
+        pspexp_batch_begin(S.ctx);   /* the frame's uploads and audio: one transfer (end_frame) */
+    }
 }
 
 static void apply_clip(void)
@@ -1730,8 +1734,18 @@ static void end_frame(void)
     begin_frame();
     flush_quads();
     audio_drain();
-    pspexp_wait_present(S.ctx, 40);
-    pspexp_present(S.ctx);
+    {
+        uint64_t w0, w1;
+        /* the frame's uploads out in one transfer, before waiting for the
+         * PSP's last frame: they travel while it finishes */
+        pspexp_batch_flush(S.ctx);
+        w0 = wall_ns();
+        pspexp_wait_present(S.ctx, 40);
+        w1 = wall_ns();
+        pspexp_present(S.ctx);
+        S.prof_wait += w1 - w0;
+        S.prof_send += wall_ns() - w1;
+    }
     S.frame_open = 0;
     pspexp_pump(S.ctx, 0);
     feed_input();
@@ -1750,9 +1764,10 @@ static void end_frame(void)
                   st->last_frame_sprites, st->last_execute_us, st->last_ge_us, S.uploads,
                   st->resource_errors + st->protocol_errors, au->buffered_frames, au->underruns);
             if (getenv("PSPEXP_PROFILE"))
-                logf_("profile: compare %.2f  convert %.2f  write %.2f ms/frame",
-                      (double)S.prof_shadow / 1e6 / fr, (double)S.prof_convert / 1e6 / fr, (double)S.prof_write / 1e6 / fr);
-            S.prof_shadow = S.prof_convert = S.prof_write = 0;
+                logf_("profile: compare %.2f  convert %.2f  write %.2f  wait for the PSP %.2f  send %.2f ms/frame",
+                      (double)S.prof_shadow / 1e6 / fr, (double)S.prof_convert / 1e6 / fr, (double)S.prof_write / 1e6 / fr,
+                      (double)S.prof_wait / 1e6 / fr, (double)S.prof_send / 1e6 / fr);
+            S.prof_shadow = S.prof_convert = S.prof_write = S.prof_wait = S.prof_send = 0;
             logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)",
                   (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, S.pages_sent, S.pages_t8, S.pages_kept,
                   (double)S.up_ticks / 1e6 / fr);

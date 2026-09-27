@@ -511,13 +511,31 @@ cross-compiled on the Mac: the card image has no compiler):
 | Super Mario World (SNES PAL) | 50 / 41-50 fps | 11 a minute, isolated clicks |
 | Sonic the Hedgehog (Mega Drive), one thread | 60 / ~30 fps while running fast | 9 in 35 s |
 | Sonic the Hedgehog, the core on its own thread | 60 / 40-57 fps (typically ~44), a whole stage | 8, all at start-up |
+| Sonic the Hedgehog, one USB transfer a frame | 60 / 57.4 fps average (never below 55.7), the whole level 1 | 7, all at start-up |
 
-On a single thread the core (7-10 ms) and the SDL layer's texture work
-(9-10 ms) added up past the 16.7 ms frame, and the PSP's vsync halved the
-picture. With more than one core the player now runs the core one frame
-ahead on a worker thread while the main thread hands the last frame to SDL
-and the PSP; the Omega (one core) keeps the single thread. What limits the
-GameShell now is the texture work alone, 7-8 ms a frame.
+Three steps got it there, each found by measuring (`PSPEXP_PROFILE=1` in a
+system's `env=` splits the SDL layer's time into compare, convert, write,
+waiting for the PSP and sending):
+
+1. **The core on its own thread.** On one thread the core (7-10 ms) and the
+   SDL layer's texture work (9-10 ms) added up past the 16.7 ms frame and
+   the PSP's vsync halved the picture. With more than one core the player
+   runs the core one frame ahead on a worker thread while the main thread
+   hands the last frame to SDL and the PSP (the Omega, one core, keeps one
+   thread).
+2. **The 16-bit shadow for part-texture updates.** The fast RGB565 path only
+   switched on for whole-texture updates; emulators update part of a texture
+   made at the core's largest size, so every frame was converted to 32 bits
+   first (compare: 5-8 ms, now 1-3).
+3. **One USB transfer a frame.** Each page went out as its own messages, a
+   palette and a texture, about 15 transfers a frame; the GameShell's USB
+   host pays dearly per transfer (8-11 ms a frame). The library now gathers
+   a frame's uploads and audio (`pspexp_batch_begin` / `_flush`) and sends
+   them in one transfer before waiting for the PSP: 0.5-1 ms.
+
+A page conversion pool (the other cores convert a frame's pages, written in
+order after) is in as well; it matters less than expected (the conversion
+was 1-2 ms of it).
 
 What was learned on the Omega:
 
