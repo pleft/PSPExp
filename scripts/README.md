@@ -23,10 +23,13 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
 
 packages/          what the launcher offers, for any board
   pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=)
-  recipes/           one recipe per package: freedoom, opentyrian, cavestory, nes,
-                     gameboy, snes, megadrive; _lib.sh holds the shared helpers
+  recipes/           one recipe per package: freedoom, opentyrian, cavestory, jazz,
+                     nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
   art/               the games' 128x128 launcher pictures (sources and licenses in its README)
   build-nxengine.sh  Cave Story's engine and its libraries, cross-compiled with Zig
+  build-openjazz.sh  Jazz Jackrabbit's engine (OpenJazz) and its bundled libraries, the same way
+  cross-glibc.sh     a game (one of the two above) for the GameShell or the Pi: Zig,
+                     linked against the board's own SDL2 (seconds, not the Pi's half hour)
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board
 
@@ -43,7 +46,7 @@ gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
                      PSP's own access point; USB networking
 
 omega/             Onion Omega2+ (MT7688 MIPS, OpenWrt): static builds, data on the SD card
-  build.sh           tools; doom, tyrian, cavestory, retro (CORE=): static programs, SDL layer linked in
+  build.sh           tools; doom, tyrian, cavestory, jazz, retro (CORE=): static programs, SDL layer linked in
   install.sh         install or update: console, launcher, fonts, package tool, init script
   pspexp-term.init   the console at boot (/etc/init.d/pspexp-term)
   doom.sh            Doom from the console (older; the Freedoom package replaces it)
@@ -58,5 +61,6 @@ pi/                Raspberry Pi (Debian, arm64)
 
 Build output goes to `build/<board>/` (binaries in `bin/`, packages in
 `pkg/`); nothing in `build/` is committed. Sources of third-party programs
-live next to the repository: `../tyrian/opentyrian`, `../cavestory/nxengine-evo`, `../doom/`,
+live next to the repository: `../tyrian/opentyrian`, `../cavestory/nxengine-evo`,
+`../jazz/openjazz`, `../doom/`,
 `../retro/libretro-<core>`, `../pspdev` (the PSP toolchain).

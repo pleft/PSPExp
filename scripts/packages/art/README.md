@@ -9,3 +9,4 @@
 | `freedoom-phase2.png` | Freedoom's `sprites/heada1.png` (its Phase 2 icon), scaled | BSD-3-Clause (Freedoom) |
 | `opentyrian.png` | OpenTyrian's `linux/icons/tyrian-128.png` | GPL-2.0 (OpenTyrian) |
 | `cavestory.png` | NXEngine-evo's `platform/xdg/org.nxengine.nxengine_evo.png`, scaled | GPL-3.0 (NXEngine-evo) |
+| `jazz.png` | OpenJazz's `res/unix/OpenJazz.svg` (its logo), rendered at 128x128 | GPL-2.0 (OpenJazz) |

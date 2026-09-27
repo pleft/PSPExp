@@ -378,6 +378,14 @@ are packaged; data is only what may be redistributed.
 | freedoom | Freedoom 0.13 Phase 1 + 2 (two entries) | the GameShell's chocolate-doom package, Doom key map |
 | opentyrian | OpenTyrian (SDL2, compiled on the GameShell) + Tyrian 2.1 freeware data | run.sh writes its config on first start |
 | cavestory | NXEngine-evo + the freeware Cave Story (2004), its data made with NXEngine-evo's nxextract on the Mac | 480x272 by default (the PSP's screen, no scaling), 50 fps, drawn as PSP sprites (~12 KB a frame) |
+| jazz | OpenJazz + the Jazz Jackrabbit shareware episode (Epic MegaGames, 1994), all 78 files of the archive unaltered, as its license asks | 480x272 by default (a wider view of the level); called shareware, Epic credited, in the entry and package |
+
+Cave Story and Jazz are cross-compiled on the Mac for every board: the
+GameShell and Pi through `scripts/packages/cross-glibc.sh` (linked against a
+stand-in libSDL2 naming only the functions used, so the board's own SDL2
+answers, with the SDL layer preloaded), the Omega2+ static with the SDL layer
+built in. About a minute each, where the Pi 400 took half an hour to compile
+Cave Story itself.
 
 Every game package puts a 128x128 picture next to its entry
 (`scripts/packages/art/`, where the README lists each one's source and

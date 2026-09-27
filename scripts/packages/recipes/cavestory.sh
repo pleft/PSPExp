@@ -1,22 +1,19 @@
 #!/bin/sh
 # title: Cave Story (NXEngine-evo, drawn by the PSP)
 # Cave Story, the freeware 2004 platformer, on NXEngine-evo at 480x272 (the
-# PSP's own screen, no scaling). GameShell and Omega2+: cross-compiled here
-# (scripts/{gameshell,omega}/build.sh cavestory); Pi: compiled on the Pi
-# (scripts/pi/install.sh cavestory); each run here when missing. The game data
+# PSP's own screen, no scaling). Cross-compiled here for every board
+# (scripts/packages/cross-glibc.sh for the GameShell and Pi, scripts/omega/build.sh
+# cavestory), run here when missing (scripts/pi/install.sh cavestory still
+# compiles it on the Pi, ~30 min against ~1 min here). The game data
 # comes from the freeware Doukutsu.exe through NXEngine-evo's nxextract, made
 # here (cavestory_data), the same on every board.
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
 case "${BOARD:-gameshell}" in
-gameshell)   # cross-compiled here, the image's SDL2; the SDL layer preloaded
-	BIN="$ROOT/build/gameshell/bin/nxengine-evo"
-	[ -x "$BIN" ] || "$ROOT/scripts/gameshell/build.sh" cavestory
-	RUN="pspexp-run ./nxengine-evo"; REQ="pspexp-run" ;;
-pi)          # compiled on the Pi against its SDL2; preloaded
-	BIN="$ROOT/build/pi/bin/nxengine-evo"
-	[ -x "$BIN" ] || HOST="$HOST" "$ROOT/scripts/pi/install.sh" cavestory
+gameshell|pi)   # cross-compiled here against the board's SDL2; the SDL layer preloaded
+	BIN="$ROOT/build/$BOARD/bin/nxengine-evo"
+	[ -x "$BIN" ] || "$ROOT/scripts/packages/cross-glibc.sh" "$BOARD" "$ROOT/scripts/packages/build-nxengine.sh" nxengine-evo
 	RUN="pspexp-run ./nxengine-evo"; REQ="pspexp-run" ;;
 omega)       # static, the SDL layer built in
 	BIN="$ROOT/build/omega/bin/nxengine-evo"

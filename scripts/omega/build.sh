@@ -8,6 +8,7 @@
 #   scripts/omega/build.sh doom      also Chocolate Doom with sdl-pspexp built in
 #   scripts/omega/build.sh tyrian    also OpenTyrian (../tyrian/opentyrian) with sdl-pspexp
 #   scripts/omega/build.sh cavestory also Cave Story's NXEngine-evo with sdl-pspexp
+#   scripts/omega/build.sh jazz      also Jazz Jackrabbit's OpenJazz with sdl-pspexp
 #   scripts/omega/build.sh retro     pspexp-retro with a libretro core linked in (CORE=fceumm:
 #                                    ../retro/libretro-fceumm) -> bin/pspexp-retro-<core>
 #                                    built in (uses the doom build's static SDL2)
@@ -225,6 +226,16 @@ if [ "$1" = "cavestory" ]; then
 	W="$OUT/nxengine" CC="$OUT/zcc" CXX="$OUT/zcxx" AR="$OUT/zar" SDLINC="$P/include/SDL2" CFLAGS_X="-include $REN" \
 		OUTBIN="$OUT/bin/nxengine-evo" LINK="-static $LIBS $P/lib/libSDL2.a -lm" \
 		"$ROOT/scripts/packages/build-nxengine.sh"
+fi
+if [ "$1" = "jazz" ]; then
+	# Jazz Jackrabbit (OpenJazz, scripts/packages/build-openjazz.sh): static,
+	# the SDL layer built in, every source seeing the rename header
+	P="$OUT/prefix"
+	[ -f "$P/lib/libSDL2.a" ] || "$ROOT/scripts/omega/build.sh" doom
+	shim_static
+	W="$OUT/openjazz" CC="$OUT/zcc" CXX="$OUT/zcxx" AR="$OUT/zar" SDLINC="$P/include/SDL2" CFLAGS_X="-include $REN" \
+		OUTBIN="$OUT/bin/openjazz" LINK="-static $LIBS $P/lib/libSDL2.a -lm" \
+		"$ROOT/scripts/packages/build-openjazz.sh"
 fi
 ls -la "$OUT/bin"
 echo "static $ZIG_TARGET ($ZIG_CPU) binaries in build/$CROSS_NAME/bin"

@@ -365,7 +365,7 @@ static const IconName ICONS[] = {
     { "microchip", 0xe61a }, { "circuit-board", 0xe403 }, { "laptop", 0xe1cd }, { "computer", 0xe4e4 },
     { "plug", 0xe37f }, { "ethernet-port", 0xe620 },
     { "radio-tower", 0xe404 }, { "folder-open", 0xe247 }, { "file-text", 0xe0cc }, { "tag", 0xe17f }, { "search-x", 0xe4ad },
-    { "arrow-left", 0xe048 }, { "text-search", 0xe5ad }, { "lock", 0xe10b }, { "eye", 0xe0ba }, { "eye-off", 0xe0bb },
+    { "arrow-left", 0xe048 }, { "text-search", 0xe5ad }, { "lock", 0xe10b }, { "eye", 0xe0ba }, { "eye-off", 0xe0bb }, { "rabbit", 0xe4f6 },
 };
 
 static int icon_cp(const char *name)

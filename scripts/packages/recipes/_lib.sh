@@ -121,3 +121,24 @@ cavestory_data() {
 	cp -R "$_w/game/CaveStory/data/." "$_o/" && cp -R "$_s/data/." "$_o/"
 	echo "$_o"
 }
+
+# ---- Jazz Jackrabbit (OpenJazz) ----------------------------------------------
+# the shareware release (v1.1, 78 files, 1994) from the DOS Games Archive,
+# checked against its SHA-256; prints the cached zip's path
+jazz_zip() {
+	_z="$CACHE/jazz.zip"
+	if [ ! -s "$_z" ]; then
+		curl -fsSL -A 'Mozilla/5.0' -e https://www.dosgamesarchive.com/file/jazz-jackrabbit/jazz \
+			-o "$_z.part" "https://www.dosgamesarchive.com/file.php?id=2031" || { rm -f "$_z.part"; echo "fetch failed: jazz.zip" >&2; return 1; }
+		mv "$_z.part" "$_z"
+	fi
+	_h=$(shasum -a 256 "$_z" 2>/dev/null || sha256sum "$_z")
+	case "$_h" in
+	ed025415c0bc5ebc3a41e7a070551bdfdfb0b65b5314241152d8bd31f87c22da*) echo "$_z" ;;
+	*) echo "jazz.zip: unexpected SHA-256" >&2; return 1 ;;
+	esac
+}
+# the PSP's buttons as OpenJazz's keys: cross jumps (Enter and Y in menus and
+# questions), square fires, circle backs out (N), triangle, L and R change
+# weapon, start the menu, select pauses
+JAZZ_KEYS="cross=space+return+y,square=lalt,circle=escape+n,triangle=rctrl,l=rctrl,r=rctrl,start=escape,select=p,up=up,down=down,left=left,right=right"
