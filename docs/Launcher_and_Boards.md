@@ -261,13 +261,22 @@ The board's own settings (`launcher_board.c`), with each board's tools:
 | GameShell, Pi | `timedatectl set-timezone` | NetworkManager: `nmcli dev wifi list --rescan yes`, `nmcli dev wifi connect` |
 | Omega2+ | `uci` `system.@system[0].zonename` and `.timezone` (POSIX rule), `/etc/init.d/system reload` | `ubus call onion wifi-scan`, `wifisetup add`/`edit`, then `priority -move top` |
 
+A scan on the Omega briefly stalls its own Wi-Fi link (one radio, access
+point and station): a PSP on USB does not notice, a stand-in PSP over Wi-Fi
+can lose the link.
+
 **Time zone** lists about 30 zones (city, UTC offset), the board's own
 ticked; cross sets it and the clock follows at once (the launcher sets its
 own `TZ`). **Wi-Fi network** (shown when the board has NetworkManager or
 Onion's wifisetup; in PSP direct mode it says to switch to the home network
 first) scans in the background and lists the networks by name, strongest
-first, with their signal and a lock for the secured ones; triangle scans
-again. A secured network opens a keyboard (three pages: lower case, upper
+first, with their signal, a lock for the secured ones and "saved" for the
+ones the board already knows (NetworkManager's Wi-Fi profiles; the Omega's
+`wifi-config` entries); triangle scans again. Cross on a saved network joins
+it with what the board keeps (`nmcli connection up uuid`, or `wifisetup
+priority -move top`, which restarts the Omega's Wi-Fi); square asks for a new
+password, and a failed new password keeps the saved profile. A new secured
+network opens a keyboard (three pages: lower case, upper
 case, symbols; square deletes, triangle shows or hides the password, START or
 Join joins, circle cancels). The join runs in the background and ends in a
 toast. The password is handed to the command in the environment variable

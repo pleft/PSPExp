@@ -41,15 +41,20 @@ typedef struct BoardNet {
     char encr[16];       /* Omega: psk2, psk, wep, none; NetworkManager: its SECURITY text */
     int  signal;         /* 0-100 */
     int  secure;         /* needs a password */
+    int  saved;          /* the board knows it: joins without asking */
+    char id[40];         /* NetworkManager: the saved profile's UUID */
 } BoardNet;
 
 /* the network the board is on, "" when none */
 void board_wifi_current(int kind, char *ssid, size_t n);
-/* the command whose output board_wifi_parse reads */
+/* the command whose output board_wifi_parse reads: the scan, then the saved
+ * networks as lines "S<tab>id<tab>ssid" */
 void board_wifi_scan_command(int kind, char *cmd, size_t n);
-/* networks from a scan: named ones, strongest first, one per name */
+/* networks from a scan: named ones, strongest first, one per name, the saved
+ * ones marked */
 int  board_wifi_parse(int kind, const char *text, BoardNet *out, int max);
-/* the command that joins net (the password in $PSPEXP_WIFI_PSK) */
-void board_wifi_connect_command(int kind, const BoardNet *net, char *cmd, size_t n);
+/* the command that joins net: a saved one with what the board keeps, or with
+ * a (new) password in $PSPEXP_WIFI_PSK when with_password */
+void board_wifi_connect_command(int kind, const BoardNet *net, int with_password, char *cmd, size_t n);
 
 #endif

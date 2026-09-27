@@ -168,10 +168,14 @@ void board_wifi_current(int kind, char *ssid, size_t n)
 void board_wifi_scan_command(int kind, char *cmd, size_t n)
 {
     if (kind == BOARD_WIFI_NM)
-        snprintf(cmd, n, "%snmcli -t -f SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null || nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list",
+        snprintf(cmd, n, "{ %snmcli -t -f SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null || nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list; }; "
+                 "for c in $(nmcli -t -f UUID,TYPE connection show | sed -n 's/:802-11-wireless$//p'); do "
+                 "printf 'S\\t%%s\\t%%s\\n' \"$c\" \"$(nmcli -t -g 802-11-wireless.ssid connection show \"$c\")\"; done",
                  geteuid() == 0 ? "" : "sudo -n ");
     else if (kind == BOARD_WIFI_ONION)
-        snprintf(cmd, n, "ubus call onion wifi-scan '{\"device\":\"ra0\"}'");
+        snprintf(cmd, n, "ubus call onion wifi-scan '{\"device\":\"ra0\"}'; "
+                 "uci -q show wireless | sed -n \"s/^wireless\\.@wifi-config\\[[0-9]*\\]\\.ssid='\\(.*\\)'$/\\1/p\" | "
+                 "while read -r s; do printf 'S\\t-\\t%%s\\n' \"$s\"; done");
     else snprintf(cmd, n, "true");
 }
 
@@ -209,12 +213,25 @@ static int json_str(const char *s, const char *e, const char *key, char *out, si
     return -1;
 }
 
+/* where the saved networks start: the first line "S<tab>" */
+static const char *saved_start(const char *text)
+{
+    const char *p = text;
+    while (p && *p) {
+        if (p[0] == 'S' && p[1] == '\t') return p;
+        p = strchr(p, '\n');
+        if (p) p++;
+    }
+    return text + strlen(text);
+}
+
 int board_wifi_parse(int kind, const char *text, BoardNet *out, int max)
 {
-    int cnt = 0;
+    int cnt = 0, i;
+    const char *saved = saved_start(text), *sp;
     if (kind == BOARD_WIFI_NM) {
         const char *line = text;
-        while (line && *line) {
+        while (line && *line && line < saved) {
             BoardNet nw;
             char sig[8];
             const char *p;
@@ -230,7 +247,7 @@ int board_wifi_parse(int kind, const char *text, BoardNet *out, int max)
         }
     } else if (kind == BOARD_WIFI_ONION) {
         const char *p = strstr(text, "\"results\"");
-        while (p && (p = strchr(p, '{'))) {
+        while (p && (p = strchr(p, '{')) && p < saved) {
             const char *e = strchr(p, '}');
             BoardNet nw;
             char sig[8] = "0";
@@ -245,20 +262,51 @@ int board_wifi_parse(int kind, const char *text, BoardNet *out, int max)
             p = e + 1;
         }
     }
+    /* the saved ones: "S<tab>id<tab>ssid" */
+    for (sp = saved; *sp; ) {
+        const char *t1 = strchr(sp, '\t'), *t2 = t1 ? strchr(t1 + 1, '\t') : NULL, *nl = strchr(sp, '\n');
+        if (!nl) nl = sp + strlen(sp);
+        if (sp[0] == 'S' && t1 == sp + 1 && t2 && t2 < nl) {
+            char id[40], ssid[64];
+            size_t il = (size_t)(t2 - t1 - 1), sl = (size_t)(nl - t2 - 1);
+            if (il >= sizeof(id)) il = sizeof(id) - 1;
+            if (sl >= sizeof(ssid)) sl = sizeof(ssid) - 1;
+            memcpy(id, t1 + 1, il); id[il] = 0;
+            memcpy(ssid, t2 + 1, sl); ssid[sl] = 0;
+            while (sl && ssid[sl - 1] == '\r') ssid[--sl] = 0;
+            for (i = 0; i < cnt; i++)
+                if (!out[i].saved && !strcmp(out[i].ssid, ssid)) {
+                    out[i].saved = 1;
+                    if (strcmp(id, "-")) snprintf(out[i].id, sizeof(out[i].id), "%s", id);
+                    break;
+                }
+        }
+        sp = *nl ? nl + 1 : nl;
+    }
     if (cnt > 1) qsort(out, (size_t)cnt, sizeof(BoardNet), net_cmp);
     return cnt;
 }
 
-void board_wifi_connect_command(int kind, const BoardNet *net, char *cmd, size_t n)
+void board_wifi_connect_command(int kind, const BoardNet *net, int with_password, char *cmd, size_t n)
 {
     char q[200];
     squote(net->ssid, q, sizeof(q));
+    if (!net->secure) with_password = 0;
     if (kind == BOARD_WIFI_NM) {
-        /* a failed join (a wrong password) leaves a profile NetworkManager
-         * cannot update, so every retry would fail too: drop it on failure */
         const char *su = geteuid() == 0 ? "" : "sudo -n ";
-        snprintf(cmd, n, "%snmcli dev wifi connect %s%s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
-                 su, q, net->secure ? " password \"$PSPEXP_WIFI_PSK\"" : "", su, q);
+        if (net->saved && net->id[0] && !with_password) {
+            char qi[100];
+            squote(net->id, qi, sizeof(qi));
+            snprintf(cmd, n, "%snmcli connection up uuid %s", su, qi);
+        } else if (net->saved)   /* a new password for a known network: keep its profile whatever happens */
+            snprintf(cmd, n, "%snmcli dev wifi connect %s%s", su, q, with_password ? " password \"$PSPEXP_WIFI_PSK\"" : "");
+        else   /* a failed join (a wrong password) leaves a profile NetworkManager
+                * cannot update, so every retry would fail too: drop it on failure */
+            snprintf(cmd, n, "%snmcli dev wifi connect %s%s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
+                     su, q, with_password ? " password \"$PSPEXP_WIFI_PSK\"" : "", su, q);
+    } else if (kind == BOARD_WIFI_ONION && net->saved && !with_password) {
+        /* known to wifisetup: first in line, and wifimanager joins it */
+        snprintf(cmd, n, "wifisetup priority -ssid %s -move top", q);
     } else if (kind == BOARD_WIFI_ONION) {
         const char *encr = net->secure ? (net->encr[0] ? net->encr : "psk2") : "none";
         /* add, or edit when the network is already known; then first in line */

@@ -1051,7 +1051,7 @@ static const char *TK_CTRL[] = { "abc", "ABC", "#+=", "space", "Join" };
 
 static void scan_start(void)
 {
-    char cmd[400];
+    char cmd[1024];
     pid_t pid;
     if (g_scan_pid > 0) return;
     board_wifi_scan_command(board_wifi_kind(), cmd, sizeof(cmd));
@@ -1104,13 +1104,15 @@ static void pick_open(int kind, uint64_t now)
     g_dirty = 1;
 }
 
-static void wifi_join(uint64_t now)
+/* with_password: the keyboard's password; otherwise a saved or open network */
+static void wifi_join(int with_password, uint64_t now)
 {
-    char cmd[900], ok[128], fail[128];
-    board_wifi_connect_command(board_wifi_kind(), &g_join, cmd, sizeof(cmd));
+    char cmd[1024], ok[128], fail[128];
+    board_wifi_connect_command(board_wifi_kind(), &g_join, with_password, cmd, sizeof(cmd));
     snprintf(ok, sizeof(ok), "Connected to %s", g_join.ssid);
-    snprintf(fail, sizeof(fail), "Could not join %s%s", g_join.ssid, g_join.secure ? " (the password?)" : "");
-    bg_run_env(cmd, "wifi", ok, fail, "PSPEXP_WIFI_PSK", g_join.secure ? g_txt : NULL);
+    snprintf(fail, sizeof(fail), "Could not join %s%s", g_join.ssid,
+             !g_join.secure ? "" : with_password ? " (the password?)" : " (square: a new password)");
+    bg_run_env(cmd, "wifi", ok, fail, "PSPEXP_WIFI_PSK", with_password ? g_txt : NULL);
     memset(g_txt, 0, sizeof(g_txt));   /* the password lives on only in the board's network tool */
     toast("wifi", "Joining the network...", now);
     g_mode = M_BROWSE;
@@ -1138,9 +1140,14 @@ static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
             g_mode = M_BROWSE;
         } else {
             g_join = g_nets[g_pick_sel];
-            if (g_join.secure) { memset(g_txt, 0, sizeof(g_txt)); g_tpage = 0; g_tx = 0; g_ty = 0; g_tshow = 0; g_mode = M_TEXT; g_overlay_a = 0; }
-            else wifi_join(now);
+            if (g_join.secure && !g_join.saved) { memset(g_txt, 0, sizeof(g_txt)); g_tpage = 0; g_tx = 0; g_ty = 0; g_tshow = 0; g_mode = M_TEXT; g_overlay_a = 0; }
+            else wifi_join(0, now);   /* saved: what the board keeps; or open */
         }
+    }
+    /* square: a (new) password for a secured network, saved or not */
+    if (g_pick_kind == PICK_WIFI && (pressed & PSPEXP_BUTTON_SQUARE) && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure) {
+        g_join = g_nets[g_pick_sel];
+        memset(g_txt, 0, sizeof(g_txt)); g_tpage = 0; g_tx = 0; g_ty = 0; g_tshow = 0; g_mode = M_TEXT; g_overlay_a = 0;
     }
     g_dirty = 1;
 }
@@ -1161,11 +1168,11 @@ static void text_input(uint32_t pressed, int up, int down, int left, int right, 
             if (l + 1 < sizeof(g_txt)) { g_txt[l] = TK[g_tpage][g_ty][g_tx]; g_txt[l + 1] = 0; }
         } else if (g_tx < 3) g_tpage = g_tx;
         else if (g_tx == 3) { if (l + 1 < sizeof(g_txt)) { g_txt[l] = ' '; g_txt[l + 1] = 0; } }
-        else if (l) { wifi_join(now); return; }
+        else if (l) { wifi_join(1, now); return; }
     }
     if ((pressed & PSPEXP_BUTTON_SQUARE) && l) g_txt[l - 1] = 0;
     if (pressed & PSPEXP_BUTTON_TRIANGLE) g_tshow = !g_tshow;
-    if ((pressed & PSPEXP_BUTTON_START) && l) { wifi_join(now); return; }
+    if ((pressed & PSPEXP_BUTTON_START) && l) { wifi_join(1, now); return; }
     if (pressed & PSPEXP_BUTTON_CIRCLE) { memset(g_txt, 0, sizeof(g_txt)); g_mode = M_PICK; }
     g_dirty = 1;
 }
@@ -1892,6 +1899,7 @@ static void draw_pick(float dt)
                 label = nw->ssid; current = !strcmp(nw->ssid, g_cur_ssid);
                 icon = nw->signal >= 67 ? "wifi" : nw->signal >= 34 ? "wifi-high" : nw->signal > 0 ? "wifi-low" : "wifi-zero";
                 if (nw->secure) { right -= 14; gfx_icon("lock", 12, right, ry + (ROW - 12) / 2, C_MUTED, a); right -= 6; }
+                if (nw->saved) value = "saved";
             }
             if (sel) {
                 gfx_nine(NINE_R10, fx, ry, fw, ROW, 0xffffff, 26);
@@ -1906,6 +1914,8 @@ static void draw_pick(float dt)
     }
     x = 16;
     x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : "Join");
+    if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
+        x = hint_btn(x, 's', "New password");
     if (g_pick_kind == PICK_WIFI) x = hint_btn(x, 't', "Scan again");
     x = hint_btn(x, 'o', "Back");
     (void)x;
