@@ -396,14 +396,17 @@ On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272
 upload, ~7 ms of texture work on the GameShell), "pretty playable"; Simutrans
-a steady 25 fps (its own rate), no underruns. The stand-in's GameShell numbers
-below were the Wi-Fi link to the Mac, not the board.
+a steady 25 fps (its own rate), no underruns. From the Omega2+ (played the
+same day): Cave Story 42-50 fps after its 35 s start ("Loading..." on the
+PSP meanwhile), Jazz 22-48 fps in the levels with short stalls at loads,
+"impressively good for omega". The stand-in's numbers below were the Wi-Fi
+link to the Mac, not the boards.
 
 Measured on the stand-in PSP: Cave Story 50 fps on the Pi, 31-36 on the
 GameShell, 26-32 on the Omega2+ (which also spends 35 s at start
 synthesising the sound effects in software floating point); Jazz's menu 38-47
 fps on the Pi, 0.1-12 on the Omega2+ (its plasma background, floating point
-again): both are GameShell and Pi games in practice.
+again). Over USB to the real PSP both play on the Omega2+ too (above).
 
 With `PSPEXP_NUB=mouse` the SDL layer draws the mouse pointer itself on the
 PSP, over the frame (a host cursor never reaches it), while the program has
