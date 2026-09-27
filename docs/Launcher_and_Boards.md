@@ -486,7 +486,7 @@ Played on the Omega2+ with the real PSP over USB (the hardest board:
 
 | System, core | Result | Setting |
 |---|---|---|
-| NES, QuickNES | full-speed game and sound, a steady 30 fps picture (20-28 while scrolling), a few audio clicks a minute; playable | 30 fps (VIDEO_DIV 2), CLUT8 pages |
+| NES, QuickNES | full-speed game and sound, a steady 30 fps picture: with the SDL layer of 2026-09-27 evening (16-bit shadow for part-texture updates, word-wise compare, one USB transfer a frame) 29.9 fps average over a whole session, never below 29 (before: 20-28 while scrolling) | 30 fps (VIDEO_DIV 2), CLUT8 pages |
 | Game Boy / Color, Gambatte | 59-60 fps, 56-59 shown, CPU half idle | 60 fps |
 | Mega Drive, PicoDrive | Sonic: 33 fps emulation, ~7 shown: unplayable | not for the Omega |
 | SNES, Snes9x 2005 | Super Mario World (PAL): 46-51 of 50 fps, 13-25 shown, audio dropouts: not enjoyable | not for the Omega |
@@ -558,6 +558,14 @@ What was learned on the Omega:
   joysticks, and events pushed into SDL never reach its keyboard state
   table: the player follows key events, and every `.system` maps the PSP's
   buttons to its keys (`PSPEXP_KEYS`).
+
+- **Measure with nothing else running.** A watcher that searched the
+  game log every 2 s took about 3 s of the Omega's CPU a pass (the log had
+  grown to 2.2 MB in RAM) and made several test rounds look far worse than
+  they were. The launcher now starts the log afresh past 256 KB; read it
+  once, after playing.
+- **Compare four bytes at a time.** musl's memcmp (the Omega's static
+  builds) goes byte by byte: 2-4 ms a frame for an NES picture, 1.3 now.
 
 Compression was considered for the Omega and left for Wi-Fi: over USB a
 scrolling NES frame costs it about 3 ms to send, and compressing it would

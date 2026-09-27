@@ -1614,7 +1614,12 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
     pid_t pid = fork();
     if (pid < 0) return;
     if (pid == 0) {
-        int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | O_APPEND, 0644), i;
+        /* the programs' output, kept small: it lives in RAM (/tmp), and a
+         * log grown to megabytes made anything reading it (a watcher on the
+         * Omega2+: seconds of CPU a pass) slow the game down */
+        struct stat lst;
+        int trunc = stat("/tmp/pspexp-launcher.log", &lst) == 0 && lst.st_size > 256 * 1024;
+        int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | (trunc ? O_TRUNC : O_APPEND), 0644), i;
         if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
         /* nothing of the console's reaches the program: its PSP link (a
          * copy would keep the connection open after the console lets go),

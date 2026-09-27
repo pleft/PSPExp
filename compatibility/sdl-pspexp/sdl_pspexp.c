@@ -195,10 +195,12 @@ static struct {
     /* stats */
     Uint32 last_report; unsigned frames, uploads, shot_every, shot_index;
     int no_delta, no_clut;             /* PSPEXP_DELTA=0 / PSPEXP_CLUT=0: every page, 16-bit (benchmarks) */
+    int no_batch;                      /* PSPEXP_BATCH=0: every message its own transfer */
     uint64_t rep_bytes;                /* link bytes at the last report */
     uint64_t up_ticks, tot_up_ticks;
     uint64_t prof_shadow, prof_convert, prof_write;   /* ns: compare, convert (wall), write */
-    uint64_t prof_wait, prof_send;    /* ns: waiting for the PSP's last frame, sending this one */   /* ns of this thread's CPU converting textures (waits do not count) */
+    uint64_t prof_wait, prof_send;    /* ns: waiting for the PSP's last frame, sending this one */
+    uint64_t prof_flush, prof_flush_cpu;   /* ns: the batched uploads out (wall, and this thread's CPU) */   /* ns of this thread's CPU converting textures (waits do not count) */
     unsigned pages_sent, pages_t8, pages_kept;          /* since the last report */
     unsigned long tot_pages_sent, tot_pages_t8, tot_pages_kept;
     Uint64 first_frame;                /* performance counter at the first frame sent */
@@ -290,6 +292,7 @@ static void connect_once(void)
     S.shot_every = getenv("PSPEXP_SHOT_EVERY") ? (unsigned)atoi(getenv("PSPEXP_SHOT_EVERY")) : 0;
     S.no_delta = getenv("PSPEXP_DELTA") && !strcmp(getenv("PSPEXP_DELTA"), "0");
     S.no_clut = getenv("PSPEXP_CLUT") && !strcmp(getenv("PSPEXP_CLUT"), "0");
+    S.no_batch = getenv("PSPEXP_BATCH") && !strcmp(getenv("PSPEXP_BATCH"), "0");
     S.vjoy = -1;
     S.rsx = S.rsy = 1.0f;
     parse_keys();
@@ -440,7 +443,7 @@ static void begin_frame(void)
 {
     if (!S.frame_open) {
         pspexp_begin_frame(S.ctx); S.frame_open = 1; S.clip_sent = 0;
-        pspexp_batch_begin(S.ctx);   /* the frame's uploads and audio: one transfer (end_frame) */
+        if (!S.no_batch) pspexp_batch_begin(S.ctx);   /* the frame's uploads and audio: one transfer (end_frame) */
     }
 }
 
@@ -865,6 +868,22 @@ static int upload_tex(Tex *x)
     return 0;
 }
 
+/* 1 when n bytes differ. Four bytes at a time: musl's memcmp (the Omega's
+ * static builds) goes byte by byte, 2-4 ms a frame there for an NES picture */
+static int differs(const void *a, const void *b, size_t n)
+{
+    const uint8_t *p = (const uint8_t *)a, *q = (const uint8_t *)b;
+    if ((((uintptr_t)p | (uintptr_t)q) & 3u) == 0) {
+        const uint32_t *wp = (const uint32_t *)p, *wq = (const uint32_t *)q;
+        size_t w = n >> 2, i;
+        for (i = 0; i + 4 <= w; i += 4)
+            if ((wp[i] ^ wq[i]) | (wp[i + 1] ^ wq[i + 1]) | (wp[i + 2] ^ wq[i + 2]) | (wp[i + 3] ^ wq[i + 3])) return 1;
+        for (; i < w; i++) if (wp[i] != wq[i]) return 1;
+        p += w << 2; q += w << 2; n &= 3u;
+    }
+    return n ? memcmp(p, q, n) != 0 : 0;
+}
+
 /* Store converted pixels (ABGR8888, `spitch` pixels per row) at r in the
  * shadow, marking the pages whose pixels actually changed. */
 static void shadow_store(Tex *x, const SDL_Rect *r, const uint32_t *px, int spitch)
@@ -881,7 +900,7 @@ static void shadow_store(Tex *x, const SDL_Rect *r, const uint32_t *px, int spit
             int a0 = x->cx[c] > r->x ? x->cx[c] : r->x;
             int a1 = x->cx[c + 1] < r->x + r->w ? x->cx[c + 1] : r->x + r->w;
             if (a0 >= a1) continue;
-            if (memcmp(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 4)) {
+            if (differs(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 4)) {
                 int bit = row * x->ncol + c;
                 memcpy(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 4);
                 if (bit < 32) x->pdirty |= 1u << bit; else x->dirty = 1;
@@ -906,7 +925,7 @@ static void shadow_store16(Tex *x, const SDL_Rect *r, const uint16_t *px, int sp
             int a0 = x->cx[c] > r->x ? x->cx[c] : r->x;
             int a1 = x->cx[c + 1] < r->x + r->w ? x->cx[c + 1] : r->x + r->w;
             if (a0 >= a1) continue;
-            if (memcmp(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 2)) {
+            if (differs(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 2)) {
                 int bit = row * x->ncol + c;
                 memcpy(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 2);
                 if (bit < 32) x->pdirty |= 1u << bit; else x->dirty = 1;
@@ -1735,11 +1754,13 @@ static void end_frame(void)
     flush_quads();
     audio_drain();
     {
-        uint64_t w0, w1;
+        uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();
         /* the frame's uploads out in one transfer, before waiting for the
          * PSP's last frame: they travel while it finishes */
         pspexp_batch_flush(S.ctx);
         w0 = wall_ns();
+        S.prof_flush += w0 - f0;
+        S.prof_flush_cpu += cpu_ns() - c0;
         pspexp_wait_present(S.ctx, 40);
         w1 = wall_ns();
         pspexp_present(S.ctx);
@@ -1764,10 +1785,11 @@ static void end_frame(void)
                   st->last_frame_sprites, st->last_execute_us, st->last_ge_us, S.uploads,
                   st->resource_errors + st->protocol_errors, au->buffered_frames, au->underruns);
             if (getenv("PSPEXP_PROFILE"))
-                logf_("profile: compare %.2f  convert %.2f  write %.2f  wait for the PSP %.2f  send %.2f ms/frame",
+                logf_("profile: compare %.2f  convert %.2f  write %.2f  flush %.2f (cpu %.2f)  wait for the PSP %.2f  send %.2f ms/frame",
                       (double)S.prof_shadow / 1e6 / fr, (double)S.prof_convert / 1e6 / fr, (double)S.prof_write / 1e6 / fr,
+                      (double)S.prof_flush / 1e6 / fr, (double)S.prof_flush_cpu / 1e6 / fr,
                       (double)S.prof_wait / 1e6 / fr, (double)S.prof_send / 1e6 / fr);
-            S.prof_shadow = S.prof_convert = S.prof_write = S.prof_wait = S.prof_send = 0;
+            S.prof_shadow = S.prof_convert = S.prof_write = S.prof_wait = S.prof_send = S.prof_flush = S.prof_flush_cpu = 0;
             logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)",
                   (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, S.pages_sent, S.pages_t8, S.pages_kept,
                   (double)S.up_ticks / 1e6 / fr);

@@ -205,6 +205,7 @@ static struct {
     int geom_pending; struct retro_game_geometry geom;
     /* stats, every 5 s: frames run / shown, core and present time */
     unsigned st_run, st_shown; Uint64 st_core, st_present, st_t0;
+    Uint64 st_audio, st_video;        /* inside the core's audio and video callbacks */
 } P;
 
 /* ---- options ---------------------------------------------------------------- */
@@ -378,6 +379,7 @@ static void make_texture(int w, int h)
 static void video_refresh(const void *data, unsigned width, unsigned height, size_t pitch)
 {
     SDL_Rect r;
+    Uint64 vt0 = SDL_GetPerformanceCounter();
     if (!data || data == RETRO_HW_FRAME_BUFFER_VALID || P.skip_video) return;   /* a dupe or a skipped frame */
     if (P.threaded) {   /* on the worker: keep a copy for the main thread */
         int b = P.back;
@@ -391,6 +393,7 @@ static void video_refresh(const void *data, unsigned width, unsigned height, siz
     r.x = 0; r.y = 0; r.w = (int)width; r.h = (int)height;
     SDL_UpdateTexture(P.tex, &r, data, (int)pitch);
     P.fb_w = (int)width; P.fb_h = (int)height;
+    P.st_video += SDL_GetPerformanceCounter() - vt0;
 }
 
 static void present(void)
@@ -429,6 +432,7 @@ static void audio_callback(void *u, Uint8 *stream, int len)
 static size_t audio_batch(const int16_t *data, size_t frames)
 {
     size_t i;
+    Uint64 t0 = SDL_GetPerformanceCounter();
     if (!P.adev) return frames;
     SDL_LockAudioDevice(P.adev);
     for (i = 0; i < frames; i++) {
@@ -446,6 +450,7 @@ static size_t audio_batch(const int16_t *data, size_t frames)
         P.last[0] = (int16_t)l; P.last[1] = (int16_t)r;
     }
     SDL_UnlockAudioDevice(P.adev);
+    P.st_audio += SDL_GetPerformanceCounter() - t0;
     return frames;
 }
 
@@ -887,10 +892,11 @@ int main(int argc, char **argv)
         if (now - P.st_t0 > 5 * freq) {
             double secs = (double)(now - P.st_t0) / (double)freq;
             if (P.st_t0)
-                fprintf(stderr, "pspexp-retro: %.1f core fps, %.1f shown, core %.1f ms/frame, present %.1f ms, audio underruns %u\n",
+                fprintf(stderr, "pspexp-retro: %.1f core fps, %.1f shown, core %.1f ms/frame (of it audio %.1f, video %.1f), present %.1f ms, audio underruns %u\n",
                         P.st_run / secs, P.st_shown / secs, P.st_run ? (double)P.st_core * 1000.0 / freq / P.st_run : 0.0,
+                        P.st_run ? (double)P.st_audio * 1000.0 / freq / P.st_run : 0.0, P.st_run ? (double)P.st_video * 1000.0 / freq / P.st_run : 0.0,
                         P.st_shown ? (double)P.st_present * 1000.0 / freq / P.st_shown : 0.0, P.underruns);
-            P.st_t0 = now; P.st_run = P.st_shown = 0; P.st_core = P.st_present = 0;
+            P.st_t0 = now; P.st_run = P.st_shown = 0; P.st_core = P.st_present = 0; P.st_audio = P.st_video = 0;
         }
         if (SDL_GetTicks() - last_save > 10000) { srm_save(); last_save = SDL_GetTicks(); }
     }
