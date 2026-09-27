@@ -1738,15 +1738,16 @@ static void oled_status(int connected, uint64_t now)
         double fps = 0, kb = 0; unsigned under = 0;
         if (f && stat("/tmp/pspexp-status", &st) == 0 && time(NULL) - st.st_mtime < 6 &&
             fscanf(f, "fps=%lf kb=%lf underruns=%u", &fps, &kb, &under) >= 2) {
-            snprintf(l, sizeof(l), "  %.0f fps %.0f KB/frame", fps, kb); oled_line(4, l);
-            snprintf(l, sizeof(l), "  audio drops %u", under); oled_line(5, l);
+            /* fixed widths: numbers changing length do not move the rest */
+            snprintf(l, sizeof(l), "  %3.0f fps %3.0f KB/frm", fps, kb); oled_line(4, l);
+            snprintf(l, sizeof(l), "  audio drops %5u", under); oled_line(5, l);
         }
         if (f) fclose(f);
     }
     busy = cpu_busy(); mem = mem_available_mb();
-    snprintf(l, sizeof(l), "CPU %d%%  RAM %ldM free", busy < 0 ? 0 : busy, mem < 0 ? 0 : mem); oled_line(6, l);
+    snprintf(l, sizeof(l), "CPU %3d%%  RAM %4ldM", busy < 0 ? 0 : busy, mem < 0 ? 0 : mem); oled_line(6, l);
     if (statvfs(getenv("PSPEXP_ROOT") ? getenv("PSPEXP_ROOT") : "/", &sv) == 0)
-        snprintf(l, sizeof(l), "Disk %lluM free %02d:%02d", (unsigned long long)sv.f_bavail * sv.f_frsize / (1024 * 1024), tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
+        snprintf(l, sizeof(l), "Free %5lluM    %02d:%02d", (unsigned long long)sv.f_bavail * sv.f_frsize / (1024 * 1024), tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
     else snprintf(l, sizeof(l), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
     oled_line(7, l);
     oled_flush();
@@ -1939,6 +1940,7 @@ int main(int argc, char **argv)
             last_try = now;
             if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; }   /* ignore buttons held while connecting */
         }
+        oled_status(connected, now);   /* before: while a game has the PSP we are not connected */
         if (!connected) continue;
 
         pspexp_pump(ctx, 0);
@@ -1966,7 +1968,6 @@ int main(int argc, char **argv)
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u) { last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1; }
-        oled_status(connected, now);
         if (g_view_launcher) {
             if (launcher_needs_frame(now) && pspexp_should_render(ctx)) {
                 launcher_render(ctx, now, 1);
