@@ -703,10 +703,11 @@ static void human_bytes(unsigned long long b, char *out, size_t n)
     else snprintf(out, n, "%llu MB", b / 1000000ull);
 }
 
-/* memory, counted as it is sold: in 1024s (24 GB, not 25.8) */
+/* memory, counted as it is sold: in 1024s (24 GB, not 25.8); GB from 1000 MB,
+ * since the kernel keeps some (a 1 GB GameShell has 1000 MB left) */
 static void human_mem(unsigned long long b, char *out, size_t n)
 {
-    if (b >= 1024ull * 1024 * 1024) snprintf(out, n, "%.1f GB", (double)b / (1024.0 * 1024 * 1024));
+    if (b >= 1000ull * 1024 * 1024) snprintf(out, n, "%.1f GB", (double)b / (1024.0 * 1024 * 1024));
     else snprintf(out, n, "%llu MB", b / (1024ull * 1024));
 }
 
