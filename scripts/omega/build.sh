@@ -229,11 +229,15 @@ if [ "$1" = "cavestory" ]; then
 fi
 if [ "$1" = "jazz" ]; then
 	# Jazz Jackrabbit (OpenJazz, scripts/packages/build-openjazz.sh): static,
-	# the SDL layer built in, every source seeing the rename header
+	# the SDL layer built in, every source seeing the rename header; music
+	# mixed at 22050 Hz with linear interpolation and no effects (the default
+	# 44.1 kHz spline + DSP starved the FPU-less CPU: stalls, broken sound),
+	# as OpenJazz's own PSP port does; the SDL layer upsamples for the PSP
 	P="$OUT/prefix"
 	[ -f "$P/lib/libSDL2.a" ] || "$ROOT/scripts/omega/build.sh" doom
 	shim_static
-	W="$OUT/openjazz" CC="$OUT/zcc" CXX="$OUT/zcxx" AR="$OUT/zar" SDLINC="$P/include/SDL2" CFLAGS_X="-include $REN" \
+	W="$OUT/openjazz" CC="$OUT/zcc" CXX="$OUT/zcxx" AR="$OUT/zar" SDLINC="$P/include/SDL2" \
+		CFLAGS_X="-include $REN -DSOUND_FREQ=22050 -DMUSIC_SETTINGS=1" \
 		OUTBIN="$OUT/bin/openjazz" LINK="-static $LIBS $P/lib/libSDL2.a -lm" \
 		"$ROOT/scripts/packages/build-openjazz.sh"
 fi
