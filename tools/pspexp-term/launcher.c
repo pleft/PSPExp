@@ -1322,7 +1322,7 @@ static void status_poll(uint64_t now)
                             while (fgets(line, sizeof(line), pp)) {
                                 int rssi;
                                 if (!strncmp(line, "RSSI", 4) && strchr(line, '=') && sscanf(strchr(line, '=') + 1, "%d", &rssi) == 1 && rssi < 0)
-                                    last = rssi >= -60 ? 3 : rssi >= -70 ? 2 : rssi >= -80 ? 1 : 0;
+                                    last = rssi >= -60 ? 3 : rssi >= -70 ? 2 : 1;   /* connected: at least one bar (0 is Wi-Fi off) */
                             }
                             pclose(pp);
                         }
