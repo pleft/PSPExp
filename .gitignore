@@ -10,3 +10,6 @@ PARAM.SFO
 psp/boot/EBOOT.PBP
 psp/transport-usb/exports.c
 PSPExpUSB.S
+
+# commercial ROMs for local testing: never committed, never on a card image
+/roms/
