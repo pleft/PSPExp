@@ -61,6 +61,7 @@ int main(void)
         board_wifi_connect_command(BOARD_WIFI_NM, &net, cmd, sizeof(cmd));
         CHECK(strstr(cmd, "'Bob'\\''s Wi-Fi'") != NULL);
         CHECK(strstr(cmd, "\"$PSPEXP_WIFI_PSK\"") != NULL);
+        CHECK(strstr(cmd, "|| { ") != NULL && strstr(cmd, "connection delete id 'Bob'\\''s Wi-Fi'") != NULL);
         board_wifi_connect_command(BOARD_WIFI_ONION, &net, cmd, sizeof(cmd));
         CHECK(strstr(cmd, "wifisetup add -ssid 'Bob'\\''s Wi-Fi' -encr psk2") != NULL);
         CHECK(strstr(cmd, "priority -ssid 'Bob'\\''s Wi-Fi' -move top") != NULL);

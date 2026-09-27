@@ -254,10 +254,11 @@ void board_wifi_connect_command(int kind, const BoardNet *net, char *cmd, size_t
     char q[200];
     squote(net->ssid, q, sizeof(q));
     if (kind == BOARD_WIFI_NM) {
-        if (net->secure)
-            snprintf(cmd, n, "%snmcli dev wifi connect %s password \"$PSPEXP_WIFI_PSK\"", geteuid() == 0 ? "" : "sudo -n ", q);
-        else
-            snprintf(cmd, n, "%snmcli dev wifi connect %s", geteuid() == 0 ? "" : "sudo -n ", q);
+        /* a failed join (a wrong password) leaves a profile NetworkManager
+         * cannot update, so every retry would fail too: drop it on failure */
+        const char *su = geteuid() == 0 ? "" : "sudo -n ";
+        snprintf(cmd, n, "%snmcli dev wifi connect %s%s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
+                 su, q, net->secure ? " password \"$PSPEXP_WIFI_PSK\"" : "", su, q);
     } else if (kind == BOARD_WIFI_ONION) {
         const char *encr = net->secure ? (net->encr[0] ? net->encr : "psk2") : "none";
         /* add, or edit when the network is already known; then first in line */
