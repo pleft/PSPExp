@@ -5,7 +5,9 @@
 # here (scripts/packages/build-simutrans.sh, from the 124.5 tag of
 # ../simutrans/simutrans); its base data (settings, texts, fonts, themes) from
 # the official 124.5 Linux release, its x86 program left out; pak64 124.4.
-# The analog nub is the mouse (cross: left button, circle: right).
+# The analog nub is the mouse (cross: left button, circle: right). Its desktop
+# is 640x362, shrunk to the PSP's 480x272 by the SDL layer: at 480x272 its
+# toolbars and windows crowd the screen.
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
@@ -39,7 +41,7 @@ title=Simutrans
 type=game
 description=Build a transport empire: trains, trucks, ships and planes
 icon=train-front
-exec=$RUN -set_basedir ./data -objects pak -screensize 480x272 -lang en
+exec=$RUN -set_basedir ./data -objects pak -screensize 640x362 -lang en
 env=PSPEXP_KEYS=$SIMUTRANS_KEYS
 env=PSPEXP_NUB=mouse
 pspexp=1
