@@ -39,7 +39,7 @@ static char g_term_path[FOPS_PATH];
 static int g_caret;
 
 /* what is on top of the panels */
-enum { O_NONE, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW };
+enum { O_NONE, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE };
 static int g_over;
 static int g_msel;                /* the menu's highlighted row */
 
@@ -57,6 +57,9 @@ static char g_msg[300], g_msg_title[64];
 enum { K_RENAME, K_MKDIR };
 static int g_kmode;
 static UiKbd g_kbd;
+
+/* the picture viewer: which entry of the active panel, its size */
+static int g_img_idx, g_img_w, g_img_h;
 
 /* the text viewer */
 static char **g_vlines; static int g_vn, g_vtop;
@@ -258,19 +261,55 @@ static int view_open(const char *path, const char *name)
     return 0;
 }
 
+static const char *icon_for(const FEntry *e);
+
+static int is_image(const FEntry *e) { return !e->is_dir && !strcmp(icon_for(e), "file-image"); }
+
+/* the picture at index i of the active panel, full screen */
+static int image_show(int i)
+{
+    Panel *p = act();
+    char path[FOPS_PATH];
+    fops_join(path, sizeof(path), p->path, p->list.e[i].name);
+    if (gfx_image_load(path, UI_SCREEN_W, UI_SCREEN_H, &g_img_w, &g_img_h) < 0) return -1;
+    g_img_idx = i;
+    p->sel = i;   /* back in the panel, the highlight is on the last one shown */
+    g_over = O_IMAGE;
+    g_dirty = 1;
+    return 0;
+}
+
+/* the next (d = 1) or previous (-1) picture in the folder, wrapping */
+static void image_step(int d)
+{
+    Panel *p = act();
+    int i = g_img_idx, k;
+    for (k = 0; k < p->list.n; k++) {
+        i = (i + d + p->list.n) % p->list.n;
+        if (is_image(&p->list.e[i]) && image_show(i) == 0) return;
+    }
+}
+
 /* a file is text by its name, or when its start has no NUL */
 static void open_file(Panel *p, const FEntry *e)
 {
     char path[FOPS_PATH];
     int r;
     fops_join(path, sizeof(path), p->path, e->name);
+    if (is_image(e)) {
+        if (image_show((int)(e - p->list.e)) == 0) return;
+        snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
+        snprintf(g_msg, sizeof(g_msg), "This picture could not be read (PNG, JPEG, GIF, BMP and TGA can).");
+        g_over = O_MESSAGE;
+        return;
+    }
     r = view_open(path, e->name);
     if (r == 0) return;
     snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
     if (r > 0) {
         char sz[32];
         fops_human(e->size, sz, sizeof(sz));
-        snprintf(g_msg, sizeof(g_msg), "Not a text file (%s). Images, ROMs and packages will open here later.", sz);
+        snprintf(g_msg, sizeof(g_msg), "Not a text file (%s). ROMs and packages will open here later.", sz);
     } else snprintf(g_msg, sizeof(g_msg), "Cannot read it: %s", strerror(errno));
     g_over = O_MESSAGE;
 }
@@ -412,6 +451,11 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         g_dirty = 1;
         return;
     }
+    case O_IMAGE:
+        if (left) image_step(-1);
+        if (right) image_step(1);
+        if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS)) { gfx_image_free(); g_over = O_NONE; g_dirty = 1; }
+        return;
     case O_VIEW: {
         int page = 14;
         if (up && g_vtop > 0) g_vtop--;
@@ -601,6 +645,28 @@ void files_render(PspExpContext *ctx, uint64_t now)
     gfx_backdrop();
     if (g_over == O_KBD) {
         ui_kbd_draw(&g_kbd, g_kmode == K_MKDIR ? "folder-plus" : "pencil", g_kmode == K_MKDIR ? "New folder" : "Rename", "Type a name", g_caret, 255);
+        pspexp_present(ctx);
+        g_dirty = 0;
+        return;
+    }
+    if (g_over == O_IMAGE) {
+        Panel *p = act();
+        int w, h, i, n = 0, at = 0;
+        char info[96];
+        gfx_rect(0, 0, UI_SCREEN_W, UI_SCREEN_H, 0x000000, 255);
+        gfx_image_size(&w, &h);
+        gfx_image_draw((UI_SCREEN_W - w) / 2, (UI_SCREEN_H - h) / 2);
+        for (i = 0; i < p->list.n; i++) if (is_image(&p->list.e[i])) { n++; if (i == g_img_idx) at = n; }
+        /* the name and where it is, on a band over the top */
+        gfx_rect(0, 0, UI_SCREEN_W, 22, 0x000000, 150);
+        gfx_icon("file-image", 12, 8, 5, UI_ACCENT, 255);
+        gfx_text(FONT_SMALL, 26, 3, p->list.e[g_img_idx].name, UI_TEXT, 255, 300);
+        snprintf(info, sizeof(info), "%d / %d   %d x %d", at, n, g_img_w, g_img_h);
+        gfx_text(FONT_SMALL, UI_SCREEN_W - 8 - gfx_text_width(FONT_SMALL, info), 3, info, UI_SUB, 255, 0);
+        gfx_rect(0, UI_HINT_Y - 4, UI_SCREEN_W, UI_SCREEN_H - UI_HINT_Y + 4, 0x000000, 150);
+        x = 16;
+        if (n > 1) x = ui_hint_cap(x, "LEFT/RIGHT", "Previous / next", UI_SUB);
+        x = ui_hint_btn(x, 'o', "Close");
         pspexp_present(ctx);
         g_dirty = 0;
         return;

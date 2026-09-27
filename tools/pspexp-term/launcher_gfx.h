@@ -60,6 +60,14 @@ void gfx_button(char which, int x, int y);
 int  gfx_cover(const CoverSpec *c, int x, int y, int alpha);
 void gfx_cover_forget(const char *key);
 
+/* one picture at a time, for full-screen viewing: decoded, fitted inside
+ * max_w x max_h (box-filtered, dithered to 5650) and kept on the PSP; its
+ * size before fitting in *w, *h. 0 or -1 */
+int  gfx_image_load(const char *path, int max_w, int max_h, int *w, int *h);
+void gfx_image_draw(int x, int y);
+void gfx_image_size(int *w, int *h);   /* as shown */
+void gfx_image_free(void);
+
 uint32_t gfx_hash(const char *s);
 
 #endif

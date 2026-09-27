@@ -16,6 +16,9 @@
 #define STB_IMAGE_STATIC
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
+#define STBI_ONLY_GIF
+#define STBI_ONLY_BMP
+#define STBI_ONLY_TGA
 #define STBI_NO_STDIO
 #define STBI_NO_LINEAR
 #define STBI_NO_HDR
@@ -33,6 +36,7 @@
 #define ID_ICON       3000 /* + slot */
 #define ICON_SLOTS    96
 #define ID_COVER      4000 /* + pool index */
+#define ID_IMAGE      5000 /* + 0..3: the picture shown full screen, in tiles */
 #define COVER_SLOTS   10
 #define COVER_IDS     32
 
@@ -534,6 +538,95 @@ void gfx_backdrop(void)
             q.u1 = (uint16_t)w; q.v1 = (uint16_t)h; q.color = 0xFFFF;
             pspexp_draw_quad_ex_batch(G, (uint16_t)(ID_BACKDROP + ty * 2 + tx), &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
         }
+}
+
+/* ---- a picture, full screen (the file manager) ------------------------------------------------------- */
+
+static int g_img_w, g_img_h, g_img_tiles;
+
+int gfx_image_load(const char *path, int max_w, int max_h, int *out_w, int *out_h)
+{
+    uint8_t *file, *img;
+    size_t len;
+    int w, h, n, dw, dh, tx, ty, x, y;
+    gfx_image_free();
+    if (read_file(path, &file, &len) < 0) return -1;
+    img = stbi_load_from_memory(file, (int)len, &w, &h, &n, 3);
+    free(file);
+    if (!img) return -1;
+    if (out_w) *out_w = w;
+    if (out_h) *out_h = h;
+    /* larger than the screen: fitted, box-filtered; smaller: the largest whole
+     * enlargement that fits (up to 8x), so pixel art stays crisp */
+    if (w > max_w || h > max_h) {
+        if ((long)w * max_h >= (long)h * max_w) { dw = max_w; dh = (int)((long)max_w * h / w); } else { dh = max_h; dw = (int)((long)max_h * w / h); }
+    } else {
+        int k = max_w / w < max_h / h ? max_w / w : max_h / h;
+        if (k > 8) k = 8;
+        if (k < 1) k = 1;
+        dw = w * k; dh = h * k;
+    }
+    if (dw < 1) dw = 1;
+    if (dh < 1) dh = 1;
+    /* up to 2 x 2 tiles of 256 x 256 (the PSP's textures are at most 512 a side) */
+    for (ty = 0; ty < 2; ty++)
+        for (tx = 0; tx < 2; tx++) {
+            int x0 = tx * 256, y0 = ty * 256, tw = dw - x0 > 256 ? 256 : dw - x0, th = dh - y0 > 256 ? 256 : dh - y0;
+            PspExpTextureDesc d;
+            PspExpFrame f;
+            uint16_t *dst;
+            if (tw <= 0 || th <= 0) continue;
+            memset(&d, 0, sizeof(d));
+            d.width = (uint16_t)pow2(tw); d.height = (uint16_t)pow2(th); d.format = PSPEXP_TEX_5650;
+            d.layout = PSPEXP_LAYOUT_LINEAR; d.priority = PSPEXP_PRIORITY_NORMAL;
+            /* one frame, 64 wide at most (the GE's strips); drawn by texture coordinates */
+            f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw > 64 ? 64 : tw); f.h = (uint16_t)th;
+            dst = (uint16_t *)pspexp_upload_texture_begin(G, (uint16_t)(ID_IMAGE + ty * 2 + tx), &d, (uint32_t)(d.width * d.height * 2), &f, 1);
+            if (!dst) continue;
+            memset(dst, 0, (size_t)d.width * d.height * 2);
+            for (y = 0; y < th; y++)
+                for (x = 0; x < tw; x++) {
+                    int X = x0 + x, Y = y0 + y;
+                    int sx0 = X * w / dw, sx1 = (X + 1) * w / dw, sy0 = Y * h / dh, sy1 = (Y + 1) * h / dh, i, j, cnt = 0;
+                    float acc[3] = { 0, 0, 0 };
+                    if (sx1 <= sx0) sx1 = sx0 + 1;
+                    if (sy1 <= sy0) sy1 = sy0 + 1;
+                    if (sx1 > w) sx1 = w;
+                    if (sy1 > h) sy1 = h;
+                    for (j = sy0; j < sy1; j++) for (i = sx0; i < sx1; i++) { const uint8_t *p = img + ((size_t)j * w + i) * 3; acc[0] += p[0]; acc[1] += p[1]; acc[2] += p[2]; cnt++; }
+                    if (!cnt) cnt = 1;
+                    dst[y * d.width + x] = dither5650(acc[0] / cnt / 255.0f, acc[1] / cnt / 255.0f, acc[2] / cnt / 255.0f, X, Y);
+                }
+            pspexp_upload_texture_commit(G, 1);
+            g_img_tiles |= 1 << (ty * 2 + tx);
+        }
+    stbi_image_free(img);
+    g_img_w = dw; g_img_h = dh;
+    return 0;
+}
+
+void gfx_image_draw(int x, int y)
+{
+    int t;
+    for (t = 0; t < 4; t++) {
+        PspExpQuadExRec q;
+        int x0 = (t & 1) * 256, y0 = (t >> 1) * 256;
+        if (!(g_img_tiles & (1 << t))) continue;
+        memset(&q, 0, sizeof(q));
+        q.x = (int16_t)(x + x0); q.y = (int16_t)(y + y0);
+        q.w = (int16_t)(g_img_w - x0 > 256 ? 256 : g_img_w - x0); q.h = (int16_t)(g_img_h - y0 > 256 ? 256 : g_img_h - y0);
+        q.u1 = (uint16_t)q.w; q.v1 = (uint16_t)q.h; q.color = 0xFFFF;
+        pspexp_draw_quad_ex_batch(G, (uint16_t)(ID_IMAGE + t), &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
+    }
+}
+
+void gfx_image_size(int *w, int *h) { *w = g_img_w; *h = g_img_h; }
+
+void gfx_image_free(void)
+{
+    int t;
+    for (t = 0; t < 4; t++) if (g_img_tiles & (1 << t)) pspexp_release(G, (uint16_t)(ID_IMAGE + t));
+    g_img_tiles = 0; g_img_w = g_img_h = 0;
 }
 
 /* ---- covers ----------------------------------------------------------------------------------------- */
