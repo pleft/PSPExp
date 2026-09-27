@@ -453,10 +453,39 @@ example Nova the Squirrel, GPL-3.0).
 
 ### 6.4 Status (2026-09-27)
 
-Tested on the Mac with the stand-in PSP: FCEUmm plays Nova the Squirrel at
-60 fps, 256-colour pages, correct colours and aspect; the full launcher flow
-works (NES tile, ROM list, start, leave, the launcher takes the PSP back).
-The Omega2+ player and package build. Not yet run on a board or on the real
-PSP: the GameShell and Pi builds need the boards on. Next systems: Game Boy
-and Game Boy Color (Gambatte), GBA (mGBA), SNES (Snes9x), Mega Drive
-(Genesis Plus GX); on the Omega probably only NES and Game Boy.
+Played on the Omega2+ with the real PSP over USB (the hardest board:
+580 MHz MIPS, no FPU):
+
+| System, core | Result | Setting |
+|---|---|---|
+| NES, QuickNES | full-speed game and sound, a steady 30 fps picture (20-28 while scrolling), a few audio clicks a minute; playable | 30 fps (VIDEO_DIV 2), CLUT8 pages |
+| Game Boy / Color, Gambatte | 59-60 fps, 56-59 shown, CPU half idle | 60 fps |
+| Mega Drive, PicoDrive | Sonic: 33 fps emulation, ~7 shown: unplayable | not for the Omega |
+| SNES, Snes9x 2005 | expected like the Mega Drive | not for the Omega |
+
+What was learned there:
+
+- **FCEUmm is too heavy for the Omega** (about 25 ms a frame with Super
+  Mario Bros.); QuickNES takes about half, so the NES package uses QuickNES.
+- **Sound first.** A frame the board cannot draw in time is still run (the
+  core is told it will not be shown), so the game's speed and sound hold and
+  only the picture gets choppier.
+- **A steady 30 fps beats a swinging one.** Letting the picture drop only
+  when needed made it swing between 60 and 12 fps while scrolling; drawing
+  every second frame on purpose (`PSPEXP_RETRO_VIDEO_DIV=2`, set in the
+  Omega's NES, SNES and Mega Drive entries) plays better.
+- **Keep CLUT8 on the Omega for the NES.** 16-bit pages doubled the bytes
+  (88-133 KB a frame while scrolling) and USB transfers cost the Omega more
+  CPU than the indexing: 48-54 fps emulation instead of 60, hundreds of audio
+  underruns.
+- **RGB565 cores go through a 16-bit shadow** in the SDL layer now (QuickNES,
+  most cores): no conversion to 32 bits before comparing.
+- **Keys, not a virtual joystick.** The Omega's static SDL has no virtual
+  joysticks, and events pushed into SDL never reach its keyboard state
+  table: the player follows key events, and every `.system` maps the PSP's
+  buttons to its keys (`PSPEXP_KEYS`).
+
+Compression was considered for the Omega and left for Wi-Fi: over USB a
+scrolling NES frame costs it about 3 ms to send, and compressing it would
+cost about as much. Next: the GameShell and the Pi, where SNES and Mega
+Drive belong.

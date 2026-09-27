@@ -69,4 +69,10 @@ env=PSPEXP_NUB=keys
 thumbs=$6
 pspexp=1
 S
+	# the Omega2+ cannot move 60 whole NES-sized frames a second to the PSP
+	# (texture work and USB cost its CPU ~20 ms a frame when a game scrolls):
+	# a steady 30 fps picture, the game and its sound at full speed. Recipes
+	# with small screens set OMEGA_VIDEO_DIV=1 (the Game Boy's 160x144 keeps up)
+	[ "$BOARD" = omega ] && [ "${OMEGA_VIDEO_DIV:-2}" -gt 1 ] && echo "env=PSPEXP_RETRO_VIDEO_DIV=${OMEGA_VIDEO_DIV:-2}" >> "$1/systems/$2.system"
+	return 0
 }

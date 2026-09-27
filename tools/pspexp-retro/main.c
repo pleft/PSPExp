@@ -21,6 +21,13 @@
  *   - frames the core repeats (dupes) are not updated at all, and the SDL
  *     layer sends only the texture pages that changed, as CLUT8 when a page
  *     has at most 256 colours (8- and 16-bit machines nearly always do);
+ *   - sound first: the core runs at its own speed, and when the board cannot
+ *     keep up, frames are run without being drawn (the core is told, so it
+ *     can skip its own drawing too): the picture gets choppier, the sound
+ *     stays whole;
+ *     PSPEXP_RETRO_VIDEO_DIV=N draws only every Nth frame on purpose (2 on
+ *     the Omega2+: a steady 30 fps picture, the game and sound at 60,
+ *     instead of a picture that swings between smooth and choppy);
  *   - sound resampled here to 44.1 kHz stereo, the PSP's rate (integer
  *     linear interpolation: no floating point per sample for FPU-less
  *     boards), through an SDL audio callback paced by the SDL layer's clock;
@@ -175,11 +182,16 @@ static struct {
     /* input */
     SDL_GameController *pad;
     uint16_t buttons;                 /* RETRO_DEVICE_ID_JOYPAD_* bits */
+    uint16_t keys;                    /* the same, from key events (see key_event) */
     /* paths */
     char system_dir[PATH_MAX], save_dir[PATH_MAX], srm_path[PATH_MAX], core_name[64];
     /* options: key, default (first value), override */
     struct { char key[96], def[96], val[96]; } opt[256]; int nopt;
     int running;
+    int skip_video;                   /* this core frame is not shown (frame skip) */
+    int video_div;                    /* show every Nth frame (PSPEXP_RETRO_VIDEO_DIV, default 1) */
+    /* stats, every 5 s: frames run / shown, core and present time */
+    unsigned st_run, st_shown; Uint64 st_core, st_present, st_t0;
 } P;
 
 /* ---- options ---------------------------------------------------------------- */
@@ -298,7 +310,9 @@ static bool environment(unsigned cmd, void *data)
     case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: *(unsigned *)data = 0; return true;   /* cores fall back to SET_VARIABLES */
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
     case RETRO_ENVIRONMENT_GET_LANGUAGE: *(unsigned *)data = RETRO_LANGUAGE_ENGLISH; return true;
-    case RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE: if (data) *(int *)data = 3; return true;
+    case RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE:   /* bit 0 video, bit 1 audio: skipped frames need no picture */
+        if (data) *(int *)data = P.skip_video ? 2 : 3;
+        return true;
     case RETRO_ENVIRONMENT_GET_FASTFORWARDING: if (data) *(bool *)data = false; return true;
     case RETRO_ENVIRONMENT_SET_GEOMETRY: set_geometry((const struct retro_game_geometry *)data); return true;
     case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO:
@@ -346,7 +360,7 @@ static void make_texture(int w, int h)
 static void video_refresh(const void *data, unsigned width, unsigned height, size_t pitch)
 {
     SDL_Rect r;
-    if (!data || data == RETRO_HW_FRAME_BUFFER_VALID) return;   /* a dupe: the texture already holds it */
+    if (!data || data == RETRO_HW_FRAME_BUFFER_VALID || P.skip_video) return;   /* a dupe or a skipped frame */
     if ((int)width > P.tex_w || (int)height > P.tex_h) make_texture((int)width, (int)height);
     r.x = 0; r.y = 0; r.w = (int)width; r.h = (int)height;
     SDL_UpdateTexture(P.tex, &r, data, (int)pitch);
@@ -456,22 +470,33 @@ static void audio_rate_control(double backlog)
 
 /* ---- input ------------------------------------------------------------------ */
 
+/* Keys are followed through their events, not SDL_GetKeyboardState: events
+ * pushed from outside (the SDL layer's PSPEXP_KEYS, the PSP's buttons) never
+ * reach SDL's keyboard state table. */
+static void key_event(SDL_Keycode sym, int down)
+{
+    int id;
+    switch (sym) {
+    case SDLK_UP: id = RETRO_DEVICE_ID_JOYPAD_UP; break;
+    case SDLK_DOWN: id = RETRO_DEVICE_ID_JOYPAD_DOWN; break;
+    case SDLK_LEFT: id = RETRO_DEVICE_ID_JOYPAD_LEFT; break;
+    case SDLK_RIGHT: id = RETRO_DEVICE_ID_JOYPAD_RIGHT; break;
+    case SDLK_x: id = RETRO_DEVICE_ID_JOYPAD_A; break;
+    case SDLK_z: id = RETRO_DEVICE_ID_JOYPAD_B; break;
+    case SDLK_s: id = RETRO_DEVICE_ID_JOYPAD_X; break;
+    case SDLK_a: id = RETRO_DEVICE_ID_JOYPAD_Y; break;
+    case SDLK_q: id = RETRO_DEVICE_ID_JOYPAD_L; break;
+    case SDLK_w: id = RETRO_DEVICE_ID_JOYPAD_R; break;
+    case SDLK_RETURN: id = RETRO_DEVICE_ID_JOYPAD_START; break;
+    case SDLK_RSHIFT: id = RETRO_DEVICE_ID_JOYPAD_SELECT; break;
+    default: return;
+    }
+    if (down) P.keys |= (uint16_t)(1u << id); else P.keys &= (uint16_t)~(1u << id);
+}
+
 static void input_poll(void)
 {
-    const Uint8 *k = SDL_GetKeyboardState(NULL);
-    uint16_t b = 0;
-    if (k[SDL_SCANCODE_UP]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_UP;
-    if (k[SDL_SCANCODE_DOWN]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_DOWN;
-    if (k[SDL_SCANCODE_LEFT]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_LEFT;
-    if (k[SDL_SCANCODE_RIGHT]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_RIGHT;
-    if (k[SDL_SCANCODE_X]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_A;
-    if (k[SDL_SCANCODE_Z]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_B;
-    if (k[SDL_SCANCODE_S]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_X;
-    if (k[SDL_SCANCODE_A]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_Y;
-    if (k[SDL_SCANCODE_Q]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_L;
-    if (k[SDL_SCANCODE_W]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_R;
-    if (k[SDL_SCANCODE_RETURN]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_START;
-    if (k[SDL_SCANCODE_RSHIFT]) b |= 1u << RETRO_DEVICE_ID_JOYPAD_SELECT;
+    uint16_t b = P.keys;
     if (P.pad) {
         static const struct { SDL_GameControllerButton sdl; unsigned id; } map[] = {
             /* SDL names positions (A = bottom); the RetroPad names Nintendo's (B = bottom) */
@@ -608,6 +633,8 @@ int main(int argc, char **argv)
         snprintf(P.srm_path, sizeof(P.srm_path), "%s/%.*s.srm", P.save_dir, (int)(dot ? dot - rb : (long)strlen(rb)), rb);
     }
     P.square_pixels = getenv("PSPEXP_RETRO_ASPECT") && !strcmp(getenv("PSPEXP_RETRO_ASPECT"), "pixel");
+    P.video_div = getenv("PSPEXP_RETRO_VIDEO_DIV") ? atoi(getenv("PSPEXP_RETRO_VIDEO_DIV")) : 1;
+    if (P.video_div < 1 || P.video_div > 4) P.video_div = 1;
     P.pixfmt = RETRO_PIXEL_FORMAT_0RGB1555;   /* the libretro default */
 
     opt_load_overrides();
@@ -670,18 +697,61 @@ int main(int argc, char **argv)
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) P.running = 0;
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) P.running = 0;
+            else if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) key_event(e.key.keysym.sym, e.type == SDL_KEYDOWN);
             else if (e.type == SDL_CONTROLLERDEVICEADDED) pad_open();
             else if (e.type == SDL_CONTROLLERDEVICEREMOVED && P.pad && !SDL_GameControllerGetAttached(P.pad)) { SDL_GameControllerClose(P.pad); P.pad = NULL; }
         }
-        C.run();
-        backlog = audio_backlog();
-        if (backlog < 0.5) { C.run(); backlog = audio_backlog(); }   /* a stall: catch up one frame (not shown) */
-        audio_rate_control(backlog);
-        present();
+        /* behind the core's clock by more than a frame: run frames without
+         * drawing them (at most 3 in a row, so something is shown) */
+        {
+            int skipped = 0;
+            Uint64 t = SDL_GetPerformanceCounter(), t1;
+            Uint64 frame = (Uint64)((double)freq / P.fps);
+            while (t > next + frame && skipped < 3 && !getenv("PSPEXP_RETRO_NOSKIP")) {
+                P.skip_video = 1;
+                C.run();
+                P.skip_video = 0;
+                next += frame;
+                skipped++;
+                P.st_run++;
+                t1 = SDL_GetPerformanceCounter();
+                P.st_core += t1 - t;
+                t = t1;
+            }
+            /* the frames in between that are never drawn (VIDEO_DIV) */
+            {
+                int k;
+                for (k = 1; k < P.video_div; k++) {
+                    P.skip_video = 1;
+                    C.run();
+                    P.skip_video = 0;
+                    next += frame;
+                    P.st_run++;
+                }
+            }
+            C.run();
+            backlog = audio_backlog();
+            if (backlog < 0.5) { C.run(); backlog = audio_backlog(); P.st_run++; }   /* a stall: catch up one frame */
+            audio_rate_control(backlog);
+            P.st_run++;
+            now = SDL_GetPerformanceCounter();
+            P.st_core += now - t;
+            present();
+            P.st_shown++;
+            P.st_present += SDL_GetPerformanceCounter() - now;
+        }
         next += (Uint64)((double)freq / P.fps);
         now = SDL_GetPerformanceCounter();
         if (now < next) SDL_Delay((Uint32)((next - now) * 1000 / freq));
         else if (now - next > freq / 4) next = now;   /* fell far behind (a stall): do not race to catch up */
+        if (now - P.st_t0 > 5 * freq) {
+            double secs = (double)(now - P.st_t0) / (double)freq;
+            if (P.st_t0)
+                fprintf(stderr, "pspexp-retro: %.1f core fps, %.1f shown, core %.1f ms/frame, present %.1f ms, audio underruns %u\n",
+                        P.st_run / secs, P.st_shown / secs, P.st_run ? (double)P.st_core * 1000.0 / freq / P.st_run : 0.0,
+                        P.st_shown ? (double)P.st_present * 1000.0 / freq / P.st_shown : 0.0, P.underruns);
+            P.st_t0 = now; P.st_run = P.st_shown = 0; P.st_core = P.st_present = 0;
+        }
         if (SDL_GetTicks() - last_save > 10000) { srm_save(); last_save = SDL_GetTicks(); }
     }
 

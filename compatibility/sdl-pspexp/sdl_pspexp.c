@@ -135,6 +135,7 @@ typedef struct Tex {
     int w, h;
     uint32_t *rgba;            /* shadow: ABGR8888 (R in the low byte), or ARGB8888 when argb */
     int argb;                  /* the shadow is in the game's ARGB8888: no conversion to compare */
+    int shadow16;              /* the shadow is the game's RGB565, 2 bytes a pixel (emulators' usual output) */
     int dirty, unsupported, streaming;   /* streaming: re-uploaded often, small pages */
     int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
     TargetOp *ops; int nops;
@@ -613,7 +614,31 @@ static int upload_page(Tex *x, Page *p, int opaque)
             } \
         } \
     }
-    if (x->argb) {   /* ARGB8888: B in the low byte */
+#define PAGE_LOOP16(CONV) \
+    for (y = 0; y < p->h; y++) { \
+        const uint16_t *src = (const uint16_t *)x->rgba + (size_t)(p->y0 + y) * x->w + p->x0; \
+        uint16_t *o = g_px16 + (size_t)y * p->w; \
+        uint8_t *oi = g_idx8 + (size_t)y * p->w; \
+        for (xx = 0; xx < p->w; xx++) { \
+            uint32_t c = src[xx]; \
+            uint16_t c16 = (uint16_t)(CONV); \
+            o[xx] = c16; \
+            if (!over) { \
+                if (c16 != last) { \
+                    if (g_stamp[c16] != g_gen) { \
+                        if (npal == 256) { over = 1; continue; } \
+                        g_stamp[c16] = g_gen; g_index[c16] = (uint8_t)npal; pal[npal++] = c16; \
+                    } \
+                    last = c16; lasti = g_index[c16]; \
+                } \
+                oi[xx] = lasti; \
+            } \
+        } \
+    }
+    if (x->shadow16) {   /* RGB565 (R high): the PSP's 5650 has R low, a swap */
+        if (opaque) PAGE_LOOP16(((c & 0x1Fu) << 11) | (c & 0x07E0u) | (c >> 11))
+        else PAGE_LOOP16((c >> 12) | (((c >> 7) & 0xFu) << 4) | (((c >> 1) & 0xFu) << 8) | 0xF000u)
+    } else if (x->argb) {   /* ARGB8888: B in the low byte */
         if (opaque) PAGE_LOOP(((c >> 19) & 0x1Fu) | (((c >> 10) & 0x3Fu) << 5) | (((c >> 3) & 0x1Fu) << 11))
         else PAGE_LOOP(((c >> 20) & 0xFu) | (((c >> 12) & 0xFu) << 4) | (((c >> 4) & 0xFu) << 8) | (((c >> 28) & 0xFu) << 12))
     } else {         /* ABGR8888: R in the low byte */
@@ -621,6 +646,7 @@ static int upload_page(Tex *x, Page *p, int opaque)
         else PAGE_LOOP(((c >> 4) & 0xFu) | (((c >> 12) & 0xFu) << 4) | (((c >> 20) & 0xFu) << 8) | (((c >> 28) & 0xFu) << 12))
     }
 #undef PAGE_LOOP
+#undef PAGE_LOOP16
     t8 = try8 && !over;
     if (p->pal) { pspexp_release(S.ctx, p->pal); p->pal = 0; }
     if (t8) {
@@ -742,6 +768,31 @@ static void shadow_store(Tex *x, const SDL_Rect *r, const uint32_t *px, int spit
     }
 }
 
+/* shadow_store for a 16-bit shadow */
+static void shadow_store16(Tex *x, const SDL_Rect *r, const uint16_t *px, int spitch)
+{
+    int y, c, row = 0;
+    uint16_t *sh = (uint16_t *)x->rgba;
+    page_grid(x);
+    if (x->npages_grid_changed) x->dirty = 1;
+    for (y = 0; y < r->h; y++) {
+        const uint16_t *src = px + (size_t)y * spitch;
+        uint16_t *dst = sh + (size_t)(r->y + y) * x->w;
+        int yy = r->y + y;
+        while (row + 1 < x->nrow && yy >= x->ry[row + 1]) row++;
+        for (c = 0; c < x->ncol; c++) {
+            int a0 = x->cx[c] > r->x ? x->cx[c] : r->x;
+            int a1 = x->cx[c + 1] < r->x + r->w ? x->cx[c + 1] : r->x + r->w;
+            if (a0 >= a1) continue;
+            if (memcmp(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 2)) {
+                int bit = row * x->ncol + c;
+                memcpy(dst + a0, src + (a0 - r->x), (size_t)(a1 - a0) * 2);
+                if (bit < 32) x->pdirty |= 1u << bit; else x->dirty = 1;
+            }
+        }
+    }
+}
+
 static uint32_t *g_conv; static size_t g_conv_n;
 static void shadow_update_(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch);
 /* the game's new pixels into the shadow; its CPU time counts as texture work */
@@ -762,6 +813,28 @@ static void shadow_update_(Tex *x, const SDL_Rect *rect, Uint32 format, const vo
      * then nothing is converted before comparing (a whole-texture update can
      * switch the layout; it re-sends every page anyway) */
     whole = r.x == 0 && r.y == 0 && r.w == x->w && r.h == x->h;
+    /* RGB565 in, RGB565 kept: half the bytes to compare, no conversion */
+    if (whole && format == SDL_PIXELFORMAT_RGB565 && !x->shadow16) { x->shadow16 = 1; x->argb = 0; x->dirty = 1; }
+    else if (whole && format != SDL_PIXELFORMAT_RGB565 && x->shadow16) { x->shadow16 = 0; x->dirty = 1; }
+    if (x->shadow16) {
+        uint16_t *sh = (uint16_t *)x->rgba;
+        const uint16_t *src = (const uint16_t *)pixels;
+        int sp = pitch / 2;
+        if (format != SDL_PIXELFORMAT_RGB565 || (pitch & 1)) {   /* another format into a 565 shadow */
+            if (n * 2 > g_conv_n * 4) {
+                uint32_t *b = (uint32_t *)realloc(g_conv, n * 2 + 4);
+                if (!b) return;
+                g_conv = b; g_conv_n = n / 2 + 1;
+            }
+            SDL_ConvertPixels(r.w, r.h, format, pixels, pitch, SDL_PIXELFORMAT_RGB565, g_conv, r.w * 2);
+            src = (const uint16_t *)g_conv; sp = r.w;
+        }
+        if (S.no_delta || x->dirty) {
+            for (y = 0; y < r.h; y++) memcpy(sh + (size_t)(r.y + y) * x->w + r.x, src + (size_t)y * sp, (size_t)r.w * 2);
+            x->dirty = 1;
+        } else shadow_store16(x, &r, src, sp);
+        return;
+    }
     want = x->argb ? SDL_PIXELFORMAT_ARGB8888 : SDL_PIXELFORMAT_ABGR8888;
     if (whole && (format == SDL_PIXELFORMAT_ARGB8888 || format == SDL_PIXELFORMAT_ABGR8888) && format != want) {
         want = format;
@@ -1291,7 +1364,7 @@ HOOK(SDL_Texture *, SDL_CreateTextureFromSurface, (SDL_Renderer *r, SDL_Surface 
             SDL_Surface *conv = SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_ABGR8888, 0);
             if (conv) {
                 int y;
-                x->argb = 0;
+                x->argb = 0; x->shadow16 = 0;
                 for (y = 0; y < surf->h; y++)
                     memcpy(x->rgba + (size_t)y * surf->w, (const Uint8 *)conv->pixels + (size_t)y * conv->pitch, (size_t)surf->w * 4);
                 SDL_FreeSurface(conv);
@@ -1662,7 +1735,7 @@ static void stream_surface(SDL_Window *win)
         x->w = surf->w; x->h = surf->h;
         shadow_update(x, &all, surf->format->format, surf->pixels, surf->pitch);
     } else {
-        x->argb = 0;
+        x->argb = 0; x->shadow16 = 0;
         SDL_ConvertPixels(surf->w, surf->h, surf->format->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ABGR8888, x->rgba, surf->w * 4);
     }
     if (SDL_MUSTLOCK(surf)) SDL_UnlockSurface(surf);
