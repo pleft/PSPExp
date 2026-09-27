@@ -27,7 +27,8 @@
  *          PSPExp SDL executor in a second window, for checking the stream)
  *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons ("return+y": both)
  *   (holding START + SELECT leaves any game: SDL_QUIT after 1 s, exit after 2 s)
- *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows)
+ *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows; mouse: the nub moves
+ *                                             a pointer drawn on the PSP, cross/circle click)
  *   PSPEXP_WINDOW=hide                        hide the program's own window
  *   PSPEXP_FOCUS=host                         let the game see host focus loss (default: hidden)
  *   PSPEXP_LOCAL_AUDIO=0                      silence the host's audio device
@@ -187,7 +188,7 @@ static struct {
      * clock (headless hosts: SDL's dummy driver runs slow and jittery) */
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
-    int nub_mouse, nub_keys, hide_window; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
+    int nub_mouse, nub_keys, hide_window, cursor_hidden; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     SDL_Keycode keys[16][3];           /* up to three keys per PSP button ("return+y") */
     Uint32 quit_hold; int quit_sent;   /* START + SELECT held: leave the game */
     int vjoy;                          /* virtual joystick device index, -1 none */
@@ -1397,7 +1398,7 @@ static void feed_input(void)
 HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, int h, Uint32 flags))
 {
     SDL_Window *win = REAL(SDL_CreateWindow)(title, x, y, w, h, flags);
-    if (win && !S.win) { S.win = win; S.win_w = w; S.win_h = h; }
+    if (win && !S.win) { S.win = win; S.win_w = w; S.win_h = h; S.px = w / 2.0f; S.py = h / 2.0f; }   /* the pointer starts centred */
     return win;
 }
 
@@ -1748,6 +1749,31 @@ static void service_link(void)
     audio_drain();
 }
 
+/* PSPEXP_NUB=mouse: the PSP shows no host cursor, so the pointer is drawn
+ * here on top of the frame (an arrow, black edge, white inside), while the
+ * program has not hidden its cursor */
+HOOK(int, SDL_ShowCursor, (int toggle))
+{
+    if (toggle == SDL_ENABLE) S.cursor_hidden = 0;
+    else if (toggle == SDL_DISABLE) S.cursor_hidden = 1;
+    return REAL(SDL_ShowCursor)(toggle);
+}
+
+static void draw_pointer(void)
+{
+    int r, x, y, ww = S.win_w > 0 ? S.win_w : 480, wh = S.win_h > 0 ? S.win_h : 272;
+    const uint16_t black = pspexp_color_5650(0, 0, 0), white = pspexp_color_5650(255, 255, 255);
+    x = S.ox + (int)lroundf(S.px * (480 - 2 * S.ox) / (float)ww);
+    y = S.oy + (int)lroundf(S.py * (272 - 2 * S.oy) / (float)wh);
+    pspexp_set_clip(S.ctx, 0, 0, 480, 272);
+    S.clip_sent = 0;   /* the program's clip again next frame */
+    for (r = 0; r < 12; r++) {
+        int len = r < 9 ? r * 2 / 3 + 1 : (11 - r) * 2 + 1;   /* widening, then the notch */
+        pspexp_fill_rect(S.ctx, (int16_t)x, (int16_t)(y + r), (int16_t)(len + 1), 1, black, 255);
+        if (len > 1 && r < 11) pspexp_fill_rect(S.ctx, (int16_t)(x + 1), (int16_t)(y + r), (int16_t)(len - 1), 1, white, 255);
+    }
+}
+
 static void end_frame(void)
 {
     if (!S.active) return;
@@ -1759,6 +1785,7 @@ static void end_frame(void)
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
     flush_quads();
+    if (S.nub_mouse && !S.cursor_hidden) draw_pointer();
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();

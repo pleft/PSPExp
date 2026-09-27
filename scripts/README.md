@@ -24,10 +24,11 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
 packages/          what the launcher offers, for any board
   pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=)
   recipes/           one recipe per package: freedoom, opentyrian, cavestory, jazz,
-                     nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
+                     simutrans, nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
   art/               the games' 128x128 launcher pictures (sources and licenses in its README)
   build-nxengine.sh  Cave Story's engine and its libraries, cross-compiled with Zig
   build-openjazz.sh  Jazz Jackrabbit's engine (OpenJazz) and its bundled libraries, the same way
+  build-simutrans.sh Simutrans with zlib, libpng, bzip2 and FreeType, through its own Makefile
   cross-glibc.sh     a game (one of the two above) for the GameShell or the Pi: Zig,
                      linked against the board's own SDL2 (seconds, not the Pi's half hour)
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
@@ -62,5 +63,5 @@ pi/                Raspberry Pi (Debian, arm64)
 Build output goes to `build/<board>/` (binaries in `bin/`, packages in
 `pkg/`); nothing in `build/` is committed. Sources of third-party programs
 live next to the repository: `../tyrian/opentyrian`, `../cavestory/nxengine-evo`,
-`../jazz/openjazz`, `../doom/`,
+`../jazz/openjazz`, `../simutrans/simutrans` (at its 124.5 tag), `../doom/`,
 `../retro/libretro-<core>`, `../pspdev` (the PSP toolchain).

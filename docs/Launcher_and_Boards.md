@@ -378,6 +378,7 @@ are packaged; data is only what may be redistributed.
 | freedoom | Freedoom 0.13 Phase 1 + 2 (two entries) | the GameShell's chocolate-doom package, Doom key map |
 | opentyrian | OpenTyrian (SDL2, compiled on the GameShell) + Tyrian 2.1 freeware data | run.sh writes its config on first start |
 | cavestory | NXEngine-evo + the freeware Cave Story (2004), its data made with NXEngine-evo's nxextract on the Mac | 480x272 by default (the PSP's screen, no scaling), 50 fps, drawn as PSP sprites (~12 KB a frame) |
+| simutrans | Simutrans 124.5 (cross-compiled from its tag) + its base data from the 124.5 Linux release + pak64 124.4, all Artistic License | 480x272 natively, 25 fps; the nub is the mouse, the SDL layer draws the pointer; GameShell and Pi only (memory) |
 | jazz | OpenJazz + the Jazz Jackrabbit shareware episode (Epic MegaGames, 1994), all 78 files of the archive unaltered, as its license asks | 480x272 by default (a wider view of the level); called shareware, Epic credited, in the entry and package |
 
 Cave Story and Jazz are cross-compiled on the Mac for every board: the
@@ -390,6 +391,16 @@ Cave Story itself.
 Every game package puts a 128x128 picture next to its entry
 (`scripts/packages/art/`, where the README lists each one's source and
 license), which the launcher shows as the cover.
+
+Measured on the stand-in PSP: Cave Story 50 fps on the Pi, 31-36 on the
+GameShell, 26-32 on the Omega2+ (which also spends 35 s at start
+synthesising the sound effects in software floating point); Jazz's menu 38-47
+fps on the Pi, 0.1-12 on the Omega2+ (its plasma background, floating point
+again): both are GameShell and Pi games in practice.
+
+With `PSPEXP_NUB=mouse` the SDL layer draws the mouse pointer itself on the
+PSP, over the frame (a host cursor never reaches it), while the program has
+not hidden its cursor (`SDL_ShowCursor`).
 
 Cave Story needed three things of the SDL layer that any game may: a
 software renderer when the program asks for an accelerated one and the board

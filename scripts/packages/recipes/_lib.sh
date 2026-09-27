@@ -142,3 +142,16 @@ jazz_zip() {
 # questions), square fires, circle backs out (N), triangle, L and R change
 # weapon, start the menu, select pauses
 JAZZ_KEYS="cross=space+return+y,square=lalt,circle=escape+n,triangle=rctrl,l=rctrl,r=rctrl,start=escape,select=p,up=up,down=down,left=left,right=right"
+
+# check_sha256 FILE HASH   stops the recipe when a download is not the one pinned
+check_sha256() {
+	_h=$(shasum -a 256 "$1" 2>/dev/null || sha256sum "$1")
+	case "$_h" in "$2"*) return 0 ;; esac
+	echo "$(basename "$1"): unexpected SHA-256" >&2; exit 1
+}
+
+# ---- Simutrans ---------------------------------------------------------------
+# the nub is the mouse (cross and circle its buttons); the D-pad scrolls the
+# map, L/R zoom (Page Down/Up), triangle and start close the top window
+# (Escape), select pauses
+SIMUTRANS_KEYS="up=up,down=down,left=left,right=right,l=pgdn,r=pgup,triangle=escape,start=escape,select=p,square=none"

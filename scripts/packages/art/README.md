@@ -10,3 +10,4 @@
 | `opentyrian.png` | OpenTyrian's `linux/icons/tyrian-128.png` | GPL-2.0 (OpenTyrian) |
 | `cavestory.png` | NXEngine-evo's `platform/xdg/org.nxengine.nxengine_evo.png`, scaled | GPL-3.0 (NXEngine-evo) |
 | `jazz.png` | OpenJazz's `res/unix/OpenJazz.svg` (its logo), rendered at 128x128 | GPL-2.0 (OpenJazz) |
+| `simutrans.png` | Simutrans's `src/android/icon.png`, scaled | Artistic-1.0 (Simutrans) |
