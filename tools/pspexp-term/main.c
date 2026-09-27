@@ -17,12 +17,15 @@
  *   square        space                              triangle  Enter
  *   start         Tab (completion)
  *   L (held)      Shift                              R (held)  Ctrl
- *   nub           arrow keys (history, cursor, vi)
+ *   nub           arrow keys (history, cursor, vi) with the keyboard shown
  *   L tap         the context menu: keys and commands for the shell or for
  *                 the full-screen program (vi, less, top), terminal actions
  *                 (~/.config/pspexp-term/menu, see term_menu.h)
- *   L + nub       scroll back like a mouse wheel (further: faster)
+ *   L + triangle  Esc                                R + circle  Ctrl-C
  *   R + up/down   scroll back a line (R + left/right: a page)
+ *   R + nub       scroll back like a mouse wheel (further: faster); with the
+ *                 keyboard hidden the nub alone does
+ *   L + select    scroll mode: the d-pad and nub scroll, nothing held
  *
  * Linux hosts: a real keyboard and mouse (the Raspberry Pi 400's own, or USB
  * ones on the Omega's dock) are read from /dev/input and type into the same
@@ -94,6 +97,7 @@
 
 static int g_cw = 6, g_ch = 8;  /* the terminal font's cell (term_fonts.h) */
 static int g_font, g_theme;     /* TERM_FONTS[g_font], TERM_THEMES[g_theme] */
+static int g_scroll_mode;       /* the D-pad and nub scroll, nothing held (L + select) */
 
 #define FONT_ID     1
 #define FONT_PAL_ID 2
@@ -822,9 +826,10 @@ static void draw_terminal(int rows)
 /* while scrolled back: a label at the top right (UI font) */
 static void draw_scroll_label(void)
 {
-    char s[40];
-    if (T.view <= 0) return;
-    snprintf(s, sizeof(s), " SCROLLBACK -%d ", T.view);
+    char s[64];
+    if (T.view <= 0 && !g_scroll_mode) return;
+    if (g_scroll_mode) snprintf(s, sizeof(s), " SCROLL MODE -%d  circle: back ", T.view);
+    else snprintf(s, sizeof(s), " SCROLLBACK -%d ", T.view);
     pspexp_fill_rect(ctx, (int16_t)(477 - (int)strlen(s) * UI_W), 0, (int16_t)(strlen(s) * UI_W), UI_H, rgb565(theme()->accent), 255);
     text(477 - (int)strlen(s) * UI_W, 0, s, rgb565(theme()->accent_text));
 }
@@ -1001,6 +1006,7 @@ static void menu_run(const TermMenuItem *it)
     else if (!strcmp(it->arg, "scroll-bottom")) T.view = 0;
     else if (!strcmp(it->arg, "keyboard")) { kb_shown = !kb_shown; term_resize(term_rows()); }
     else if (!strcmp(it->arg, "keys")) g_help_open = 1;
+    else if (!strcmp(it->arg, "scroll-mode")) g_scroll_mode = !T.on_alt;
     else fprintf(stderr, "[pspexp-term] menu: unknown action @%s\n", it->arg);
 }
 
@@ -1014,19 +1020,19 @@ static const char *const HELP[][2] = {
     { "Square", "Space" },
     { "Triangle", "Enter" },
     { "Start", "Tab (completion)" },
-    { "Nub", "arrow keys (history, cursor)" },
-    { "L held", "Shift" },
-    { "R held", "Ctrl" },
+    { "L held / R held", "Shift / Ctrl" },
+    { "L + Triangle", "Esc" },
+    { "R + Circle", "Ctrl-C (stop)" },
+    { "Nub", "arrow keys (keyboard shown)" },
     { "#", "Screen" },
-    { "Select", "keyboard on / off" },
-    { "Select held", "switch to the launcher" },
-    { "L + nub", "scroll back, like a mouse wheel" },
-    { "R + up/down", "scroll back a line" },
-    { "R + left/right", "scroll back a page" },
+    { "Select", "keyboard on / off   held: the launcher" },
+    { "R + up/down", "scroll a line   left/right: a page" },
+    { "R + nub", "scroll like a wheel (keyboard hidden:" },
+    { "", "  the nub alone)" },
+    { "L + Select", "scroll mode: nothing held; circle leaves" },
     { "#", "Menu" },
     { "L tapped", "this menu: keys, commands, settings" },
-    { "D-pad", "choose; left / right: a page" },
-    { "Cross", "run it       Circle: back / close" },
+    { "D-pad / Cross", "choose / run it     Circle: back" },
 };
 
 static void draw_help(void)
@@ -1378,8 +1384,9 @@ static void handle_input(void)
         return;
     }
 
-    /* L + nub: scroll like a wheel, faster the further it is pushed */
-    if (shift && !T.on_alt && (ay < -30 || ay > 30)) {
+    /* the wheel: R + nub, the nub alone when the keyboard is hidden, or in
+     * scroll mode; faster the further it is pushed */
+    if ((ctrl || !kb_shown || g_scroll_mode) && !T.on_alt && (ay < -30 || ay > 30)) {
         static uint64_t last; static float acc;
         float dt = last && now - last < 200000u ? (now - last) / 1e6f : 0.016f;
         float v = (float)((ay < 0 ? -ay : ay) - 30) / 97.0f;   /* 0..1 */
@@ -1393,6 +1400,25 @@ static void handle_input(void)
             T.dirty = 1;
         }
         ax = ay = 0;   /* not arrows too */
+    }
+    if ((ctrl || !kb_shown || g_scroll_mode) && !T.on_alt) ax = ay = 0;   /* the nub scrolls here: never arrows */
+
+    /* scroll mode (L + Select, or the menu): the D-pad scrolls with nothing
+     * held; circle, or any typing, leaves */
+    if (shift && g_select_tap) { g_scroll_mode = !T.on_alt; g_select_tap = 0; T.dirty = 1; }
+    if (g_scroll_mode) {
+        int page = term_rows() - 1;
+        if (up) T.view++;
+        if (down) T.view--;
+        if (left) T.view += page;
+        if (right) T.view -= page;
+        if (T.view > T.sb_count) T.view = T.sb_count;
+        if (T.view < 0) T.view = 0;
+        if (up || down || left || right) T.dirty = 1;
+        if (pressed & ~(PSPEXP_BUTTON_UP | PSPEXP_BUTTON_DOWN | PSPEXP_BUTTON_LEFT | PSPEXP_BUTTON_RIGHT | PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER)) {
+            g_scroll_mode = 0; T.dirty = 1;
+            if (pressed & PSPEXP_BUTTON_CIRCLE) { T.view = 0; fire(V_CIRCLE, 1, now, 1); return; }   /* circle only leaves */
+        } else return;
     }
 
     if (g_select_tap) { kb_shown = !kb_shown; term_resize(term_rows()); }
@@ -1418,16 +1444,17 @@ static void handle_input(void)
         if (right) send_arrow('C');
         if (left) send_arrow('D');
     }
-    /* the nub: arrow keys, always */
+    /* the nub: arrow keys (with the keyboard shown) */
     if (fire(N_UP, ay < -60, now, 1)) send_arrow('A');
     if (fire(N_DOWN, ay > 60, now, 1)) send_arrow('B');
     if (fire(N_LEFT, ax < -60, now, 1)) send_arrow('D');
     if (fire(N_RIGHT, ax > 60, now, 1)) send_arrow('C');
 
     if (fire(V_CROSS, b & PSPEXP_BUTTON_CROSS, now, 1) && kb_shown) { send_key(&KROWS_[kb_row][kb_col], shift, ctrl); T.view = 0; T.dirty = 1; }
-    if (fire(V_CIRCLE, b & PSPEXP_BUTTON_CIRCLE, now, 1)) { pty_puts("\177"); T.view = 0; }
+    if (ctrl && (pressed & PSPEXP_BUTTON_CIRCLE)) { pty_puts("\003"); T.view = 0; fire(V_CIRCLE, 1, now, 1); }   /* R + circle: Ctrl-C */
+    else if (!ctrl && fire(V_CIRCLE, b & PSPEXP_BUTTON_CIRCLE, now, 1)) { pty_puts("\177"); T.view = 0; }
     if (pressed & PSPEXP_BUTTON_SQUARE) { pty_puts(" "); T.view = 0; }
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts("\r"); T.view = 0; }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts(shift ? "\033" : "\r"); T.view = 0; }   /* L + triangle: Esc */
     if (pressed & PSPEXP_BUTTON_START) pty_puts("\t");
 }
 
