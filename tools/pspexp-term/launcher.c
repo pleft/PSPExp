@@ -16,6 +16,9 @@
 #include "launcher.h"
 #include "launcher_lib.h"
 #include "launcher_board.h"
+#ifdef __APPLE__
+#include "launcher_mac.h"
+#endif
 #include "launcher_gfx.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -700,6 +703,13 @@ static void human_bytes(unsigned long long b, char *out, size_t n)
     else snprintf(out, n, "%llu MB", b / 1000000ull);
 }
 
+/* memory, counted as it is sold: in 1024s (24 GB, not 25.8) */
+static void human_mem(unsigned long long b, char *out, size_t n)
+{
+    if (b >= 1024ull * 1024 * 1024) snprintf(out, n, "%.1f GB", (double)b / (1024.0 * 1024 * 1024));
+    else snprintf(out, n, "%llu MB", b / (1024ull * 1024));
+}
+
 /* what kind of storage a device is, by its name */
 /* the storage kind of a mounted file system. The device name alone can
  * mislead ("/dev/root" on a GameShell is its SD card), so block devices are
@@ -779,6 +789,20 @@ static void about_collect(void)
     char tmp[128], t2[64];
     int cores = 0, bat, i;
     memset(a, 0, sizeof(*a));
+#ifdef __APPLE__
+    (void)cores; (void)u; (void)soc_name; (void)read_quoted;   /* Linux only */
+    mac_model(a->board, sizeof(a->board));
+    mac_chip(a->soc, sizeof(a->soc));
+    mac_cores(a->cpu, sizeof(a->cpu));
+    {
+        unsigned long long tot, avail;
+        mac_memory(&tot, &avail);
+        human_mem(tot, tmp, sizeof(tmp)); human_mem(avail, t2, sizeof(t2));
+        snprintf(a->mem, sizeof(a->mem), "%s, %s free", tmp, t2);
+    }
+    about_disks(a);
+    mac_os(a->os, sizeof(a->os), a->kernel, sizeof(a->kernel));
+#else
     if (read_line("/proc/device-tree/model", a->board, sizeof(a->board)) < 0 || !a->board[0]) {
         cpuinfo_field("machine", a->board, sizeof(a->board));   /* OpenWrt: "Onion Omega2+" */
         if (!a->board[0]) cpuinfo_field("Model", a->board, sizeof(a->board));
@@ -803,13 +827,14 @@ static void about_collect(void)
             }
             fclose(f);
         }
-        human_bytes(tot, tmp, sizeof(tmp)); human_bytes(avail, t2, sizeof(t2));
+        human_mem(tot, tmp, sizeof(tmp)); human_mem(avail, t2, sizeof(t2));
         snprintf(a->mem, sizeof(a->mem), "%s, %s free", tmp, t2);
     }
     about_disks(a);
     if (read_quoted("/etc/os-release", "PRETTY_NAME", a->os, sizeof(a->os)) < 0)
         read_quoted("/etc/openwrt_release", "DISTRIB_DESCRIPTION", a->os, sizeof(a->os));
     snprintf(a->kernel, sizeof(a->kernel), "Linux %s", u.release);
+#endif
     gethostname(a->host, sizeof(a->host) - 1);
     {   /* IPv4 addresses, one per interface */
         struct ifaddrs *ifs, *it;
@@ -834,7 +859,12 @@ static void about_collect(void)
         snprintf(p, sizeof(p), "/sys/class/thermal/thermal_zone%d/temp", i);
         if (read_line(p, tmp, sizeof(tmp)) == 0 && atol(tmp) > 0) snprintf(a->temp, sizeof(a->temp), "%.0f C", atol(tmp) / 1000.0);
     }
+#ifdef __APPLE__
+    snprintf(tmp, sizeof(tmp), "%ld", mac_uptime());
+    if (atol(tmp) >= 0) {
+#else
     if (read_line("/proc/uptime", tmp, sizeof(tmp)) == 0) {
+#endif
         long up = atol(tmp);
         if (up >= 86400) snprintf(a->uptime, sizeof(a->uptime), "%ld d %ld h", up / 86400, up % 86400 / 3600);
         else if (up >= 3600) snprintf(a->uptime, sizeof(a->uptime), "%ld h %ld min", up / 3600, up % 3600 / 60);
@@ -1216,6 +1246,22 @@ static void status_poll(uint64_t now)
     if (tmv.tm_min != g_minute) { g_minute = tmv.tm_min; g_dirty = 1; }
     if (now - g_status_at < 3000000u && g_bat != -2) return;
     g_status_at = now;
+#ifdef __APPLE__
+    (void)dirs; (void)i; (void)p; (void)read_int;
+    bat = mac_battery(&chg);
+    {   /* no routing table to read: en0 is a MacBook's Wi-Fi, any other en with an address a cable or adapter */
+        struct ifaddrs *ifs, *it;
+        if (getifaddrs(&ifs) == 0) {
+            for (it = ifs; it; it = it->ifa_next) {
+                if (!it->ifa_addr || it->ifa_addr->sa_family != AF_INET || strncmp(it->ifa_name, "en", 2)) continue;
+                if (!strcmp(it->ifa_name, "en0")) wifi = 2;   /* connected, strength unknown */
+                else wired = 1;
+            }
+            freeifaddrs(ifs);
+        }
+        if (wired) wifi = -1;
+    }
+#else
     for (i = 0; dirs[i]; i++) {
         snprintf(p, sizeof(p), "%s/capacity", dirs[i]);
         if (read_int(p, &bat) == 0) {
@@ -1282,6 +1328,7 @@ static void status_poll(uint64_t now)
             if (stat("/sys/class/net/wlan0", &st) == 0 || stat("/sys/class/net/apcli0", &st) == 0) wifi = 0;
         }
     }
+#endif
     if (bat != g_bat || chg != g_chg || wifi != g_wifi || wired != g_wired) { g_bat = bat; g_chg = chg; g_wifi = wifi; g_wired = wired; g_dirty = 1; }
 }
 
