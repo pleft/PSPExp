@@ -15,7 +15,7 @@ DIR=/mnt/mmcblk0p1/pspexp
 [ -x "$B/pspexp-term" ] || { echo "run scripts/omega/build.sh first" >&2; exit 1; }
 ssh "$OM" "mkdir -p $DIR/assets $DIR/opt/apps $DIR/opt/systems $DIR/home $DIR/.new"
 # dropbear: the classic scp protocol (-O)
-scp -O -q "$B/pspexp-term" "$B/pspexp-bench" "$B/pspexp-sprite-demo" "$ROOT/scripts/board/pspexp-exec" \
+scp -O -q "$B/pspexp-term" "$B/pspexp-ms" "$B/pspexp-bench" "$B/pspexp-sprite-demo" "$ROOT/scripts/board/pspexp-exec" \
 	"$ROOT/scripts/board/pspexp-pkg" "$OM:$DIR/.new/"
 scp -O -q "$ROOT/tools/pspexp-term/assets/Inter-Regular.ttf" "$ROOT/tools/pspexp-term/assets/Inter-SemiBold.ttf" \
 	"$ROOT/tools/pspexp-term/assets/lucide.ttf" "$ROOT/tools/pspexp-term/assets/Inter-LICENSE.txt" \
