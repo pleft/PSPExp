@@ -1,6 +1,6 @@
 # PSPExp packages: recipes over the board's own package manager
 
-*Design, reviewed 2026-09-28: decisions in §11; operational contracts in §5.1-5.5 and §6.1 after a review. Nothing here is implemented yet except what "Today" describes.*
+*Design, reviewed twice on 2026-09-28: decisions in §11; operational contracts in §5.1-5.6 and §6.1. Nothing here is implemented yet except what "Today" describes.*
 
 ## Contents
 
@@ -274,7 +274,7 @@ complete list:
 | `update` | fetch and check the catalogue (§5.1), then `apt-get update` | none |
 | `install <id>` | build and install the recipe's meta-package `pspexp-recipe-<id>` (§5.4) with `apt-get install` | a recipe id present in the trusted catalogue |
 | `remove <id>` | `apt-get remove pspexp-recipe-<id>`, then remove only the packages §5.4 allows | an installed recipe id |
-| `upgrade` | `apt-get install --only-upgrade` of the installed recipes' packages and `pspexp-*` | none (the list comes from the catalogue and apt's state) |
+| `upgrade` | for each installed recipe: its meta-package rebuilt when the recipe changed and installed with `apt-get install` (new dependencies come in); then `apt-get install --only-upgrade` of the packages the installed meta-packages depend on, and `pspexp-*` (§5.6) | none (the list comes from the catalogue and apt's state) |
 | `repair` | `dpkg --configure -a`, then `apt-get -f install` | none |
 
 - **Package names never come from the user's side.** The helper takes
@@ -296,32 +296,53 @@ operation either finishes, or leaves a recorded state that `recover`
 finishes or cleans up, and the user sees which.
 
 - **One operation at a time:** `pspexp-pkg` takes an exclusive lock
-  (`flock` on `<root>/state/lock`). A second one, from the Packages app or
-  the shell, waits or reports "busy". apt keeps its own lock, and the
-  helper waits for it with a timeout.
-- **A journal:** each operation writes `<root>/state/txn`, with the
-  operation, the recipe id and the phase:
-  1. `fetch`: pinned data downloaded into a staging folder under
-     `<root>/state/stage/`, checksums checked;
-  2. `apt`: the helper ran `install` / `remove`;
-  3. `files`: the launcher's files are built in a staging folder, then
-     swapped in with one rename per folder;
-  4. `done`: the journal is removed.
-- **What remains after a failure:**
-  - **In `fetch`:** nothing changed; staging is deleted.
-  - **In `apt`:** apt and dpkg keep their own consistency. The recipe
-    shows as **broken** ("the programs were not installed completely")
-    with Retry and Remove. `recover` runs the helper's `repair` first.
-  - **In `files`:** the programs are installed. The launcher files are
-    either the old ones or the new ones, never a mix, because of the swap.
-    `recover` finishes the step.
-- **Power loss:** the console runs `pspexp-pkg recover` at every start. It
-  reads the journal:
-  - a `dpkg` interrupted mid-unpack is completed by `repair`
-    (`dpkg --configure -a`);
-  - half-built staging folders and `.old` folders are removed or put back.
+  (`flock` on `<root>/state/lock`), held for the whole operation, recovery
+  included. A second one, from the Packages app or the shell, waits or
+  reports "busy". apt keeps its own lock, and the helper waits for it with
+  a timeout.
+- **The journal:** `<root>/state/txn`, rewritten through a temporary file
+  and a rename at each checkpoint. It names:
+  - the operation, the recipe id, the recipe version and the catalogue
+    serial it is carrying out;
+  - the checksum manifest of what was staged;
+  - the last checkpoint reached.
+
+  `recover` works from the journal and the staged files alone, never from
+  the catalogue, which may have changed meanwhile.
+- **Checkpoints, in this order:**
+  1. **`staged`:** everything the operation will publish is built under
+     `<root>/state/stage/<id>/`, and its manifest is recorded:
+     - pinned data (checksums checked);
+     - the new app folder;
+     - the new system files;
+     - the list of system files to unpublish.
+  2. **`apt-done`:** the helper's `install` / `remove` / `upgrade`
+     succeeded. apt and dpkg keep their own consistency.
+  3. **`publishing`:** a marker `<root>/state/publishing` is created before
+     the first visible change. Its steps each record their own sub-checkpoint:
+     1. `app-swapped`: `apps/<id>` renamed to `apps/.<id>.old`, the staged
+        folder renamed to `apps/<id>`;
+     2. `systems-published`: each new system file written as `.tmp`, then
+        renamed into `systems/`, and dropped ones deleted.
+  4. **`done`:** `.old` deleted, the marker removed, the journal removed.
+- **The launcher never sees a half-published install.** While
+  `<root>/state/publishing` exists, it doesn't rescan its library; it keeps
+  showing what it showed and rescans once the marker is gone. That's a
+  small change to the launcher's library watcher.
+- **Recovery, by checkpoint:**
+
+  | checkpoint reached | what `recover` does | what remains |
+  |---|---|---|
+  | none, or `staged` | deletes staging | nothing changed |
+  | `apt-done` | publishes from staging (below) | the new install |
+  | `publishing` | if the manifest checks, rolls forward, redoing each sub-step not recorded (every step can be redone); otherwise rolls back: `.old` returns, and its own `systems/` are republished | new, or exactly the old |
+  | an apt failure | runs the helper's `repair`; the recipe shows as **broken**, with Retry and Remove | apt's consistent state |
+
+- **Power loss:** the console runs `pspexp-pkg recover` at every start,
+  under the lock, before the launcher first reads its library. A `dpkg`
+  interrupted mid-unpack is completed by `repair` (`dpkg --configure -a`).
 - **The Packages app** shows an operation's phase and result, and after a
-  failure the exact recipe state (installed, broken, not installed).
+  failure the recipe's exact state: installed, broken, or not installed.
 
 ### 5.4 Package ownership: apt's own records, not ours
 
@@ -366,6 +387,33 @@ expressed in apt's own terms:
   - Removing unpublishes exactly the files with `pkg=<id>`.
 - **The user's data is never touched by removal:** ROMs in `~/roms`, saves
   and settings in their home folder.
+
+### 5.6 When a recipe changes: upgrading its meta-package
+
+A recipe's meta-package carries the recipe's dependencies, so a changed
+recipe needs a new meta-package, not just newer packages.
+
+- **Versioning:** `pspexp-recipe-<id>` has version `<recipe version>`, the
+  recipe's own counter. The catalogue changing a recipe means a higher
+  number.
+- **`upgrade`, for each installed recipe with a newer version in the
+  catalogue:** one transaction of §5.3 with the operation `upgrade`:
+  1. **`staged`:** the new app folder and system files, and the new
+     meta-package (same name, new version, new `Depends:`), built from the
+     new recipe.
+  2. **`apt-done`:** `apt-get install ./pspexp-recipe-<id>_<new>.deb`. A
+     plain install, not `--only-upgrade`, so dependencies the new recipe
+     adds (B, replacing A) are installed. Then the limited removal of §5.4:
+     packages that were dependencies of the old meta-package and that apt
+     now reports unneeded (A) are removed.
+  3. **Publishing and `done`,** as for an install. The launcher files for B
+     appear only after B is installed.
+- **Then the packages themselves:** `apt-get install --only-upgrade` of the
+  packages the installed meta-packages depend on, plus `pspexp-*`. These
+  are all installed already, by construction, so `--only-upgrade` skips
+  none of them.
+- **A recipe removed from the catalogue:** its install stays as it is
+  (nothing breaks). The app marks it "no longer offered", with Remove.
 
 ## 6. PSPExp's own apt repository
 
@@ -417,39 +465,83 @@ expressed in apt's own terms:
 
 ### 6.1 The PSP's runtime: a lifecycle of its own
 
-The PSP runs the runtime from its memory stick, so a new version reaches it
-only by a copy over the link, and it takes effect when PSPExp is started
-again on the PSP.
+The PSP runs PSPExp from its memory stick. A new version reaches it only by
+a copy over the link, and takes effect when PSPExp is started again. The
+update must never be able to leave the PSP unable to connect, since the
+connection is what repairs it. So recovery never depends on the component
+being replaced.
 
-- **Compatibility first.**
-  - The console works with any runtime newer than the first to announce
-    its features in HELLO. New abilities are feature bits (as FILES and
-    CLOCK are), used only when present.
-  - A runtime update is therefore never required to keep working. The
-    console offers it; it doesn't force it.
-  - A runtime too old for a new console (a protocol change) is refused at
-    HELLO with a clear message on the board. The copy below is then still
-    offered, since the FILE channel is independent of the rest.
-- **Staging:**
-  1. The files go to the stick under temporary names
-     (`EBOOT.PBP.new`, and so on) in PSPExp's folder.
-  2. Each is read back and checked against the package's SHA-256 before
-     anything is replaced.
-- **Swapping:** the current files are renamed `.bak`, then the `.new` ones
-  take their names. A small marker file (`update.txt`) records the step.
-- **Recovery:**
-  - **A cable pull or crash during the copy:** only `.new` files are
-    affected. The next connection deletes and redoes them.
-  - **An interruption during the swap:** the marker says how far it got.
-    The next connection completes the swap, or restores from `.bak`.
-  - **The PSP never has no runtime:** either the old or the new set is
-    complete at every moment.
-- **Activation:** the running runtime is unaffected. The console says
-  "PSP update installed: leave PSPExp with HOME and start it again". Once
-  the new runtime reports its version, the console removes the `.bak`
-  files after the first successful connection.
-- **Rolling back by hand:** until then the `.bak` set stays. The console
-  offers "Previous PSP runtime" in System if the new one fails to connect.
+**Three layers, updated differently:**
+- **The boot loader** (`EBOOT.PBP`: `pspexp_boot.prx` and the XMB
+  pictures). It's small, and changes almost never. Its only jobs are to
+  choose a slot and load the USB driver and runtime from it, and it's
+  never replaced by the automatic update (below).
+- **Two complete slots:** `ms0:/PSP/GAME/PSPExp/slot-a/` and `slot-b/`.
+  Each holds a whole runtime set: `pspexp_runtime.prx`, `pspexp_usb.prx`,
+  and a `VERSION` file with the set's version and checksums.
+- **The choice:** `active`, a small file naming the slot to boot (`a` or
+  `b`), plus a `tries` counter.
+
+**Updating (always the inactive slot):**
+1. Copy the new set into the inactive slot, over the FILE channel.
+2. Read every file back and check it against the `pspexp-runtime`
+   package's SHA-256. Write that slot's `VERSION` last, as its "complete"
+   mark.
+3. Switch: write `active.new` naming the updated slot with `tries=0`, then
+   rename it over `active`. This single small rename is the only switch
+   point.
+4. The console says "PSP update installed: leave PSPExp with HOME and start
+   it again".
+
+The running runtime is untouched throughout. A power loss or cable pull at
+any moment leaves one complete, bootable slot (the old one), plus possibly
+a half-written inactive slot that nothing boots.
+
+**Booting, with automatic fallback:**
+- The loader reads `active` (a missing or unreadable one means the slot
+  with a valid `VERSION`, `a` first).
+- It raises `tries` before loading.
+- The runtime resets `tries` to 0 once it has a working connection to a
+  host.
+- If `tries` reaches 3, or the chosen slot has no valid `VERSION`, or its
+  modules fail to load, the loader boots the other slot and records the
+  fallback. The console then reports "the new PSP runtime did not start;
+  the previous one is running".
+- Holding **L** while PSPExp starts forces the other slot, by hand.
+
+**The protocol's frozen core, and maintenance mode:** so that any console
+can talk to any runtime at least enough to repair it, these are frozen and
+never changed incompatibly:
+- the stream framing (the message header, whose `version` byte means the
+  framing);
+- the first fields of HELLO: the protocol version and the feature bits;
+- the FILE channel's messages. New file operations are new opcodes, never
+  changed ones.
+
+With those frozen:
+- **A matching protocol version:** a normal connection.
+- **A different protocol version, when the runtime has
+  `PSPEXP_FEATURE_FILES`:** the host doesn't reject the HELLO as today. It
+  answers with a HELLO_ACK marked **maintenance**. The link is then
+  connected with only SYSTEM (HELLO, DISCONNECT, ERROR) and FILE in use,
+  and no graphics. The console uses it only to install a matching runtime
+  into the inactive slot, then asks for a restart.
+- **A different version, without FILES:** rejected as today, with the
+  manual route below.
+
+This is a change to today's connection contract (today, a mismatch is
+rejected and file operations need a normal connection). It's part of
+implementing this section.
+
+**The manual route, needing nothing of PSPExp.** When nothing else works, a
+new loader included, the PSP's own **USB mode in the XMB** (Settings > USB
+Connection) shows its memory stick to any computer. Copy a known-good
+`dist/PSPExp` folder to `ms0:/PSP/GAME/PSPExp/`. This is the documented
+last resort, and the only way the boot loader itself is replaced.
+
+**The console's side:** after a successful connection to an updated slot,
+the console keeps the other slot as it is (the previous version, for the
+fallback) until the next runtime update overwrites it.
 
 ## 7. The Packages app
 
@@ -532,8 +624,18 @@ because boards differ.
   - a package the user installed by hand before stays after the recipe is
     removed, and so does one another package depends on;
   - a system file name owned by another package is refused;
-  - a runtime copy interrupted by a cable pull in each step (copy, check,
-    swap) leaves a complete set, and the next connection finishes it.
+  - a runtime update interrupted in each step (copy, check, switch)
+    leaves the old slot booting;
+  - a runtime that doesn't connect: `tries` reaches its limit and the
+    loader falls back to the other slot; holding L forces it;
+  - a console with a different protocol version reaches a FILES runtime in
+    maintenance mode and installs a matching runtime;
+  - a recipe changing its dependency from A to B: B is installed before
+    the new launcher files appear, and A is removed only if apt no longer
+    needs it;
+  - an install killed at each sub-checkpoint of publishing: `recover`
+    rolls forward, or rolls back to exactly the old install, and the
+    launcher never lists a half-published one.
 - **On a board, via `tests/psp/run.py`:**
   - the apps suite: Packages lists the catalogue;
   - `--store-writes`: install and remove one small recipe through apt, check
@@ -556,8 +658,9 @@ because boards differ.
 2. ~~**Signing key**~~ *Decided:* a project GPG key created on the Mac and
    used by the build scripts; a backup copy kept safe by the owner. Boards
    and the image carry only its public half.
-3. ~~**Root**~~ *Decided:* the narrow sudoers rule for `pspexp-pkg-apt`
-   (only `apt-get install/remove` of packages named in the recipes).
+3. ~~**Root**~~ *Decided:* the narrow sudoers rule for `pspexp-pkg-apt`,
+   with exactly the five operations of §5.2 (update, install, remove,
+   upgrade, repair), taking recipe ids only.
 4. ~~**The Omega**~~ *Decided:* it keeps our own static builds, described by
    the same recipes and shown in the same Packages app. An opkg feed is for
    later.
@@ -593,10 +696,19 @@ also runs Debian.
    - a signed repository built on the Mac, pushed to the home server and
      served there;
    - the Pi installs Cave Story and upgrades the core through apt.
-5. **The GameShell:** the same on armhf, and lighter cores where the games
+5. **The PSP runtime's lifecycle (§6.1), before any runtime is delivered
+   by package:**
+   - the boot loader's two slots, `active` / `tries` and fallback, and the
+     L override;
+   - the protocol's frozen core and maintenance mode in HELLO / HELLO_ACK;
+   - the console's slot update over the FILE channel.
+
+   The real PSP gets the new loader once, by the manual route. Then run the
+   runtime failure paths of §10.3.
+6. **The GameShell:** the same on armhf, and lighter cores where the games
    suite says so.
-6. **Every recipe converted,** and the old archive packages retired. The
+7. **Every recipe converted,** and the old archive packages retired. The
    Omega keeps its builds, read through recipes.
-7. **Publishing, when the project goes public:** the same files on a public
+8. **Publishing, when the project goes public:** the same files on a public
    host, and the image built with only the core, the catalogue and the
    public address.
