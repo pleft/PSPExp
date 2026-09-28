@@ -606,6 +606,7 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     Panel *p = act();
     (void)b; (void)now;
     if (launcher_running_title()) return;   /* a program is starting: nothing else meanwhile */
+    if (!pressed && !up && !down && !left && !right) return;   /* nothing new: no frame (it used to redraw every turn) */
     switch (g_over) {
     case O_ACTIONS: case O_OPTIONS: {
         int n = g_over == O_ACTIONS ? NACT : NOPT;
@@ -1020,4 +1021,43 @@ void files_render(PspExpContext *ctx, uint64_t now)
     }
     pspexp_present(ctx);
     g_dirty = 0;
+}
+
+/* ---- tests ------------------------------------------------------------------- */
+
+void files_state(char *out, size_t n)
+{
+    static const char *over[] = { "none", "drives", "actions", "options", "confirm", "progress", "message", "kbd", "view", "image", "installing" };
+    size_t l = strlen(out);
+    int k, i;
+#define ADD(...) do { if (l < n) l += (size_t)snprintf(out + l, n - l, __VA_ARGS__); } while (0)
+    ADD("files.active=%s\nfiles.overlay=%s\n", g_act ? "right" : "left", g_over >= 0 && g_over <= O_INSTALLING ? over[g_over] : "?");
+    if (g_over == O_DRIVES || g_over == O_ACTIONS || g_over == O_OPTIONS) ADD("files.menu_sel=%d\n", g_msel);
+    ADD("files.drives=");
+    for (i = 0; i < g_ndrv; i++) ADD("%s%s", i ? "|" : "", g_drv[i].name);
+    ADD("\n");
+    for (k = 0; k < 2; k++) {
+        const Panel *p = &g_p[k];
+        const char *side = k ? "right" : "left";
+        int marked = 0;
+        for (i = 0; i < p->list.n; i++) marked += p->list.e[i].marked;
+        ADD("files.%s.path=%s\nfiles.%s.drive=%s\nfiles.%s.on_drives=%d\nfiles.%s.selected=%s\nfiles.%s.count=%d\nfiles.%s.marked=%d\nfiles.%s.error=%s\nfiles.%s.space=%s\nfiles.%s.names=",
+            side, p->path, side, g_ndrv ? g_drv[drive_cur(p)].name : "", side, p->on_drives,
+            side, p->sel < p->list.n ? p->list.e[p->sel].name : "", side, p->list.n - (p->list.n && p->list.e[0].is_up),
+            side, marked, side, p->error, side, p->space, side);
+        for (i = 0; i < p->list.n; i++) if (!p->list.e[i].is_up) ADD("%s%s%s", i > (p->list.n && p->list.e[0].is_up) ? "|" : "", p->list.e[i].name, p->list.e[i].is_dir ? "/" : "");
+        ADD("\n");
+    }
+    if (g_over == O_MESSAGE) {   /* one line: its breaks as " / " */
+        char flat[sizeof(g_msg) * 3], *o = flat;
+        const char *m;
+        for (m = g_msg; *m && o < flat + sizeof(flat) - 4; m++) { if (*m == '\n') { memcpy(o, " / ", 3); o += 3; } else *o++ = *m; }
+        *o = 0;
+        ADD("files.message.title=%s\nfiles.message.text=%s\n", g_msg_title, flat);
+    }
+    if (g_over == O_CONFIRM) ADD("files.question=%s\n", g_qtext);
+    if (g_over == O_PROGRESS) ADD("files.progress=%d/%d files, %llu/%llu bytes\n", g_job.files_done, g_job.files_total, (unsigned long long)g_job.bytes_done, (unsigned long long)g_job.bytes_total);
+    if (g_over == O_IMAGE) ADD("files.image=%s %dx%d\n", act()->list.e[g_img_idx].name, g_img_w, g_img_h);
+    if (g_over == O_VIEW) ADD("files.viewer=%s lines=%d\n", g_vtitle, g_vn);
+#undef ADD
 }

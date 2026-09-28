@@ -63,6 +63,8 @@
 #include "term_themes.h"
 #include "files.h"
 #include "files_psp.h"
+#include "control.h"
+#include "files_ops.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
 #ifdef PSPEXP_HAVE_USB
@@ -77,6 +79,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1598,17 +1601,20 @@ static uint32_t test_keys_buttons(uint64_t now)
     return 0;
 }
 
+static uint32_t g_ctl_mask;            /* buttons a test holds (the control port) */
+static int g_ctl_nub, g_ctl_ax, g_ctl_ay;
+
 static void handle_input(void)
 {
     const PspExpInput *in = pspexp_input(ctx);
     uint64_t now = pspexp_time_us();
-    uint32_t b = g_test_keys ? test_keys_buttons(now) : in->buttons, pressed;
+    uint32_t b = (g_test_keys ? test_keys_buttons(now) : in->buttons) | g_ctl_mask, pressed;
     g_raw_buttons = b;
     g_swallow &= b;          /* released: counts again */
     b &= ~g_swallow;
     pressed = b & ~g_prev_buttons;
     int shift = (b & PSPEXP_BUTTON_LTRIGGER) != 0, ctrl = (b & PSPEXP_BUTTON_RTRIGGER) != 0;
-    int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
+    int ax = (g_ctl_nub ? g_ctl_ax : (int)in->analog_x) - 128, ay = (g_ctl_nub ? g_ctl_ay : (int)in->analog_y) - 128;
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
@@ -2466,6 +2472,255 @@ static void usage(void)
                     "                   [--launcher] [--assets DIR]\n");
 }
 
+/* ---- the test-control port (control.c; tests/psp) ------------------------------------ */
+
+static uint64_t g_ctl_frame_us;        /* when the last frame went to the PSP */
+static int g_ctl_on;
+enum { CS_IDLE, CS_PRESS, CS_SETTLE, CS_WAIT, CS_IDLEWAIT, CS_SHOT };
+static struct { int st; uint64_t t0, until, limit; unsigned shot; char name[128]; } C;
+
+static uint32_t ctl_buttons_of(const char *s)   /* "l+r+right" */
+{
+    static const struct { const char *n; uint32_t b; } names[] = {
+        { "up", PSPEXP_BUTTON_UP }, { "down", PSPEXP_BUTTON_DOWN }, { "left", PSPEXP_BUTTON_LEFT }, { "right", PSPEXP_BUTTON_RIGHT },
+        { "cross", PSPEXP_BUTTON_CROSS }, { "circle", PSPEXP_BUTTON_CIRCLE }, { "square", PSPEXP_BUTTON_SQUARE }, { "triangle", PSPEXP_BUTTON_TRIANGLE },
+        { "l", PSPEXP_BUTTON_LTRIGGER }, { "r", PSPEXP_BUTTON_RTRIGGER }, { "start", PSPEXP_BUTTON_START }, { "select", PSPEXP_BUTTON_SELECT } };
+    uint32_t m = 0;
+    while (*s) {
+        size_t l = strcspn(s, "+"), i;
+        int found = 0;
+        for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+            if (strlen(names[i].n) == l && !strncmp(names[i].n, s, l)) { m |= names[i].b; found = 1; }
+        if (!found) return 0;
+        s += l; if (*s == '+') s++;
+    }
+    return m;
+}
+
+static void ctl_add(char *o, size_t n, const char *fmt, ...)
+{
+    size_t l = strlen(o);
+    va_list ap;
+    if (l >= n) return;
+    va_start(ap, fmt);
+    vsnprintf(o + l, n - l, fmt, ap);
+    va_end(ap);
+}
+
+static void ctl_state(char *o, size_t n)
+{
+    int y, x;
+    o[0] = 0;
+    ctl_add(o, n, "ok\nview=%s\nconnected=%d\npsp_files=%d\nrunning=%s\n",
+            g_view_files ? "files" : g_view_launcher ? "launcher" : g_view_mirror ? "mirror" : "terminal",
+            pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED, files_psp_available(),
+            g_launcher_on && launcher_running_title() ? launcher_running_title() : "");
+    if (g_launcher_on) launcher_state(o, n);
+    files_state(o, n);
+    ctl_add(o, n, "term.session=%d\nterm.cursor=%d,%d\nterm.scrolled=%d\n", g_sess_cur, T.cx, T.cy, T.view);
+    for (y = 0; y < T.rows; y++) {   /* the screen's text, lines with something on them */
+        char line[COLS_MAX + 1];
+        int end = 0;
+        for (x = 0; x < T.cols && x < COLS_MAX; x++) { uint8_t c = T.screen[y].c[x].ch; line[x] = c >= 32 && c < 127 ? (char)c : c ? '?' : ' '; if (line[x] != ' ') end = x + 1; }
+        line[end] = 0;
+        if (end) ctl_add(o, n, "term.%d=%s\n", y, line);
+    }
+}
+
+/* the screenshot index idx, written next to the runtime's EBOOT: found, fetched to
+ * $PSPEXP_TERM_SHOTS (/tmp/pspexp-shots)/<name>.bmp and removed from the stick. 1 when done */
+static int ctl_shot_fetch(char *reply, size_t rn)
+{
+    static char dir[PSPEXP_FS_PATH];
+    char want[64], path[PSPEXP_FS_PATH], out[600];
+    const char *shots = getenv("PSPEXP_TERM_SHOTS");
+    PspExpFsEntry e[PSPEXP_FS_LIST_MAX], st;
+    int n, i, more = 0;
+    snprintf(want, sizeof(want), "pspexp-shot-%u.bmp", C.shot);
+    if (dir[0]) { snprintf(path, sizeof(path), "%s/%s", dir, want); if (pspexp_fs_stat(ctx, path, &st) < 0) path[0] = 0; }
+    else path[0] = 0;
+    if (!path[0]) {   /* where is the runtime? look in each game folder */
+        n = pspexp_fs_list(ctx, "ms0:/PSP/GAME", 0, e, PSPEXP_FS_LIST_MAX, &more);
+        for (i = 0; i < n && !path[0]; i++) {
+            if (!(e[i].flags & PSPEXP_FS_DIR)) continue;
+            snprintf(path, sizeof(path), "ms0:/PSP/GAME/%s/%s", e[i].name, want);
+            if (pspexp_fs_stat(ctx, path, &st) == 0) snprintf(dir, sizeof(dir), "ms0:/PSP/GAME/%s", e[i].name);
+            else path[0] = 0;
+        }
+    }
+    if (!path[0]) return 0;
+    {
+        static uint8_t buf[PSPEXP_FS_CHUNK];
+        uint64_t off = 0;
+        FILE *f;
+        int r;
+        char *c;
+        if (!shots || !*shots) shots = "/tmp/pspexp-shots";
+        mkdir(shots, 0755);
+        for (c = C.name; *c; c++) if (!isalnum((unsigned char)*c) && *c != '-' && *c != '_' && *c != '.') *c = '_';
+        snprintf(out, sizeof(out), "%s/%s.bmp", shots, C.name[0] ? C.name : want);
+        if (!(f = fopen(out, "wb"))) { snprintf(reply, rn, "error cannot write %s", out); return 1; }
+        while ((r = pspexp_fs_read(ctx, path, off, buf, sizeof(buf))) > 0) { fwrite(buf, 1, (size_t)r, f); off += (uint64_t)r; }
+        fclose(f);
+        pspexp_fs_remove(ctx, path);
+        if (r < 0) snprintf(reply, rn, "error reading %s (%d)", path, r);
+        else snprintf(reply, rn, "ok %s %llu bytes", out, (unsigned long long)off);
+    }
+    return 1;
+}
+
+/* fs ls|get|put|rm|rmtree|mkdir|mv|df: the PSP's memory stick over the console's link */
+static void ctl_fs(const char *args, char *reply, size_t rn)
+{
+    char op[16] = "", a[1024] = "", b[1024] = "";
+    uint64_t t0 = pspexp_time_us();
+    int r = 0;
+    sscanf(args, "%15s %1023s %1023s", op, a, b);
+    if (!pspexp_fs_supported(ctx)) { snprintf(reply, rn, "error the PSP does not share its memory stick (not connected, or an older runtime)"); return; }
+    if (!strcmp(op, "ls")) {
+        PspExpFsEntry e[PSPEXP_FS_LIST_MAX];
+        uint32_t first = 0;
+        int more = 1, n, i;
+        snprintf(reply, rn, "ok\n");
+        while (more) {
+            if ((n = pspexp_fs_list(ctx, a, first, e, PSPEXP_FS_LIST_MAX, &more)) < 0) { snprintf(reply, rn, "error %s: %d", a, n); return; }
+            for (i = 0; i < n; i++) ctl_add(reply, rn, "%s%s %llu %u\n", e[i].name, (e[i].flags & PSPEXP_FS_DIR) ? "/" : "",
+                                           (unsigned long long)e[i].size_lo | ((unsigned long long)e[i].size_hi << 32), e[i].mtime);
+            first += (uint32_t)n;
+            if (!n) break;
+        }
+        return;
+    }
+    if (!strcmp(op, "get") || !strcmp(op, "put")) {
+        static uint8_t buf[PSPEXP_FS_CHUNK];
+        int get = op[0] == 'g';
+        FILE *f = fopen(get ? b : a, get ? "wb" : "rb");
+        uint64_t off = 0;
+        size_t n;
+        if (!f) { snprintf(reply, rn, "error cannot open %s", get ? b : a); return; }
+        if (get) { while ((r = pspexp_fs_read(ctx, a, off, buf, sizeof(buf))) > 0) { fwrite(buf, 1, (size_t)r, f); off += (uint64_t)r; } }
+        else do {
+            n = fread(buf, 1, sizeof(buf), f);
+            if ((r = pspexp_fs_write(ctx, b, off, buf, (uint32_t)n, off ? 0 : PSPEXP_FS_CREATE | PSPEXP_FS_TRUNCATE)) < 0) break;
+            off += n;
+        } while (n == sizeof(buf));
+        fclose(f);
+        if (r < 0) { snprintf(reply, rn, "error %s: %d", get ? a : b, r); return; }
+        {
+            uint64_t us = pspexp_time_us() - t0;
+            snprintf(reply, rn, "ok %llu bytes %llu ms %.2f MB/s", (unsigned long long)off, (unsigned long long)(us / 1000), us ? off / (double)us : 0.0);
+        }
+        return;
+    }
+    if (!strcmp(op, "rmtree")) {   /* a folder and all in it (test clean-up) */
+        FJob j;
+        char parent[1024], name[256];
+        snprintf(parent, sizeof(parent), "%s", a);
+        snprintf(name, sizeof(name), "%s", fops_parent(parent));
+        memset(&j, 0, sizeof(j));
+        j.kind = FJOB_DELETE;
+        snprintf(j.src, sizeof(j.src), "%s", parent);
+        j.names = calloc(1, 256);
+        if (!j.names) { snprintf(reply, rn, "error out of memory"); return; }
+        snprintf(j.names[0], 256, "%s", name);
+        j.nnames = 1;
+        fjob_run(&j);
+        fjob_finish(&j);
+        if (j.error[0]) snprintf(reply, rn, "error %s", j.error);
+        else snprintf(reply, rn, "ok %d files", j.files_done);
+        return;
+    }
+    if (!strcmp(op, "rm")) r = pspexp_fs_remove(ctx, a);
+    else if (!strcmp(op, "mkdir")) r = pspexp_fs_mkdir(ctx, a);
+    else if (!strcmp(op, "mv")) r = pspexp_fs_rename(ctx, a, b);
+    else if (!strcmp(op, "df")) {
+        uint64_t fr = 0, tot = 0;
+        if ((r = pspexp_fs_info(ctx, a[0] ? a : "ms0:/", &fr, &tot)) >= 0) { snprintf(reply, rn, "ok free=%llu total=%llu", (unsigned long long)fr, (unsigned long long)tot); return; }
+    } else { snprintf(reply, rn, "error fs: ls|get|put|rm|rmtree|mkdir|mv|df"); return; }
+    if (r < 0) snprintf(reply, rn, "error %s: %d", a, r);
+    else snprintf(reply, rn, "ok");
+}
+
+static void ctl_step(uint64_t now, int connected)
+{
+    static char reply[65536];
+    const char *cmd;
+    switch (C.st) {
+    case CS_PRESS:
+        if (now < C.until) return;
+        g_ctl_mask = 0; g_ctl_nub = 0;
+        C.st = CS_SETTLE; C.until = now + 80000u;   /* a frame or two to take it in */
+        return;
+    case CS_SETTLE: case CS_WAIT:
+        if (now < C.until) return;
+        C.st = CS_IDLE; ctl_reply("ok"); return;
+    case CS_IDLEWAIT:
+        if (now - C.t0 > 150000u && now - g_ctl_frame_us > 400000u) { C.st = CS_IDLE; ctl_reply("ok idle"); }
+        else if (now > C.limit) { C.st = CS_IDLE; ctl_reply("ok busy (still drawing)"); }
+        return;
+    case CS_SHOT:
+        if (now < C.until) return;
+        if (!connected) { C.st = CS_IDLE; ctl_reply("error the PSP went away"); return; }
+        if (ctl_shot_fetch(reply, sizeof(reply))) { C.st = CS_IDLE; ctl_reply(reply); return; }
+        if (now > C.limit) { C.st = CS_IDLE; ctl_reply("error no screenshot on the memory stick (runtime without FILES, or it could not write)"); return; }
+        C.until = now + 200000u;
+        return;
+    }
+    if (!(cmd = ctl_take())) return;
+    if (strcmp(cmd, "end")) launcher_set_test_mode(1);   /* from the first command on: no Restart, Power off or Wi-Fi switch */
+    if (!strncmp(cmd, "press ", 6) || !strncmp(cmd, "hold ", 5)) {
+        char what[128] = "";
+        int ms = 0;
+        sscanf(cmd + (cmd[0] == 'p' ? 6 : 5), "%127s %d", what, &ms);
+        if (!(g_ctl_mask = ctl_buttons_of(what))) { ctl_reply("error buttons: up down left right cross circle square triangle l r start select, joined with +"); return; }
+        if (!connected) { g_ctl_mask = 0; ctl_reply("error the PSP is not connected"); return; }
+        C.st = CS_PRESS; C.until = now + (uint64_t)(ms > 0 ? ms : 100) * 1000u;
+    } else if (!strncmp(cmd, "nub ", 4)) {
+        int x = 128, y = 128, ms = 300;
+        sscanf(cmd + 4, "%d %d %d", &x, &y, &ms);
+        g_ctl_nub = 1; g_ctl_ax = x; g_ctl_ay = y;
+        C.st = CS_PRESS; C.until = now + (uint64_t)ms * 1000u;
+    } else if (!strncmp(cmd, "wait ", 5)) {
+        C.st = CS_WAIT; C.until = now + (uint64_t)atoi(cmd + 5) * 1000u;
+    } else if (!strncmp(cmd, "idle", 4)) {
+        int ms = atoi(cmd + 4);
+        C.st = CS_IDLEWAIT; C.t0 = now; C.limit = now + (uint64_t)(ms > 0 ? ms : 4000) * 1000u;
+    } else if (!strcmp(cmd, "state")) {
+        ctl_state(reply, sizeof(reply)); ctl_reply(reply);
+    } else if (!strcmp(cmd, "stats")) {
+        const PspExpStats *st = pspexp_stats(ctx);
+        snprintf(reply, sizeof(reply), "ok\nframes_sent=%u\nframes_presented=%u\ninputs=%u\nprotocol_errors=%u\nresource_errors=%u\nlast_frame_bytes=%u\nlast_present_latency_us=%u\nlast_ge_us=%u\nlast_execute_us=%u\nreconnects=%u\nbytes_sent=%llu\nbytes_received=%llu\n",
+                 st->frames_sent, st->frames_presented, st->inputs_received, st->protocol_errors, st->resource_errors, st->last_frame_bytes,
+                 st->last_present_latency_us, st->last_ge_us, st->last_execute_us, st->reconnects, (unsigned long long)st->bytes_sent, (unsigned long long)st->bytes_received);
+        ctl_reply(reply);
+    } else if (!strncmp(cmd, "shot", 4)) {
+        if (!connected || !pspexp_fs_supported(ctx)) { ctl_reply("error screenshots need a connected PSP that shares its memory stick"); return; }
+        snprintf(C.name, sizeof(C.name), "%s", cmd[4] == ' ' ? cmd + 5 : "");
+        C.shot = 9000u + (C.shot + 1 - 9000u) % 500u;
+        pspexp_request_screenshot(ctx, (uint16_t)C.shot);
+        C.st = CS_SHOT; C.until = now + 150000u; C.limit = now + 6000000u;
+    } else if (!strncmp(cmd, "open ", 5)) {
+        const char *w = cmd + 5;
+        if (!strncmp(w, "files", 5)) { if (!g_launcher_on) { ctl_reply("error the file manager needs --launcher"); return; } files_show(w[5] == ' ' ? w + 6 : NULL, 1); }
+        else if (!strcmp(w, "launcher")) { if (!g_launcher_on) { ctl_reply("error not started with --launcher"); return; } g_view_files = 0; g_view_launcher = 1; launcher_invalidate(); }
+        else if (!strcmp(w, "terminal")) { g_view_files = 0; g_view_launcher = 0; T.dirty = 1; }
+        else { ctl_reply("error open launcher|terminal|files [PATH]"); return; }
+        swallow();
+        C.st = CS_SETTLE; C.until = now + 150000u;
+    } else if (!strncmp(cmd, "type ", 5)) {   /* straight into the shell; \n is Enter */
+        const char *s = cmd + 5;
+        for (; *s; s++) { if (s[0] == '\\' && s[1] == 'n') { pty_write("\r", 1); s++; } else pty_write(s, 1); }
+        C.st = CS_SETTLE; C.until = now + 200000u;
+    } else if (!strncmp(cmd, "fs ", 3)) {
+        ctl_fs(cmd + 3, reply, sizeof(reply)); ctl_reply(reply);
+    } else if (!strcmp(cmd, "ping")) {
+        ctl_reply("ok pong");
+    } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
+        launcher_set_test_mode(0);
+        ctl_reply("ok");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], type TEXT, fs ..., ping, end");
+}
+
 int main(int argc, char **argv)
 {
     const char *fifo_path = "/tmp/pspexp-audio", *pidfile = "/tmp/pspexp-term.pid";
@@ -2481,6 +2736,13 @@ int main(int argc, char **argv)
 #else
     g_mode = MODE_NULL;
 #endif
+    /* the control port's client: pspexp-term --ctl "COMMAND" [--ctl-timeout S] */
+    for (i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--ctl") && i + 1 < argc) {
+            int t = 60, k;
+            for (k = 1; k < argc; k++) if (!strcmp(argv[k], "--ctl-timeout") && k + 1 < argc) t = atoi(argv[k + 1]);
+            return ctl_client(ctl_path(), argv[i + 1], t);
+        }
     g_shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
     if (access(g_shell, X_OK) != 0) g_shell = "/bin/sh";
     for (i = 1; i < argc; i++) {
@@ -2506,6 +2768,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--no-audio-fifo")) fifo_path = NULL;
         else if (!strcmp(argv[i], "--pidfile") && i + 1 < argc) pidfile = argv[++i];
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--no-control")) g_ctl_on = -1;
         else if (!strcmp(argv[i], "--no-host-input")) g_host_input = 0;
 #ifdef __linux__
         else if (!strcmp(argv[i], "--test-key") && i + 1 < argc) {   /* send one key through the keypad path and exit */
@@ -2580,6 +2843,10 @@ int main(int argc, char **argv)
     }
     pspexp_set_log(ctx, log_fn, NULL);
     files_psp_init(ctx);   /* the PSP's memory stick as a file-manager drive */
+    if (g_ctl_on == 0) {   /* the test-control port (tests/psp), this user only */
+        g_ctl_on = ctl_open(ctl_path()) == 0;
+        fprintf(stderr, "[pspexp-term] control port %s%s%s\n", ctl_path(), g_ctl_on ? "" : ": could not open: ", g_ctl_on ? "" : strerror(errno));
+    } else g_ctl_on = 0;
     if (g_mode == MODE_NULL || g_mode == MODE_SDL) {
         if (pspexp_connect(ctx, 5000) < 0) { fprintf(stderr, "no HELLO\n"); return 1; }
         launcher_set_link(g_mode == MODE_SDL ? "SDL window (a test executor)" : "none (null executor)");
@@ -2663,6 +2930,7 @@ int main(int argc, char **argv)
             if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; }   /* ignore buttons held while connecting */
         }
         files_psp_service(ctx, 12000);   /* the file manager's requests to the PSP's stick (a copy on its thread) */
+        if (g_ctl_on) ctl_step(now, connected);
         if (!connected) continue;
 
         pspexp_pump(ctx, 0);
@@ -2707,13 +2975,13 @@ int main(int argc, char **argv)
         if (g_view_files) {
             if (files_needs_frame(now) && pspexp_should_render(ctx)) {
                 files_render(ctx, now);
-                frames++;
+                frames++; g_ctl_frame_us = now;
                 if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
             }
         } else if (g_view_launcher) {
             if (launcher_needs_frame(now) && pspexp_should_render(ctx)) {
                 launcher_render(ctx, now, 1);
-                frames++;
+                frames++; g_ctl_frame_us = now;
                 if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
             }
         } else if (g_view_mirror) {
@@ -2721,11 +2989,11 @@ int main(int argc, char **argv)
             static uint64_t last_mirror;
             if (now - last_mirror >= 16000u && pspexp_should_render(ctx)) {
                 last_mirror = now;
-                if (mirror_frame()) frames++;
+                if (mirror_frame()) frames++; g_ctl_frame_us = now;
             }
         } else if (T.dirty && pspexp_should_render(ctx)) {
             render();
-            frames++;
+            frames++; g_ctl_frame_us = now;
             if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
         }
 #ifdef PSPEXP_HAVE_SDL
@@ -2746,6 +3014,7 @@ int main(int argc, char **argv)
         }
     }
 
+    if (g_ctl_on) ctl_close();
     { int k; for (k = 0; k < NSESS; k++) if (g_sess[k].used && g_sess[k].child > 0) kill(-g_sess[k].child, SIGHUP); }
     if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
         pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);

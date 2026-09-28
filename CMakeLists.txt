@@ -131,7 +131,7 @@ if(PSPEXP_HAVE_USB)
   target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
 endif()
 
-add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
+add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
   tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c)
 target_compile_definitions(pspexp-term PRIVATE PSPEXP_LAUNCHER_ASSET_DIR="${CMAKE_SOURCE_DIR}/tools/pspexp-term/assets")
 target_link_libraries(pspexp-term PRIVATE pspexp pspexp_null pspexp_tcp)

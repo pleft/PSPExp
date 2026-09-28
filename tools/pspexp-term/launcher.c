@@ -532,9 +532,15 @@ static const char *action_value(const LEntry *e)
 enum { PICK_TZ, PICK_WIFI };
 static void pick_open(int kind, uint64_t now);
 
+static int g_test_mode;
+
 static void run_action(LEntry *e, uint64_t now)
 {
     const char *a = e->id + 2;
+    if (g_test_mode && (!strcmp(a, "reboot") || !strcmp(a, "poweroff") || !strcmp(a, "wifi"))) {
+        toast("lock", "Not during a test run", now);   /* a test never takes the board away */
+        return;
+    }
     if (!strcmp(a, "rescan")) {
         char s[96];
         int n = lib_reload(&L);
@@ -631,6 +637,22 @@ int launcher_open_file(const char *path)
 }
 
 const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }
+
+void launcher_set_test_mode(int on) { g_test_mode = on; }
+
+void launcher_state(char *out, size_t n)
+{
+    static const char *modes[] = { "browse", "search", "details", "about", "pick", "text" };
+    size_t l = strlen(out);
+    LEntry *e = cur_entry();
+    int i;
+    l += (size_t)snprintf(out + l, n > l ? n - l : 0, "launcher.mode=%s\nlauncher.category=%s\nlauncher.selected=%s\nlauncher.items=",
+                          g_mode >= 0 && g_mode < 6 ? modes[g_mode] : "?", g_ncat ? g_cat[g_cur].name : "", e ? e->title : "");
+    for (i = 0; g_ncat && i < g_cat[g_cur].n && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[g_cur].it[i]->title);
+    if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.categories=");
+    for (i = 0; i < g_ncat && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[i].name);
+    if (l < n) snprintf(out + l, n - l, "\nlauncher.toast=%s\n", pspexp_time_us() < g_toast_until ? g_toast : "");
+}
 
 int launcher_system_for(const char *path, char *name, size_t n)
 {

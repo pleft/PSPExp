@@ -34,5 +34,7 @@ void files_invalidate(void);
 int  files_take_exit(void);
 /* 1 once with a folder when the user asked for a terminal there */
 int  files_take_terminal(char *path, size_t n);
+/* tests (the control port): what is on screen, as "files.key=value" lines appended to out */
+void files_state(char *out, size_t n);
 
 #endif

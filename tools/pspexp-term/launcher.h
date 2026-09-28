@@ -44,6 +44,10 @@ int launcher_open_file(const char *path);
 int launcher_system_for(const char *path, char *name, size_t n);
 /* the title of what is starting or running, NULL when nothing is */
 const char *launcher_running_title(void);
+/* tests (the control port): what is on screen, as "launcher.key=value" lines
+ * appended to out; test mode refuses Restart, Power off and the Wi-Fi switch */
+void launcher_state(char *out, size_t n);
+void launcher_set_test_mode(int on);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);
