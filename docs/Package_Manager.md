@@ -691,17 +691,12 @@ because boards differ.
 
 ## 11. Decisions needed
 
-1. ~~**Hosting**~~ *Decided:* the home Linux server (`home-server.local`), on
-   the home network, until the whole project is published; a public host
-   comes then.
-   - **Checked 2026-09-28:** Ubuntu 24.04, 55 GB free, key login from the
-     Mac works, rsync and gpg present.
-   - **Already in use:** Apache has port 80 and another service has 8080;
-     neither is to be touched.
-   - **Proposal for step 4:** a user service of its own, a small static
-     server on a free port (e.g. 8093) serving `~/pspexp-repo`. It needs
-     `sudo loginctl enable-linger pleft` once, so it runs without a
-     login.
+1. ~~**Hosting**~~ *Decided:* a home Linux server, on the home network,
+   until the whole project is published; a public host comes then. It
+   serves `~/pspexp-repo` with a small user service of its own, a static
+   server on a free port (`loginctl enable-linger` once, so it runs without
+   a login). Its address is a local setting (`~/.pspexp/repo-host` on the
+   Mac, `/etc/pspexp/repo` on the boards), never in the repository.
 2. ~~**Signing key**~~ *Decided:* a project GPG key created on the Mac and
    used by the build scripts; a backup copy kept safe by the owner. Boards
    and the image carry only its public half.

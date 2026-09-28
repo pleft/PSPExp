@@ -3,8 +3,10 @@
 PSPExp's apt repository and recipe catalogue (docs/Package_Manager.md §6).
 
   scripts/packages/apt-repo build [DEBS_DIR]   -> build/apt: pool/, dists/stable/, catalogue.tar.gz (all signed)
-  scripts/packages/apt-repo push [HOST]        build/apt to HOST:~/pspexp-repo (default user@home-server);
-                                               older packages stay there
+  scripts/packages/apt-repo push [HOST]        build/apt to HOST:~/pspexp-repo, older packages kept there.
+                                               HOST (user@host): the argument, else $PSPEXP_REPO_HOST, else
+                                               the first line of ~/.pspexp/repo-host (a local setting, never
+                                               in the repository)
   scripts/packages/apt-repo key                the project's public key (creates the key the first time)
 
 The signing key lives outside the repository, in ~/.pspexp/gnupg (keep a copy
@@ -118,7 +120,13 @@ def main():
     if cmd == "build":
         build(sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "build/debs"))
     elif cmd == "push":
-        push(sys.argv[2] if len(sys.argv) > 2 else "user@home-server")
+        host = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("PSPEXP_REPO_HOST", "")
+        cfg = os.path.expanduser("~/.pspexp/repo-host")
+        if not host and os.path.exists(cfg):
+            host = open(cfg).readline().strip()
+        if not host:
+            sys.exit("apt-repo push: no host: give user@host, or set PSPEXP_REPO_HOST or ~/.pspexp/repo-host")
+        push(host)
     elif cmd == "key":
         sys.stdout.write(ensure_key().decode())
     else:
