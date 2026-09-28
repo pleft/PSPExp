@@ -15,6 +15,7 @@ GameShell, hence sections 1-5; section 6 is the emulators. Scripts:
 5. A fresh base for the GameShell: Debian 13 and mainline Linux
 6. Emulators: pspexp-retro
 7. The terminal and the file manager
+8. Integration tests on a real PSP
 
 ---
 
@@ -790,4 +791,69 @@ running and the link stays up.
     lost link, through the broker from a real thread.
 - **Measured in PPSSPP:** a 5 MB round trip matches byte for byte, at about
   3 MB/s (emulated; the real PSP over USB not yet measured).
+
+## 8. Integration tests on a real PSP (2026-09-28)
+
+`tests/psp/run.py` drives a real PSP, with no one pressing anything, through
+the console's **test-control port**.
+
+### 8.1 The control port
+
+This is a Unix socket for the console's own user only:
+`/tmp/pspexp-term-<uid>.ctl`, or `$PSPEXP_TERM_CONTROL`, which must be a
+short path. `--no-control` turns it off. `pspexp-term --ctl "COMMAND"` is
+its client: it prints the reply and exits 0 (ok), 1 (error) or 2 (no
+console). The commands:
+
+| command | what it does |
+|---|---|
+| `press BUTTONS [ms]`, `hold ...` | buttons as if pressed on the PSP (`l+r+right`) |
+| `nub X Y [ms]` | the nub (0-255) |
+| `wait MS`, `idle [MS]` | a pause; until nothing is drawn for 0.4 s |
+| `state` | the view; the launcher's section, entries and highlight; both file-manager panels (path, drive, entries, selection), the open menu or message; the terminal's text |
+| `stats` | frames, latency, GE time, errors |
+| `shot NAME` | the PSP saves its screen next to its EBOOT; the console fetches it over the FILE channel into `/tmp/pspexp-shots/NAME.bmp` (or `$PSPEXP_TERM_SHOTS`) and deletes it from the stick |
+| `open launcher|terminal|files [PATH]` | switches the view |
+| `type TEXT` | writes into the shell (`\n` is Enter) |
+| `fs ls|get|put|rm|rmtree|mkdir|mv|df` | the memory stick over the console's link, with timings |
+| `end` | lifts test mode |
+
+From its first command on, the console is in test mode: Restart, Power off
+and the Wi-Fi mode switch are refused, so a test can never take the board
+away. The PSP's own buttons keep working.
+
+### 8.2 The runner
+
+`tests/psp/run.py --host user@board [suites]` runs on the Mac. It talks to
+the board over one shared ssh connection, and `--local` uses a console on
+the Mac.
+
+**Suites:**
+- **link:** connected, no errors, a screenshot round trip.
+- **stick:** free space; 4 MB up and back, identical, timed; listing,
+  size and date; rename; errors; clean-up.
+- **launcher:** the sections; Apps starts with Terminal and Files; a
+  screenshot of every section.
+- **files:** open at a board folder; the other panel onto the PSP through
+  the drive list; copy two files with triangle > Copy (checked byte for
+  byte); open a picture and a text file from the stick; delete with its
+  question; back to the board.
+- **terminal:** a command and its output.
+
+The report goes to `build/psp-tests/<time>/report.md`: each check, what was
+measured, and the PSP's screenshots as PNG.
+
+### 8.3 First run
+
+The first run was on the Pi 400 with a PSP-1000 over USB: 20 checks in
+about 100 s.
+
+- **The memory stick over the link:** 2.3 MB/s writing and 4.4 MB/s
+  reading. Each 64 KB is one request, and the file is opened and closed
+  each time, far below the link's 25 MB/s, so there is room to improve.
+- **Dates:** that PSP's clock was about 15.7 years behind. Files the PSP
+  writes carry its clock, so the check only asks for a real date and
+  reports the offset.
+- **A bug found by the run:** the file manager redrew every turn even with
+  nothing pressed. Fixed.
 
