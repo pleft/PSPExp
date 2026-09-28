@@ -1,6 +1,6 @@
 # PSPExp packages: recipes over the board's own package manager
 
-*Design, reviewed three times on 2026-09-28: decisions in §11; operational contracts in §5.1-5.6 and §6.1. Nothing here is implemented yet except what "Today" describes.*
+*Design, reviewed on 2026-09-28 (findings closed at the design level): decisions in §11; operational contracts in §5.1-5.6 and §6.1. Implementation and hardware failure tests must still show these guarantees hold. Nothing here is implemented yet except what "Today" describes.*
 
 ## Contents
 
@@ -667,7 +667,10 @@ because boards differ.
   - a system file name owned by another package is refused;
   - a runtime update interrupted in each step (invalidate, copy, check,
     `VERSION`, switch), and between the switch's rename and the console's
-    reading of `active`, leaves the old slot booting;
+    reading of `active`, always leaves a complete, verified slot that
+    boots:
+    - the old one, when the interruption came before the switch;
+    - the new one, when it came after, with the old one kept for fallback;
   - a slot with a stale `VERSION` and one damaged file is never booted:
     not by `active`, not by fallback, not with L;
   - a runtime that doesn't connect: `tries` reaches its limit and the
