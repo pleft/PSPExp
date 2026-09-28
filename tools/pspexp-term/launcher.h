@@ -36,6 +36,8 @@ void launcher_child_exited(int status);
 int launcher_take_console(void);
 /* 1 once when the user opened Apps > Files: show the file manager */
 int launcher_take_files(void);
+/* 1 once with the id of a built-in app the user opened (appview.h: "monitor", "store") */
+int launcher_take_app(char *id, size_t n);
 /* a file opened from the file manager: a ROM starts in its system's
  * emulator, as from the launcher's lists. 1 when started, 0 when no system
  * plays it */
@@ -50,6 +52,8 @@ void launcher_state(char *out, size_t n);
 void launcher_set_test_mode(int on);
 /* the highlight onto the entry titled so in the section shown; 1, or 0 when none */
 int  launcher_select(const char *title);
+/* the rail onto the section named so; 1, or 0 when none */
+int  launcher_category(const char *name);
 /* System > PSP clock: set the PSP's clock from this board (1, the default) */
 int  launcher_psp_clock(void);
 /* 1 once when the user just turned it on: set it now */

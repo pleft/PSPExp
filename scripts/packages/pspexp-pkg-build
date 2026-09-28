@@ -5,6 +5,10 @@
 #   scripts/packages/pspexp-pkg-build install ID... build when missing, copy, pspexp-pkg install
 #   scripts/packages/pspexp-pkg-build remove ID...
 #   scripts/packages/pspexp-pkg-build list          what the board has installed
+#   scripts/packages/pspexp-pkg-build index         (re)write build/<board>/pkg/index and covers
+#   scripts/packages/pspexp-pkg-build publish       the board's repository: every built package, the
+#                                                   index and covers, to <root>/repo on the board,
+#                                                   where Apps > Packages offers them
 # BOARD=gameshell (default) | omega | pi picks the build; HOST=user@host is the
 # board to install on over SSH (default: cpi@gameshell, root@omega, pi@raspberrypi;
 # GAMESHELL= is still read, its old name). A recipe
@@ -39,10 +43,40 @@ build() {
 	echo "built $OUT/$id.tar.gz ($(du -h "$OUT/$id.tar.gz" | cut -f1))"
 }
 
+# The repository's index, one line per package (the board's Packages app reads it):
+#   id|version|bytes|file|title|description
+# and <id>.png, the package's own cover when it has one (its first entry's picture).
+index() {
+	idx="$OUT/index.new"
+	: > "$idx"
+	for f in "$OUT"/*.tar.gz; do
+		[ -f "$f" ] || continue
+		id=$(basename "$f" .tar.gz)
+		meta=$(tar -xzOf "$f" "$id/package" 2>/dev/null) || continue
+		field() { printf '%s\n' "$meta" | sed -n "s/^$1=//p" | head -1 | tr '|' '/'; }
+		size=$(wc -c < "$f" | tr -d ' ')
+		printf '%s|%s|%s|%s|%s|%s\n' "$id" "$(field version)" "$size" "$(basename "$f")" "$(field title)" "$(field description)" >> "$idx"
+		png=$(tar -tzf "$f" 2>/dev/null | grep -E "^$id/[^/]+\.png$" | head -1)
+		if [ -n "$png" ]; then tar -xzOf "$f" "$png" > "$OUT/$id.png"; else rm -f "$OUT/$id.png"; fi
+	done
+	mv "$idx" "$OUT/index"
+	echo "index: $(wc -l < "$OUT/index" | tr -d ' ') packages in $OUT/index"
+}
+
+# where the board keeps PSPExp's packages ($PSPEXP_ROOT)
+board_root() { case "$BOARD" in omega) echo /mnt/mmcblk0p1/pspexp/opt ;; *) echo /opt/pspexp ;; esac; }
+
 cmd="$1"; [ $# -gt 0 ] && shift
 case "$cmd" in
 recipes) for r in "$RECIPES"/[!_]*.sh; do printf '%-14s %s\n' "$(basename "$r" .sh)" "$(sed -n 's/^# title: //p' "$r")"; done ;;
-build) for id in "$@"; do build "$id"; done ;;
+build) for id in "$@"; do build "$id"; done; index ;;
+index) index ;;
+publish)
+	index
+	R="$(board_root)/repo"
+	ssh "$HOST" "mkdir -p '$R' && rm -f '$R'/*.tar.gz '$R'/*.png '$R'/index"
+	scp -O -q "$OUT"/*.tar.gz "$OUT"/index $(ls "$OUT"/*.png 2>/dev/null) "$HOST:$R/"
+	echo "published $(wc -l < "$OUT/index" | tr -d ' ') packages to $HOST:$R" ;;
 install)
 	for id in "$@"; do
 		[ -f "$OUT/$id.tar.gz" ] && [ "$OUT/$id.tar.gz" -nt "$RECIPES/$id.sh" ] || build "$id"

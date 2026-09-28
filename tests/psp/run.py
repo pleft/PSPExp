@@ -140,6 +140,10 @@ class Run:
         s = self.state()
         cats = s["launcher.categories"].split("|")
         self.expect(name in cats, "no %s section (sections: %s)" % (name, ", ".join(cats)))
+        ok, _ = self.t.ctl("category " + name)   # straight there (older consoles: by the buttons below)
+        if ok:
+            self.ctl("idle 2500")
+            return self.state()
         for _ in range(len(cats) + 2):
             s = self.state()
             cur = s["launcher.category"]
@@ -515,8 +519,82 @@ def suite_games(r):
                 lambda cat=cat, first=roms[0]: play(r, cat, first, MIN_FPS, "emu-" + slug(cat)))
 
 
+STORE_WRITES = False   # --store-writes: the Packages app also removes and reinstalls a package
+
+
+def suite_apps(r):
+    t = r.t
+
+    def listed():
+        r.ctl("open launcher")
+        s = r.to_category("Apps")
+        items = s["launcher.items"].split("|")
+        r.expect(items[:4] == ["Terminal", "Files", "System Monitor", "Packages"], "Apps starts with %s" % items[:4])
+    r.check("Apps lists Terminal, Files, System Monitor and Packages", listed)
+
+    def monitor():
+        r.ctl("open monitor")
+        r.ctl("wait 2500")   # rates and CPU shares need two readings
+        s = r.state()
+        r.expect(s["view"] == "monitor", "view %s" % s["view"])
+        r.expect(int(s["monitor.cores"]) >= 1 and int(s["monitor.mem_total"]) > 0 and int(s["monitor.programs"]) > 0,
+                 "no figures: cores %s, memory %s, programs %s" % (s["monitor.cores"], s["monitor.mem_total"], s["monitor.programs"]))
+        r.note("monitor: %s cores, %.0f MB, %s programs, CPU %s%%%s" % (s["monitor.cores"], int(s["monitor.mem_total"]) / 1048576, s["monitor.programs"], s["monitor.cpu"],
+               "" if s["monitor.temp_mc"] == "-1" else ", %.0f C" % (int(s["monitor.temp_mc"]) / 1000)))
+        r.shot("monitor-overview", "System Monitor: the overview")
+        r.press("r", idle=False); r.ctl("wait 1200")
+        r.expect(r.state()["monitor.page"] == "programs", "the Programs page did not open")
+        r.shot("monitor-programs", "System Monitor: the programs")
+        r.press("circle", idle=False); r.ctl("wait 800")
+        r.expect(r.state()["view"] == "launcher", "circle did not close it")
+    r.check("System Monitor shows the board's figures, both pages, closes", monitor)
+
+    def store():
+        r.ctl("open store")
+        r.ctl("wait 2500")
+        s = r.state()
+        r.expect(s["view"] == "store", "view %s" % s["view"])
+        pk = dict(x.split(":") for x in s["store.packages"].split("|") if ":" in x)
+        installed = set(l.split()[0] for l in t.sh("pspexp-pkg list 2>/dev/null || true").splitlines() if l.strip())
+        shown = set(k for k, v in pk.items() if v in ("installed", "update", "local"))
+        r.expect(shown == installed, "installed per the app %s, per pspexp-pkg %s" % (sorted(shown), sorted(installed)))
+        r.note("packages: %d offered or installed, %d installed, repositories %s" % (len(pk), len(installed), s["store.sources"]))
+        r.shot("store", "Packages")
+    r.check("Packages lists what the repositories offer and what is installed", store)
+
+    if STORE_WRITES:
+        def cycle():
+            s = r.state()
+            pk = [x.split(":") for x in s["store.packages"].split("|") if ":" in x]
+            cand = [k for k, v in pk if v == "installed"]
+            r.expect(cand, "nothing installed that a repository also offers")
+            sizes = {}
+            for k in cand:   # the smallest: the quickest to put back
+                sizes[k] = int(t.sh("du -sk \"${PSPEXP_ROOT:-/opt/pspexp}/apps/%s\" 2>/dev/null | cut -f1 || echo 0" % k).strip() or 0)
+            pid = min(cand, key=lambda k: sizes[k] or 1 << 30)
+            for _ in range(len(pk) + 1):
+                if r.state()["store.selected"] == pid: break
+                r.press("down", idle=False)
+            r.press("triangle", idle=False); r.ctl("wait 500")
+            r.expect(r.state()["store.mode"] == "confirm", "no question before removing")
+            r.press("cross", idle=False)
+            end = time.time() + 60
+            while time.time() < end and r.state()["store.mode"] == "working": time.sleep(0.5)
+            r.expect("Removed" in r.state()["store.result"], "remove: %s" % r.state()["store.result"])
+            r.press("cross", idle=False)
+            r.press("cross", idle=False)   # install it again
+            end = time.time() + 120
+            while time.time() < end and r.state()["store.mode"] == "working": time.sleep(0.5)
+            r.expect("Installed" in r.state()["store.result"], "install: %s" % r.state()["store.result"])
+            r.press("cross", idle=False)
+            r.expect(pid in t.sh("pspexp-pkg list"), "%s is not installed again" % pid)
+            r.note("packages: removed and reinstalled %s" % pid)
+        r.check("Packages removes a package (asks) and installs it again", cycle)
+    r.ctl("open launcher")
+
+
 SUITES = [("link", suite_link), ("stick", suite_stick), ("launcher", suite_launcher),
-          ("files", suite_files), ("terminal", suite_terminal), ("relink", suite_relink), ("games", suite_games)]
+          ("files", suite_files), ("terminal", suite_terminal), ("apps", suite_apps), ("relink", suite_relink), ("games", suite_games)]
 
 
 def main():
@@ -524,10 +602,12 @@ def main():
     ap.add_argument("--host", help="user@board whose console drives the PSP")
     ap.add_argument("--local", action="store_true", help="a console on this machine")
     ap.add_argument("--min-fps", type=int, default=0, help="games: also require this frame rate (off: rates are only recorded)")
+    ap.add_argument("--store-writes", action="store_true", help="apps: the Packages app also removes and reinstalls the smallest package")
     ap.add_argument("suites", nargs="*", help="some of: " + " ".join(n for n, _ in SUITES))
     a = ap.parse_args()
-    global MIN_FPS
+    global MIN_FPS, STORE_WRITES
     MIN_FPS = a.min_fps
+    STORE_WRITES = a.store_writes
     if not a.host and not a.local:
         ap.error("--host user@board or --local")
     want = a.suites or [n for n, _ in SUITES]

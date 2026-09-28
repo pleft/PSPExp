@@ -22,7 +22,8 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
   pspexp-pkg         install, remove and list packages on the board
 
 packages/          what the launcher offers, for any board
-  pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=)
+  pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=);
+                     `publish`: the board's repository for Apps > Packages
   recipes/           one recipe per package: freedoom, opentyrian, cavestory, jazz,
                      simutrans, nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
   art/               the games' 128x128 launcher pictures (sources and licenses in its README)

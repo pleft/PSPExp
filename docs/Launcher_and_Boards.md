@@ -17,6 +17,7 @@ GameShell, hence sections 1-5; section 6 is the emulators. Scripts:
 7. The terminal and the file manager
 8. Integration tests on a real PSP
 9. The PSP's clock from the board
+10. System Monitor and Packages
 
 ---
 
@@ -953,4 +954,85 @@ to touch the PSP's Settings.
 - **Verified on the PSP-1000 via the Pi 400:** the clock was 15.7 years
   behind and was set. Then its zone (UTC+2 without summer time) was set to
   Athens' UTC+3 with summer time, and the user saw the XMB clock right.
+
+## 10. System Monitor and Packages (2026-09-28)
+
+Apps now holds four built-in apps: Terminal, Files, **System Monitor** and
+**Packages**, each with a cover of its own. The last two are views like the
+file manager, and share one small interface (`appview.h`: open, input, frame,
+render, exit, state). The console shows them in place of the launcher; hold
+select or circle closes them.
+
+### 10.1 System Monitor
+
+`monitor.c` draws the board's own figures, read by `sysinfo.c`: on Linux from
+`/proc` and `/sys`, on a Mac through sysctl, mach and libproc. It refreshes
+once a second, so it costs the link very little.
+
+- **Overview:**
+  - **CPU:** a bar for each core, the frequency, the temperature and the
+    load.
+  - **Memory and swap.**
+  - **The board:** its model, name, uptime and kernel.
+  - **Storage:** the board's drives from the file manager's list, plus the
+    PSP's memory stick.
+  - **Network:** interfaces with an address, or Wi-Fi ones, with their rates
+    and Wi-Fi quality.
+  - **The PSP's link:** frames per second, bytes per second and latency.
+- **Programs:** the busiest first, sorted by CPU or memory (square). Cross
+  ends the highlighted one after a question, with SIGTERM.
+  - **What can be ended:** only the user's own programs, not root's. On a
+    board where everything runs as root (the Omega), only the program the
+    launcher started. Others show a lock.
+
+### 10.2 Packages
+
+`store.c` reads the repositories and compares them with what is installed
+(`<root>/apps/*/package`). Each package shows as Installed, Update, or Get.
+
+- **Buttons:** cross installs, updates or reinstalls; triangle removes, after
+  a question; start reads the repositories again.
+- **How it installs:** it runs `pspexp-pkg` in the background (log:
+  `/tmp/pspexp-store.log`), and the launcher notices the change by itself.
+- **Repositories:**
+  - **On the board:** `<root>/repo` (`/opt/pspexp/repo`; on the Omega
+    `/mnt/mmcblk0p1/pspexp/opt/repo`). A card image can carry one.
+  - **Others:** one per line of `~/.config/pspexp-launcher/sources`, either a
+    folder or an `http(s)` address. For an address, the app reads
+    `<address>/<board>/`, where `<board>` is `gameshell`, `pi` or `omega`
+    (from `uname -m`), and fetches with curl or wget into
+    `~/.cache/pspexp-store`.
+- **The index:** a repository holds `index`, with one line per package
+  (`id|version|bytes|file|title|description`), the `.tar.gz` packages, and
+  `<id>.png`, the package's own cover (its first entry's picture).
+- **Filling a repository from the Mac:** `scripts/packages/pspexp-pkg-build`
+  writes the index on every build (`index` on its own). `publish` copies
+  `build/<board>/pkg` to the board's `<root>/repo`:
+
+  ```sh
+  BOARD=omega HOST=omega scripts/packages/pspexp-pkg-build publish
+  ```
+
+  Nothing is published on the internet; a web repository is for later.
+
+### 10.3 Status
+
+Both apps were tried on the Pi 400 and the Omega, against the stand-in PSP
+(the real PSP was off):
+
+- the monitor showed each board's figures;
+- on the Omega, Packages removed SNES (with the question) and installed it
+  again from the board's repository.
+
+The first run on the Omega also found a bug: after a reconnect, the file
+manager and the new apps stayed black until something changed. Both now
+draw again when the link is back.
+
+The integration tests have an `apps` suite:
+- Apps lists the four apps;
+- the monitor has figures and both pages;
+- the Packages list matches `pspexp-pkg list`.
+
+`--store-writes` adds a remove and reinstall of the smallest package. The
+control port gained `category NAME`.
 

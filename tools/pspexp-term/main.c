@@ -64,6 +64,7 @@
 #include "files.h"
 #include "files_psp.h"
 #include "control.h"
+#include "appview.h"
 #include "files_ops.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
@@ -1475,6 +1476,8 @@ static PspExpTransport *open_transport(void)
     return t;
 }
 
+static int g_redraw_app;   /* a new connection: the app shown draws again, changed or not */
+
 static int try_connect(void)
 {
     PspExpTransport *t = open_transport();
@@ -1491,6 +1494,8 @@ static int try_connect(void)
         launcher_set_link(link);
     }
     launcher_invalidate();
+    files_invalidate();   /* the PSP's screen is empty after a reconnect: whatever is shown draws again */
+    g_redraw_app = 1;
     return 1;
 }
 
@@ -1528,6 +1533,7 @@ static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
 static int g_view_launcher, g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
 static int g_view_files, g_files_from_launcher;   /* the file manager (files.c), and where it was opened from */
 static int g_launch_from_files;                   /* the running program was opened in the file manager */
+static const AppView *g_app;                      /* a built-in app shown instead of the launcher (appview.h) */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself: no mirror while it runs */
@@ -1536,6 +1542,7 @@ static int g_launch_aware;                   /* it hands the PSP over itself: no
 static void view_cycle(void)
 {
     swallow();   /* the press that switched does not act in the new view */
+    if (g_app) { g_app = NULL; g_view_launcher = 1; launcher_invalidate(); return; }
     if (g_view_files) { g_view_files = 0; if (g_files_from_launcher) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1; return; }
     if (g_view_launcher) { g_view_launcher = 0; T.dirty = 1; }
     else if (!g_view_mirror) {
@@ -1548,11 +1555,22 @@ static void view_cycle(void)
     }
 }
 
+/* a built-in app (System Monitor, Packages), in place of the launcher */
+static void app_show(const AppView *a)
+{
+    if (!g_launcher_on || !a) return;   /* it draws with the launcher's graphics */
+    g_app = a;
+    g_view_files = 0; g_view_launcher = 0; g_view_mirror = 0;
+    swallow();
+    a->open();
+}
+
 /* the file manager at path (NULL: home), over the launcher or the terminal */
 static void files_show(const char *path, int from_launcher)
 {
     if (!g_launcher_on) return;   /* it draws with the launcher's graphics */
     g_files_from_launcher = from_launcher;
+    g_app = NULL;
     g_view_files = 1; g_view_launcher = 0; g_view_mirror = 0;
     swallow();
     files_open(path);
@@ -1637,6 +1655,7 @@ static void handle_input(void)
         if (!mirror_available() && !g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
     }
     if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
+    if (g_app) { g_app->input(b, pressed, up, down, left, right, now); return; }
     if (g_view_files) { files_input(b, pressed, up, down, left, right, now); return; }
     if (g_view_launcher) { launcher_input(b, pressed, up, down, left, right, now); return; }
     if (shift != held_shift || ctrl != held_ctrl) { held_shift = shift; held_ctrl = ctrl; if (kb_shown) T.dirty = 1; }
@@ -2611,10 +2630,11 @@ static void ctl_state(char *o, size_t n)
     int y, x;
     o[0] = 0;
     ctl_add(o, n, "ok\nview=%s\nconnected=%d\npsp_files=%d\nrunning=%s\n",
-            g_view_files ? "files" : g_view_launcher ? "launcher" : g_view_mirror ? "mirror" : "terminal",
+            g_app ? g_app->id : g_view_files ? "files" : g_view_launcher ? "launcher" : g_view_mirror ? "mirror" : "terminal",
             pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED, files_psp_available(),
             g_launcher_on && launcher_running_title() ? launcher_running_title() : "");
     if (g_launcher_on) launcher_state(o, n);
+    if (g_app && g_app->state) g_app->state(o, n);
     files_state(o, n);
     ctl_add(o, n, "psp_clock=%s\nprogram_pid=%d\n", g_clock_report, (int)g_launch_pid);
     ctl_add(o, n, "term.session=%d\nterm.cursor=%d,%d\nterm.scrolled=%d\n", g_sess_cur, T.cx, T.cy, T.view);
@@ -2812,9 +2832,10 @@ static void ctl_step(uint64_t now, int connected)
     } else if (!strncmp(cmd, "open ", 5)) {
         const char *w = cmd + 5;
         if (!strncmp(w, "files", 5)) { if (!g_launcher_on) { ctl_reply("error the file manager needs --launcher"); return; } files_show(w[5] == ' ' ? w + 6 : NULL, 1); }
-        else if (!strcmp(w, "launcher")) { if (!g_launcher_on) { ctl_reply("error not started with --launcher"); return; } g_view_files = 0; g_view_launcher = 1; launcher_invalidate(); }
-        else if (!strcmp(w, "terminal")) { g_view_files = 0; g_view_launcher = 0; T.dirty = 1; }
-        else { ctl_reply("error open launcher|terminal|files [PATH]"); return; }
+        else if (!strcmp(w, "launcher")) { if (!g_launcher_on) { ctl_reply("error not started with --launcher"); return; } g_app = NULL; g_view_files = 0; g_view_launcher = 1; launcher_invalidate(); }
+        else if (!strcmp(w, "terminal")) { g_app = NULL; g_view_files = 0; g_view_launcher = 0; T.dirty = 1; }
+        else if (app_find(w)) { if (!g_launcher_on) { ctl_reply("error the apps need --launcher"); return; } app_show(app_find(w)); }
+        else { ctl_reply("error open launcher|terminal|files [PATH]|monitor|store"); return; }
         swallow();
         C.st = CS_SETTLE; C.until = now + 150000u;
     } else if (!strncmp(cmd, "type ", 5)) {   /* straight into the shell; \n is Enter */
@@ -2831,6 +2852,9 @@ static void ctl_step(uint64_t now, int connected)
         if (!connected) { ctl_reply("error not connected"); return; }
         g_ctl_relink = 1;
         C.st = CS_RELINK; C.t0 = 0; C.limit = now + 20000000u;
+    } else if (!strncmp(cmd, "category ", 9)) {   /* the launcher's rail onto a section */
+        if (!g_launcher_on || !launcher_category(cmd + 9)) { ctl_reply("error no such section"); return; }
+        C.st = CS_SETTLE; C.until = now + 300000u;
     } else if (!strncmp(cmd, "select ", 7)) {   /* the launcher's highlight onto an entry of the section shown */
         if (!g_launcher_on || !launcher_select(cmd + 7)) { ctl_reply("error no such entry in this section"); return; }
         C.st = CS_SETTLE; C.until = now + 150000u;
@@ -2842,7 +2866,7 @@ static void ctl_step(uint64_t now, int connected)
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
         launcher_set_test_mode(0);
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], select TITLE, type TEXT, fs ..., stop, relink, clock [force], ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], ping, end");
 }
 
 int main(int argc, char **argv)
@@ -3091,7 +3115,10 @@ int main(int argc, char **argv)
             if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) { g_launch_from_files = g_view_files; launch_child(cmd, cwd, aware); }
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
             if (launcher_take_files()) { files_show(NULL, 1); swallow(); }
+            { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }
+        if (g_app && g_app->take_exit()) view_cycle();
+        monitor_set_program(g_launch_pid);
         if (g_view_files) {
             char dir[1024];
             if (files_take_exit()) view_cycle();
@@ -3108,7 +3135,14 @@ int main(int argc, char **argv)
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u) { last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1; }
-        if (g_view_files) {
+        if (g_app) {
+            if ((g_app->needs_frame(now) || g_redraw_app) && pspexp_should_render(ctx)) {
+                g_redraw_app = 0;
+                g_app->render(ctx, now);
+                frames++; g_ctl_frame_us = now;
+                if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
+            }
+        } else if (g_view_files) {
             if (files_needs_frame(now) && pspexp_should_render(ctx)) {
                 files_render(ctx, now);
                 frames++; g_ctl_frame_us = now;

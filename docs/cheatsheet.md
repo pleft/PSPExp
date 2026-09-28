@@ -49,6 +49,7 @@ cable pull, so pull the cable to read it after a session.
 | **the PSP as this machine's console** | `build/host/pspexp-term` |
 | the PSP's memory stick from a shell (list, copy both ways, mkdir, rm, mv, free space) | `build/host/pspexp-ms [--tcp <host>] ls ms0:/PSP/GAME` / `get ms0:/X [file]` / `put file ms0:/PSP/GAME/X/` / `mkdir` / `rm` / `mv` / `df` |
 | a stand-in PSP whose memory stick is a folder (file manager, `pspexp-ms`) | `PSPEXP_MS0=<folder> build/host/pspexp-sdl-server` |
+| a board's package repository for Apps > Packages (every built package, index, covers) | `BOARD=<board> HOST=<user@board> scripts/packages/pspexp-pkg-build publish` |
 | **integration tests on a real PSP** (on a board's console; report + the PSP's screenshots in `build/psp-tests/`) | `tests/psp/run.py --host <user@board> [link stick launcher files terminal]` |
 | drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |

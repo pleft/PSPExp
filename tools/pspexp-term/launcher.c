@@ -100,8 +100,11 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
 }
 
 /* apps built into the console, first in Apps: the terminal and the file manager */
-static LEntry g_builtin[2];
-static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 };
+#define NBUILTIN 4
+static LEntry g_builtin[NBUILTIN];
+static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 },
+                      GRAD_MONITOR[2] = { 0x0f766e, 0x2563eb }, GRAD_STORE[2] = { 0x7c3aed, 0xe11d48 };
+static char g_app_req[16];   /* a built-in app to show (appview.h), taken by the console */
 
 static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp(e->id, "a:", 2); }
 
@@ -109,7 +112,7 @@ static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp
 static LEntry *find_any(const char *id)
 {
     int i;
-    for (i = 0; i < 2; i++) if (!strcmp(g_builtin[i].id, id)) return &g_builtin[i];
+    for (i = 0; i < NBUILTIN; i++) if (!strcmp(g_builtin[i].id, id)) return &g_builtin[i];
     return lib_find(&L, id);
 }
 
@@ -159,7 +162,9 @@ static void cats_build(void)
     cats_free();
     action(&g_builtin[0], "console", "Terminal", "square-terminal", "This board's shell on the PSP: up to four, themes, copy and paste");
     action(&g_builtin[1], "files", "Files", "folder-open", "The board's drives and the PSP's memory stick: copy, move, view");
-    for (i = 0; i < 2; i++) {
+    action(&g_builtin[2], "monitor", "System Monitor", "activity", "This board's CPU, memory, temperature, storage, network and programs");
+    action(&g_builtin[3], "store", "Packages", "package", "Games, emulators and apps for this board: install, update, remove");
+    for (i = 0; i < NBUILTIN; i++) {
         int k;
         g_builtin[i].type = LT_APP;
         for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
@@ -183,8 +188,7 @@ static void cats_build(void)
         for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
     }
     c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
-    cat_push(c, &g_builtin[0]);
-    cat_push(c, &g_builtin[1]);
+    for (i = 0; i < NBUILTIN; i++) cat_push(c, &g_builtin[i]);
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
     c = cat_add("System", "settings", 0x94a3b8, CK_SETTINGS, "item");
     g_nactions = 0;
@@ -441,7 +445,10 @@ static void draw_cover(const LEntry *e, int x, int y, int alpha)
     char png[700] = "";
     memset(&cs, 0, sizeof(cs));
     cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
-    if (is_builtin(e)) { cs.hero = 1; cs.grad = !strcmp(e->id, "a:files") ? GRAD_FILES : GRAD_TERMINAL; }
+    if (is_builtin(e)) {
+        cs.hero = 1;
+        cs.grad = !strcmp(e->id, "a:files") ? GRAD_FILES : !strcmp(e->id, "a:monitor") ? GRAD_MONITOR : !strcmp(e->id, "a:store") ? GRAD_STORE : GRAD_TERMINAL;
+    }
     if (e->art[0]) cs.art = e->art;
     else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
     gfx_cover(&cs, x, y, alpha);
@@ -554,6 +561,8 @@ static void run_action(LEntry *e, uint64_t now)
         g_console_req = 1;
     } else if (!strcmp(a, "files")) {
         g_files_req = 1;
+    } else if (!strcmp(a, "monitor") || !strcmp(a, "store")) {
+        snprintf(g_app_req, sizeof(g_app_req), "%s", a);
     } else if (!strcmp(a, "pspclock")) {
         g_psp_clock = !g_psp_clock;
         lib_setting_set(&L, "psp_clock", g_psp_clock);
@@ -635,6 +644,7 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
 
 int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
 int launcher_take_files(void) { int r = g_files_req; g_files_req = 0; return r; }
+int launcher_take_app(char *id, size_t n) { if (!g_app_req[0]) return 0; snprintf(id, n, "%s", g_app_req); g_app_req[0] = 0; return 1; }
 
 int launcher_open_file(const char *path)
 {
@@ -647,6 +657,14 @@ int launcher_open_file(const char *path)
 const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }
 
 void launcher_set_test_mode(int on) { g_test_mode = on; }
+
+int launcher_category(const char *name)
+{
+    int i;
+    for (i = 0; i < g_ncat; i++)
+        if (!strcmp(g_cat[i].name, name)) { g_cur = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
+    return 0;
+}
 
 int launcher_select(const char *title)
 {
