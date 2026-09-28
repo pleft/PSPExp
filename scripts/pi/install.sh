@@ -66,6 +66,13 @@ ssh "$PI" 'set -e; cd ~/pspexp/src
 	cmake --build build -j4 --target pspexp-term sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
 	[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
 
+# a Pi whose PSPExp comes from apt (pspexp-core, docs/Package_Manager.md §6): only the build;
+# then scripts/packages/debs/pspexp-core/build build/debs arm64 $PI, apt-repo build and push,
+# and pspexp-pkg upgrade on the Pi (the console offers System > Restart PSPExp)
+# (automatic once the Pi has pspexp-core: /usr/local copies would shadow the package's)
+[ -n "${PSPEXP_CORE:-}" ] || { ssh "$PI" 'dpkg-query -W -f="\${Status}" pspexp-core 2>/dev/null' | grep -q "ok installed" && PSPEXP_CORE=apt; }
+if [ "${PSPEXP_CORE:-}" = apt ]; then echo "built on $PI (~/pspexp/src/build); its PSPExp comes from apt: package it as pspexp-core"; exit 0; fi
+
 # install; the running console is swapped for the new one at the end
 ssh "$PI" 'set -e; S=~/pspexp/src; U=$(id -un); H=$HOME
 	sudo install -d -m 0755 /usr/local/bin /usr/local/lib /usr/local/share/pspexp/launcher /etc/pspexp

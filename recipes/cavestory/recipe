@@ -1,0 +1,22 @@
+# Cave Story: NXEngine-evo and the freeware data, from PSPExp's repository
+# (Debian does not carry NXEngine-evo).
+
+[package]
+id=cavestory
+title=Cave Story
+description=The freeware platformer Cave Story (2004), on NXEngine-evo
+category=game
+license=GPL-3.0 (NXEngine-evo); freeware data (Cave Story, Studio Pixel; English translation by Aeon Genesis)
+version=1
+
+[debian]
+apt=pspexp-cavestory
+
+[entry]
+title=Cave Story
+type=game
+description=Studio Pixel's 2004 platformer: explore a floating island
+icon=gamepad-2
+exec=/usr/games/pspexp-cavestory
+keys=cross=z,square=x,circle=x,l=a,r=s,triangle=q,select=w,start=escape,up=up,down=down,left=left,right=right
+nub=keys

@@ -7,6 +7,7 @@
 # (a system on the NES core), pkgtest-clash (a system named like NES's).
 ROOT=${PSPEXP_ROOT:-/opt/pspexp}; APPS=$ROOT/apps; SYS=$ROOT/systems; ST=$ROOT/state
 CAT=/usr/share/pspexp/catalogue
+for HELPER in /usr/sbin/pspexp-pkg-apt /usr/local/sbin/pspexp-pkg-apt; do [ -x "$HELPER" ] && break; done   # pspexp-core's, or an installer's
 pass=0; fail=0
 ok() { pass=$((pass + 1)); echo "  PASS $*"; }
 bad() { fail=$((fail + 1)); echo "  FAIL $*"; }
@@ -31,14 +32,14 @@ restore() {
 trap restore EXIT
 
 echo "catalogue: authentication (§5.1)"
-setrepo file:///tmp/pkgtest-repo/good; sudo /usr/local/sbin/pspexp-pkg-apt update >/dev/null 2>&1
+setrepo file:///tmp/pkgtest-repo/good; sudo $HELPER update >/dev/null 2>&1
 check '[ -d $CAT/recipes/pkgtest-hello ]' "a signed, newer catalogue is taken"
 S1=$(cat $CAT/serial)
 setrepo file:///tmp/pkgtest-repo/tampered
-sudo /usr/local/sbin/pspexp-pkg-apt update >/dev/null 2>&1; r=$?
+sudo $HELPER update >/dev/null 2>&1; r=$?
 check '[ $r -ne 0 ] && [ "$(cat $CAT/serial)" = "$S1" ]' "a tampered catalogue is refused; the installed one stays"
 setrepo file:///tmp/pkgtest-repo/older
-sudo /usr/local/sbin/pspexp-pkg-apt update >/dev/null 2>&1; r=$?
+sudo $HELPER update >/dev/null 2>&1; r=$?
 check '[ $r -ne 0 ] && [ "$(cat $CAT/serial)" = "$S1" ]' "an older (validly signed) catalogue is refused"
 setrepo "$REPO_SAVE"
 
@@ -96,7 +97,7 @@ check '! has hello' "upgrade: A (hello), needed by nothing now, removed"
 pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
 
 echo "damaged staging: back to exactly the old install (§5.3)"
-setrepo file:///tmp/pkgtest-repo/good; sudo rm -f $CAT/serial; sudo /usr/local/sbin/pspexp-pkg-apt update >/dev/null 2>&1   # (the test resets the serial to go back to version 1)
+setrepo file:///tmp/pkgtest-repo/good; sudo rm -f $CAT/serial; sudo $HELPER update >/dev/null 2>&1   # (the test resets the serial to go back to version 1)
 pspexp-pkg install pkgtest-hello >/dev/null 2>&1
 before=$(cat $APPS/pkgtest-hello/*.entry)
 setrepo file:///tmp/pkgtest-repo/good2; pspexp-pkg update >/dev/null 2>&1; setrepo "$REPO_SAVE"

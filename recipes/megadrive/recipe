@@ -1,0 +1,24 @@
+# The Mega Drive / Genesis: Debian's Genesis Plus GX core, played by pspexp-retro.
+
+[package]
+id=megadrive
+title=Mega Drive
+description=Sega Mega Drive / Genesis: Debian's Genesis Plus GX core; ROMs in ~/roms/md
+category=system
+license=Genesis Plus GX licence (non-commercial); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro libretro-genesisplusgx
+core=genesis_plus_gx_libretro.so
+
+[system]
+id=md
+name=Mega Drive
+short=MD
+icon=gamepad-2
+ext=md,gen,smd,bin
+roms=~/roms/md
+thumbs=Sega - Mega Drive - Genesis
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys

@@ -716,7 +716,7 @@ because boards differ.
 
 ## 12. Implementation plan
 
-**Status (2026-09-28):**
+**Status (2026-09-29):**
 - **Steps 1 to 3 are done on the Pi 400:**
   - recipes and their check;
   - `pspexp-pkg` and the root helper to the contracts of §5, with 28
@@ -726,8 +726,32 @@ because boards differ.
 - **The repository** is signed and served from the home server. The Pi's
   installer sets the board up when `~/.pspexp/repo-url` exists on the Mac.
 - **Found along the way:** Debian's libretro cores accept "retroarch or any
-  libretro frontend". With both new in one install, apt took RetroArch, so
-  the helper now installs PSPExp's own packages (the frontend) first.
+  libretro frontend", and Freedoom accepts "dsda-doom or any Doom engine".
+  With both choices new in one install, apt takes its first choice. So the
+  helper installs a recipe's packages one at a time, in the order the
+  recipe lists them (`pspexp-retro`, or `chocolate-doom`, first).
+- **Step 4 is done on the Pi 400:**
+  - **Our packages:** `pspexp-core` (the console, SDL layer, tools, root
+    helper, fonts), `pspexp-cavestory`, `jazz-shareware-data`,
+    `tyrian-data` and `pspexp-retro`, built on the Mac by
+    `scripts/packages/debs/*/build` and published with `apt-repo`.
+  - **The catalogue** has nine recipes: OpenTyrian, Freedoom (two
+    entries), Cave Story, Jazz, Simutrans, NES, Game Boy (GB and GBC), Mega
+    Drive and SNES. All installed through apt on the Pi, without RetroArch
+    or dsda-doom.
+  - **They play on the real PSP:** the games suite passes 11 of 11, at the
+    same speeds as the older builds.
+  - **The Pi's PSPExp is now `pspexp-core`** from apt; its old
+    `/usr/local` copies are gone.
+  - **A self-update, end to end:** `pspexp-pkg upgrade` installed a newer
+    core; the running console noticed and offered System > Restart PSPExp;
+    choosing it started the new version.
+  - **The Pi installer only builds** once the Pi has `pspexp-core`
+    (`PSPEXP_CORE=apt`, detected automatically).
+- **Found by that test:** the launcher's System entries lived in a fixed
+  array of 8. The PSP clock setting had already made 9 on the GameShell
+  (with its Wi-Fi mode entry), and "Restart PSPExp" made 9 on the Pi. The
+  overflow corrupted the section names. Now it's 16, with a guard.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.

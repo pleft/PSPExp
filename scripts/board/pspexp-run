@@ -11,7 +11,9 @@
 # headless SDL (dummy video and audio drivers): the X path costs chocolate-doom
 # 20 fps (35 headless) and there is no LCD to show it on. PSPEXP_X=1 keeps X
 # (hidden window) for programs that need it.
-LIB=${PSPEXP_SHIM:-/usr/local/lib/libsdl-pspexp.so}
+# the SDL layer: an installer's copy (/usr/local) or the pspexp-core package's (/usr/lib/pspexp)
+LIB=${PSPEXP_SHIM:-}
+[ -n "$LIB" ] || for LIB in /usr/local/lib/libsdl-pspexp.so /usr/lib/pspexp/libsdl-pspexp.so; do [ -f "$LIB" ] && break; done
 [ -f "$LIB" ] || { echo "pspexp-run: $LIB missing" >&2; exit 1; }
 [ $# -ge 1 ] || { echo "usage: pspexp-run <program> [args...]" >&2; exit 2; }
 export PSPEXP="${PSPEXP:-usb}"
@@ -24,4 +26,5 @@ else
 fi
 # preload into the program only: the shim's SDL symbols resolve from the
 # program's libSDL2, so a shell or env loading it would fail
-exec /usr/local/bin/pspexp-exec env LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}" "$@"
+EXEC=$(command -v pspexp-exec || echo /usr/local/bin/pspexp-exec)
+exec "$EXEC" env LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}" "$@"

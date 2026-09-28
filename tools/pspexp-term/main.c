@@ -3006,6 +3006,8 @@ int main(int argc, char **argv)
     tfont_upload();   /* after the UI font: it uses the same palette */
     if (g_launcher_on) {
         if (!g_launcher_assets) g_launcher_assets = getenv("PSPEXP_LAUNCHER_ASSETS");
+        if (!g_launcher_assets && access("/usr/share/pspexp/launcher/lucide.ttf", R_OK) == 0 && access("/usr/local/share/pspexp/launcher/lucide.ttf", R_OK) != 0)
+            g_launcher_assets = "/usr/share/pspexp/launcher";   /* the pspexp-core package's */
         if (!g_launcher_assets) g_launcher_assets = access("/usr/local/share/pspexp/launcher/lucide.ttf", R_OK) == 0 ? "/usr/local/share/pspexp/launcher"
 #ifdef PSPEXP_LAUNCHER_ASSET_DIR
                                                     : PSPEXP_LAUNCHER_ASSET_DIR;   /* the source tree, for development */
@@ -3128,6 +3130,19 @@ int main(int argc, char **argv)
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }
         if (g_app && g_app->take_exit()) view_cycle();
+        if (g_launcher_on) {   /* PSPExp's own file replaced by an upgrade (docs/Package_Manager.md §6): say so; restart only when asked */
+            static char self[512]; static struct stat self_st; static int have_self = -1; static uint64_t self_check;
+            if (have_self < 0) {
+                ssize_t l = readlink("/proc/self/exe", self, sizeof(self) - 1);
+                have_self = l > 0 && (self[l] = 0, stat(self, &self_st) == 0);
+            }
+            if (have_self > 0 && now - self_check > 10000000u) {
+                struct stat st;
+                self_check = now;
+                if (stat(self, &st) == 0 && (st.st_ino != self_st.st_ino || st.st_mtime != self_st.st_mtime)) { launcher_set_core_updated(); have_self = 0; }
+            }
+            if (launcher_take_console_restart()) { fprintf(stderr, "[pspexp-term] restarting for the new version\n"); g_quit = 1; }
+        }
         monitor_set_program(g_launch_pid);
         if (g_view_files) {
             char dir[1024];

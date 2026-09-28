@@ -56,6 +56,10 @@ int  launcher_select(const char *title);
 int  launcher_category(const char *name);
 /* System > PSP clock: set the PSP's clock from this board (1, the default) */
 int  launcher_psp_clock(void);
+/* PSPExp's own program file was replaced (a package upgrade): say so, offer a restart;
+ * 1 once when the user chose System > Restart PSPExp */
+void launcher_set_core_updated(void);
+int  launcher_take_console_restart(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);
 /* a message at the bottom of the launcher, as its own ones */

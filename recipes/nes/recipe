@@ -10,7 +10,7 @@ license=GPL-2.0 (Nestopia); pspexp-retro is part of PSPExp
 version=1
 
 [debian]
-apt=libretro-nestopia pspexp-retro
+apt=pspexp-retro libretro-nestopia
 core=nestopia_libretro.so
 
 [system]

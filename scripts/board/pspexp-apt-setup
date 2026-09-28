@@ -19,7 +19,7 @@ Components: main
 Signed-By: /usr/share/keyrings/pspexp-archive-keyring.gpg
 S
 # the one thing the console's user may do as root, without a password
-echo "$U ALL=(root) NOPASSWD: /usr/local/sbin/pspexp-pkg-apt" > /etc/sudoers.d/pspexp-pkg
+echo "$U ALL=(root) NOPASSWD: /usr/sbin/pspexp-pkg-apt, /usr/local/sbin/pspexp-pkg-apt" > /etc/sudoers.d/pspexp-pkg   # the package's, or an installer's
 chmod 440 /etc/sudoers.d/pspexp-pkg
 visudo -cf /etc/sudoers.d/pspexp-pkg >/dev/null
 /usr/local/sbin/pspexp-pkg-apt update

@@ -1,0 +1,24 @@
+# The SNES: Debian's Snes9x core, played by pspexp-retro.
+
+[package]
+id=snes
+title=SNES
+description=Super Nintendo: Debian's Snes9x core; ROMs in ~/roms/snes
+category=system
+license=Snes9x licence (non-commercial); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro libretro-snes9x
+core=snes9x_libretro.so
+
+[system]
+id=snes
+name=Super Nintendo
+short=SNES
+icon=gamepad-2
+ext=sfc,smc
+roms=~/roms/snes
+thumbs=Nintendo - Super Nintendo Entertainment System
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys

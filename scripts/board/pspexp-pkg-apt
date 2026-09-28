@@ -102,14 +102,16 @@ Description: PSPExp recipe $id
 C
 	deb="$META/pspexp-recipe-${id}_${v}_all.deb"
 	dpkg-deb --root-owner-group -b "$w/p" "$deb" >/dev/null
-	# PSPExp's own packages first: they provide what Debian's ask for as a
-	# first-choice-or-other dependency (pspexp-retro is a libretro-frontend),
-	# and apt picks the first choice (RetroArch) when both are new
-	own=""; for p in $pk; do case "$p" in pspexp-*) installed "$p" || own="$own $p" ;; esac; done
-	if [ -n "$own" ]; then
-		$APT --no-install-recommends install $own
-		apt-mark auto $own >/dev/null   # held by the meta-package below, like the rest
-	fi
+	# the recipe's packages one at a time, in the order it lists them: a Debian
+	# package that asks for "A or B" (freedoom: dsda-doom | doom-engine; a core:
+	# retroarch | libretro-frontend) then finds the one the recipe listed before
+	# it (chocolate-doom, pspexp-retro) already installed, instead of apt adding
+	# its first choice
+	for p in $pk; do
+		installed "$p" && continue
+		$APT --no-install-recommends install "$p"
+		apt-mark auto "$p" >/dev/null   # held by the meta-package below, like the rest
+	done
 	$APT --no-install-recommends install "$deb"
 	apt-mark manual "pspexp-recipe-$id" >/dev/null
 	# an older version's dependencies the new one dropped, when nothing needs them (§5.6)

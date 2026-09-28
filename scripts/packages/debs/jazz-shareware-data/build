@@ -1,0 +1,29 @@
+#!/bin/sh
+# jazz-shareware-data: Jazz Jackrabbit's shareware episode (Epic MegaGames,
+# 1994; freely distributable: LICENSE.DOC inside), for Debian's OpenJazz, which
+# is given the folder (/usr/share/games/jazz-shareware). Arch all. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+. "$ROOT/scripts/packages/recipes/_lib.sh"
+CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
+Z=$(jazz_zip)
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/share/games/jazz-shareware" "$W/root/usr/share/doc/jazz-shareware-data"
+unzip -q -o "$Z" -d "$W/root/usr/share/games/jazz-shareware"
+cat > "$W/root/usr/share/doc/jazz-shareware-data/README" <<D
+Jazz Jackrabbit, shareware episode 1 (Epic MegaGames, 1994), for OpenJazz.
+Its licence is LICENSE.DOC in /usr/share/games/jazz-shareware. Packaged by
+PSPExp (docs/Package_Manager.md).
+D
+cat > "$W/control" <<C
+Package: jazz-shareware-data
+Version: 1.0-pspexp1
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: non-free/games
+Priority: optional
+Description: Jazz Jackrabbit shareware episode, for OpenJazz
+ The freely distributable shareware episode of Jazz Jackrabbit (Epic
+ MegaGames, 1994), in /usr/share/games/jazz-shareware. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/jazz-shareware-data_1.0-pspexp1_all.deb"

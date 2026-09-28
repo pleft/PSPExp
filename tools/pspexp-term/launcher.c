@@ -83,11 +83,14 @@ static PspExpContext *g_ctx;
 static Library L;
 static Cat g_cat[40];
 static int g_ncat, g_cur;
-static LEntry g_actions[8];
+#define MAX_ACTIONS 16
+#define ACTION(...) do { if (g_nactions < MAX_ACTIONS) action(&g_actions[g_nactions++], __VA_ARGS__); } while (0)
+static LEntry g_actions[MAX_ACTIONS];   /* System's entries (up to 11 now: count them when adding one) */
 static int g_nactions;
 static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
 static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board; asked for now */
+static int g_core_updated, g_console_restart_req;   /* PSPExp's own files were upgraded; the user asked to restart it */
 
 static void action(LEntry *e, const char *id, const char *title, const char *icon, const char *detail)
 {
@@ -192,16 +195,17 @@ static void cats_build(void)
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
     c = cat_add("System", "settings", 0x94a3b8, CK_SETTINGS, "item");
     g_nactions = 0;
-    action(&g_actions[g_nactions++], "rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
-    if (g_wifi_cmd) action(&g_actions[g_nactions++], "wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
+    ACTION("rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
+    if (g_wifi_cmd) ACTION("wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
     if (board_wifi_kind() != BOARD_WIFI_NONE)
-        action(&g_actions[g_nactions++], "wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
-    action(&g_actions[g_nactions++], "tz", "Time zone", "clock", "The board's time zone, for the clock");
-    action(&g_actions[g_nactions++], "pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
-    action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
-    action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart this board");
-    action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut this board down");
-    action(&g_actions[g_nactions++], "about", "About", "info", "This board, the PSP and the connection");
+        ACTION("wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
+    ACTION("tz", "Time zone", "clock", "The board's time zone, for the clock");
+    ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
+    ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
+    if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
+    ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
+    ACTION("poweroff", "Power off", "power", "Shut this board down");
+    ACTION("about", "About", "info", "This board, the PSP and the connection");
     for (i = 0; i < g_nactions; i++) cat_push(c, &g_actions[i]);
     /* back to where we were */
     g_cur = -1;
@@ -563,6 +567,8 @@ static void run_action(LEntry *e, uint64_t now)
         g_files_req = 1;
     } else if (!strcmp(a, "monitor") || !strcmp(a, "store")) {
         snprintf(g_app_req, sizeof(g_app_req), "%s", a);
+    } else if (!strcmp(a, "console-restart")) {
+        g_console_restart_req = 1;
     } else if (!strcmp(a, "pspclock")) {
         g_psp_clock = !g_psp_clock;
         lib_setting_set(&L, "psp_clock", g_psp_clock);
@@ -677,6 +683,14 @@ int launcher_select(const char *title)
     return 0;
 }
 int  launcher_psp_clock(void) { return g_psp_clock; }
+void launcher_set_core_updated(void)
+{
+    if (g_core_updated) return;
+    g_core_updated = 1;
+    cats_build();   /* System gains Restart PSPExp */
+    toast("package", "PSPExp was updated: System > Restart PSPExp starts the new version", pspexp_time_us());
+}
+int  launcher_take_console_restart(void) { int r = g_console_restart_req; g_console_restart_req = 0; return r; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
 void launcher_notice(const char *icon, const char *text) { toast(icon, text, pspexp_time_us()); }
 

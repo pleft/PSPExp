@@ -1,0 +1,21 @@
+# Simutrans: Debian's game and its pak64 graphics.
+
+[package]
+id=simutrans
+title=Simutrans
+description=The transport simulation, with the pak64 graphics
+category=game
+license=Artistic-1.0 (Simutrans and pak64)
+version=1
+
+[debian]
+apt=simutrans simutrans-pak64
+
+[entry]
+title=Simutrans
+type=game
+description=Build a transport network: rail, road, ships, planes
+icon=train-front
+exec=/usr/games/simutrans -objects pak -screensize 480x272 -lang en
+keys=up=up,down=down,left=left,right=right,l=pgdn,r=pgup,triangle=escape,start=escape,select=p,square=none
+nub=mouse

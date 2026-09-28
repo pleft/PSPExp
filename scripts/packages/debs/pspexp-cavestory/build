@@ -1,0 +1,43 @@
+#!/bin/sh
+# pspexp-cavestory: Cave Story on NXEngine-evo (GPL-3.0), which Debian does not
+# carry, with the freeware data (Studio Pixel 2004; Aeon Genesis translation).
+# The engine: build/pi/bin/nxengine-evo (scripts/pi/install.sh cavestory) or
+# build/gameshell/bin/nxengine-evo (scripts/packages/build-nxengine.sh); the
+# data: build/cavestory-data (the recipes' cavestory_data). Installs
+# /usr/lib/pspexp/cavestory and /usr/games/pspexp-cavestory.
+# Usage: build OUTDIR ARCH   (arm64 | armhf)
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+. "$ROOT/scripts/packages/recipes/_lib.sh"
+CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
+OUT="$1"; ARCH="$2"
+case "$ARCH" in arm64) B="$ROOT/build/pi/bin/nxengine-evo" ;; armhf) B="$ROOT/build/gameshell/bin/nxengine-evo" ;; *) echo "arch: arm64 | armhf" >&2; exit 2 ;; esac
+[ -x "$B" ] || { echo "no $B: build it first" >&2; exit 1; }
+DATA=$(cavestory_data)
+V="$(git -C "$ROOT/../cavestory/nxengine-evo" log -1 --format=%cd --date=format:%Y.%m.%d 2>/dev/null || date +%Y.%m.%d)"
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L="$W/root/usr/lib/pspexp/cavestory"
+mkdir -p "$L/data" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-cavestory"
+cp "$B" "$L/nxengine-evo"; chmod 755 "$L/nxengine-evo"
+cp -R "$DATA/." "$L/data/"
+cat > "$W/root/usr/games/pspexp-cavestory" <<'R'
+#!/bin/sh
+# Cave Story: NXEngine-evo reads its data from ./data
+cd /usr/lib/pspexp/cavestory && exec ./nxengine-evo "$@"
+R
+chmod 755 "$W/root/usr/games/pspexp-cavestory"
+[ -f "$ROOT/../cavestory/nxengine-evo/LICENSE" ] && cp "$ROOT/../cavestory/nxengine-evo/LICENSE" "$W/root/usr/share/doc/pspexp-cavestory/COPYING.nxengine-evo"
+echo "Cave Story (Studio Pixel, 2004; freeware; English translation by Aeon Genesis) on NXEngine-evo. Packaged by PSPExp." > "$W/root/usr/share/doc/pspexp-cavestory/README"
+cat > "$W/control" <<C
+Package: pspexp-cavestory
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: libc6, libsdl2-2.0-0
+Description: Cave Story on NXEngine-evo, for PSPExp
+ Studio Pixel's 2004 freeware platformer, with the NXEngine-evo engine,
+ which Debian does not carry. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-cavestory_${V}_$ARCH.deb"

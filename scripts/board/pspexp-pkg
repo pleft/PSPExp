@@ -28,7 +28,12 @@ APPS="$ROOT/apps"
 SYS="$ROOT/systems"
 STATE="$ROOT/state"
 CAT="${PSPEXP_CATALOGUE:-/usr/share/pspexp/catalogue}/recipes"
-APT_HELPER="${PSPEXP_PKG_APT:-sudo -n /usr/local/sbin/pspexp-pkg-apt}"
+# the root helper: the pspexp-core package's (/usr/sbin) or an installer's (/usr/local/sbin)
+if [ -z "${PSPEXP_PKG_APT:-}" ]; then
+	for h in /usr/sbin/pspexp-pkg-apt /usr/local/sbin/pspexp-pkg-apt; do [ -x "$h" ] && break; done
+	PSPEXP_PKG_APT="sudo -n $h"
+fi
+APT_HELPER="$PSPEXP_PKG_APT"
 BOARD=$(cat /etc/pspexp/board 2>/dev/null || echo "")
 case "$BOARD" in omega) FAMILY=omega ;; *) FAMILY=debian ;; esac
 die() { echo "pspexp-pkg: $*" >&2; exit 1; }
@@ -103,6 +108,8 @@ rall() {
 }
 
 serial() { tr -dc 0-9 < "${CAT%/recipes}/serial" 2>/dev/null; }
+# the recipe's sections of a kind, in order: [entry], [entry.phase2], ... (not the [x:board] overrides)
+sections() { sed -n "s/^\[\($2\(\.[a-z0-9-]*\)\{0,1\}\)\][ \t]*\$/\1/p" "$1" | awk '!seen[$0]++'; }
 meta_version() { dpkg-query -W -f='${Status} ${Version}' "pspexp-recipe-$1" 2>/dev/null | awk '/install ok installed/ {print $NF}'; }
 
 # the Debian folder of libretro cores (Debian's cores install there)
@@ -155,53 +162,58 @@ requires=pspexp-run
 P
 	cat=$(rget "$R" package category)
 	if [ "$cat" = system ]; then
-		core=$(rget "$R" "$FAMILY" core)
-		sid=$(rget "$R" system id); sid=${sid:-$ID}
-		keys=$(rget "$R" system keys); nub=$(rget "$R" system nub)
-		# a system file of another package's name is an error of the recipe (§5.5)
-		if [ -f "$SYS/$sid.system" ]; then
-			own=$(sed -n 's/^pkg=//p' "$SYS/$sid.system" | head -1)
-			[ "$own" = "$ID" ] || die "$ID: the system $sid belongs to $own"
-		fi
 		mkdir -p "$A/systems"
-		{ echo "name=$(rget "$R" system name)"
-		  echo "short=$(rget "$R" system short)"
-		  icon=$(rget "$R" system icon); [ -n "$icon" ] && echo "icon=$icon"
-		  echo "roms=$(rget "$R" system roms)"
-		  echo "ext=$(rget "$R" system ext)"
-		  echo "exec=pspexp-run pspexp-retro $(libretro_dir)/$core %ROM%"
-		  echo "pkg=$ID"
-		  echo "env=SDL_VIDEODRIVER=dummy"; echo "env=SDL_AUDIODRIVER=dummy"
-		  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
-		  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
-		  rall "$R" system env | sed 's/^/env=/'
-		  th=$(rget "$R" system thumbs); [ -n "$th" ] && echo "thumbs=$th"
-		  echo "pspexp=1"; } > "$A/systems/$sid.system"
-		cp "$A/systems/$sid.system" "$STAGE/systems/"
+		for sec in $(sections "$R" system); do
+			sid=$(rget "$R" "$sec" id); sid=${sid:-$ID}
+			# a system file of another package's name is an error of the recipe (§5.5)
+			if [ -f "$SYS/$sid.system" ]; then
+				own=$(sed -n 's/^pkg=//p' "$SYS/$sid.system" | head -1)
+				[ "$own" = "$ID" ] || die "$ID: the system $sid belongs to $own"
+			fi
+			core=$(rget "$R" "$sec" core); [ -n "$core" ] || core=$(rget "$R" "$FAMILY" core)
+			keys=$(rget "$R" "$sec" keys); nub=$(rget "$R" "$sec" nub)
+			{ echo "name=$(rget "$R" "$sec" name)"
+			  echo "short=$(rget "$R" "$sec" short)"
+			  icon=$(rget "$R" "$sec" icon); [ -n "$icon" ] && echo "icon=$icon"
+			  echo "roms=$(rget "$R" "$sec" roms)"
+			  echo "ext=$(rget "$R" "$sec" ext)"
+			  echo "exec=pspexp-run pspexp-retro $(libretro_dir)/$core %ROM%"
+			  echo "pkg=$ID"
+			  echo "env=SDL_VIDEODRIVER=dummy"; echo "env=SDL_AUDIODRIVER=dummy"
+			  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
+			  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
+			  rall "$R" "$sec" env | sed 's/^/env=/'
+			  th=$(rget "$R" "$sec" thumbs); [ -n "$th" ] && echo "thumbs=$th"
+			  echo "pspexp=1"; } > "$A/systems/$sid.system"
+			cp "$A/systems/$sid.system" "$STAGE/systems/"
+		done
 	else
-		eid=$(rget "$R" entry id); eid=${eid:-$ID}
-		keys=$(rget "$R" entry keys); nub=$(rget "$R" entry nub)
-		exec=$(rget "$R" entry exec)
-		[ "$(rget "$R" entry native)" = 1 ] || exec="pspexp-run $exec"
-		first=$(rget "$R" entry first-run)
-		if [ -n "$first" ]; then   # a settings file written once, when missing, then the program
-			f=${first%%:*}; body=${first#*:}
-			{ echo '#!/bin/sh'; echo "# written by pspexp-pkg from the recipe $ID: first-run settings, then the program"
-			  echo "[ -f \"\$HOME/$f\" ] || { mkdir -p \"\$(dirname \"\$HOME/$f\")\"; printf '%b' '$body' > \"\$HOME/$f\"; }"
-			  echo "exec $exec \"\$@\""; } > "$A/run.sh"
-			chmod 755 "$A/run.sh"
-			exec=./run.sh
-		fi
-		{ echo "title=$(rget "$R" entry title)"
-		  echo "type=$(rget "$R" entry type)"
-		  echo "description=$(rget "$R" entry description)"
-		  icon=$(rget "$R" entry icon); [ -n "$icon" ] && echo "icon=$icon"
-		  echo "exec=$exec"
-		  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
-		  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
-		  rall "$R" entry env | sed 's/^/env=/'
-		  echo "pspexp=1"; } > "$A/$eid.entry"
-		[ -f "$CAT/$ID/cover.png" ] && cp "$CAT/$ID/cover.png" "$A/$eid.png"
+		for sec in $(sections "$R" entry); do
+			eid=$(rget "$R" "$sec" id); eid=${eid:-$ID}
+			keys=$(rget "$R" "$sec" keys); nub=$(rget "$R" "$sec" nub)
+			exec=$(rget "$R" "$sec" exec)
+			[ "$(rget "$R" "$sec" native)" = 1 ] || exec="pspexp-run $exec"
+			first=$(rget "$R" "$sec" first-run)
+			if [ -n "$first" ]; then   # a settings file written once, when missing, then the program
+				f=${first%%:*}; body=${first#*:}
+				{ echo '#!/bin/sh'; echo "# written by pspexp-pkg from the recipe $ID: first-run settings, then the program"
+				  echo "[ -f \"\$HOME/$f\" ] || { mkdir -p \"\$(dirname \"\$HOME/$f\")\"; printf '%b' '$body' > \"\$HOME/$f\"; }"
+				  echo "exec $exec \"\$@\""; } > "$A/run-$eid.sh"
+				chmod 755 "$A/run-$eid.sh"
+				exec=./run-$eid.sh
+			fi
+			{ echo "title=$(rget "$R" "$sec" title)"
+			  echo "type=$(rget "$R" "$sec" type)"
+			  echo "description=$(rget "$R" "$sec" description)"
+			  icon=$(rget "$R" "$sec" icon); [ -n "$icon" ] && echo "icon=$icon"
+			  echo "exec=$exec"
+			  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
+			  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
+			  rall "$R" "$sec" env | sed 's/^/env=/'
+			  echo "pspexp=1"; } > "$A/$eid.entry"
+			cov=$(rget "$R" "$sec" cover); cov=${cov:-cover.png}
+			[ -f "$CAT/$ID/$cov" ] && cp "$CAT/$ID/$cov" "$A/$eid.png"
+		done
 	fi
 	# the published system files this package owns that the new version drops
 	: > "$STAGE/unpublish"

@@ -1,0 +1,22 @@
+# Jazz Jackrabbit: Debian's OpenJazz, and the shareware episode from PSPExp's
+# repository (Debian's route to the data is game-data-packager).
+
+[package]
+id=jazz
+title=Jazz Jackrabbit (shareware)
+description=Jazz Jackrabbit, shareware episode 1, by Epic MegaGames, on OpenJazz
+category=game
+license=GPL-2.0 (OpenJazz); shareware (Jazz Jackrabbit, Epic MegaGames, 1994)
+version=1
+
+[debian]
+apt=openjazz jazz-shareware-data
+
+[entry]
+title=Jazz Jackrabbit
+type=game
+description=Epic MegaGames' 1994 platformer, shareware episode
+icon=rabbit
+exec=/usr/games/OpenJazz /usr/share/games/jazz-shareware
+keys=cross=space+return+y,square=lalt,circle=escape+n,triangle=rctrl,l=rctrl,r=rctrl,start=escape,select=p,up=up,down=down,left=left,right=right
+nub=keys
