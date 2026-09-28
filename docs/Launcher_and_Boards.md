@@ -888,6 +888,26 @@ With the relink and games suites, the Pi 400 run is 34 of 34 in about
 
 The link comes back about 2.4 s after a drop.
 
+**The GameShell** (same PSP, over USB) also passes 34 of 34. How it differs
+from the Pi 400:
+
+| on the GameShell | frame rate | audio underruns |
+|---|---|---|
+| Cave Story | 50 fps | 0 |
+| Freedoom 1 and 2 | 33-35 fps, dips to 16 | 1 |
+| Jazz Jackrabbit | 14 fps typical, 33 at best | 0 |
+| OpenTyrian | 46 fps at its best | 0 |
+| Simutrans | 24 fps | 0 |
+| Game Boy, Game Boy Color, Mega Drive and NES | 59 fps | 0 |
+| SNES | 50 fps | 0 |
+
+- **The memory stick:** 1.65 MB/s writing and 2.2 MB/s reading.
+- **Reconnecting:** the link comes back in about 2.6 s.
+- **Screenshots:** at first each one took 16 s. The GameShell's Wi-Fi is
+  slow, and the runner copied each 391 KB BMP to the Mac as it was. It now
+  compresses them on the board, to about 44 KB, which brings a screenshot
+  down to 3 s, as on the Pi.
+
 ## 9. The PSP's clock from the board (2026-09-28)
 
 A PSP whose clock battery ran flat starts years in the past: the user's

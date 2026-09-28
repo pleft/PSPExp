@@ -57,8 +57,15 @@ class Target:
         return r.returncode == 0, lines
 
     def fetch(self, remote, local):
+        """a board's file here, compressed on the way (a BMP shrinks ninefold: it
+        matters on a slow Wi-Fi like the GameShell's)"""
         if self.host:
-            subprocess.run(["scp", "-q", "-o", "ControlPath=/tmp/pspexp-it-ssh-%d" % os.getpid(), "%s:%s" % (self.host, remote), local], check=True)
+            import gzip
+            r = subprocess.run(self.ssh + ["gzip -c " + shlex.quote(remote)], capture_output=True, timeout=120)
+            if r.returncode != 0:
+                raise Fail("cannot fetch %s: %s" % (remote, r.stderr.decode(errors="replace").strip()))
+            with open(local, "wb") as f:
+                f.write(gzip.decompress(r.stdout))
         else:
             shutil.copy(remote, local)
 
