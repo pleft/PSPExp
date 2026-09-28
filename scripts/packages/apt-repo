@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""
+PSPExp's apt repository and recipe catalogue (docs/Package_Manager.md §6).
+
+  scripts/packages/apt-repo build [DEBS_DIR]   -> build/apt: pool/, dists/stable/, catalogue.tar.gz (all signed)
+  scripts/packages/apt-repo push [HOST]        build/apt to HOST:~/pspexp-repo (default user@home-server);
+                                               older packages stay there
+  scripts/packages/apt-repo key                the project's public key (creates the key the first time)
+
+The signing key lives outside the repository, in ~/.pspexp/gnupg (keep a copy
+of that folder somewhere safe: without it no board accepts a new release).
+Its public half is scripts/packages/pspexp-archive-key.asc.
+"""
+import gzip, hashlib, io, os, shutil, subprocess, sys, tarfile, time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+OUT = os.path.join(ROOT, "build/apt")
+GNUPG = os.path.expanduser("~/.pspexp/gnupg")
+KEY_NAME = "PSPExp archive <pspexp@localhost>"
+ARCHES = ("arm64", "armhf")
+PUBKEY = os.path.join(ROOT, "scripts/packages/pspexp-archive-key.asc")
+
+
+def gpg(*args, **kw):
+    os.makedirs(GNUPG, mode=0o700, exist_ok=True)
+    return subprocess.run(["gpg", "--homedir", GNUPG, "--batch", "--yes"] + list(args), check=True, capture_output=True, **kw)
+
+
+def ensure_key():
+    r = subprocess.run(["gpg", "--homedir", GNUPG, "--batch", "--list-secret-keys", KEY_NAME], capture_output=True)
+    if r.returncode != 0:
+        gpg("--pinentry-mode", "loopback", "--passphrase", "", "--quick-generate-key", KEY_NAME, "ed25519", "sign", "never")
+        print("created the signing key in %s: keep a copy of that folder" % GNUPG)
+    pub = gpg("--armor", "--export", KEY_NAME).stdout
+    if not os.path.exists(PUBKEY) or open(PUBKEY, "rb").read() != pub:
+        open(PUBKEY, "wb").write(pub)
+    return pub
+
+
+def deb_control(path):
+    """the control file of a .deb (ar -> control.tar.* -> ./control)"""
+    data = open(path, "rb").read()
+    assert data[:8] == b"!<arch>\n", path
+    i = 8
+    while i < len(data):
+        name = data[i:i + 16].decode().strip().rstrip("/")
+        size = int(data[i + 48:i + 58].decode().strip())
+        body = data[i + 60:i + 60 + size]
+        if name.startswith("control.tar"):
+            with tarfile.open(fileobj=io.BytesIO(body)) as t:
+                for m in t.getmembers():
+                    if m.name in ("./control", "control"):
+                        return t.extractfile(m).read().decode()
+        i += 60 + size + (size % 2)
+    raise SystemExit("%s: no control" % path)
+
+
+def build(debs_dir):
+    ensure_key()
+    if os.path.isdir(OUT):
+        shutil.rmtree(OUT)
+    packages = {a: [] for a in ARCHES}
+    for fn in sorted(os.listdir(debs_dir)):
+        if not fn.endswith(".deb"):
+            continue
+        src = os.path.join(debs_dir, fn)
+        ctl = deb_control(src).rstrip("\n")
+        fields = dict(l.split(": ", 1) for l in ctl.splitlines() if ": " in l and not l.startswith(" "))
+        pool = "pool/main/%s/%s" % (fields["Package"], fn)
+        os.makedirs(os.path.join(OUT, os.path.dirname(pool)), exist_ok=True)
+        shutil.copy(src, os.path.join(OUT, pool))
+        blob = open(src, "rb").read()
+        stanza = ctl + "\nFilename: %s\nSize: %d\nMD5sum: %s\nSHA256: %s\n" % (pool, len(blob), hashlib.md5(blob).hexdigest(), hashlib.sha256(blob).hexdigest())
+        for a in ARCHES:
+            if fields["Architecture"] in (a, "all"):
+                packages[a].append(stanza)
+    files = []
+    for a in ARCHES:
+        d = "main/binary-%s" % a
+        os.makedirs(os.path.join(OUT, "dists/stable", d), exist_ok=True)
+        text = "\n".join(packages[a]).encode()
+        for name, body in (("Packages", text), ("Packages.gz", gzip.compress(text, mtime=0))):
+            open(os.path.join(OUT, "dists/stable", d, name), "wb").write(body)
+            files.append(("%s/%s" % (d, name), body))
+    release = "Origin: PSPExp\nLabel: PSPExp\nSuite: stable\nCodename: stable\nDate: %s\nArchitectures: %s\nComponents: main\nDescription: PSPExp: the PSP as a console\n" % (
+        time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime()), " ".join(ARCHES))
+    for h, fn in (("MD5Sum", hashlib.md5), ("SHA256", hashlib.sha256)):
+        release += "%s:\n" % h + "".join(" %s %d %s\n" % (fn(b).hexdigest(), len(b), n) for n, b in files)
+    rel = os.path.join(OUT, "dists/stable/Release")
+    open(rel, "w").write(release)
+    gpg("--local-user", KEY_NAME, "--clearsign", "-o", os.path.join(OUT, "dists/stable/InRelease"), rel)
+    gpg("--local-user", KEY_NAME, "--armor", "--detach-sign", "-o", rel + ".gpg", rel)
+    # the recipes, as one signed archive
+    cat = os.path.join(OUT, "catalogue.tar.gz")
+    serial = time.strftime("%Y%m%d%H%M%S", time.gmtime())   # boards refuse a catalogue older than theirs (docs/Package_Manager.md §5.1)
+    with tarfile.open(cat, "w:gz") as t:
+        t.add(os.path.join(ROOT, "recipes"), arcname="recipes", filter=lambda i: None if os.path.basename(i.name).startswith(".") else i)
+        ser = tarfile.TarInfo("serial"); body = (serial + "\n").encode(); ser.size = len(body); ser.mtime = int(time.time())
+        t.addfile(ser, io.BytesIO(body))
+    gpg("--local-user", KEY_NAME, "--detach-sign", "-o", cat + ".sig", cat)
+    # the keyring for boards (/usr/share/keyrings/pspexp-archive-keyring.gpg)
+    open(os.path.join(OUT, "pspexp-archive-keyring.gpg"), "wb").write(gpg("--export", KEY_NAME).stdout)
+    n = sum(len(v) for v in packages.values())
+    print("built %s: %s; catalogue %s: %d recipes" % (OUT, ", ".join("%s %d" % (a, len(packages[a])) for a in ARCHES), serial,
+          len([d for d in os.listdir(os.path.join(ROOT, "recipes")) if not d.startswith(".")])))
+
+
+def push(host):
+    # pool: added to (older packages stay); the rest: replaced
+    subprocess.run(["ssh", host, "mkdir -p ~/pspexp-repo"], check=True)
+    subprocess.run(["rsync", "-a", OUT + "/pool/", "%s:pspexp-repo/pool/" % host], check=True)
+    subprocess.run(["rsync", "-a", "--delete", "--exclude", "pool/", OUT + "/", "%s:pspexp-repo/" % host], check=True)
+    print("pushed to %s:~/pspexp-repo" % host)
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "build":
+        build(sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "build/debs"))
+    elif cmd == "push":
+        push(sys.argv[2] if len(sys.argv) > 2 else "user@home-server")
+    elif cmd == "key":
+        sys.stdout.write(ensure_key().decode())
+    else:
+        print(__doc__.strip()); sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

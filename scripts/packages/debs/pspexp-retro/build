@@ -1,0 +1,31 @@
+#!/bin/sh
+# pspexp-retro: PSPExp's libretro player (tools/pspexp-retro), as a package
+# that also provides libretro-frontend, so Debian's libretro cores install
+# without RetroArch. Usage: build OUTDIR ARCH   (ARCH: arm64 for the Pi, armhf for the GameShell)
+# The binary: build/pi/bin/pspexp-retro (scripts/pi/install.sh retro) or
+# build/gameshell/bin/pspexp-retro (scripts/gameshell/build.sh retro).
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+case "$ARCH" in arm64) B="$ROOT/build/pi/bin/pspexp-retro" ;; armhf) B="$ROOT/build/gameshell/bin/pspexp-retro" ;; *) echo "arch: arm64 | armhf" >&2; exit 2 ;; esac
+[ -x "$B" ] || { echo "no $B: build it first" >&2; exit 1; }
+V="$(git -C "$ROOT" log -1 --format=%cd --date=format:%Y.%m.%d -- tools/pspexp-retro)"
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/bin"
+cp "$B" "$W/root/usr/bin/pspexp-retro"
+chmod 755 "$W/root/usr/bin/pspexp-retro"
+cat > "$W/control" <<C
+Package: pspexp-retro
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: libc6, libsdl2-2.0-0
+Provides: libretro-frontend
+Description: PSPExp's libretro player: an emulator core, played on the PSP
+ A plain SDL2 program with no menus, run through PSPExp's SDL layer so the
+ PSP is its screen, sound and controller. It provides libretro-frontend,
+ so Debian's libretro cores install without RetroArch.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-retro_${V}_$ARCH.deb"

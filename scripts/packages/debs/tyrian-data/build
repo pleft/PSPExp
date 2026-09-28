@@ -1,0 +1,29 @@
+#!/bin/sh
+# tyrian-data: the Tyrian 2.1 freeware data where Debian's opentyrian reads it
+# (/usr/share/games/tyrian), so apt needs neither game-data-packager nor its
+# GTK. Arch all. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+. "$ROOT/scripts/packages/recipes/_lib.sh"
+CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
+Z=$(fetch "https://camanis.net/tyrian/tyrian21.zip")
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/share/games/tyrian" "$W/root/usr/share/doc/tyrian-data"
+unzip -q -j -o "$Z" -d "$W/root/usr/share/games/tyrian"
+rm -f "$W/root/usr/share/games/tyrian"/*.exe "$W/root/usr/share/games/tyrian"/*.EXE   # the DOS program: not needed
+cat > "$W/root/usr/share/doc/tyrian-data/README" <<D
+Tyrian 2.1 data files (freeware since 2004), from $(basename "$Z"), for
+OpenTyrian. Packaged by PSPExp (docs/Package_Manager.md).
+D
+cat > "$W/control" <<C
+Package: tyrian-data
+Version: 2.1-pspexp1
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: contrib/games
+Priority: optional
+Description: Tyrian 2.1 data files, for OpenTyrian
+ The freeware data of the vertical shooter Tyrian 2.1, in the folder
+ Debian's opentyrian reads. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/tyrian-data_2.1-pspexp1_all.deb"

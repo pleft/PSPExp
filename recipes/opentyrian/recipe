@@ -1,0 +1,24 @@
+# OpenTyrian: Debian's game, and the freeware Tyrian 2.1 data from
+# PSPExp's repository (Debian's own route to it, game-data-packager, brings
+# GTK and more). See docs/Package_Manager.md for the format.
+
+[package]
+id=opentyrian
+title=OpenTyrian
+description=The vertical shooter Tyrian 2.1, freeware since 2004
+category=game
+license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
+version=1
+
+[debian]
+apt=opentyrian tyrian-data
+
+[entry]
+title=OpenTyrian
+type=game
+description=Tyrian 2.1: a vertical shooter, freeware since 2004
+icon=rocket
+exec=/usr/games/opentyrian --no-joystick
+keys=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right
+nub=keys
+first-run=.config/opentyrian/opentyrian.cfg:section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n

@@ -1,0 +1,25 @@
+# The NES: Debian's Nestopia core, played by pspexp-retro (PSPExp's
+# player, which also stands in for the libretro frontend Debian asks for).
+
+[package]
+id=nes
+title=NES
+description=Nintendo Entertainment System: Debian's Nestopia core; ROMs in ~/roms/nes
+category=system
+license=GPL-2.0 (Nestopia); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=libretro-nestopia pspexp-retro
+core=nestopia_libretro.so
+
+[system]
+id=nes
+name=Nintendo Entertainment System
+short=NES
+icon=gamepad-2
+ext=nes
+roms=~/roms/nes
+thumbs=Nintendo - Nintendo Entertainment System
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys

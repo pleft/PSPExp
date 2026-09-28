@@ -1,7 +1,6 @@
 # PSPExp packages: recipes over the board's own package manager
 
-*Design, reviewed 2026-09-28 (decisions in §11). Nothing here is
-implemented yet except what "Today" describes.*
+*Design, reviewed 2026-09-28: decisions in §11; operational contracts in §5.1-5.5 and §6.1 after a review. Nothing here is implemented yet except what "Today" describes.*
 
 ## Contents
 
@@ -88,7 +87,8 @@ implemented yet except what "Today" describes.*
   - games Debian lacks (Cave Story);
   - builds made lighter or patched for these boards.
 
-  They are ordinary signed `.deb` files, so `apt upgrade` updates PSPExp too.
+  They are ordinary `.deb` files in a repository whose metadata is signed
+  (§5.1), so `pspexp-pkg upgrade` updates PSPExp too.
 - **The catalogue:** the recipes as one small archive, shipped on the image
   and refreshed from our repository.
 
@@ -218,51 +218,162 @@ A shared script turns that into `.deb` files on the Mac (§6).
 
 ## 5. On the board: `pspexp-pkg`
 
-The same tool as today, now driven by recipes:
+apt manages the software; the recipes manage the PSP integration. Each has
+its own contract below.
 
 ```text
 pspexp-pkg list                     installed recipes
-pspexp-pkg available                the catalogue, with state (installed / update / new)
-pspexp-pkg install <id>...          apt, then the launcher files
-pspexp-pkg remove <id>...           the launcher files, then apt (the program; not the user's saves)
-pspexp-pkg update                   the catalogue, and apt's package lists
-pspexp-pkg upgrade                  apt upgrade of what PSPExp installed, and changed recipes
+pspexp-pkg available                the catalogue, with state (installed / update / new / broken)
+pspexp-pkg install <id>...          the recipe's packages (apt), then its launcher files
+pspexp-pkg remove <id>...           its launcher files, then the packages only it needed (apt)
+pspexp-pkg update                   the catalogue (signature checked), and apt's lists
+pspexp-pkg upgrade                  the packages the installed recipes use, and changed recipes
+pspexp-pkg recover                  after an interruption: finish or clean up (run at every start)
 ```
 
-What `install` does:
-1. Read the recipe from the catalogue.
-2. Check the board: kind (`/etc/pspexp/board`), free space, network.
-3. Install the recipe's apt package, through the narrow privilege below.
-4. Fetch pinned data, if any, and check it.
-5. Write the launcher files into `<root>/apps/<id>/`: the entry or system
-   file, the cover, and first-run settings.
-6. The launcher notices, as today.
+### 5.1 Trust: the catalogue is authenticated like apt's own metadata
 
-If any step fails, it undoes what it did.
+Recipes carry commands, data checksums and the root helper's allowlist, so
+the catalogue is trusted only after the same kind of check apt makes of a
+repository (apt-secure):
+- **The trust root:** the project's public key,
+  `/usr/share/keyrings/pspexp-archive-keyring.gpg`, installed by the image
+  or the board setup. It's the only key used for PSPExp's catalogue and
+  apt repository.
+- **Checking a new catalogue:** the catalogue is `catalogue.tar.gz` plus a
+  detached signature. The root helper fetches both into a temporary
+  folder, checks the signature with `gpgv` against that keyring, and only
+  then replaces the installed one.
+- **Where it lives:** `/usr/share/pspexp/catalogue`, owned by root and not
+  writable by anyone else. `pspexp-pkg` and the root helper read recipes
+  only from there. A recipe edited elsewhere is never used.
+- **No going backwards:** the signed archive carries a `serial` (build
+  time). The helper refuses a catalogue older than the one installed, so an
+  old signed catalogue can't be replayed to reintroduce a withdrawn recipe.
+- **Checksums in recipes** (`data=... sha256=`) are trusted because the
+  recipe itself is authenticated. A checksum alone would prove nothing.
+- **The apt repository:** what apt verifies is the repository's signed
+  metadata. `InRelease` (or `Release` + `Release.gpg`) is signed with the
+  project key; it holds the hashes of the `Packages` index, which holds the
+  hash of every `.deb`. The `.deb` files themselves aren't signed; they're
+  trusted through that chain. The apt source names the keyring with
+  `Signed-By`, so this key vouches for PSPExp's repository only, not for
+  Debian's.
+- **Rotating the key** comes later: a new key is shipped in a package signed
+  by the old one before the old one retires.
 
-- **Board kind:** the installer writes `/etc/pspexp/board`
-  (`gameshell`, `pi`, `omega`), so nothing is guessed from the processor.
-- **Privileges:** apt needs root. The image adds one sudoers rule that lets
-  the PSPExp user run a small root helper, `pspexp-pkg-apt`, without a
-  password. The helper only takes `install` / `remove` of package names
-  found in the catalogue's recipes (plus `pspexp-*`). Nothing else runs as
-  root.
-- **Removing:**
-  - apt removes the program only when PSPExp installed it, and no other
-    installed recipe needs it. `pspexp-pkg` records that under
-    `<root>/state`.
-  - The user's saves and settings in their home folder stay.
-- **Progress:** apt's progress (download, unpack) is read from its status
-  output for the Packages app.
+### 5.2 Privileges: the root helper's whole contract
+
+`pspexp-pkg` runs as the console's user. apt needs root, and gets it only
+through `/usr/local/sbin/pspexp-pkg-apt`. One sudoers line allows the user
+to run exactly that program, with no password. Its operations are the
+complete list:
+
+| operation | what it runs | arguments accepted |
+|---|---|---|
+| `update` | fetch and check the catalogue (§5.1), then `apt-get update` | none |
+| `install <id>` | build and install the recipe's meta-package `pspexp-recipe-<id>` (§5.4) with `apt-get install` | a recipe id present in the trusted catalogue |
+| `remove <id>` | `apt-get remove pspexp-recipe-<id>`, then remove only the packages §5.4 allows | an installed recipe id |
+| `upgrade` | `apt-get install --only-upgrade` of the installed recipes' packages and `pspexp-*` | none (the list comes from the catalogue and apt's state) |
+| `repair` | `dpkg --configure -a`, then `apt-get -f install` | none |
+
+- **Package names never come from the user's side.** The helper takes
+  recipe ids, which must match `[a-z0-9-]+` and exist in the root-owned
+  catalogue, and reads the package names from the recipe itself.
+- **Every apt call** uses `DEBIAN_FRONTEND=noninteractive`,
+  `--no-install-recommends` and `-o DPkg::Lock::Timeout=120`. Output goes
+  to a log. Progress is read from apt's status output
+  (`APT::Status-Fd`).
+- **No general `apt upgrade`.** Updating the whole Debian system is not
+  PSPExp's to do. The board's owner does it, or a separate, opt-in "system
+  updates" action may come later.
+
+### 5.3 Transactions, interruptions, concurrency
+
+A complete undo isn't possible once apt has run: dependencies change and
+package scripts have run. So the contract is **forward recovery**. Every
+operation either finishes, or leaves a recorded state that `recover`
+finishes or cleans up, and the user sees which.
+
+- **One operation at a time:** `pspexp-pkg` takes an exclusive lock
+  (`flock` on `<root>/state/lock`). A second one, from the Packages app or
+  the shell, waits or reports "busy". apt keeps its own lock, and the
+  helper waits for it with a timeout.
+- **A journal:** each operation writes `<root>/state/txn`, with the
+  operation, the recipe id and the phase:
+  1. `fetch`: pinned data downloaded into a staging folder under
+     `<root>/state/stage/`, checksums checked;
+  2. `apt`: the helper ran `install` / `remove`;
+  3. `files`: the launcher's files are built in a staging folder, then
+     swapped in with one rename per folder;
+  4. `done`: the journal is removed.
+- **What remains after a failure:**
+  - **In `fetch`:** nothing changed; staging is deleted.
+  - **In `apt`:** apt and dpkg keep their own consistency. The recipe
+    shows as **broken** ("the programs were not installed completely")
+    with Retry and Remove. `recover` runs the helper's `repair` first.
+  - **In `files`:** the programs are installed. The launcher files are
+    either the old ones or the new ones, never a mix, because of the swap.
+    `recover` finishes the step.
+- **Power loss:** the console runs `pspexp-pkg recover` at every start. It
+  reads the journal:
+  - a `dpkg` interrupted mid-unpack is completed by `repair`
+    (`dpkg --configure -a`);
+  - half-built staging folders and `.old` folders are removed or put back.
+- **The Packages app** shows an operation's phase and result, and after a
+  failure the exact recipe state (installed, broken, not installed).
+
+### 5.4 Package ownership: apt's own records, not ours
+
+Removing software must not rely on PSPExp's memory of what it installed.
+Other tools, and the user, may have used apt since. So ownership is
+expressed in apt's own terms:
+- **Installing a recipe installs a tiny meta-package,
+  `pspexp-recipe-<id>`.** The helper builds it on the board with
+  `dpkg-deb` from the trusted recipe. Its `Depends:` lists the recipe's
+  packages. Only the meta-package is marked manually installed. The
+  packages it pulls in stay automatic, unless they were already installed:
+  - one the user had installed themselves stays **manual**;
+  - one another tool needs stays, because of that dependency.
+- **Removing a recipe removes its meta-package.** Then the helper asks
+  apt, with a simulated autoremove, which packages are no longer needed,
+  and removes only those that are also among this recipe's own
+  dependencies. It never runs a general `autoremove` that would take
+  packages unrelated to PSPExp.
+- **Direct apt use is respected either way:**
+  - if the user later installs a recipe's program by hand, apt marks it
+    manual, and removing the recipe leaves it;
+  - if the user removes a recipe's program by hand, the recipe shows as
+    broken, with Reinstall or Remove.
+
+### 5.5 Launcher files: where they go and who owns them
+
+- **Entries (games, apps):** they live in `<root>/apps/<id>/`: `package`
+  (with `recipe=<id>`), the `.entry` files, covers, `run.sh` for
+  first-run settings. The launcher reads them there.
+- **Systems (emulators):** the launcher discovers systems only in
+  `<root>/systems/`. So a system is:
+  1. built in `<root>/apps/<id>/systems/<sid>.system`, the package's own
+     copy;
+  2. **published** by copying it to `<root>/systems/<sid>.system`, with
+     `pkg=<id>` inside.
+- **Ownership of published systems:** a file in `<root>/systems/` belongs
+  to the package named by its `pkg=`.
+  - Installing refuses to overwrite a system file owned by another package
+    (a name clash is an error in the recipe).
+  - Updating replaces its own files, and unpublishes those the new version
+    dropped.
+  - Removing unpublishes exactly the files with `pkg=<id>`.
+- **The user's data is never touched by removal:** ROMs in `~/roms`, saves
+  and settings in their home folder.
 
 ## 6. PSPExp's own apt repository
 
 **What goes in, and only this:**
 - `pspexp-core`: the console and launcher, the SDL layer, the emulator
   player, `pspexp-pkg`, the catalogue;
-- `pspexp-runtime`: the PSP's own files (EBOOT, runtime, USB driver). The
-  console copies it to the PSP over the link when it differs, as done by
-  hand for the clock;
+- `pspexp-runtime`: the PSP's own files (EBOOT, runtime, USB driver),
+  installed on the board and copied to the PSP under the lifecycle of §6.1;
 - games Debian lacks (`pspexp-cavestory`);
 - lighter builds where speed needs them (`pspexp-snes9x2005` for the
   GameShell).
@@ -274,8 +385,9 @@ If any step fails, it undoes what it did.
   - Our game packages follow their `build` recipe.
   - `.deb` files are made with `dpkg-deb`, or a small script in the same
     format.
-- **Signing:** a GPG key of the project. The image carries its public key
-  and an apt source for the repository.
+- **Signing:** the project key signs the repository's metadata
+  (`InRelease`, `Release.gpg`) and the catalogue (§5.1). The image carries
+  its public half and an apt source that names it with `Signed-By`.
 - **Hosting, on the home server until the project is published:**
   - The repository (`dists/`, `pool/`) and the catalogue are plain static
     files.
@@ -293,8 +405,51 @@ If any step fails, it undoes what it did.
     host (for example GitHub Pages) and changing that one line on the
     boards and in the image. Nothing else changes.
 - **Updates:** a new build of the core is a new version in the repository,
-  and `pspexp-pkg upgrade` (or plain `apt upgrade`) brings it. The Packages
-  app shows "PSPExp update" like any other.
+  and `pspexp-pkg upgrade` brings it. The Packages app shows "PSPExp
+  update" like any other.
+- **Upgrading `pspexp-core` while its own console shows the Packages
+  app:** the package's scripts never restart the console. The new files are
+  in place, and the running console carries on with the old program. The
+  app then says "PSPExp was updated: restart the console to use it", with a
+  Restart button. The console restarts itself when the user agrees, or at
+  the next boot. A restart in the middle of an install is therefore
+  impossible.
+
+### 6.1 The PSP's runtime: a lifecycle of its own
+
+The PSP runs the runtime from its memory stick, so a new version reaches it
+only by a copy over the link, and it takes effect when PSPExp is started
+again on the PSP.
+
+- **Compatibility first.**
+  - The console works with any runtime newer than the first to announce
+    its features in HELLO. New abilities are feature bits (as FILES and
+    CLOCK are), used only when present.
+  - A runtime update is therefore never required to keep working. The
+    console offers it; it doesn't force it.
+  - A runtime too old for a new console (a protocol change) is refused at
+    HELLO with a clear message on the board. The copy below is then still
+    offered, since the FILE channel is independent of the rest.
+- **Staging:**
+  1. The files go to the stick under temporary names
+     (`EBOOT.PBP.new`, and so on) in PSPExp's folder.
+  2. Each is read back and checked against the package's SHA-256 before
+     anything is replaced.
+- **Swapping:** the current files are renamed `.bak`, then the `.new` ones
+  take their names. A small marker file (`update.txt`) records the step.
+- **Recovery:**
+  - **A cable pull or crash during the copy:** only `.new` files are
+    affected. The next connection deletes and redoes them.
+  - **An interruption during the swap:** the marker says how far it got.
+    The next connection completes the swap, or restores from `.bak`.
+  - **The PSP never has no runtime:** either the old or the new set is
+    complete at every moment.
+- **Activation:** the running runtime is unaffected. The console says
+  "PSP update installed: leave PSPExp with HOME and start it again". Once
+  the new runtime reports its version, the console removes the `.bak`
+  files after the first successful connection.
+- **Rolling back by hand:** until then the `.bak` set stays. The console
+  offers "Previous PSP runtime" in System if the new one fails to connect.
 
 ## 7. The Packages app
 
@@ -366,6 +521,19 @@ because boards differ.
 
 - **Build time:** `tests/test_recipes` validates every recipe (the rules in
   §4.3), and a `pspexp-pkg` test runs against a fake apt on the Mac.
+- **Failure paths, on a board with a scratch recipe:**
+  - a catalogue with a wrong signature, or an older serial, is refused and
+    the installed one stays;
+  - a recipe naming a missing package fails in the `apt` phase, shows as
+    broken, and Remove clears it;
+  - an install killed in each phase (`fetch`, `apt`, `files`), including a
+    `dpkg` interrupted mid-unpack, is completed or cleaned by `recover`;
+  - two operations at once: the second waits or reports busy;
+  - a package the user installed by hand before stays after the recipe is
+    removed, and so does one another package depends on;
+  - a system file name owned by another package is refused;
+  - a runtime copy interrupted by a cable pull in each step (copy, check,
+    swap) leaves a complete set, and the next connection finishes it.
 - **On a board, via `tests/psp/run.py`:**
   - the apps suite: Packages lists the catalogue;
   - `--store-writes`: install and remove one small recipe through apt, check
@@ -409,9 +577,15 @@ also runs Debian.
 1. **Recipe format and check:** the format, the check script, and
    converting two recipes: OpenTyrian (Debian's) and NES (Debian's core
    with our player). Test on the Mac.
-2. **`pspexp-pkg` and the privilege helper:** `pspexp-pkg` v2 (apt), the
-   root helper, the board-kind file. Install OpenTyrian and NES from
-   recipes on the Pi, with launcher entries.
+2. **`pspexp-pkg` and the privilege helper, to the contracts of §5:**
+   - the signed catalogue with its serial (§5.1);
+   - the helper's five operations, taking recipe ids (§5.2);
+   - the lock, the journal and `recover` (§5.3);
+   - meta-packages and apt-based removal (§5.4);
+   - publishing systems (§5.5).
+
+   Install OpenTyrian and NES from recipes on the Pi, then run the failure
+   paths of §10.3.
 3. **The Packages app on the catalogue:** sections, progress, states. The
    apps suite on the real PSP.
 4. **Our apt repository, locally:**

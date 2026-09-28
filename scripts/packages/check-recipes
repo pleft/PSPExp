@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""
+Check PSPExp's recipes (recipes/<id>/recipe; format: docs/Package_Manager.md §4).
+  scripts/packages/check-recipes [RECIPES_DIR]      0 when all are fine, 1 with the problems
+"""
+import os, re, sys
+
+SECTIONS = {"package", "debian", "omega", "entry", "system"}
+PACKAGE_KEYS = {"id", "title", "description", "category", "license", "version", "requires"}
+BOARD_KEYS = {"apt", "core", "build", "data", "warn"}
+ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover"}
+SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native"}
+CATEGORIES = {"game", "system", "app", "tool"}
+KEY_NAME = re.compile(r"^[a-z0-9]+(\+[a-z0-9]+)*$")
+BUTTONS = {"cross", "circle", "square", "triangle", "l", "r", "start", "select", "up", "down", "left", "right"}
+ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+APT = re.compile(r"^[a-z0-9][a-z0-9+.-]+$")
+
+
+def parse(path):
+    """[(section, key, value, line)]; sections may carry a board: [debian:gameshell]"""
+    out, sec = [], None
+    with open(path, encoding="utf-8") as f:
+        for n, raw in enumerate(f, 1):
+            line = raw.rstrip("\n")
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            m = re.match(r"^\[([a-z]+)(?::([a-z0-9]+))?\]$", line.strip())
+            if m:
+                sec = m.group(0)[1:-1]
+                continue
+            if "=" not in line:
+                out.append((sec, None, line, n))
+                continue
+            k, v = line.split("=", 1)
+            out.append((sec, k.strip(), v.strip(), n))
+    return out
+
+
+def check(dirpath):
+    errs = []
+    rid = os.path.basename(dirpath.rstrip("/"))
+    path = os.path.join(dirpath, "recipe")
+    if not os.path.isfile(path):
+        return ["%s: no recipe file" % rid]
+    items = parse(path)
+    sections = {}
+    for sec, k, v, n in items:
+        where = "%s/recipe:%d" % (rid, n)
+        if sec is None:
+            errs.append("%s: outside any section" % where); continue
+        base = sec.split(":")[0]
+        if base not in SECTIONS:
+            errs.append("%s: unknown section [%s]" % (where, sec)); continue
+        if k is None:
+            errs.append("%s: not KEY=value: %s" % (where, v)); continue
+        allowed = PACKAGE_KEYS if base == "package" else BOARD_KEYS if base in ("debian", "omega") else ENTRY_KEYS if base == "entry" else SYSTEM_KEYS
+        if k not in allowed:
+            errs.append("%s: [%s] has no key %s" % (where, sec, k))
+        if k in ("keys",):
+            for pair in v.split(","):
+                if "=" not in pair or pair.split("=")[0] not in BUTTONS or not KEY_NAME.match(pair.split("=", 1)[1]):
+                    errs.append("%s: keys: '%s' is not BUTTON=key" % (where, pair))
+        if base in ("debian", "omega") and k == "apt":
+            for p in v.split():
+                if not APT.match(p):
+                    errs.append("%s: '%s' is not a package name" % (where, p))
+        if k == "data" and "sha256=" not in v:
+            errs.append("%s: data without sha256=" % where)
+        sections.setdefault(sec, {})[k] = v
+    pk = sections.get("package", {})
+    for need in ("id", "title", "description", "category", "license", "version"):
+        if need not in pk:
+            errs.append("%s: [package] needs %s" % (rid, need))
+    if pk.get("id") and pk["id"] != rid:
+        errs.append("%s: [package] id=%s, but the folder is %s" % (rid, pk["id"], rid))
+    if pk.get("id") and not ID.match(pk["id"]):
+        errs.append("%s: id '%s': lower case, digits and -" % (rid, pk["id"]))
+    if pk.get("category") and pk["category"] not in CATEGORIES:
+        errs.append("%s: category %s (one of %s)" % (rid, pk["category"], ", ".join(sorted(CATEGORIES))))
+    if pk.get("version") and not pk["version"].isdigit():
+        errs.append("%s: version counts the recipe's changes: a whole number" % rid)
+    if not any(s.split(":")[0] in ("debian", "omega") for s in sections):
+        errs.append("%s: no [debian] or [omega]: nothing to install" % rid)
+    if "debian" in sections and "apt" not in sections["debian"]:
+        errs.append("%s: [debian] needs apt=" % rid)
+    if pk.get("category") == "system":
+        if "system" not in sections: errs.append("%s: a system needs [system]" % rid)
+        for need in ("name", "short", "ext", "roms"):
+            if need not in sections.get("system", {}): errs.append("%s: [system] needs %s" % (rid, need))
+        if "debian" in sections and "core" not in sections["debian"]:
+            errs.append("%s: a system's [debian] needs core=" % rid)
+    elif pk.get("category"):
+        if "entry" not in sections: errs.append("%s: needs [entry]" % rid)
+        for need in ("title", "exec"):
+            if need not in sections.get("entry", {}): errs.append("%s: [entry] needs %s" % (rid, need))
+    cover = os.path.join(dirpath, "cover.png")
+    if os.path.exists(cover):
+        with open(cover, "rb") as f:
+            head = f.read(24)
+        if head[:8] != b"\x89PNG\r\n\x1a\n":
+            errs.append("%s: cover.png is not a PNG" % rid)
+        else:
+            w, h = int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+            if (w, h) != (128, 128):
+                errs.append("%s: cover.png is %dx%d, not 128x128" % (rid, w, h))
+    return errs
+
+
+def main():
+    root = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "recipes")
+    errs, n = [], 0
+    for d in sorted(os.listdir(root)):
+        p = os.path.join(root, d)
+        if os.path.isdir(p) and not d.startswith("."):
+            n += 1
+            errs += check(p)
+    for e in errs:
+        print(e)
+    print("%d recipes, %d problems" % (n, len(errs)))
+    sys.exit(1 if errs else 0)
+
+
+if __name__ == "__main__":
+    main()
