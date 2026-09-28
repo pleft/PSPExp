@@ -39,8 +39,14 @@ the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
 
 ## Measure the USB link (v0.1 first milestone)
 
-1. Copy `dist/PSPExp/` to `ms0:/PSP/GAME/PSPExp/` (custom firmware required:
-   the boot module loads a kernel PRX).
+1. Put PSPExp on the memory stick (custom firmware required: the boot module
+   loads a kernel PRX). With the PSP in USB mode (Settings > USB Connection):
+   `scripts/packages/runtime-slot --install /Volumes/<stick>/PSP/GAME/PSPExp`
+   writes the boot loader, the runtime in `slot-a/` and `active`. This is
+   needed only once: after that a board's console updates the runtime over
+   the link (the cheatsheet's "Updating the PSP's runtime"). Copying
+   `dist/PSPExp/` flat still works too; the loader then runs the runtime
+   next to the EBOOT, without slots.
 2. Launch PSPExp from the XMB and connect the USB cable. The screen shows
    `waiting for host sync`.
 3. On the host: `build/host/pspexp-bench` (add `--verbose` for libusb errors).

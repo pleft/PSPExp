@@ -7,11 +7,15 @@ Paths are relative to the PSPExp tree; the WarCraft project is `../WarCraft`.
 | what | command |
 |---|---|
 | build everything (host + PSP) and run the tests | `scripts/build.sh` |
-| PSP files to copy | `dist/PSPExp/` → `ms0:/PSP/GAME/PSPExp/` (EBOOT.PBP, pspexp_usb.prx, pspexp_runtime.prx) |
+| PSP install, once (PSP in USB mode) | `scripts/packages/runtime-slot --install <stick>/PSP/GAME/PSPExp` (EBOOT.PBP, slot-a/, active) |
+| PSP install without slots (older way) | `dist/PSPExp/` → `ms0:/PSP/GAME/PSPExp/` (EBOOT.PBP, pspexp_usb.prx, pspexp_runtime.prx) |
+| a runtime set with its VERSION / the `pspexp-runtime` package | `scripts/packages/runtime-slot OUTDIR` / `scripts/packages/debs/pspexp-runtime/build OUTDIR` |
 | rebuild Stratagus with the backend | `cd ../WarCraft && cmake --build build/host-stratagus -j8 --target stratagus` |
 | regenerate the Stratagus patch after editing the `pspexp` branch | `scripts/dev/export-stratagus-patch.sh` |
 
 Only `pspexp_runtime.prx` changes often; the EBOOT and the USB driver rarely.
+With slots, the runtime reaches the PSP over the link (below); USB mode is
+only for the first install and for a new boot loader.
 The PSP must be in the XMB (or the runtime stopped) to be seen as a memory
 stick; while the runtime runs it is the PSPExp USB device.
 
@@ -25,6 +29,43 @@ stick; while the runtime runs it is the PSPExp USB device.
 4. Diagnostics on the memory stick, next to the EBOOT: `pspexp-rt.log`
    (link state changes) and `pspexp-shot-N.bmp` (framebuffer dumps when a
    host asked for them).
+
+### The runtime's two slots (docs/Package_Manager.md §6.1)
+
+```text
+ms0:/PSP/GAME/PSPExp/
+  EBOOT.PBP        the boot loader: picks a slot, loads its USB driver and runtime
+  slot-a/, slot-b/ each a whole runtime: pspexp_runtime.prx, pspexp_usb.prx, VERSION
+  active           slot=a|b, tries=N (starts not yet confirmed by a connection)
+  active.new       a finished update: the loader makes it `active` at the next start
+  fallback         why the loader last booted the other slot (from=, to=, reason=)
+```
+
+- A slot boots only when every file matches its size and SHA-256 in
+  `VERSION`, and `VERSION` ends with `end`.
+- The runtime sets `tries` back to 0 once connected. After 3 starts without
+  a connection, or with a slot that doesn't check, the loader boots the
+  other slot and writes `fallback`; the console reports it.
+- **Hold L** while PSPExp starts to boot the other slot by hand.
+- The loader's screen (the slot and version it boots) shows for a moment
+  only; `pspexp-rt.log` keeps `slot confirmed` and the connection lines.
+
+### Updating the PSP's runtime
+
+The board's `pspexp-runtime` package (a dependency of `pspexp-core`) holds
+the current set in `/usr/share/pspexp/runtime`. When it's newer than the
+PSP's, the console offers **System > Update the PSP**. The update fills the
+slot not in use, checks every file, then writes `active.new`; leave PSPExp
+with HOME and start it again to run it. An update cut short leaves the old
+slot booting. A console speaking a newer protocol connects in **maintenance
+mode** (files only) and installs its runtime by itself.
+
+| goal | command |
+|---|---|
+| the PSP's slots, versions, pending switch, last fallback | `pspexp-ms slots` (on the Mac: `build/host/pspexp-ms --tcp HOST:3838 slots`) |
+| install a runtime set into the inactive slot | `pspexp-ms runtime-update DIR` |
+| the same through a running console (tests) | `pspexp-term --ctl runtime-update [DIR]`, `pspexp-term --ctl slots` |
+| every slot case end to end in PPSSPP (~10 min) | `tests/psp/slots-ppsspp.sh` |
 
 The status page shows USB counters, link generation, frames, GE and cache
 statistics, audio buffer state and the last log lines. It comes back after a
@@ -167,6 +208,9 @@ select: escape.
 | host says `no USB device 054c:01ca` | PSP not on the status page, or cable |
 | host says `no sync reply` | runtime not running (XMB?) or stuck: HOME and relaunch |
 | picture quartered / wrong colours | old `pspexp_runtime.prx` on the stick |
+| "No valid PSPExp runtime" at start | neither slot checks: USB mode, `runtime-slot --install` again |
+| the console says the PSP fell back | `fallback` on the stick says why; the new slot stays for the next update |
+| the PSP keeps running the old version after an update | not restarted yet (HOME, start again), or `active.new` refused: its slot didn't check |
 | host killed on cable pull | fixed 2026-09-22; rebuild the host tools |
 | PSP status page shows `resource errors` | memory budget: 1.5 MiB VRAM + 12 MiB RAM; the backend evicts after 15 s |
 | audio `underruns` climbing on the status page | host frame loop stalled; the stream needs the host to run at ≥ 30 fps |

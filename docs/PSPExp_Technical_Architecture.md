@@ -537,6 +537,8 @@ Host -> HELLO_ACK
         audio_stream=44100x2
 ```
 
+When the two sides speak different protocol versions and the runtime has the file channel, the host doesn't refuse: it answers with a `HELLO_ACK` whose `flags` has `PSPEXP_ACK_MAINTENANCE`. Only SYSTEM and FILE are used then, no graphics or audio, and the host uses the link to install a matching runtime (§9.3). The framing, the first fields of `HELLO` and the FILE messages are frozen for this reason: new file operations are new opcodes.
+
 Any `HELLO` invalidates all PSP-side state: the runtime releases every resource and empties its queues before replying. This is what makes reconnection simple (§9.2).
 
 ### 9.2 Reconnection and resynchronisation
@@ -549,6 +551,10 @@ The link will be lost: the cable is pulled, the PSP suspends, the host process r
 4. The host re-uploads its current working set (which it already tracks for prefetch purposes) and resumes frames.
 
 An application using libPSPExp should experience this as a pause, not an error.
+
+### 9.3 Installing and updating the runtime
+
+The EBOOT is a small boot loader that rarely changes. The runtime (`pspexp_runtime.prx` and `pspexp_usb.prx`) lives in two slots beside it, `slot-a/` and `slot-b/`. Each has a `VERSION` file with every file's size and SHA-256, and the loader checks the whole set before booting it. `active` names the slot and counts starts not yet confirmed by a connection. The host updates the slot not in use over the FILE channel (`pspexp_slots_update` in libPSPExp), and a complete `active.new` switches to it at the next start. Three unconfirmed starts, or a slot that doesn't check, make the loader boot the other slot. The full lifecycle and its failure cases are in [Package_Manager.md §6.1](Package_Manager.md).
 
 ---
 

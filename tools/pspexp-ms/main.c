@@ -7,7 +7,7 @@
  *     ls PATH              list a folder ("ms0:/PSP/GAME")
  *     get PATH [FILE]      copy a file from the PSP (to FILE, or its name here)
  *     put FILE PATH        copy a file to the PSP (PATH: the file, or a folder ending in /)
- *     mkdir PATH | rm PATH | mv FROM TO | df [DEVICE]
+ *     mkdir PATH | rm PATH | mv FROM TO | df [DEVICE] | slots | runtime-update DIR
  *     slots                the PSP's runtime slots: which runs, which is pending, their versions
  *     runtime-update DIR   the runtime set in DIR into the inactive slot (docs/Package_Manager.md §6.1);
  *                          PSPEXP_SLOT_CRASH=<step> stops it dead after that step (tests)
@@ -44,7 +44,7 @@ static void slot_log(void *u, const char *m) { (void)u; printf("%s\n", m); }
 
 static int usage(void)
 {
-    fprintf(stderr, "usage: pspexp-ms [--tcp HOST[:PORT] | --usb] ls PATH | get PATH [FILE] | put FILE PATH | mkdir PATH | rm PATH | mv FROM TO | df [DEVICE]\n");
+    fprintf(stderr, "usage: pspexp-ms [--tcp HOST[:PORT] | --usb] ls PATH | get PATH [FILE] | put FILE PATH | mkdir PATH | rm PATH | mv FROM TO | df [DEVICE] | slots | runtime-update DIR\n");
     return 2;
 }
 

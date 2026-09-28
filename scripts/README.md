@@ -20,6 +20,8 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
   pspexp-exec        start a PSPExp program: the console hands the PSP over and back
   pspexp-run         an SDL2 program with the SDL layer preloaded (glibc boards)
   pspexp-pkg         install, remove and list packages on the board
+  pspexp-pkg-apt     the root helper pspexp-pkg calls through sudo (recipes through apt)
+  pspexp-apt-setup   set a Debian board up for the repository: board kind, key, apt source, sudo rule
 
 packages/          what the launcher offers, for any board
   pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=);
@@ -34,6 +36,14 @@ packages/          what the launcher offers, for any board
                      linked against the board's own SDL2 (seconds, not the Pi's half hour)
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board
+  check-recipes      check the catalogue's recipes (docs/Package_Manager.md §4)
+  debs/              our own .deb packages, each with a `build` script: pspexp-core,
+                     pspexp-runtime, pspexp-retro, pspexp-cavestory, tyrian-data,
+                     jazz-shareware-data
+  mkdeb.py           a .deb without dpkg (the Mac has none)
+  apt-repo           the signed apt repository and catalogue: build, push to the home server
+  runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole
+                     slotted install for a memory stick (--install)
 
 gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
   build.sh           tools and the SDL layer (Zig cross build); cavestory, retro cross-built;

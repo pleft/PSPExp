@@ -63,7 +63,7 @@ fi
 	ssh "$PI" 'mkdir -p ~/pspexp/src && tar -C ~/pspexp/src -xf -'
 ssh "$PI" 'set -e; cd ~/pspexp/src
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
-	cmake --build build -j4 --target pspexp-term sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
+	cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
 	[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
 
 # a Pi whose PSPExp comes from apt (pspexp-core, docs/Package_Manager.md §6): only the build;
