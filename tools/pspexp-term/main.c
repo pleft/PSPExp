@@ -2574,7 +2574,8 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
 
 static uint64_t g_ctl_frame_us;        /* when the last frame went to the PSP */
 static int g_ctl_on;
-enum { CS_IDLE, CS_PRESS, CS_SETTLE, CS_WAIT, CS_IDLEWAIT, CS_SHOT };
+enum { CS_IDLE, CS_PRESS, CS_SETTLE, CS_WAIT, CS_IDLEWAIT, CS_SHOT, CS_STOP, CS_RELINK };
+static int g_ctl_relink;               /* drop the link now: the main loop does it (it owns the retry timer) */
 static struct { int st; uint64_t t0, until, limit; unsigned shot; char name[128]; } C;
 
 static uint32_t ctl_buttons_of(const char *s)   /* "l+r+right" */
@@ -2615,7 +2616,7 @@ static void ctl_state(char *o, size_t n)
             g_launcher_on && launcher_running_title() ? launcher_running_title() : "");
     if (g_launcher_on) launcher_state(o, n);
     files_state(o, n);
-    ctl_add(o, n, "psp_clock=%s\n", g_clock_report);
+    ctl_add(o, n, "psp_clock=%s\nprogram_pid=%d\n", g_clock_report, (int)g_launch_pid);
     ctl_add(o, n, "term.session=%d\nterm.cursor=%d,%d\nterm.scrolled=%d\n", g_sess_cur, T.cx, T.cy, T.view);
     for (y = 0; y < T.rows; y++) {   /* the screen's text, lines with something on them */
         char line[COLS_MAX + 1];
@@ -2757,6 +2758,16 @@ static void ctl_step(uint64_t now, int connected)
         if (now - C.t0 > 150000u && now - g_ctl_frame_us > 400000u) { C.st = CS_IDLE; ctl_reply("ok idle"); }
         else if (now > C.limit) { C.st = CS_IDLE; ctl_reply("ok busy (still drawing)"); }
         return;
+    case CS_STOP:   /* the program ended and the launcher has the PSP again */
+        if (g_launch_pid <= 0 && connected && now > C.until) { C.st = CS_IDLE; ctl_reply("ok stopped"); return; }
+        if (g_launch_pid > 0 && now > C.t0 + 4000000u && !C.shot) { kill(-g_launch_pid, SIGKILL); C.shot = 1; }   /* it did not listen */
+        if (now > C.limit) { C.st = CS_IDLE; ctl_reply(g_launch_pid > 0 ? "error the program does not end" : "error the PSP did not come back"); }
+        return;
+    case CS_RELINK:
+        if (!connected) C.t0 = 1;   /* seen down */
+        if (C.t0 == 1 && connected) { C.st = CS_IDLE; ctl_reply("ok back"); return; }
+        if (now > C.limit) { C.st = CS_IDLE; ctl_reply(C.t0 == 1 ? "error the PSP did not come back" : "error the link did not drop"); }
+        return;
     case CS_SHOT:
         if (now < C.until) return;
         if (!connected) { C.st = CS_IDLE; ctl_reply("error the PSP went away"); return; }
@@ -2812,6 +2823,17 @@ static void ctl_step(uint64_t now, int connected)
         C.st = CS_SETTLE; C.until = now + 200000u;
     } else if (!strncmp(cmd, "fs ", 3)) {
         ctl_fs(cmd + 3, reply, sizeof(reply)); ctl_reply(reply);
+    } else if (!strcmp(cmd, "stop")) {   /* end the program the launcher started, wait for the PSP to come back */
+        if (g_launch_pid <= 0) { ctl_reply("error nothing is running"); return; }
+        kill(-g_launch_pid, SIGTERM);
+        C.st = CS_STOP; C.t0 = now; C.until = now + 500000u; C.limit = now + 20000000u; C.shot = 0;
+    } else if (!strcmp(cmd, "relink")) {   /* as a cable pull: drop the link, wait until it is back */
+        if (!connected) { ctl_reply("error not connected"); return; }
+        g_ctl_relink = 1;
+        C.st = CS_RELINK; C.t0 = 0; C.limit = now + 20000000u;
+    } else if (!strncmp(cmd, "select ", 7)) {   /* the launcher's highlight onto an entry of the section shown */
+        if (!g_launcher_on || !launcher_select(cmd + 7)) { ctl_reply("error no such entry in this section"); return; }
+        C.st = CS_SETTLE; C.until = now + 150000u;
     } else if (!strncmp(cmd, "clock", 5)) {   /* the PSP's clock from this board ("clock force": always) */
         psp_clock_sync(!strcmp(cmd, "clock force"), reply, sizeof(reply));
         ctl_reply(reply);
@@ -2820,7 +2842,7 @@ static void ctl_step(uint64_t now, int connected)
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
         launcher_set_test_mode(0);
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], type TEXT, fs ..., ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], select TITLE, type TEXT, fs ..., stop, relink, clock [force], ping, end");
 }
 
 int main(int argc, char **argv)
@@ -3023,6 +3045,13 @@ int main(int argc, char **argv)
         /* hand-over */
         if (g_release_req) { g_release_req = 0; release_psp(); }
         if (g_acquire_req) { g_acquire_req = 0; g_released = 0; last_try = 0; }
+        if (g_ctl_relink) {   /* the control port's relink: as a cable pull */
+            g_ctl_relink = 0;
+            fprintf(stderr, "[pspexp-term] control port: dropping the link\n");
+            keypad_release_all();
+            pspexp_set_transport(ctx, NULL);
+            last_try = pspexp_time_us();   /* a second down, then back */
+        }
 
         now = pspexp_time_us();
         connected = pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED;

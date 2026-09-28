@@ -48,6 +48,8 @@ const char *launcher_running_title(void);
  * appended to out; test mode refuses Restart, Power off and the Wi-Fi switch */
 void launcher_state(char *out, size_t n);
 void launcher_set_test_mode(int on);
+/* the highlight onto the entry titled so in the section shown; 1, or 0 when none */
+int  launcher_select(const char *title);
 /* System > PSP clock: set the PSP's clock from this board (1, the default) */
 int  launcher_psp_clock(void);
 /* 1 once when the user just turned it on: set it now */

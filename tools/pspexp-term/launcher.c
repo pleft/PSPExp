@@ -647,6 +647,17 @@ int launcher_open_file(const char *path)
 const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }
 
 void launcher_set_test_mode(int on) { g_test_mode = on; }
+
+int launcher_select(const char *title)
+{
+    Cat *c;
+    int i;
+    if (!g_ncat) return 0;
+    c = &g_cat[g_cur];
+    for (i = 0; i < c->n; i++)
+        if (!strcmp(c->it[i]->title, title)) { c->sel = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
+    return 0;
+}
 int  launcher_psp_clock(void) { return g_psp_clock; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
 void launcher_notice(const char *icon, const char *text) { toast(icon, text, pspexp_time_us()); }
@@ -662,6 +673,8 @@ void launcher_state(char *out, size_t n)
     for (i = 0; g_ncat && i < g_cat[g_cur].n && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[g_cur].it[i]->title);
     if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.categories=");
     for (i = 0; i < g_ncat && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[i].name);
+    if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.systems=");   /* the sections that are emulated systems (with ROMs) */
+    for (i = 0, e = NULL; i < g_ncat && l < n; i++) if (g_cat[i].kind == CK_SYSTEM) l += (size_t)snprintf(out + l, n - l, "%s%s", e ? "|" : "", g_cat[i].name), e = (LEntry *)1;
     if (l < n) snprintf(out + l, n - l, "\nlauncher.toast=%s\n", pspexp_time_us() < g_toast_until ? g_toast : "");
 }
 

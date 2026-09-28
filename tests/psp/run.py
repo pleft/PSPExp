@@ -404,16 +404,123 @@ def suite_terminal(r):
     r.check("a command in the terminal and its output", echo)
 
 
+def suite_relink(r):
+    """the link dropped (as a cable pull) and back, three times"""
+    def relink():
+        times = []
+        for i in range(3):
+            t0 = time.time()
+            r.ctl("relink", timeout=40)
+            times.append(time.time() - t0)
+            s = r.state()
+            r.expect(s["connected"] == "1" and s["psp_files"] == "1", "after relink %d: not back fully" % (i + 1))
+        r.note("the link back after a drop: %s s" % ", ".join("%.1f" % x for x in times))
+    r.check("the link drops and comes back (3 times)", relink)
+
+    def after():
+        s = r.state()
+        r.expect(s.get("psp_clock", "").startswith("result="), "no clock check after reconnecting")
+        st = dict(l.split("=", 1) for l in r.ctl("stats")[1:] if "=" in l)
+        r.expect(int(st["protocol_errors"]) == 0, "protocol errors: %s" % st["protocol_errors"])
+        r.ctl("open launcher")
+        r.ctl("idle 3000")
+        r.shot("relink-launcher", "The launcher after three dropped links")
+    r.check("after reconnecting: clock checked, no errors, the screen draws", after)
+
+
+LOG = "/tmp/pspexp-launcher.log"   # where the console writes the programs it starts
+
+
+def play(r, category, title, min_fps, name):
+    """start title from the launcher, read its frame rates for a while, stop it, check the launcher is back"""
+    t = r.t
+    r.ctl("open launcher")
+    r.to_category(category)
+    r.ctl("select " + title)
+    r.ctl("idle 2500")
+    off = int(t.sh("wc -c < %s 2>/dev/null || echo 0" % LOG).strip() or 0)
+    r.press("cross", idle=False)
+    end = time.time() + 10
+    while time.time() < end and r.state()["running"] != title:
+        time.sleep(0.3)
+    r.expect(r.state()["running"] == title, "%s did not start" % title)
+    fps, errors, underruns, end = [], [], [], time.time() + 75
+    while time.time() < end:   # the SDL layer's line every few seconds: a starting phase, then three to judge by
+        time.sleep(2)
+        lines = t.sh("tail -c +%d %s 2>/dev/null | grep -a 'fps  ' || true" % (off + 1, LOG)).splitlines()
+        if len(lines) >= 4:
+            break
+    r.expect(lines, "%s wrote no frame rates in 75 s (log: %s)" % (title, t.sh("tail -c +%d %s | tail -3" % (off + 1, LOG)).strip()))
+    for l in lines[1:] or lines:
+        w = l.split()
+        try:
+            fps.append(float(w[w.index("fps") - 1]))
+            errors.append(int(w[w.index("errors") + 1]))
+            underruns.append(int(w[w.index("underruns") + 1]))
+        except (ValueError, IndexError):
+            pass
+    r.expect(fps, "no frame rate in: %s" % lines[-1])
+    fps.sort()
+    med = fps[len(fps) // 2]
+    r.note("%s: %.0f fps (%.0f-%.0f), link errors %d, audio underruns %d" % (title, med, fps[0], fps[-1], max(errors or [0]), max(underruns or [0])))
+    r.ctl("stop", timeout=40)
+    s = r.state()
+    r.expect(s["connected"] == "1" and s["running"] == "" and s["view"] == "launcher", "after quitting: view %s, connected %s" % (s["view"], s["connected"]))
+    r.ctl("idle 3000")
+    r.shot("after-" + name, "The launcher back after %s" % title)
+    # the best rate seen: an intro that waits on a logo draws few frames on purpose (OpenTyrian's), the speed shows when it moves
+    r.expect(fps[-1] >= DRAWS_FPS, "%s draws no frames" % title)
+    if min_fps:
+        r.expect(fps[-1] >= min_fps, "%s reaches only %.0f fps (--min-fps %d)" % (title, fps[-1], min_fps))
+    r.expect(max(errors or [0]) == 0, "%s: link errors" % title)
+
+
+# Frame rates differ a lot between boards (the Omega's MIPS vs the Pi 400):
+# they are recorded, not judged. A game passes when it starts, draws, has no
+# link errors and quits back. --min-fps N adds a floor, for one board at a time.
+MIN_FPS = 0
+DRAWS_FPS = 1.0   # "it draws": at least this, at its best moment
+
+
+def slug(s):
+    return "".join(c if c.isalnum() else "-" for c in s.lower()).strip("-")
+
+
+def suite_games(r):
+    """whatever this board has: every installed game, and the first ROM of
+    every emulated system that has ROMs (a system without any is not listed)"""
+    r.ctl("open launcher")
+    r.ctl("idle 3000")
+    s = r.state()
+    cats = s["launcher.categories"].split("|")
+    systems = [x for x in s.get("launcher.systems", "").split("|") if x]
+    games = [x for x in r.to_category("Games")["launcher.items"].split("|") if x] if "Games" in cats else []
+    r.note("games installed: %s" % (", ".join(games) or "none"))
+    r.note("systems with ROMs: %s" % (", ".join(systems) or "none"))
+    for title in games:
+        r.check("%s starts, draws, quits back to the launcher" % title,
+                lambda title=title: play(r, "Games", title, MIN_FPS, slug(title)))
+    for cat in systems:
+        roms = [x for x in r.to_category(cat)["launcher.items"].split("|") if x]
+        if not roms:
+            continue
+        r.check("%s: its first ROM (%s) starts, draws, quits back" % (cat, roms[0]),
+                lambda cat=cat, first=roms[0]: play(r, cat, first, MIN_FPS, "emu-" + slug(cat)))
+
+
 SUITES = [("link", suite_link), ("stick", suite_stick), ("launcher", suite_launcher),
-          ("files", suite_files), ("terminal", suite_terminal)]
+          ("files", suite_files), ("terminal", suite_terminal), ("relink", suite_relink), ("games", suite_games)]
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", help="user@board whose console drives the PSP")
     ap.add_argument("--local", action="store_true", help="a console on this machine")
+    ap.add_argument("--min-fps", type=int, default=0, help="games: also require this frame rate (off: rates are only recorded)")
     ap.add_argument("suites", nargs="*", help="some of: " + " ".join(n for n, _ in SUITES))
     a = ap.parse_args()
+    global MIN_FPS
+    MIN_FPS = a.min_fps
     if not a.host and not a.local:
         ap.error("--host user@board or --local")
     want = a.suites or [n for n, _ in SUITES]

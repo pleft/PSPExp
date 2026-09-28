@@ -815,6 +815,10 @@ console). The commands:
 | `stats` | frames, latency, GE time, errors |
 | `shot NAME` | the PSP saves its screen next to its EBOOT; the console fetches it over the FILE channel into `/tmp/pspexp-shots/NAME.bmp` (or `$PSPEXP_TERM_SHOTS`) and deletes it from the stick |
 | `open launcher|terminal|files [PATH]` | switches the view |
+| `select TITLE` | the launcher's highlight onto an entry of the section shown |
+| `stop` | ends the program the launcher started (its process group), and answers when the launcher has the PSP back |
+| `relink` | drops the link as a cable pull would, and answers when it is back |
+| `clock [force]` | the PSP's clock and time zone from the board (§9) |
 | `type TEXT` | writes into the shell (`\n` is Enter) |
 | `fs ls|get|put|rm|rmtree|mkdir|mv|df` | the memory stick over the console's link, with timings |
 | `end` | lifts test mode |
@@ -840,6 +844,17 @@ the Mac.
   byte); open a picture and a text file from the stick; delete with its
   question; back to the board.
 - **terminal:** a command and its output.
+- **relink:** the link dropped and back three times; then the clock is
+  checked again, there are no errors, and the screen draws.
+- **games:** what the board has, never a fixed list. Every installed game,
+  and the first ROM of every emulated system that has ROMs (the launcher's
+  `launcher.systems`), is started from the launcher. Each must draw frames
+  with no link errors, quit (`stop`) and hand the PSP back to the launcher.
+  Its frame rates come from the SDL layer's lines in
+  `/tmp/pspexp-launcher.log`; they differ widely between boards, so they
+  are recorded, not judged. `--min-fps N` adds a floor for one board. The
+  best rate counts: an intro that waits on a logo (OpenTyrian's) draws
+  little on purpose.
 
 The report goes to `build/psp-tests/<time>/report.md`: each check, what was
 measured, and the PSP's screenshots as PNG.
@@ -857,6 +872,21 @@ about 100 s.
   reports the offset.
 - **A bug found by the run:** the file manager redrew every turn even with
   nothing pressed. Fixed.
+
+With the relink and games suites, the Pi 400 run is 34 of 34 in about
+7 minutes.
+
+| on the Pi 400 | frame rate | audio underruns |
+|---|---|---|
+| Cave Story | 50 fps | 0 |
+| Freedoom 1 and 2 | 35 fps | 1 |
+| Jazz Jackrabbit | 41 fps | 0 |
+| OpenTyrian | 48 fps at its best | 0 |
+| Simutrans | 25 fps | 0 |
+| Game Boy, Game Boy Color, Mega Drive and NES | 60 fps | 0 |
+| SNES | 50 fps | 0 |
+
+The link comes back about 2.4 s after a drop.
 
 ## 9. The PSP's clock from the board (2026-09-28)
 
