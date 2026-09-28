@@ -48,6 +48,12 @@ const char *launcher_running_title(void);
  * appended to out; test mode refuses Restart, Power off and the Wi-Fi switch */
 void launcher_state(char *out, size_t n);
 void launcher_set_test_mode(int on);
+/* System > PSP clock: set the PSP's clock from this board (1, the default) */
+int  launcher_psp_clock(void);
+/* 1 once when the user just turned it on: set it now */
+int  launcher_take_clock_request(void);
+/* a message at the bottom of the launcher, as its own ones */
+void launcher_notice(const char *icon, const char *text);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);

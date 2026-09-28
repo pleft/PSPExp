@@ -11,7 +11,7 @@ CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR = ../transport-usb
 LDFLAGS =
-LIBS = -lpspexpusb -lpsppower -lpspgu -lpspge -lpspaudio -lpspnet_inet -lpsputility
+LIBS = -lpspexpusb -lpsprtc -lpsppower -lpspgu -lpspge -lpspaudio -lpspnet_inet -lpsputility
 
 BUILD_PRX = 1
 

@@ -196,6 +196,27 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_FILES      0x00000004u  /* answers the FILE channel: the memory stick for the host.
                                                   A host must not send on that channel otherwise: runtimes
                                                   before it drop a link on a channel they do not know */
+#define PSPEXP_FEATURE_CLOCK      0x00000008u  /* answers CLOCK_SET: the host may set the PSP's clock */
+
+/* Host -> PSP (CLOCK_SET): the board's clock, for a PSP whose own one is
+ * wrong (a flat clock battery puts it back years). The PSP keeps UTC; what
+ * it shows is UTC plus its own time-zone setting, which is not changed. */
+typedef struct PspExpClockSet {
+    uint32_t utc_lo, utc_hi;    /* seconds since 1970, UTC */
+    int32_t  tz_minutes;        /* the board's offset from UTC, east positive (for the report) */
+    uint32_t min_diff;          /* set only when the PSP is further off (seconds); 0: always; PSPEXP_CLOCK_REPORT_ONLY: never */
+} PspExpClockSet;
+#define PSPEXP_CLOCK_REPORT_ONLY 0xffffffffu
+
+/* PSP -> host (CLOCK_STATUS). */
+typedef struct PspExpClockStatus {
+    uint32_t before_lo, before_hi;   /* the PSP's UTC clock before, seconds since 1970 */
+    uint32_t after_lo, after_hi;     /* and after */
+    int32_t  tz_minutes;             /* the PSP's time-zone setting, east positive */
+    int32_t  dst;                    /* its daylight-saving setting: 1 adds an hour */
+    int32_t  result;                 /* 1 set, 0 left as it was, < 0 could not */
+    uint32_t reserved;
+} PspExpClockStatus;
 
 /* Host -> PSP, reply to HELLO. */
 typedef struct PspExpHelloAck {

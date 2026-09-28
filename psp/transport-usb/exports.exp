@@ -18,6 +18,7 @@ PSP_EXPORT_FUNC(pspexpUsbRead)
 PSP_EXPORT_FUNC(pspexpUsbWrite)
 PSP_EXPORT_FUNC(pspexpUsbGetStats)
 PSP_EXPORT_FUNC(pspexpUsbHomeHeld)
+PSP_EXPORT_FUNC(pspexpUsbSetClock)
 PSP_EXPORT_END
 
 PSP_END_EXPORTS

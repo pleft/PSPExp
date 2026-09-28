@@ -23,6 +23,8 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_PRESENT_DONE: return "PRESENT_DONE";
     case PSPEXP_OP_MEMORY_QUERY: return "MEMORY_QUERY";
     case PSPEXP_OP_MEMORY_STATUS: return "MEMORY_STATUS";
+    case PSPEXP_OP_CLOCK_SET: return "CLOCK_SET";
+    case PSPEXP_OP_CLOCK_STATUS: return "CLOCK_STATUS";
     case PSPEXP_OP_ERROR: return "ERROR";
     case PSPEXP_OP_DISCONNECT: return "DISCONNECT";
     case PSPEXP_OP_BEGIN_FRAME: return "BEGIN_FRAME";

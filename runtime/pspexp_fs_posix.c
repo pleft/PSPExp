@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
 #if defined(__APPLE__)
 #include <sys/mount.h>
 #else
@@ -171,3 +172,28 @@ void pspexp_fs_posix_install(PspExpRuntimeOps *ops, const char *root)
     ops->fs_list = fs_list; ops->fs_stat = fs_stat; ops->fs_read = fs_read; ops->fs_write = fs_write;
     ops->fs_mkdir = fs_mkdir; ops->fs_remove = fs_remove; ops->fs_rename = fs_rename; ops->fs_info = fs_info;
 }
+
+/* ---- the clock ---------------------------------------------------------------- */
+
+static int64_t g_clock_shift;   /* what CLOCK_SET moved it by */
+
+static int clock_get(void *u, uint64_t *utc, int *tz, int *dst)
+{
+    time_t now = time(NULL);
+    struct tm lt;
+    (void)u;
+    localtime_r(&now, &lt);
+    *utc = (uint64_t)((int64_t)now + g_clock_shift);
+    *tz = (int)(lt.tm_gmtoff / 60) - (lt.tm_isdst > 0 ? 60 : 0);
+    *dst = lt.tm_isdst > 0;
+    return 0;
+}
+
+static int clock_set(void *u, uint64_t utc)
+{
+    (void)u;
+    g_clock_shift = (int64_t)utc - (int64_t)time(NULL);
+    return 0;
+}
+
+void pspexp_clock_posix_install(PspExpRuntimeOps *ops) { ops->clock_get = clock_get; ops->clock_set = clock_set; }

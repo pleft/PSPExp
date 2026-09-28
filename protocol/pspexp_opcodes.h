@@ -14,6 +14,8 @@ enum PspExpOpcode {
     PSPEXP_OP_MEMORY_STATUS  = 0x0005,  /* PSP -> host, PspExpMemoryStatus */
     PSPEXP_OP_ERROR          = 0x0006,  /* either, PspExpError */
     PSPEXP_OP_DISCONNECT     = 0x0007,  /* either, no payload: orderly close */
+    PSPEXP_OP_CLOCK_SET      = 0x0008,  /* host -> PSP, PspExpClockSet (only with PSPEXP_FEATURE_CLOCK) */
+    PSPEXP_OP_CLOCK_STATUS   = 0x0009,  /* PSP -> host, PspExpClockStatus: the answer */
 
     /* GRAPHICS (0x01xx) */
     PSPEXP_OP_BEGIN_FRAME       = 0x0101,  /* PspExpBeginFrame */

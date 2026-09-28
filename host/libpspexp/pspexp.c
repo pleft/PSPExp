@@ -56,6 +56,9 @@ struct PspExpContext {
     uint32_t fs_next_id, fs_reply_id, fs_reply_len;
     int fs_have;
     uint8_t *fs_reply;
+    /* CLOCK_STATUS, the answer to CLOCK_SET */
+    int clock_have;
+    PspExpClockStatus clock_status;
 };
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
@@ -199,6 +202,32 @@ int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index)
     memset(&sc, 0, sizeof(sc));
     sc.index = index;
     return pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_DEBUG_SCREENSHOT, &sc, sizeof(sc));
+}
+
+/* ---- the PSP's clock ---------------------------------------------------------------------- */
+
+int pspexp_clock_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_CLOCK) != 0;
+}
+
+int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, uint32_t min_diff, PspExpClockStatus *out)
+{
+    PspExpClockSet c;
+    uint64_t deadline;
+    if (!pspexp_clock_supported(ctx)) return -1;
+    memset(&c, 0, sizeof(c));
+    c.utc_lo = (uint32_t)utc; c.utc_hi = (uint32_t)(utc >> 32);
+    c.tz_minutes = tz_minutes;
+    c.min_diff = min_diff;
+    ctx->clock_have = 0;
+    if (pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_CLOCK_SET, &c, sizeof(c)) < 0) return -1;
+    deadline = pspexp_time_us() + 3000000u;
+    while (!ctx->clock_have) {
+        if (pspexp_pump(ctx, 20) < 0 || pspexp_time_us() > deadline) return -1;
+    }
+    if (out) *out = ctx->clock_status;
+    return ctx->clock_status.result;
 }
 
 /* ---- FILE: the PSP's memory stick ------------------------------------------------------ */
@@ -396,6 +425,9 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
     switch (m->header->opcode) {
     case PSPEXP_OP_HELLO:
         on_hello(ctx, m);
+        break;
+    case PSPEXP_OP_CLOCK_STATUS:
+        if (m->length >= sizeof(PspExpClockStatus)) { memcpy(&ctx->clock_status, m->payload, sizeof(ctx->clock_status)); ctx->clock_have = 1; }
         break;
     case PSPEXP_OP_FS_REPLY: {
         uint32_t cap = (uint32_t)sizeof(PspExpFsReply) + PSPEXP_FS_CHUNK;

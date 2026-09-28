@@ -477,6 +477,7 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.log = op_log;
     ops.screenshot = op_screenshot;
     pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick (the stand-in PSP) */
+    pspexp_clock_posix_install(&ops);      /* a clock CLOCK_SET can move (in this process only) */
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);
     if (pspexp_runtime_init(&x->rt, &ops, &cfg) < 0) { snprintf(err, errlen, "runtime init failed"); pspexp_sdl_destroy(x); return NULL; }
     x->transport.name = "sdl";

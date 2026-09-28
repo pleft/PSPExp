@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
 
 static void quiet_log(void *u, const char *msg) { (void)u; (void)msg; }
 
@@ -89,6 +90,20 @@ int main(void)
     CHECK_EQ(pspexp_fs_stat(ctx, "/etc/passwd", e), PSPEXP_FSERR_PATH);
     CHECK_EQ(pspexp_fs_info(ctx, "ms0:/", &fr, &tot), 0);
     CHECK(tot > 0 && fr <= tot);
+
+    /* the clock (CLOCK_SET): moved only past min_diff; report-only leaves it */
+    {
+        PspExpClockStatus cs;
+        uint64_t now = (uint64_t)time(NULL), after;
+        CHECK_EQ(pspexp_clock_supported(ctx), 1);
+        CHECK_EQ(pspexp_clock_sync(ctx, now + 30, 0, 60, &cs), 0);          /* 30 s off: close enough */
+        CHECK_EQ(pspexp_clock_sync(ctx, now + 100000, 0, 60, &cs), 1);      /* a day off: set */
+        after = (uint64_t)cs.after_lo | ((uint64_t)cs.after_hi << 32);
+        CHECK(after >= now + 100000 - 2 && after <= now + 100000 + 5);
+        CHECK_EQ(pspexp_clock_sync(ctx, now, 0, PSPEXP_CLOCK_REPORT_ONLY, &cs), 0);
+        CHECK(((uint64_t)cs.before_lo | ((uint64_t)cs.before_hi << 32)) >= now + 100000 - 2);   /* still moved */
+        CHECK_EQ(pspexp_clock_sync(ctx, now, 0, 0, &cs), 1);                 /* 0: always */
+    }
 
     pspexp_destroy(ctx);
     pspexp_null_destroy(nul);

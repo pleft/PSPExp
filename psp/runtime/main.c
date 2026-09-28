@@ -136,6 +136,31 @@ static void op_screenshot(void *u, uint16_t index)
     sceIoClose(fd);
     trace("screenshot written");
 }
+/* the clock (CLOCK_SET): read here, set through the USB driver (kernel mode) */
+#include <psprtc.h>
+#include <psputility_sysparam.h>
+#define TICKS_TO_1970 62135596800ull   /* seconds from 0001-01-01 to 1970-01-01 */
+static int op_clock_get(void *u, uint64_t *utc, int *tz, int *dst)
+{
+    u64 tick = 0;
+    (void)u;
+    if (sceRtcGetCurrentTick(&tick) < 0) return -1;
+    *utc = tick / 1000000ull - TICKS_TO_1970;
+    if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_TIMEZONE, tz) < 0) *tz = 0;
+    if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_DAYLIGHTSAVINGS, dst) < 0) *dst = 0;
+    return 0;
+}
+static int op_clock_set(void *u, uint64_t utc)
+{
+    u64 tick = (utc + TICKS_TO_1970) * 1000000ull;
+    int r;
+    char b[64];
+    (void)u;
+    r = pspexpUsbSetClock((unsigned)tick, (unsigned)(tick >> 32));
+    snprintf(b, sizeof(b), "clock set from the host: 0x%08X", (unsigned)r);
+    trace(b);
+    return r < 0 ? -1 : 0;
+}
 static void op_log(void *u, const char *msg)
 {
     strncpy(g_log[g_log_n % 4], msg, sizeof(g_log[0]) - 1);
@@ -231,6 +256,8 @@ int main(int argc, char *argv[])
     pspexp_fs_psp_ops(&ops);   /* the memory stick as a drive of the board's file manager */
     ops.now_us = op_now;
     ops.screenshot = op_screenshot;
+    ops.clock_get = op_clock_get;
+    ops.clock_set = op_clock_set;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 

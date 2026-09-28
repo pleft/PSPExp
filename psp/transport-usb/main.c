@@ -498,6 +498,19 @@ int pspexpUsbHomeHeld(void)
     return held;
 }
 
+/* The system clock (UTC), in microseconds since 0001-01-01: setting it is
+ * kernel-only. For CLOCK_SET: a PSP whose clock battery ran flat starts years
+ * behind, and the board it plays for knows the time. */
+int sceRtcSetCurrentTick(u64 *tick);
+int pspexpUsbSetClock(unsigned int tick_lo, unsigned int tick_hi)
+{
+    int k1 = pspSdkSetK1(0), r;
+    u64 tick = ((u64)tick_hi << 32) | tick_lo;
+    r = sceRtcSetCurrentTick(&tick);
+    pspSdkSetK1(k1);
+    return r;
+}
+
 int module_start(SceSize args, void *argp)
 {
     memset(&g_stats, 0, sizeof(g_stats));

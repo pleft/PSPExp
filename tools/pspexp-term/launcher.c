@@ -87,6 +87,7 @@ static LEntry g_actions[8];
 static int g_nactions;
 static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
+static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board; asked for now */
 
 static void action(LEntry *e, const char *id, const char *title, const char *icon, const char *detail)
 {
@@ -192,6 +193,7 @@ static void cats_build(void)
     if (board_wifi_kind() != BOARD_WIFI_NONE)
         action(&g_actions[g_nactions++], "wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
     action(&g_actions[g_nactions++], "tz", "Time zone", "clock", "The board's time zone, for the clock");
+    action(&g_actions[g_nactions++], "pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
     action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart this board");
     action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut this board down");
@@ -524,6 +526,7 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "tz")) { int k = board_zone_find(g_cur_tz); return k >= 0 ? board_zone(k)->label : g_cur_tz[0] ? g_cur_tz : "UTC"; }
     if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
+    if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
     return NULL;
 }
 
@@ -551,6 +554,11 @@ static void run_action(LEntry *e, uint64_t now)
         g_console_req = 1;
     } else if (!strcmp(a, "files")) {
         g_files_req = 1;
+    } else if (!strcmp(a, "pspclock")) {
+        g_psp_clock = !g_psp_clock;
+        lib_setting_set(&L, "psp_clock", g_psp_clock);
+        toast("clock", g_psp_clock ? "The PSP's clock follows this board" : "The PSP keeps its own clock", now);
+        if (g_psp_clock) g_clock_req = 1;   /* now, not at the next connection */
     } else if (!strcmp(a, "boxart")) {
         g_nofetch = !g_nofetch;
         lib_setting_set(&L, "boxart", !g_nofetch);
@@ -639,6 +647,9 @@ int launcher_open_file(const char *path)
 const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }
 
 void launcher_set_test_mode(int on) { g_test_mode = on; }
+int  launcher_psp_clock(void) { return g_psp_clock; }
+int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
+void launcher_notice(const char *icon, const char *text) { toast(icon, text, pspexp_time_us()); }
 
 void launcher_state(char *out, size_t n)
 {
@@ -1552,6 +1563,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
     case LT_TOOL: snprintf(s, n, "Tool"); break;
     case LT_ACTION:
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
+        else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
         else snprintf(s, n, "%s", e->tags);
         break;
@@ -2081,6 +2093,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     if (gfx_init(ctx, assets) < 0) { fprintf(stderr, "[launcher] no fonts in %s\n", assets); return -1; }
     lib_load(&L);
     g_nofetch = getenv("PSPEXP_LAUNCHER_NO_FETCH") != NULL || !lib_setting_int(&L, "boxart", 1);
+    g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
     cats_build();
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i;   /* start on Games */
     /* screenshots and tests: open a page without replaying keys, which a slow

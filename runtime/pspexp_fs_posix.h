@@ -12,4 +12,8 @@
  * nothing when neither is set (the runtime then does not offer FILES) */
 void pspexp_fs_posix_install(PspExpRuntimeOps *ops, const char *root);
 
+/* the clock for a stand-in PSP: this computer's, moved by what CLOCK_SET asks
+ * (kept in the process: the computer's own clock is never touched) */
+void pspexp_clock_posix_install(PspExpRuntimeOps *ops);
+
 #endif

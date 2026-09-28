@@ -80,6 +80,9 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <ctype.h>
+#if defined(__linux__)
+#include <sys/timex.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2472,6 +2475,76 @@ static void usage(void)
                     "                   [--launcher] [--assets DIR]\n");
 }
 
+/* ---- the PSP's clock, set from this board -------------------------------------------------- */
+
+static char g_clock_report[200];   /* the last sync, for the control port's state */
+static int g_clock_pending = 1;    /* a connection to look at the PSP's clock on */
+
+/* this board's clock comes from the network (NTP) and is believed */
+static int board_clock_synced(void)
+{
+#if defined(__linux__)
+    struct timex tx;
+    memset(&tx, 0, sizeof(tx));
+    return adjtimex(&tx) != TIME_ERROR && !(tx.status & STA_UNSYNC);
+#else
+    return 1;   /* a Mac keeps its own */
+#endif
+}
+
+static void human_span(int64_t s, char *out, size_t n)
+{
+    int64_t a = s < 0 ? -s : s;
+    if (a >= 2 * 365 * 86400LL) snprintf(out, n, "%.1f years", a / (365.25 * 86400));
+    else if (a >= 2 * 86400) snprintf(out, n, "%lld days", (long long)(a / 86400));
+    else if (a >= 2 * 3600) snprintf(out, n, "%lld hours", (long long)(a / 3600));
+    else snprintf(out, n, "%lld minutes", (long long)(a / 60));
+}
+
+/* When the PSP connects (and when asked): a PSP clock that is off is set from
+ * this board's. A board whose own clock has not come from the network yet only
+ * corrects a PSP that is obviously reset (half a year or more off); one still
+ * before 2025 corrects nothing. force: set whatever the difference (tests). */
+static int psp_clock_sync(int force, char *reply, size_t rn)
+{
+    PspExpClockStatus st;
+    time_t now = time(NULL);
+    struct tm lt;
+    int tz, synced = board_clock_synced(), r, psp_off;
+    uint32_t min_diff;
+    int64_t before, diff;
+    char span[48], note[240];
+    if (!pspexp_clock_supported(ctx)) { snprintf(reply, rn, "error the PSP's runtime cannot set its clock (older than CLOCK_SET)"); return -1; }
+    localtime_r(&now, &lt);
+    tz = (int)(lt.tm_gmtoff / 60);
+    if (lt.tm_year + 1900 < 2025) min_diff = PSPEXP_CLOCK_REPORT_ONLY;
+    else if (force) min_diff = 0;
+    else if (g_launcher_on && !launcher_psp_clock()) min_diff = PSPEXP_CLOCK_REPORT_ONLY;
+    else min_diff = synced ? 90 : 180u * 86400u;
+    if ((r = pspexp_clock_sync(ctx, (uint64_t)now, tz, min_diff, &st)) < 0 && st.result == 0) {
+        snprintf(reply, rn, "error no answer from the PSP"); return -1;
+    }
+    before = (int64_t)((uint64_t)st.before_lo | ((uint64_t)st.before_hi << 32));
+    diff = before - (int64_t)now;
+    psp_off = st.tz_minutes + (st.dst ? 60 : 0);
+    human_span(diff, span, sizeof(span));
+    note[0] = 0;
+    if (psp_off != tz)
+        snprintf(note, sizeof(note), "; its time zone is UTC%+.1f, this board's UTC%+.1f, so it shows %s", psp_off / 60.0, tz / 60.0,
+                 psp_off > tz ? "a later hour" : "an earlier hour");
+    if (st.result == 1) {
+        char msg[300];
+        snprintf(msg, sizeof(msg), "The PSP's clock was %s %s: set from this board%s", span, diff < 0 ? "behind" : "ahead", note);
+        fprintf(stderr, "[pspexp-term] %s\n", msg);
+        if (g_launcher_on && llabs(diff) > 90) launcher_notice("clock", msg);
+    } else if (st.result < 0) fprintf(stderr, "[pspexp-term] the PSP could not set its clock (%d)\n", st.result);
+    else if (llabs(diff) > 90) fprintf(stderr, "[pspexp-term] the PSP's clock is %s %s; left (%s)\n", span, diff < 0 ? "behind" : "ahead",
+                                     min_diff == PSPEXP_CLOCK_REPORT_ONLY ? "off, or this board's clock is not set" : "this board's clock is not from the network yet");
+    snprintf(g_clock_report, sizeof(g_clock_report), "result=%d off_s=%lld psp_tz=%d board_tz=%d board_synced=%d", st.result, (long long)diff, psp_off, tz, synced);
+    snprintf(reply, rn, "ok %s", g_clock_report);
+    return st.result;
+}
+
 /* ---- the test-control port (control.c; tests/psp) ------------------------------------ */
 
 static uint64_t g_ctl_frame_us;        /* when the last frame went to the PSP */
@@ -2517,6 +2590,7 @@ static void ctl_state(char *o, size_t n)
             g_launcher_on && launcher_running_title() ? launcher_running_title() : "");
     if (g_launcher_on) launcher_state(o, n);
     files_state(o, n);
+    ctl_add(o, n, "psp_clock=%s\n", g_clock_report);
     ctl_add(o, n, "term.session=%d\nterm.cursor=%d,%d\nterm.scrolled=%d\n", g_sess_cur, T.cx, T.cy, T.view);
     for (y = 0; y < T.rows; y++) {   /* the screen's text, lines with something on them */
         char line[COLS_MAX + 1];
@@ -2713,6 +2787,9 @@ static void ctl_step(uint64_t now, int connected)
         C.st = CS_SETTLE; C.until = now + 200000u;
     } else if (!strncmp(cmd, "fs ", 3)) {
         ctl_fs(cmd + 3, reply, sizeof(reply)); ctl_reply(reply);
+    } else if (!strncmp(cmd, "clock", 5)) {   /* the PSP's clock from this board ("clock force": always) */
+        psp_clock_sync(!strcmp(cmd, "clock force"), reply, sizeof(reply));
+        ctl_reply(reply);
     } else if (!strcmp(cmd, "ping")) {
         ctl_reply("ok pong");
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
@@ -2927,11 +3004,16 @@ int main(int argc, char **argv)
         host_input_poll(connected);
         if (!connected && !g_released && (g_mode == MODE_USB || g_mode == MODE_TCP) && now - last_try > 1000000u) {
             last_try = now;
-            if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; }   /* ignore buttons held while connecting */
+            if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; g_clock_pending = 1; }   /* ignore buttons held while connecting */
         }
         files_psp_service(ctx, 12000);   /* the file manager's requests to the PSP's stick (a copy on its thread) */
         if (g_ctl_on) ctl_step(now, connected);
         if (!connected) continue;
+        if (g_clock_pending || (g_launcher_on && launcher_take_clock_request())) {   /* a new connection (or the setting just on): the PSP's clock */
+            char r[256];
+            g_clock_pending = 0;
+            psp_clock_sync(0, r, sizeof(r));
+        }
 
         pspexp_pump(ctx, 0);
         {   /* liveness: the PSP sends input samples at 60 Hz; a link that stays

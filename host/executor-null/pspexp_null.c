@@ -117,6 +117,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.audio_stop = op_audio_stop;
     ops.log = op_log;
     pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick */
+    pspexp_clock_posix_install(&ops);      /* a clock CLOCK_SET can move (in this process only) */
     if (pspexp_runtime_init(&x->rt, &ops, &c) < 0) { free(x); return NULL; }
     x->transport.name = "null";
     x->transport.user = x;

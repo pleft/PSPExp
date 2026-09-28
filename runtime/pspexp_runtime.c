@@ -119,7 +119,8 @@ static void send_hello(PspExpRuntime *rt)
     h.max_batch_records = rt->cfg.max_batch_records;
     h.vram_budget = rt->cache.vram_budget;
     h.ram_budget = rt->cache.ram_budget;
-    h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0);
+    h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
+                 (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -581,6 +582,29 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         rt_log(rt, "host disconnected");
         release_all(rt);
         return;
+    case PSPEXP_OP_CLOCK_SET: {
+        const PspExpClockSet *c;
+        PspExpClockStatus st;
+        uint64_t before = 0, after = 0, want;
+        int64_t diff;
+        int tz = 0, dst = 0;
+        if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        c = (const PspExpClockSet *)m->payload;
+        memset(&st, 0, sizeof(st));
+        want = (uint64_t)c->utc_lo | ((uint64_t)c->utc_hi << 32);
+        if (!rt->ops.clock_get || !rt->ops.clock_set || rt->ops.clock_get(rt->ops.user, &before, &tz, &dst) < 0) st.result = -1;
+        else {
+            diff = (int64_t)(want - before);
+            if (c->min_diff != PSPEXP_CLOCK_REPORT_ONLY && (c->min_diff == 0 || diff > (int64_t)c->min_diff || -diff > (int64_t)c->min_diff))
+                st.result = rt->ops.clock_set(rt->ops.user, want) < 0 ? -2 : 1;
+            rt->ops.clock_get(rt->ops.user, &after, &tz, &dst);
+        }
+        st.before_lo = (uint32_t)before; st.before_hi = (uint32_t)(before >> 32);
+        st.after_lo = (uint32_t)after; st.after_hi = (uint32_t)(after >> 32);
+        st.tz_minutes = tz; st.dst = dst;
+        pspexp_writer_message(&rt->out, PSPEXP_CH_SYSTEM, PSPEXP_OP_CLOCK_STATUS, 0, &st, sizeof(st));
+        return;
+    }
     case PSPEXP_OP_MEMORY_QUERY: {
         PspExpMemoryStatus s;
         pspexp_cache_status(&rt->cache, &s);
