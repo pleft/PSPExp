@@ -1,6 +1,6 @@
 # PSPExp packages: recipes over the board's own package manager
 
-*Design, reviewed twice on 2026-09-28: decisions in §11; operational contracts in §5.1-5.6 and §6.1. Nothing here is implemented yet except what "Today" describes.*
+*Design, reviewed three times on 2026-09-28: decisions in §11; operational contracts in §5.1-5.6 and §6.1. Nothing here is implemented yet except what "Today" describes.*
 
 ## Contents
 
@@ -309,34 +309,49 @@ finishes or cleans up, and the user sees which.
 
   `recover` works from the journal and the staged files alone, never from
   the catalogue, which may have changed meanwhile.
+- **Every action is bracketed by two checkpoints:** `<action>-started`
+  is written before it begins, and `<action>-done` after it ends. A crash
+  can fall between the action and its `-done`. So recovery never trusts
+  the last checkpoint alone at a `-started`; it **reconciles**, inspecting
+  the real state (dpkg's records, the files on disk) to learn whether the
+  action happened.
+- **Staging is kept until the operation ends.** It is deleted only at
+  `done`, or when the user abandons a broken operation (Remove), or when
+  recovery finds that nothing past `staged` began.
 - **Checkpoints, in this order:**
   1. **`staged`:** everything the operation will publish is built under
      `<root>/state/stage/<id>/`, and its manifest is recorded:
      - pinned data (checksums checked);
      - the new app folder;
      - the new system files;
-     - the list of system files to unpublish.
-  2. **`apt-done`:** the helper's `install` / `remove` / `upgrade`
-     succeeded. apt and dpkg keep their own consistency.
+     - the list of system files to unpublish;
+     - the meta-package `.deb`.
+  2. **`apt-started`,** written before the helper is called, then
+     **`apt-done`** after it succeeds. apt and dpkg keep their own
+     consistency.
   3. **`publishing`:** a marker `<root>/state/publishing` is created before
-     the first visible change. Its steps each record their own sub-checkpoint:
-     1. `app-swapped`: `apps/<id>` renamed to `apps/.<id>.old`, the staged
-        folder renamed to `apps/<id>`;
-     2. `systems-published`: each new system file written as `.tmp`, then
-        renamed into `systems/`, and dropped ones deleted.
+     the first visible change. Its steps are bracketed the same way:
+     1. `app-swap-started` / `app-swapped`: `apps/<id>` renamed to
+        `apps/.<id>.old`, then the staged folder renamed to `apps/<id>`;
+     2. `systems-started` / `systems-published`: each new system file
+        written as `.tmp`, then renamed into `systems/`, and dropped ones
+        deleted.
   4. **`done`:** `.old` deleted, the marker removed, the journal removed.
 - **The launcher never sees a half-published install.** While
   `<root>/state/publishing` exists, it doesn't rescan its library; it keeps
   showing what it showed and rescans once the marker is gone. That's a
   small change to the launcher's library watcher.
-- **Recovery, by checkpoint:**
+- **Recovery, by checkpoint** (the journal names the operation, recipe
+  version and catalogue serial, and the manifest):
 
-  | checkpoint reached | what `recover` does | what remains |
+  | last checkpoint | how `recover` reconciles | outcome |
   |---|---|---|
-  | none, or `staged` | deletes staging | nothing changed |
-  | `apt-done` | publishes from staging (below) | the new install |
-  | `publishing` | if the manifest checks, rolls forward, redoing each sub-step not recorded (every step can be redone); otherwise rolls back: `.old` returns, and its own `systems/` are republished | new, or exactly the old |
-  | an apt failure | runs the helper's `repair`; the recipe shows as **broken**, with Retry and Remove | apt's consistent state |
+  | none, or `staged` | nothing past staging began | staging deleted; nothing changed |
+  | `apt-started` | runs `repair` if dpkg reports anything half-installed, then asks dpkg whether the journal's meta-package is in the state the operation wanted: installed and configured at the journal's version, or absent for a removal | yes: continues at publishing; no: the recipe shows as **broken** (Retry uses the kept staging; Remove abandons it) |
+  | `apt-done` | none needed | publishes from staging |
+  | `app-swap-started` | inspects `apps/<id>` and `apps/.<id>.old` against the manifest to see which renames happened | finishes the swap, or undoes the half of it that happened |
+  | `app-swapped`, `systems-started` | compares each system file in `systems/` with the manifest; every step can be redone | finishes publishing |
+  | a manifest that doesn't check | staging is damaged | rolls back: `.old` returns, and its own system files are republished; the recipe shows as broken |
 
 - **Power loss:** the console runs `pspexp-pkg recover` at every start,
   under the lock, before the launcher first reads its library. A `dpkg`
@@ -482,15 +497,30 @@ being replaced.
 - **The choice:** `active`, a small file naming the slot to boot (`a` or
   `b`), plus a `tries` counter.
 
+**What makes a slot valid:** its `VERSION` file lists every file of the
+set with its size and SHA-256. A slot is valid only when:
+- `VERSION` is present and well-formed;
+- every file it lists is present;
+- each file's size and SHA-256 match.
+
+The loader checks this in full before booting a slot, every time, whether
+it was chosen by `active`, by fallback, or forced with L. A slot that fails
+is never booted. Hashing the whole set, about 250 KB, adds a fraction of a
+second.
+
 **Updating (always the inactive slot):**
-1. Copy the new set into the inactive slot, over the FILE channel.
-2. Read every file back and check it against the `pspexp-runtime`
-   package's SHA-256. Write that slot's `VERSION` last, as its "complete"
-   mark.
-3. Switch: write `active.new` naming the updated slot with `tries=0`, then
+1. **Invalidate first:** delete the inactive slot's `VERSION`, so a
+   previous release's marker can never vouch for half-written files. Only
+   then write anything.
+2. Copy the new set into the inactive slot, over the FILE channel.
+3. Read every file back and check it against the `pspexp-runtime`
+   package's SHA-256. Write `VERSION` last, as its "complete" mark, and
+   read it back too.
+4. Switch: write `active.new` naming the updated slot with `tries=0`, then
    rename it over `active`. This single small rename is the only switch
-   point.
-4. The console says "PSP update installed: leave PSPExp with HOME and start
+   point. If the link breaks around it, the next connection reads `active`
+   back to learn which side of the switch it's on.
+5. The console says "PSP update installed: leave PSPExp with HOME and start
    it again".
 
 The running runtime is untouched throughout. A power loss or cable pull at
@@ -498,14 +528,15 @@ any moment leaves one complete, bootable slot (the old one), plus possibly
 a half-written inactive slot that nothing boots.
 
 **Booting, with automatic fallback:**
-- The loader reads `active` (a missing or unreadable one means the slot
-  with a valid `VERSION`, `a` first).
+- The loader reads `active`. A missing or unreadable one means the first
+  valid slot, `a` first, in the full sense above.
 - It raises `tries` before loading.
 - The runtime resets `tries` to 0 once it has a working connection to a
   host.
-- If `tries` reaches 3, or the chosen slot has no valid `VERSION`, or its
-  modules fail to load, the loader boots the other slot and records the
-  fallback. The console then reports "the new PSP runtime did not start;
+- If `tries` reaches 3, or the chosen slot isn't valid, or its modules
+  fail to load, the loader boots the other slot, if that one is valid, and
+  records the fallback. With neither valid, it shows a message pointing to
+  the manual route. The console then reports "the new PSP runtime did not start;
   the previous one is running".
 - Holding **L** while PSPExp starts forces the other slot, by hand.
 
@@ -618,14 +649,27 @@ because boards differ.
     the installed one stays;
   - a recipe naming a missing package fails in the `apt` phase, shows as
     broken, and Remove clears it;
-  - an install killed in each phase (`fetch`, `apt`, `files`), including a
-    `dpkg` interrupted mid-unpack, is completed or cleaned by `recover`;
+  - an operation killed at each checkpoint of §5.3 (`staged`,
+    `apt-started`, `apt-done`, `app-swap-started`, `app-swapped`,
+    `systems-started`), and **between each action and the recording of its
+    `-done`**:
+    - after apt succeeded, before `apt-done`;
+    - between the two renames of the app swap, and after them, before
+      `app-swapped`;
+    - after a system file's rename, before `systems-published`;
+    - a `dpkg` interrupted mid-unpack.
+
+    `recover` must reach the outcome the table promises, and the kept
+    staging must let Retry finish;
   - two operations at once: the second waits or reports busy;
   - a package the user installed by hand before stays after the recipe is
     removed, and so does one another package depends on;
   - a system file name owned by another package is refused;
-  - a runtime update interrupted in each step (copy, check, switch)
-    leaves the old slot booting;
+  - a runtime update interrupted in each step (invalidate, copy, check,
+    `VERSION`, switch), and between the switch's rename and the console's
+    reading of `active`, leaves the old slot booting;
+  - a slot with a stale `VERSION` and one damaged file is never booted:
+    not by `active`, not by fallback, not with L;
   - a runtime that doesn't connect: `tries` reaches its limit and the
     loader falls back to the other slot; holding L forces it;
   - a console with a different protocol version reaches a FILES runtime in
