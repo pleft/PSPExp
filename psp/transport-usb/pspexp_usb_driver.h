@@ -40,6 +40,10 @@ int pspexpUsbGetStats(PspExpUsbStats *out);
 int pspexpUsbHomeHeld(void);
 /* Set the system clock (UTC): microseconds since 0001-01-01, in two halves. 0 or < 0. */
 int pspexpUsbSetClock(unsigned int tick_lo, unsigned int tick_hi);
+/* The time-zone settings (Settings > Date & Time): minutes east of UTC without
+ * summer time, and summer time 0 / 1. 0 or < 0. */
+int pspexpUsbSetZone(int tz_minutes, int dst);
+int pspexpUsbGetZone(int *tz_minutes, int *dst);
 
 #ifdef __cplusplus
 }

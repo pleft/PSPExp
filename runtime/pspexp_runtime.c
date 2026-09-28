@@ -591,6 +591,9 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         c = (const PspExpClockSet *)m->payload;
         memset(&st, 0, sizeof(st));
+        if (m->length >= sizeof(PspExpClockSet) && (c->flags & PSPEXP_CLOCK_ZONE) && rt->ops.zone_set && rt->ops.clock_get &&
+            rt->ops.clock_get(rt->ops.user, &before, &tz, &dst) == 0 && (tz != c->tz_minutes || dst != (c->dst != 0)))
+            st.zone_result = rt->ops.zone_set(rt->ops.user, c->tz_minutes, c->dst != 0) < 0 ? -1 : 1;
         want = (uint64_t)c->utc_lo | ((uint64_t)c->utc_hi << 32);
         if (!rt->ops.clock_get || !rt->ops.clock_set || rt->ops.clock_get(rt->ops.user, &before, &tz, &dst) < 0) st.result = -1;
         else {

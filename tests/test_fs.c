@@ -96,13 +96,19 @@ int main(void)
         PspExpClockStatus cs;
         uint64_t now = (uint64_t)time(NULL), after;
         CHECK_EQ(pspexp_clock_supported(ctx), 1);
-        CHECK_EQ(pspexp_clock_sync(ctx, now + 30, 0, 60, &cs), 0);          /* 30 s off: close enough */
-        CHECK_EQ(pspexp_clock_sync(ctx, now + 100000, 0, 60, &cs), 1);      /* a day off: set */
+        CHECK_EQ(pspexp_clock_sync(ctx, now + 30, 0, 0, 0, 60, &cs), 0);          /* 30 s off: close enough */
+        CHECK_EQ(pspexp_clock_sync(ctx, now + 100000, 0, 0, 0, 60, &cs), 1);      /* a day off: set */
         after = (uint64_t)cs.after_lo | ((uint64_t)cs.after_hi << 32);
         CHECK(after >= now + 100000 - 2 && after <= now + 100000 + 5);
-        CHECK_EQ(pspexp_clock_sync(ctx, now, 0, PSPEXP_CLOCK_REPORT_ONLY, &cs), 0);
+        CHECK_EQ(pspexp_clock_sync(ctx, now, 0, 0, 0, PSPEXP_CLOCK_REPORT_ONLY, &cs), 0);
         CHECK(((uint64_t)cs.before_lo | ((uint64_t)cs.before_hi << 32)) >= now + 100000 - 2);   /* still moved */
-        CHECK_EQ(pspexp_clock_sync(ctx, now, 0, 0, &cs), 1);                 /* 0: always */
+        CHECK_EQ(pspexp_clock_sync(ctx, now, 0, 0, 0, 0, &cs), 1);           /* 0: always */
+        /* the zone: set when it differs, then left */
+        CHECK_EQ(pspexp_clock_sync(ctx, now, 330, 1, PSPEXP_CLOCK_ZONE, PSPEXP_CLOCK_REPORT_ONLY, &cs), 0);
+        CHECK_EQ(cs.zone_result, 1);
+        CHECK_EQ(cs.tz_minutes, 330); CHECK_EQ(cs.dst, 1);
+        CHECK_EQ(pspexp_clock_sync(ctx, now, 330, 1, PSPEXP_CLOCK_ZONE, PSPEXP_CLOCK_REPORT_ONLY, &cs), 0);
+        CHECK_EQ(cs.zone_result, 0);
     }
 
     pspexp_destroy(ctx);

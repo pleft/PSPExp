@@ -171,13 +171,14 @@ void pspexp_set_transport(PspExpContext *ctx, PspExpTransport *transport);
 int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index);
 
 /* The PSP's clock (CLOCK_SET), when the runtime offers it (PSPEXP_FEATURE_CLOCK):
- * utc = this computer's clock (seconds since 1970, UTC), tz_minutes its offset
- * for the report. The PSP's clock moves only when it is further off than
- * min_diff seconds (0: always; PSPEXP_CLOCK_REPORT_ONLY: never). Waits up to
- * 3 s; 1 set, 0 left, < 0 no answer or could not; out: before, after, the
- * PSP's time-zone and daylight-saving settings. Not in a frame. */
+ * utc = this computer's clock (seconds since 1970, UTC); tz_minutes its
+ * standard offset and dst its summer time. The PSP's clock moves only when it
+ * is further off than min_diff seconds (0: always; PSPEXP_CLOCK_REPORT_ONLY:
+ * never); with flags PSPEXP_CLOCK_ZONE its time zone and summer time follow
+ * when they differ. Waits up to 3 s; 1 set, 0 left, < 0 no answer or could
+ * not; out: before, after, the PSP's zone, zone_result. Not in a frame. */
 int pspexp_clock_supported(const PspExpContext *ctx);
-int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, uint32_t min_diff, PspExpClockStatus *out);
+int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, int dst, uint32_t flags, uint32_t min_diff, PspExpClockStatus *out);
 
 /* The PSP's memory stick (the FILE channel), when the runtime offers it
  * (PSPEXP_FEATURE_FILES). Paths are the PSP's: "ms0:/PSP/GAME". Each call

@@ -211,7 +211,7 @@ int pspexp_clock_supported(const PspExpContext *ctx)
     return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_CLOCK) != 0;
 }
 
-int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, uint32_t min_diff, PspExpClockStatus *out)
+int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, int dst, uint32_t flags, uint32_t min_diff, PspExpClockStatus *out)
 {
     PspExpClockSet c;
     uint64_t deadline;
@@ -220,6 +220,8 @@ int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, uint32_t
     c.utc_lo = (uint32_t)utc; c.utc_hi = (uint32_t)(utc >> 32);
     c.tz_minutes = tz_minutes;
     c.min_diff = min_diff;
+    c.dst = dst;
+    c.flags = flags;
     ctx->clock_have = 0;
     if (pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_CLOCK_SET, &c, sizeof(c)) < 0) return -1;
     deadline = pspexp_time_us() + 3000000u;

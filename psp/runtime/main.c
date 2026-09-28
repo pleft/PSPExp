@@ -146,8 +146,10 @@ static int op_clock_get(void *u, uint64_t *utc, int *tz, int *dst)
     (void)u;
     if (sceRtcGetCurrentTick(&tick) < 0) return -1;
     *utc = tick / 1000000ull - TICKS_TO_1970;
-    if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_TIMEZONE, tz) < 0) *tz = 0;
-    if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_DAYLIGHTSAVINGS, dst) < 0) *dst = 0;
+    if (pspexpUsbGetZone(tz, dst) < 0) {   /* the registry, as set; else what the system read at boot */
+        if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_TIMEZONE, tz) < 0) *tz = 0;
+        if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_DAYLIGHTSAVINGS, dst) < 0) *dst = 0;
+    }
     return 0;
 }
 static int op_clock_set(void *u, uint64_t utc)
@@ -158,6 +160,15 @@ static int op_clock_set(void *u, uint64_t utc)
     (void)u;
     r = pspexpUsbSetClock((unsigned)tick, (unsigned)(tick >> 32));
     snprintf(b, sizeof(b), "clock set from the host: 0x%08X", (unsigned)r);
+    trace(b);
+    return r < 0 ? -1 : 0;
+}
+static int op_zone_set(void *u, int tz, int dst)
+{
+    int r = pspexpUsbSetZone(tz, dst);
+    char b[80];
+    (void)u;
+    snprintf(b, sizeof(b), "time zone set from the host: %d min, summer %d: 0x%08X", tz, dst, (unsigned)r);
     trace(b);
     return r < 0 ? -1 : 0;
 }
@@ -258,6 +269,7 @@ int main(int argc, char *argv[])
     ops.screenshot = op_screenshot;
     ops.clock_get = op_clock_get;
     ops.clock_set = op_clock_set;
+    ops.zone_set = op_zone_set;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 

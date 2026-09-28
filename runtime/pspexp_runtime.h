@@ -69,6 +69,8 @@ typedef struct PspExpRuntimeOps {
      * with both, HELLO advertises PSPEXP_FEATURE_CLOCK. */
     int (*clock_get)(void *user, uint64_t *utc, int *tz_minutes, int *dst);
     int (*clock_set)(void *user, uint64_t utc);
+    /* optional: the time-zone setting (standard offset, minutes east) and summer time */
+    int (*zone_set)(void *user, int tz_minutes, int dst);
     /* Optional: the memory stick for the host (the FILE channel). With
      * fs_list set, HELLO advertises PSPEXP_FEATURE_FILES. Paths arrive
      * checked: "ms0:/..." or "ef0:/...", no ".." parts. Results: >= 0, or a

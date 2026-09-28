@@ -2492,6 +2492,23 @@ static int board_clock_synced(void)
 #endif
 }
 
+/* this board's time zone was chosen (a fresh board says UTC, and must not
+ * put a PSP on UTC) */
+static int board_zone_set(void)
+{
+#if defined(__linux__)
+    char link[256];
+    ssize_t l = readlink("/etc/localtime", link, sizeof(link) - 1);
+    const char *tz = getenv("TZ");
+    if (tz && *tz) return !strstr(tz, "UTC");
+    if (l <= 0) return 0;
+    link[l] = 0;
+    return !strstr(link, "UTC") && !strstr(link, "Etc/");
+#else
+    return 1;
+#endif
+}
+
 static void human_span(int64_t s, char *out, size_t n)
 {
     int64_t a = s < 0 ? -s : s;
@@ -2510,18 +2527,22 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
     PspExpClockStatus st;
     time_t now = time(NULL);
     struct tm lt;
-    int tz, synced = board_clock_synced(), r, psp_off;
+    int tz, std, dst, synced = board_clock_synced(), r, psp_off, zone;
     uint32_t min_diff;
     int64_t before, diff;
     char span[48], note[240];
     if (!pspexp_clock_supported(ctx)) { snprintf(reply, rn, "error the PSP's runtime cannot set its clock (older than CLOCK_SET)"); return -1; }
     localtime_r(&now, &lt);
     tz = (int)(lt.tm_gmtoff / 60);
+    dst = lt.tm_isdst > 0;
+    std = tz - (dst ? 60 : 0);
+    zone = board_zone_set() && (!g_launcher_on || launcher_psp_clock());
     if (lt.tm_year + 1900 < 2025) min_diff = PSPEXP_CLOCK_REPORT_ONLY;
     else if (force) min_diff = 0;
     else if (g_launcher_on && !launcher_psp_clock()) min_diff = PSPEXP_CLOCK_REPORT_ONLY;
     else min_diff = synced ? 90 : 180u * 86400u;
-    if ((r = pspexp_clock_sync(ctx, (uint64_t)now, tz, min_diff, &st)) < 0 && st.result == 0) {
+    memset(&st, 0, sizeof(st));
+    if ((r = pspexp_clock_sync(ctx, (uint64_t)now, std, dst, zone ? PSPEXP_CLOCK_ZONE : 0, min_diff, &st)) < 0 && st.result == 0) {
         snprintf(reply, rn, "error no answer from the PSP"); return -1;
     }
     before = (int64_t)((uint64_t)st.before_lo | ((uint64_t)st.before_hi << 32));
@@ -2529,18 +2550,22 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
     psp_off = st.tz_minutes + (st.dst ? 60 : 0);
     human_span(diff, span, sizeof(span));
     note[0] = 0;
-    if (psp_off != tz)
-        snprintf(note, sizeof(note), "; its time zone is UTC%+.1f, this board's UTC%+.1f, so it shows %s", psp_off / 60.0, tz / 60.0,
-                 psp_off > tz ? "a later hour" : "an earlier hour");
-    if (st.result == 1) {
+    if (st.zone_result == 1) snprintf(note, sizeof(note), "time zone set to UTC%+.1f%s", tz / 60.0, dst ? " (summer time)" : "");
+    else if (st.zone_result < 0) snprintf(note, sizeof(note), "its time zone could not be set");
+    else if (psp_off != tz)
+        snprintf(note, sizeof(note), "its time zone is UTC%+.1f, this board's UTC%+.1f", psp_off / 60.0, tz / 60.0);
+    if (st.result == 1 || st.zone_result == 1) {
         char msg[300];
-        snprintf(msg, sizeof(msg), "The PSP's clock was %s %s: set from this board%s", span, diff < 0 ? "behind" : "ahead", note);
+        if (st.result == 1) snprintf(msg, sizeof(msg), "The PSP's clock was %s %s: set from this board%s%s", span, diff < 0 ? "behind" : "ahead", note[0] ? "; " : "", note);
+        else snprintf(msg, sizeof(msg), "The PSP's %s, as this board's", note);
         fprintf(stderr, "[pspexp-term] %s\n", msg);
-        if (g_launcher_on && llabs(diff) > 90) launcher_notice("clock", msg);
-    } else if (st.result < 0) fprintf(stderr, "[pspexp-term] the PSP could not set its clock (%d)\n", st.result);
+        if (g_launcher_on && (llabs(diff) > 90 || st.zone_result == 1)) launcher_notice("clock", msg);
+    } else if (note[0]) fprintf(stderr, "[pspexp-term] the PSP: %s\n", note);
+    if (st.result < 0) fprintf(stderr, "[pspexp-term] the PSP could not set its clock (%d)\n", st.result);
     else if (llabs(diff) > 90) fprintf(stderr, "[pspexp-term] the PSP's clock is %s %s; left (%s)\n", span, diff < 0 ? "behind" : "ahead",
                                      min_diff == PSPEXP_CLOCK_REPORT_ONLY ? "off, or this board's clock is not set" : "this board's clock is not from the network yet");
-    snprintf(g_clock_report, sizeof(g_clock_report), "result=%d off_s=%lld psp_tz=%d board_tz=%d board_synced=%d", st.result, (long long)diff, psp_off, tz, synced);
+    snprintf(g_clock_report, sizeof(g_clock_report), "result=%d zone_result=%d off_s=%lld psp_tz=%d board_tz=%d board_synced=%d board_zone=%d",
+             st.result, st.zone_result, (long long)diff, psp_off, tz, synced, zone);
     snprintf(reply, rn, "ok %s", g_clock_report);
     return st.result;
 }

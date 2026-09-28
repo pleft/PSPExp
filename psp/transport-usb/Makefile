@@ -8,7 +8,7 @@ CFLAGS = -Os -mno-gpopt -Wall -fno-builtin-printf -MMD -MP
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR =
-LIBS = -lpspusbbus_driver -lpspusb_driver -lpspctrl_driver -lpsprtc_driver
+LIBS = -lpspusbbus_driver -lpspusb_driver -lpspctrl_driver -lpsprtc_driver -lpspreg_driver
 
 PSPSDK = $(shell psp-config --pspsdk-path)
 include $(PSPSDK)/lib/build_prx.mak
@@ -17,7 +17,7 @@ include $(PSPSDK)/lib/build_prx.mak
 # one #ifdef F_PSPExpUSB_NNNN block per exported function (0000: the library
 # header, then one per PSP_EXPORT_FUNC of PSPExpUSB in exports.exp).
 STUB_LIB = libpspexpusb.a
-STUB_OBJS = $(foreach i,0000 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010,PSPExpUSB_$(i).o)
+STUB_OBJS = $(foreach i,0000 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012,PSPExpUSB_$(i).o)
 
 all: $(STUB_LIB)
 

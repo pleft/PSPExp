@@ -176,6 +176,7 @@ void pspexp_fs_posix_install(PspExpRuntimeOps *ops, const char *root)
 /* ---- the clock ---------------------------------------------------------------- */
 
 static int64_t g_clock_shift;   /* what CLOCK_SET moved it by */
+static int g_zone_set, g_zone_tz, g_zone_dst;   /* and its zone, once set */
 
 static int clock_get(void *u, uint64_t *utc, int *tz, int *dst)
 {
@@ -186,6 +187,7 @@ static int clock_get(void *u, uint64_t *utc, int *tz, int *dst)
     *utc = (uint64_t)((int64_t)now + g_clock_shift);
     *tz = (int)(lt.tm_gmtoff / 60) - (lt.tm_isdst > 0 ? 60 : 0);
     *dst = lt.tm_isdst > 0;
+    if (g_zone_set) { *tz = g_zone_tz; *dst = g_zone_dst; }
     return 0;
 }
 
@@ -196,4 +198,6 @@ static int clock_set(void *u, uint64_t utc)
     return 0;
 }
 
-void pspexp_clock_posix_install(PspExpRuntimeOps *ops) { ops->clock_get = clock_get; ops->clock_set = clock_set; }
+static int zone_set(void *u, int tz, int dst) { (void)u; g_zone_set = 1; g_zone_tz = tz; g_zone_dst = dst; return 0; }
+
+void pspexp_clock_posix_install(PspExpRuntimeOps *ops) { ops->clock_get = clock_get; ops->clock_set = clock_set; ops->zone_set = zone_set; }

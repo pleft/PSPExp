@@ -511,6 +511,55 @@ int pspexpUsbSetClock(unsigned int tick_lo, unsigned int tick_hi)
     return r;
 }
 
+/* The time-zone settings, as Settings > Date & Time keeps them in the system
+ * registry: /CONFIG/DATE time_zone_offset (minutes east, summer time not
+ * included) and summer_time (0 / 1). write: set them from *tz and *dst;
+ * else read them into *tz and *dst. 0 or < 0. */
+#include <pspreg.h>
+static int reg_date(int write, int *tz, int *dst)
+{
+    struct RegParam reg;
+    REGHANDLE h, hd;
+    int r;
+    memset(&reg, 0, sizeof(reg));
+    reg.regtype = 1;
+    strcpy(reg.name, "/system");
+    reg.namelen = strlen(reg.name);
+    reg.unk2 = 1; reg.unk3 = 1;
+    if ((r = sceRegOpenRegistry(&reg, 2, &h)) < 0) return r;
+    if ((r = sceRegOpenCategory(h, "/CONFIG/DATE", 2, &hd)) < 0) { sceRegCloseRegistry(h); return r; }
+    if (write) {
+        r = sceRegSetKeyValue(hd, "time_zone_offset", tz, 4);
+        if (r >= 0) r = sceRegSetKeyValue(hd, "summer_time", dst, 4);
+        if (r >= 0) r = sceRegFlushCategory(hd);
+    } else {
+        r = sceRegGetKeyValueByName(hd, "time_zone_offset", tz, 4);
+        if (r >= 0) r = sceRegGetKeyValueByName(hd, "summer_time", dst, 4);
+    }
+    sceRegCloseCategory(hd);
+    if (write && r >= 0) sceRegFlushRegistry(h);
+    sceRegCloseRegistry(h);
+    return r < 0 ? r : 0;
+}
+
+int pspexpUsbSetZone(int tz_minutes, int dst)
+{
+    int k1 = pspSdkSetK1(0), r;
+    r = reg_date(1, &tz_minutes, &dst);
+    pspSdkSetK1(k1);
+    return r;
+}
+
+/* the registry's values (what Settings shows), into two ints of the caller */
+int pspexpUsbGetZone(int *tz_minutes, int *dst)
+{
+    int k1 = pspSdkSetK1(0), r, t = 0, d = 0;
+    r = reg_date(0, &t, &d);
+    pspSdkSetK1(k1);
+    if (r >= 0) { *tz_minutes = t; *dst = d; }
+    return r;
+}
+
 int module_start(SceSize args, void *argp)
 {
     memset(&g_stats, 0, sizeof(g_stats));

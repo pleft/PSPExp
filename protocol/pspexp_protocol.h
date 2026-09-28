@@ -203,10 +203,14 @@ enum PspExpExecutorKind {
  * it shows is UTC plus its own time-zone setting, which is not changed. */
 typedef struct PspExpClockSet {
     uint32_t utc_lo, utc_hi;    /* seconds since 1970, UTC */
-    int32_t  tz_minutes;        /* the board's offset from UTC, east positive (for the report) */
+    int32_t  tz_minutes;        /* the board's standard offset from UTC (summer time not included), east positive */
     uint32_t min_diff;          /* set only when the PSP is further off (seconds); 0: always; PSPEXP_CLOCK_REPORT_ONLY: never */
-} PspExpClockSet;
+    int32_t  dst;               /* the board is on summer time (1) */
+    uint32_t flags;             /* PSPEXP_CLOCK_ZONE: also the PSP's time zone and summer time, when they differ */
+    uint32_t reserved[2];
+} PspExpClockSet;               /* the first 16 bytes are the whole message of the first runtimes with CLOCK */
 #define PSPEXP_CLOCK_REPORT_ONLY 0xffffffffu
+#define PSPEXP_CLOCK_ZONE        0x1u
 
 /* PSP -> host (CLOCK_STATUS). */
 typedef struct PspExpClockStatus {
@@ -215,7 +219,7 @@ typedef struct PspExpClockStatus {
     int32_t  tz_minutes;             /* the PSP's time-zone setting, east positive */
     int32_t  dst;                    /* its daylight-saving setting: 1 adds an hour */
     int32_t  result;                 /* 1 set, 0 left as it was, < 0 could not */
-    uint32_t reserved;
+    int32_t  zone_result;            /* the time zone: 1 set, 0 left, < 0 could not (0 from runtimes without it) */
 } PspExpClockStatus;
 
 /* Host -> PSP, reply to HELLO. */
