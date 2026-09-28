@@ -253,11 +253,11 @@ def suite_stick(r):
         # the date is the PSP's own clock (local time, read as UTC): a real date; a
         # clock far from the board's is the PSP's setting, reported, not a failure
         r.expect(int(mtime) > 946684800, "no date (%s)" % mtime)
-        off = (int(mtime) - board_now) / 3600.0
-        if abs(off) > 26:
-            r.note("the PSP's clock is %.1f days %s the board's: set it in the PSP's Settings > Date and Time" % (abs(off) / 24, "behind" if off < 0 else "ahead of"))
-        else:
-            r.note("the PSP's clock is within a day of the board's (%+.1f h, time zones included)" % off)
+        z = t.sh("date +%z").strip()   # the stick's dates are the PSP's local time: the board's offset, when their zones agree
+        tz_s = (1 if z[0] == "+" else -1) * (int(z[1:3]) * 3600 + int(z[3:5]) * 60)
+        off = int(mtime) - board_now - tz_s
+        r.expect(abs(off) < 180, "a new file's date is %.1f h from the board's local time (the PSP's clock or zone is off)" % (off / 3600.0))
+        r.note("a new file on the stick carries the board's local time (%+d s)" % off)
     r.check("the listing shows the file, its size and a sensible date", listing)
 
     def rename():
