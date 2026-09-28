@@ -40,7 +40,9 @@ target_link_libraries(pspexp_runtime PUBLIC pspexp_protocol)
 add_library(pspexp STATIC
   host/libpspexp/pspexp.c
   host/libpspexp/pspexp_font.c
-  host/libpspexp/pspexp_time.c)
+  host/libpspexp/pspexp_time.c
+  host/libpspexp/pspexp_slots.c
+  protocol/pspexp_sha256.c)
 target_link_libraries(pspexp PUBLIC pspexp_protocol)
 
 add_library(pspexp_null STATIC host/executor-null/pspexp_null.c)

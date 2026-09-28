@@ -38,6 +38,7 @@ struct PspExpContext {
     uint8_t *rx;
     PspExpLinkState state;
     int ever_connected;
+    int maintenance;   /* the runtime speaks another protocol version: only SYSTEM and FILE (§6.1) */
     PspExpHello hello;
     Resource *res;
     size_t nres, cres;
@@ -380,9 +381,26 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
     size_t i;
     if (pspexp_message_expect(m, sizeof(PspExpHello)) < 0) { ctx_log(ctx, "short HELLO"); return; }
     memcpy(&ctx->hello, m->payload, sizeof(ctx->hello));
-    if (ctx->hello.protocol != PSPEXP_PROTOCOL_VERSION) {
-        ctx_log(ctx, "protocol %u not supported", ctx->hello.protocol);
-        return;
+    {   /* PSPEXP_TEST_PROTOCOL: act as a host of that version (tests of maintenance mode) */
+        const char *tp = getenv("PSPEXP_TEST_PROTOCOL");
+        unsigned mine = tp && *tp ? (unsigned)atoi(tp) : PSPEXP_PROTOCOL_VERSION;
+        ctx->maintenance = 0;
+        if (ctx->hello.protocol != mine) {
+            if (!(ctx->hello.features & PSPEXP_FEATURE_FILES)) {
+                ctx_log(ctx, "protocol %u not supported (this host speaks %u), and the runtime has no file channel to update it", ctx->hello.protocol, mine);
+                return;
+            }
+            /* the frozen core (HELLO's first fields, the framing, FILE) still works:
+             * connect for maintenance only, to install a matching runtime */
+            memset(&ack, 0, sizeof(ack));
+            ack.protocol = (uint16_t)mine;
+            ack.flags = PSPEXP_ACK_MAINTENANCE;
+            if (pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_HELLO_ACK, &ack, sizeof(ack)) < 0) return;
+            ctx->maintenance = 1;
+            ctx->state = PSPEXP_LINK_CONNECTED;
+            ctx_log(ctx, "maintenance: the PSP's runtime speaks protocol %u, this host %u: files only", ctx->hello.protocol, mine);
+            return;
+        }
     }
     if (ctx->ever_connected) {
         ctx->stats.reconnects++;
@@ -1009,8 +1027,10 @@ long pspexp_present(PspExpContext *ctx)
 
 int pspexp_should_render(const PspExpContext *ctx)
 {
-    return ctx->state == PSPEXP_LINK_CONNECTED && ctx->in_flight < ctx->cfg.max_in_flight;
+    return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && ctx->in_flight < ctx->cfg.max_in_flight;
 }
+
+int pspexp_link_maintenance(const PspExpContext *ctx) { return ctx->state == PSPEXP_LINK_CONNECTED && ctx->maintenance; }
 
 int pspexp_wait_present(PspExpContext *ctx, int timeout_ms)
 {

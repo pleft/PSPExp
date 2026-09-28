@@ -60,6 +60,9 @@ int  launcher_psp_clock(void);
  * 1 once when the user chose System > Restart PSPExp */
 void launcher_set_core_updated(void);
 int  launcher_take_console_restart(void);
+/* a newer PSP runtime is on the board: System > Update the PSP (1 once when chosen) */
+void launcher_set_psp_update(int available);
+int  launcher_take_psp_update(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);
 /* a message at the bottom of the launcher, as its own ones */

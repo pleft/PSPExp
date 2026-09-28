@@ -64,6 +64,7 @@
 #include "files.h"
 #include "files_psp.h"
 #include "control.h"
+#include "../../host/libpspexp/pspexp_slots.h"
 #include "appview.h"
 #include "files_ops.h"
 #include "../../host/executor-null/pspexp_null.h"
@@ -2498,6 +2499,60 @@ static void usage(void)
 
 static char g_clock_report[200];   /* the last sync, for the control port's state */
 static int g_clock_pending = 1;    /* a connection to look at the PSP's clock on */
+static int g_slots_pending = 1;    /* ...and at its runtime slots */
+
+/* the runtime set the board has for the PSP (the pspexp-runtime package) */
+static const char *runtime_dir(void)
+{
+    const char *d = getenv("PSPEXP_RUNTIME_DIR");
+    return d && *d ? d : "/usr/share/pspexp/runtime";
+}
+
+static void runtime_version(char *out, size_t n)
+{
+    char p[600], line[256];
+    FILE *f;
+    out[0] = 0;
+    snprintf(p, sizeof(p), "%s/VERSION", runtime_dir());
+    if (!(f = fopen(p, "r"))) return;
+    while (fgets(line, sizeof(line), f)) if (!strncmp(line, "version=", 8)) { snprintf(out, n, "%.*s", (int)strcspn(line + 8, "\r\n"), line + 8); break; }
+    fclose(f);
+}
+
+static void slot_log(void *u, const char *m) { (void)u; fprintf(stderr, "[pspexp-term] PSP runtime: %s\n", m); }
+
+/* install the board's runtime set into the PSP's spare slot (docs/Package_Manager.md §6.1) */
+static int psp_runtime_update(const char *dir, char *msg, size_t n)
+{
+    char err[300];
+    int r = pspexp_slots_update(ctx, dir && *dir ? dir : runtime_dir(), getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
+    if (r == 0) snprintf(msg, n, "PSP update installed: leave PSPExp on the PSP (hold HOME) and start it again");
+    else snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
+    if (g_launcher_on) { launcher_notice(r == 0 ? "download" : "circle-x", msg); if (r == 0) launcher_set_psp_update(0); }
+    return r;
+}
+
+/* on each connection: the PSP's slots against the board's runtime set */
+static void psp_slots_check(void)
+{
+    static char reported[160];
+    PspExpSlots s;
+    char have[64], msg[300];
+    if (!pspexp_fs_supported(ctx) || pspexp_slots_read(ctx, &s) < 0) return;   /* no slots (an install before them) */
+    if (s.fallback[0] && strcmp(s.fallback, reported)) {   /* the loader fell back: say so once */
+        snprintf(reported, sizeof(reported), "%s", s.fallback);
+        fprintf(stderr, "[pspexp-term] PSP runtime fallback: %s\n", s.fallback);
+        if (g_launcher_on) launcher_notice("circle-x", strstr(s.fallback, "not valid") ? "The PSP's new runtime did not check out; the previous one is running"
+                                                                                      : "The PSP's new runtime did not start; the previous one is running");
+    }
+    runtime_version(have, sizeof(have));
+    if (!have[0] || !s.current) return;
+    if (s.pending) { if (g_launcher_on) launcher_notice("download", "PSP update installed: leave PSPExp on the PSP and start it again"); return; }
+    if (!strcmp(have, s.version[s.current - 'a'])) { if (g_launcher_on) launcher_set_psp_update(0); return; }
+    if (pspexp_link_maintenance(ctx)) { psp_runtime_update(NULL, msg, sizeof(msg)); return; }   /* nothing else works anyway */
+    fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: System > Update the PSP\n", s.version[s.current - 'a'], have);
+    if (g_launcher_on) { launcher_set_psp_update(1); launcher_notice("download", "A newer PSP runtime is here: System > Update the PSP"); }
+}
 
 /* this board's clock comes from the network (NTP) and is believed */
 static int board_clock_synced(void)
@@ -2861,6 +2916,17 @@ static void ctl_step(uint64_t now, int connected)
     } else if (!strncmp(cmd, "clock", 5)) {   /* the PSP's clock from this board ("clock force": always) */
         psp_clock_sync(!strcmp(cmd, "clock force"), reply, sizeof(reply));
         ctl_reply(reply);
+    } else if (!strncmp(cmd, "runtime-update", 14)) {   /* the board's runtime set (or DIR) into the PSP's spare slot */
+        char m[300];
+        int r = psp_runtime_update(cmd[14] == ' ' ? cmd + 15 : NULL, m, sizeof(m));
+        snprintf(reply, sizeof(reply), "%s %s", r == 0 ? "ok" : "error", m);
+        ctl_reply(reply);
+    } else if (!strcmp(cmd, "slots")) {
+        PspExpSlots sl;
+        if (pspexp_slots_read(ctx, &sl) < 0) { ctl_reply("error no slotted PSPExp on the stick"); return; }
+        snprintf(reply, sizeof(reply), "ok current=%c pending=%c slot-a=%s slot-b=%s fallback=%s", sl.current ? sl.current : '-', sl.pending ? sl.pending : '-',
+                 sl.version[0], sl.version[1], sl.fallback);
+        ctl_reply(reply);
     } else if (!strcmp(cmd, "ping")) {
         ctl_reply("ok pong");
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
@@ -3094,11 +3160,13 @@ int main(int argc, char **argv)
         host_input_poll(connected);
         if (!connected && !g_released && (g_mode == MODE_USB || g_mode == MODE_TCP) && now - last_try > 1000000u) {
             last_try = now;
-            if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; g_clock_pending = 1; }   /* ignore buttons held while connecting */
+            if (try_connect()) { connected = 1; g_prev_buttons = 0xFFFFFFFFu; g_clock_pending = 1; g_slots_pending = 1; }   /* ignore buttons held while connecting */
         }
         files_psp_service(ctx, 12000);   /* the file manager's requests to the PSP's stick (a copy on its thread) */
         if (g_ctl_on) ctl_step(now, connected);
         if (!connected) continue;
+        if (g_slots_pending) { g_slots_pending = 0; psp_slots_check(); }
+        if (g_launcher_on && launcher_take_psp_update()) { char m[300]; psp_runtime_update(NULL, m, sizeof(m)); }
         if (g_clock_pending || (g_launcher_on && launcher_take_clock_request())) {   /* a new connection (or the setting just on): the PSP's clock */
             char r[256];
             g_clock_pending = 0;

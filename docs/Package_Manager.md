@@ -499,7 +499,8 @@ being replaced.
 
 **What makes a slot valid:** its `VERSION` file lists every file of the
 set with its size and SHA-256. A slot is valid only when:
-- `VERSION` is present and well-formed;
+- `VERSION` is present and well-formed, ending with the line `end` (a
+  `VERSION` cut short never has it);
 - every file it lists is present;
 - each file's size and SHA-256 match.
 
@@ -516,10 +517,14 @@ second.
 3. Read every file back and check it against the `pspexp-runtime`
    package's SHA-256. Write `VERSION` last, as its "complete" mark, and
    read it back too.
-4. Switch: write `active.new` naming the updated slot with `tries=0`, then
-   rename it over `active`. This single small rename is the only switch
-   point. If the link breaks around it, the next connection reads `active`
-   back to learn which side of the switch it's on.
+4. Switch: write `active.new` naming the updated slot with `tries=0`, and
+   read it back. A complete, valid `active.new` is the only switch point:
+   the PSP's FAT can't rename over an existing file, so the loader, at the
+   next start, makes it `active` (remove, then rename) once it has checked
+   the slot it names. An `active.new` cut short, or naming a slot that
+   doesn't check, is removed and never chosen. If the link breaks around
+   the switch, the next connection reads `active` and `active.new` back to
+   learn which side of it it's on.
 5. The console says "PSP update installed: leave PSPExp with HOME and start
    it again".
 
@@ -666,8 +671,8 @@ because boards differ.
     removed, and so does one another package depends on;
   - a system file name owned by another package is refused;
   - a runtime update interrupted in each step (invalidate, copy, check,
-    `VERSION`, switch), and between the switch's rename and the console's
-    reading of `active`, always leaves a complete, verified slot that
+    `VERSION`, switch), and between writing `active.new` and the console's
+    reading it back, always leaves a complete, verified slot that
     boots:
     - the old one, when the interruption came before the switch;
     - the new one, when it came after, with the old one kept for fallback;
@@ -752,6 +757,36 @@ because boards differ.
   array of 8. The PSP clock setting had already made 9 on the GameShell
   (with its Wi-Fi mode entry), and "Restart PSPExp" made 9 on the Pi. The
   overflow corrupted the section names. Now it's 16, with a guard.
+
+- **Step 5, in the PPSSPP emulator and partly on the real PSP:**
+  - **The boot loader** keeps two slots next to the EBOOT, checks a slot's
+    whole set against its `VERSION` (SHA-256, shared with the console:
+    `protocol/pspexp_sha256.c`) before booting it, counts attempts in
+    `active`, falls back after 3 or on a slot that doesn't check (recorded
+    in `fallback`), and boots the other slot while L is held. With no slot
+    files at all it loads the runtime next to the EBOOT, as before.
+  - **The runtime** sets `tries` back to 0 once it's connected.
+  - **Maintenance mode:** a console speaking another protocol version
+    answers a runtime that has FILE with a HELLO_ACK marked maintenance;
+    only SYSTEM and FILE are used then, and the console installs its own
+    runtime into the inactive slot.
+  - **The console's side:** `pspexp_slots_update` (the four steps above,
+    each file read back and checked), `pspexp-ms slots` / `runtime-update
+    DIR`, and in the launcher System > Update the PSP, offered when the
+    `pspexp-runtime` package holds a newer set than the PSP's.
+    `pspexp-term --ctl runtime-update` does the same for tests.
+  - **The package:** `pspexp-runtime` (arch all) puts the set in
+    `/usr/share/pspexp/runtime`, with the loader for the manual route.
+  - **The tests:** `tests/psp/slots-ppsspp.sh` runs the real loader and
+    runtime in PPSSPP through every case of §10.3's runtime paths: an
+    update and the switch, a stop after each of the update's six steps,
+    three starts without a connection, a stale `VERSION` over a damaged
+    file, an `active.new` naming that slot, and maintenance mode. Holding
+    L can't be scripted in the emulator: it's a real-PSP check.
+  - **On the real PSP:** the slotted loader was installed once by the
+    manual route; it booted slot a and the runtime confirmed it. Still to
+    do with the PSP at hand: an update over the link to slot b, and a
+    fallback.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.

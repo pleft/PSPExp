@@ -1,7 +1,7 @@
 # pspexp_boot.prx packed as EBOOT.PBP. Kernel-style build (no crt0): the
 # module supplies module_start itself, like PSPLink's bootstrap.
 TARGET = pspexp_boot
-OBJS = main.o
+OBJS = main.o pspexp_sha256.o
 
 INCDIR =
 CFLAGS = -O2 -mno-gpopt -Wall -MMD -MP
@@ -9,7 +9,7 @@ CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR =
 LDFLAGS =
-LIBS =
+LIBS = -lpspctrl
 
 BUILD_PRX = 1
 
@@ -23,6 +23,9 @@ all: EBOOT.PBP
 EBOOT.PBP: $(TARGET).prx ICON0.PNG PIC1.PNG
 	mksfoex 'PSPExp' PARAM.SFO
 	pack-pbp EBOOT.PBP PARAM.SFO ICON0.PNG NULL NULL PIC1.PNG NULL $(TARGET).prx NULL
+
+pspexp_sha256.o: ../../protocol/pspexp_sha256.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 EXTRA_CLEAN = clean_pbp
 clean_pbp:

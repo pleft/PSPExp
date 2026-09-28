@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""
+A PSP runtime set with its VERSION file (docs/Package_Manager.md §6.1), from the
+build's dist/PSPExp:
+  scripts/packages/runtime-slot OUTDIR            OUTDIR/pspexp_runtime.prx, pspexp_usb.prx, VERSION
+  scripts/packages/runtime-slot --install OUTDIR  a whole slotted install for a memory stick:
+                                                  EBOOT.PBP (the loader), slot-a/ (the set), active
+VERSION: version=..., then file=NAME size=N sha256=HEX per module.
+"""
+import hashlib, os, shutil, subprocess, sys, time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DIST = os.path.join(ROOT, "dist/PSPExp")
+MODULES = ("pspexp_runtime.prx", "pspexp_usb.prx")
+
+
+def version():
+    g = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    return time.strftime("%Y.%m.%d.%H%M%S", time.gmtime()) + "+g" + g
+
+
+def make_set(out):
+    os.makedirs(out, exist_ok=True)
+    lines = ["version=" + version()]
+    for m in MODULES:
+        src = os.path.join(DIST, m)
+        shutil.copy(src, os.path.join(out, m))
+        data = open(src, "rb").read()
+        lines.append("file=%s size=%d sha256=%s" % (m, len(data), hashlib.sha256(data).hexdigest()))
+    lines.append("end")   # the last line: the loader refuses a VERSION without it (one cut short)
+    open(os.path.join(out, "VERSION"), "w").write("\n".join(lines) + "\n")
+    return lines[0]
+
+
+def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--install":
+        out = sys.argv[2]
+        os.makedirs(out, exist_ok=True)
+        shutil.copy(os.path.join(DIST, "EBOOT.PBP"), os.path.join(out, "EBOOT.PBP"))
+        v = make_set(os.path.join(out, "slot-a"))
+        open(os.path.join(out, "active"), "w").write("slot=a\ntries=0\n")
+        print("%s: EBOOT.PBP, slot-a (%s), active" % (out, v))
+    elif len(sys.argv) == 2:
+        print(make_set(sys.argv[1]))
+    else:
+        print(__doc__.strip()); sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

@@ -117,6 +117,7 @@ typedef struct PspExpRuntime {
     PspExpWriter        out;
     PspExpRuntimeStats  stats;
     int      connected;          /* HELLO_ACK received */
+    int      maintenance;        /* ...marked maintenance: only SYSTEM and FILE are served */
     int      in_frame;
     uint32_t frame_seq;
     uint32_t frame_start_us;

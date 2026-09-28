@@ -80,6 +80,10 @@ void pspexp_set_message_hook(PspExpContext *ctx, PspExpMessageHook fn, void *use
 /* Wait for HELLO and answer it. 0 on success, -1 on timeout/transport loss. */
 int pspexp_connect(PspExpContext *ctx, int timeout_ms);
 PspExpLinkState pspexp_link_state(const PspExpContext *ctx);
+/* connected for maintenance only: the PSP's runtime speaks another protocol
+ * version; the file channel works (to install a matching runtime), nothing is
+ * drawn (pspexp_should_render says no) */
+int pspexp_link_maintenance(const PspExpContext *ctx);
 const PspExpHello *pspexp_caps(const PspExpContext *ctx);
 
 /* Receive and process pending messages, waiting up to timeout_ms for the

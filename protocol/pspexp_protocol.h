@@ -228,8 +228,12 @@ typedef struct PspExpHelloAck {
     uint16_t input_rate;        /* Hz, <= HELLO.input_rate_max */
     uint32_t audio_rate;        /* 0 = no audio stream */
     uint8_t  audio_channels;
-    uint8_t  reserved[7];
+    uint8_t  flags;             /* PSPEXP_ACK_*; 0 in hosts before maintenance mode */
+    uint8_t  reserved[6];
 } PspExpHelloAck;
+/* maintenance: the host speaks another protocol version; only SYSTEM and FILE
+ * are used (docs/Package_Manager.md §6.1: to install a matching runtime) */
+#define PSPEXP_ACK_MAINTENANCE 0x01
 PSPEXP_STATIC_ASSERT(sizeof(PspExpHelloAck) == 16, hello_ack_size);
 
 /* PSP -> host after each vblank at which a new frame was displayed. */

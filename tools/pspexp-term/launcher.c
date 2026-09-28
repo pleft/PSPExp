@@ -91,6 +91,7 @@ static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
 static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board; asked for now */
 static int g_core_updated, g_console_restart_req;   /* PSPExp's own files were upgraded; the user asked to restart it */
+static int g_psp_update, g_psp_update_req;          /* a newer PSP runtime is on the board; the user asked to install it */
 
 static void action(LEntry *e, const char *id, const char *title, const char *icon, const char *detail)
 {
@@ -202,6 +203,7 @@ static void cats_build(void)
     ACTION("tz", "Time zone", "clock", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
+    if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
     ACTION("poweroff", "Power off", "power", "Shut this board down");
@@ -567,6 +569,8 @@ static void run_action(LEntry *e, uint64_t now)
         g_files_req = 1;
     } else if (!strcmp(a, "monitor") || !strcmp(a, "store")) {
         snprintf(g_app_req, sizeof(g_app_req), "%s", a);
+    } else if (!strcmp(a, "psp-update")) {
+        g_psp_update_req = 1;
     } else if (!strcmp(a, "console-restart")) {
         g_console_restart_req = 1;
     } else if (!strcmp(a, "pspclock")) {
@@ -691,6 +695,8 @@ void launcher_set_core_updated(void)
     toast("package", "PSPExp was updated: System > Restart PSPExp starts the new version", pspexp_time_us());
 }
 int  launcher_take_console_restart(void) { int r = g_console_restart_req; g_console_restart_req = 0; return r; }
+void launcher_set_psp_update(int available) { if (g_psp_update != available) { g_psp_update = available; cats_build(); } }
+int  launcher_take_psp_update(void) { int r = g_psp_update_req; g_psp_update_req = 0; return r; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
 void launcher_notice(const char *icon, const char *text) { toast(icon, text, pspexp_time_us()); }
 

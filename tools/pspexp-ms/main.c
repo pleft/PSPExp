@@ -8,8 +8,12 @@
  *     get PATH [FILE]      copy a file from the PSP (to FILE, or its name here)
  *     put FILE PATH        copy a file to the PSP (PATH: the file, or a folder ending in /)
  *     mkdir PATH | rm PATH | mv FROM TO | df [DEVICE]
+ *     slots                the PSP's runtime slots: which runs, which is pending, their versions
+ *     runtime-update DIR   the runtime set in DIR into the inactive slot (docs/Package_Manager.md §6.1);
+ *                          PSPEXP_SLOT_CRASH=<step> stops it dead after that step (tests)
  */
 #include "../../host/libpspexp/pspexp.h"
+#include "../../host/libpspexp/pspexp_slots.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
 #ifdef PSPEXP_HAVE_USB
 #include "../../host/transport-usb/pspexp_usb.h"
@@ -36,6 +40,7 @@ static const char *err_name(int e)
 static int fail(const char *what, int e) { fprintf(stderr, "pspexp-ms: %s: %s\n", what, err_name(e)); return 1; }
 
 static void quiet(void *u, const char *m) { (void)u; (void)m; }
+static void slot_log(void *u, const char *m) { (void)u; printf("%s\n", m); }
 
 static int usage(void)
 {
@@ -130,6 +135,16 @@ int main(int argc, char **argv)
         if ((rc = pspexp_fs_remove(ctx, argv[a])) < 0) return fail(argv[a], rc);
     } else if (!strcmp(cmd, "mv") && a + 1 < argc) {
         if ((rc = pspexp_fs_rename(ctx, argv[a], argv[a + 1])) < 0) return fail(argv[a], rc);
+    } else if (!strcmp(cmd, "slots")) {
+        PspExpSlots sl;
+        if (pspexp_slots_read(ctx, &sl) < 0) { fprintf(stderr, "pspexp-ms: no slotted PSPExp on the stick\n"); return 1; }
+        printf("dir=%s\ncurrent=%c\npending=%c\nslot-a=%s\nslot-b=%s\nfallback=%s\n", sl.dir, sl.current ? sl.current : '-',
+               sl.pending ? sl.pending : '-', sl.version[0], sl.version[1], sl.fallback);
+    } else if (!strcmp(cmd, "runtime-update") && a < argc) {
+        char err[300];
+        int r = pspexp_slots_update(ctx, argv[a], getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
+        if (r == -2) return 3;   /* stopped on purpose (tests) */
+        if (r < 0) { fprintf(stderr, "pspexp-ms: %s\n", err); return 1; }
     } else if (!strcmp(cmd, "df")) {
         uint64_t fr, tot;
         const char *dev = a < argc ? argv[a] : "ms0:/";

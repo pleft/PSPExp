@@ -45,6 +45,32 @@ static void trace_init(const char *argv0)
     snprintf(g_trace_path, sizeof(g_trace_path), "%.*s/pspexp-rt.log", (int)(slash - argv0), argv0);
 }
 
+/* A working connection: the boot loader's attempt count for this slot goes
+ * back to 0 (docs/Package_Manager.md §6.1: `active` next to the EBOOT, "slot=X
+ * tries=N"; after 3 attempts without this, the loader boots the other slot). */
+static void slot_confirm(void)
+{
+    static int done;
+    char path[288], text[64];
+    const char *slash = strrchr(g_trace_path, '/'), *sl;
+    SceUID fd;
+    int n;
+    if (done || !slash) return;
+    done = 1;
+    snprintf(path, sizeof(path), "%.*s/active", (int)(slash - g_trace_path), g_trace_path);
+    if ((fd = sceIoOpen(path, PSP_O_RDONLY, 0)) < 0) return;   /* before slots: nothing to confirm */
+    n = sceIoRead(fd, text, sizeof(text) - 1);
+    sceIoClose(fd);
+    if (n <= 0) return;
+    text[n] = 0;
+    if (strstr(text, "tries=0\n") || !(sl = strstr(text, "slot=")) || (sl[5] != 'a' && sl[5] != 'b')) return;
+    snprintf(text, sizeof(text), "slot=%c\ntries=0\n", sl[5]);
+    if ((fd = sceIoOpen(path, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777)) < 0) return;
+    sceIoWrite(fd, text, strlen(text));
+    sceIoClose(fd);
+    trace("slot confirmed: attempts back to 0");
+}
+
 static int link_connected(void)
 {
     if (g_link == LINK_USB) return pspexpUsbConnected();
@@ -177,6 +203,7 @@ static void op_log(void *u, const char *msg)
     strncpy(g_log[g_log_n % 4], msg, sizeof(g_log[0]) - 1);
     g_log[g_log_n % 4][sizeof(g_log[0]) - 1] = 0;
     g_log_n++;
+    if (!strncmp(msg, "connected", 9) || !strncmp(msg, "maintenance", 11)) trace(msg);   /* once per connection: kept in the log file too */
 }
 
 static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
@@ -350,6 +377,7 @@ int main(int argc, char *argv[])
             continue;
         }
 
+        if (rt.connected) slot_confirm();
         now = sceKernelGetSystemTimeLow();
         if (now - last_input >= 16666) {
             last_input = now;

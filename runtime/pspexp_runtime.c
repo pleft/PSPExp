@@ -562,6 +562,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
     const uint16_t op = m->header->opcode;
     rt->stats.messages_in++;
     rt->stats.bytes_in += PSPEXP_HEADER_SIZE + m->length;
+    if (rt->maintenance && m->header->channel != PSPEXP_CH_SYSTEM && m->header->channel != PSPEXP_CH_FILE) return;   /* another version's messages: not ours to read */
     if (rt->in_frame) rt->frame_bytes += PSPEXP_HEADER_SIZE + m->length;
 
     switch (op) {
@@ -569,6 +570,8 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (pspexp_message_expect(m, sizeof(PspExpHelloAck)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         memcpy(&rt->ack, m->payload, sizeof(rt->ack));
         rt->connected = 1;
+        rt->maintenance = (rt->ack.flags & PSPEXP_ACK_MAINTENANCE) != 0;
+        if (rt->maintenance) { rt_log(rt, "maintenance: the host speaks protocol %u; files only", rt->ack.protocol); return; }
         rt_log(rt, "connected: input %u Hz, audio %u Hz", rt->ack.input_rate, rt->ack.audio_rate);
         if (rt->ack.audio_rate >= 8000 && rt->ack.audio_rate <= 48000 && rt->ops.audio_start && !rt->audio_active) {
             /* 32768-frame ring, start playing once 100 ms is buffered */
