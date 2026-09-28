@@ -244,7 +244,10 @@ int main(void)
             "/dev/sdc1 /mnt/usb2 vfat rw 0 0\n"
             "/dev/loop0 /snap/core squashfs ro 0 0\n"
             "tmpfs /tmp tmpfs rw 0 0\n"
-            "/dev/mmcblk0p2 /var/log ext4 rw 0 0";
+            "/dev/mmcblk0p2 /var/log ext4 rw 0 0\n"
+            "/dev/root /rom squashfs ro 0 0\n"
+            "/dev/mtdblock6 /overlay jffs2 rw 0 0\n"
+            "/dev/mtdblock7 /mnt/mtdblock7 jffs2 rw 0 0";
         int n = fops_board_drives(d, FOPS_DRIVES, mounts);
         CHECK_EQ(n, 5);
         CHECK(!strcmp(d[0].root, "/") && !strcmp(d[0].name, "Board"));

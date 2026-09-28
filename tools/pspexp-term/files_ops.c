@@ -232,9 +232,10 @@ static void unescape(char *s)
 
 static int skip_mount(const char *dev, const char *dir)
 {
-    static const char *sys[] = { "/boot", "/efi", "/proc", "/sys", "/dev", "/run", "/snap", "/var", "/usr", "/tmp", "/etc", "/opt", "/srv", NULL };
+    static const char *sys[] = { "/boot", "/efi", "/proc", "/sys", "/dev", "/run", "/snap", "/var", "/usr", "/tmp", "/etc", "/opt", "/srv",
+                                 "/rom", "/overlay", NULL };   /* the last two: OpenWrt's own flash */
     int i;
-    if (strncmp(dev, "/dev/", 5) || !strncmp(dev, "/dev/loop", 9) || !strncmp(dev, "/dev/zram", 9)) return 1;
+    if (strncmp(dev, "/dev/", 5) || !strncmp(dev, "/dev/loop", 9) || !strncmp(dev, "/dev/zram", 9) || !strncmp(dev, "/dev/mtd", 8)) return 1;   /* mtd: a router's flash */
     if (!strcmp(dir, "/")) return 1;
     if (!strncmp(dir, "/run/media/", 11)) return 0;   /* desktops mount sticks there */
     for (i = 0; sys[i]; i++) {
