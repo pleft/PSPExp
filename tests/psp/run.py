@@ -204,6 +204,15 @@ def suite_link(r):
         r.note("frames presented %s, last present latency %s us, GE %s us" % (st["frames_presented"], st["last_present_latency_us"], st["last_ge_us"]))
     r.check("no link errors, frames reach the screen", errors)
 
+    def clock():
+        line = r.ctl("clock")[0]
+        kv = dict(p.split("=") for p in line.split()[1:])
+        r.expect(int(kv["result"]) >= 0 and int(kv["zone_result"]) >= 0, "the PSP could not set its clock or zone: %s" % line)
+        r.expect(abs(int(kv["off_s"])) <= 90 or kv["board_synced"] == "0", "the PSP's clock is %s s off" % kv["off_s"])
+        r.expect(kv["psp_tz"] == kv["board_tz"] or kv["board_zone"] == "0", "time zone: PSP %s min, board %s min" % (kv["psp_tz"], kv["board_tz"]))
+        r.note("clock: PSP %+d s from the board, zone UTC%+.1f on both" % (int(kv["off_s"]), int(kv["board_tz"]) / 60))
+    r.check("the PSP's clock and time zone follow the board", clock)
+
     def screenshot():
         t0 = time.time()
         r.shot("link-screen", "The PSP's screen when the run began")

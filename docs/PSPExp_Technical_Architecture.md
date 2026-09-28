@@ -487,6 +487,11 @@ DEBUG      metrics, traces
 FILE       the PSP's memory stick (host -> PSP requests, one reply each)
 ```
 
+*SYSTEM also carries CLOCK_SET / CLOCK_STATUS (2026-09-28, runtimes with
+`PSPEXP_FEATURE_CLOCK`). The host sets the PSP's clock and, with
+`PSPEXP_CLOCK_ZONE`, its time zone and summer time. See
+docs/Launcher_and_Boards.md §9.*
+
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 
 *The FILE channel (6), added 2026-09-28:*

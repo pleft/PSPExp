@@ -16,6 +16,7 @@ GameShell, hence sections 1-5; section 6 is the emulators. Scripts:
 6. Emulators: pspexp-retro
 7. The terminal and the file manager
 8. Integration tests on a real PSP
+9. The PSP's clock from the board
 
 ---
 
@@ -856,4 +857,50 @@ about 100 s.
   reports the offset.
 - **A bug found by the run:** the file manager redrew every turn even with
   nothing pressed. Fixed.
+
+## 9. The PSP's clock from the board (2026-09-28)
+
+A PSP whose clock battery ran flat starts years in the past: the user's
+PSP-1000 was about 15.7 years behind. When the PSP connects, the console now
+sets the PSP's clock, time zone and summer time from the board's. Nobody has
+to touch the PSP's Settings.
+
+- **Protocol:** CLOCK_SET goes from host to PSP and CLOCK_STATUS answers
+  (SYSTEM channel), only with runtimes that announce `PSPEXP_FEATURE_CLOCK`.
+  The message carries:
+  - the board's UTC time;
+  - its standard offset and summer time;
+  - `min_diff`, below which the clock is left alone;
+  - `PSPEXP_CLOCK_ZONE`, which also sets the zone.
+
+  The answer holds the PSP's clock before and after, its zone, and what
+  changed.
+- **On the PSP:** setting the clock (`sceRtcSetCurrentTick`) and the
+  registry's `/CONFIG/DATE` `time_zone_offset` and `summer_time` are
+  kernel-only, so the USB driver does them (`pspexpUsbSetClock`,
+  `pspexpUsbSetZone`, `pspexpUsbGetZone`). Settings > Date & Time shows the
+  result, and the XMB clock follows.
+- **Clock rule:** the console checks the clock on every connection and when
+  the setting is turned on. It sets the clock when the PSP is more than 90 s
+  off, and only when the board's clock is trusted:
+  - **Synced:** a board synced from the network (`adjtimex` without
+    `STA_UNSYNC`), or a Mac.
+  - **Not synced yet:** it only corrects a PSP half a year or more off.
+  - **Before 2025:** a board whose own clock is still before 2025 sets
+    nothing.
+- **Zone rule:** the zone and summer time follow when they differ, unless
+  the board's own zone was never chosen. A fresh board says UTC, and must
+  not put a correct PSP on UTC.
+- **What the user sees:**
+  - a message at the bottom of the launcher;
+  - a line in the log;
+  - `psp_clock=` in the control port's state;
+  - `clock [force]` on the control port.
+- **Setting:** System > PSP clock (on by default) turns it off.
+- **Tests:** `tests/test_fs.c` covers the message with the stand-in's clock,
+  which moves inside the process only. The link suite of `tests/psp/run.py`
+  checks that the real PSP's clock and zone match the board.
+- **Verified on the PSP-1000 via the Pi 400:** the clock was 15.7 years
+  behind and was set. Then its zone (UTC+2 without summer time) was set to
+  Athens' UTC+3 with summer time, and the user saw the XMB clock right.
 
