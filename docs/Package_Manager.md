@@ -716,6 +716,19 @@ because boards differ.
 
 ## 12. Implementation plan
 
+**Status (2026-09-28):**
+- **Steps 1 to 3 are done on the Pi 400:**
+  - recipes and their check;
+  - `pspexp-pkg` and the root helper to the contracts of §5, with 28
+    failure-path checks passing (`tests/pkg/run.py`);
+  - the Packages app on the catalogue (sections, states, progress), tried
+    on the real PSP.
+- **The repository** is signed and served from the home server. The Pi's
+  installer sets the board up when `~/.pspexp/repo-url` exists on the Mac.
+- **Found along the way:** Debian's libretro cores accept "retroarch or any
+  libretro frontend". With both new in one install, apt took RetroArch, so
+  the helper now installs PSPExp's own packages (the frontend) first.
+
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.
 

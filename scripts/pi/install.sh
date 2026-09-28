@@ -103,4 +103,15 @@ U
 	sudo systemctl enable pspexp-term >/dev/null 2>&1
 	sudo systemctl restart pspexp-term
 	sleep 1; systemctl is-active pspexp-term'
+# packages from recipes (docs/Package_Manager.md): the board kind, the project key, the
+# apt source, the root helper and its sudo rule, the catalogue. The repository's address
+# is a local setting, never in git: $PSPEXP_REPO_URL or ~/.pspexp/repo-url (http://host:port)
+REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+if [ -n "$REPO_URL" ]; then
+	ssh "$PI" "set -e; S=~/pspexp/src; gpg --dearmor < \$S/scripts/packages/pspexp-archive-key.asc > /tmp/pspexp-keyring.gpg
+		sudo sh \$S/scripts/board/pspexp-apt-setup pi \$(id -un) '$REPO_URL' /tmp/pspexp-keyring.gpg \$S/scripts/board/pspexp-pkg-apt
+		rm -f /tmp/pspexp-keyring.gpg"
+else
+	echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): Packages keeps to folder repositories"
+fi
 echo "PSPExp installed on $PI; the console restarted with the launcher"
