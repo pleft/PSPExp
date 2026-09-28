@@ -18,9 +18,11 @@ include $(PSPSDK)/lib/build_prx.mak
 
 all: EBOOT.PBP
 
-EBOOT.PBP: $(TARGET).prx
+# ICON0.PNG (144x80, the XMB tile) and PIC1.PNG (480x272, the XMB background
+# while PSPExp is highlighted) come from scripts/dev/make-eboot-art.py.
+EBOOT.PBP: $(TARGET).prx ICON0.PNG PIC1.PNG
 	mksfoex 'PSPExp' PARAM.SFO
-	pack-pbp EBOOT.PBP PARAM.SFO NULL NULL NULL NULL NULL $(TARGET).prx NULL
+	pack-pbp EBOOT.PBP PARAM.SFO ICON0.PNG NULL NULL PIC1.PNG NULL $(TARGET).prx NULL
 
 EXTRA_CLEAN = clean_pbp
 clean_pbp:
