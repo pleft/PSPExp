@@ -3012,6 +3012,16 @@ int main(int argc, char **argv)
 #else
                                                     : "/usr/local/share/pspexp/launcher";
 #endif
+        {   /* a package operation interrupted (power loss): finished or cleaned up
+             * before the launcher first reads its library (docs/Package_Manager.md §5.3) */
+            const char *r = getenv("PSPEXP_ROOT");
+            char txn[600];
+            snprintf(txn, sizeof(txn), "%s/state/txn", r && *r ? r : "/opt/pspexp");
+            if (access(txn, F_OK) == 0) {
+                int rc = system("pspexp-pkg recover >> /tmp/pspexp-recover.log 2>&1");
+                fprintf(stderr, "[pspexp-term] pspexp-pkg recover: %s\n", rc == 0 ? "done" : "failed (see /tmp/pspexp-recover.log)");
+            }
+        }
         if (launcher_init(ctx, g_launcher_assets) < 0) g_launcher_on = 0;
         else { g_view_launcher = 1; g_view_mirror = 0; }   /* the home view; the mirror shows the programs it starts */
         {   /* screenshots: PSPEXP_LAUNCHER_OPEN=files or files:/some/folder */

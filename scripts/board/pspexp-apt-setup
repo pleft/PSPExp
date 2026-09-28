@@ -1,0 +1,25 @@
+#!/bin/sh
+# pspexp-apt-setup: a Debian board (GameShell, Pi) gets PSPExp's apt source
+# and what the Packages app needs. Runs as root; the installers call it.
+#   pspexp-apt-setup BOARD USER REPO_URL KEYRING_FILE HELPER_FILE
+# BOARD: gameshell | pi. USER: who runs the console (gets the sudo rule).
+set -e
+BOARD="$1"; U="$2"; REPO="$3"; KEYRING="$4"; HELPER="$5"
+[ -n "$HELPER" ] || { echo "usage: pspexp-apt-setup BOARD USER REPO_URL KEYRING HELPER" >&2; exit 2; }
+mkdir -p /etc/pspexp /usr/share/pspexp/catalogue
+echo "$BOARD" > /etc/pspexp/board
+echo "$REPO" > /etc/pspexp/repo
+install -m 644 "$KEYRING" /usr/share/keyrings/pspexp-archive-keyring.gpg
+install -m 755 -o root -g root "$HELPER" /usr/local/sbin/pspexp-pkg-apt
+cat > /etc/apt/sources.list.d/pspexp.sources <<S
+Types: deb
+URIs: $REPO
+Suites: stable
+Components: main
+Signed-By: /usr/share/keyrings/pspexp-archive-keyring.gpg
+S
+# the one thing the console's user may do as root, without a password
+echo "$U ALL=(root) NOPASSWD: /usr/local/sbin/pspexp-pkg-apt" > /etc/sudoers.d/pspexp-pkg
+chmod 440 /etc/sudoers.d/pspexp-pkg
+visudo -cf /etc/sudoers.d/pspexp-pkg >/dev/null
+/usr/local/sbin/pspexp-pkg-apt update

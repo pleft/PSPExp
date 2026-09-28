@@ -1,0 +1,136 @@
+#!/bin/sh
+# pspexp-pkg-apt: the only part of PSPExp's packages that runs as root, through
+# one sudoers rule (pspexp-apt-setup). Its whole contract is
+# docs/Package_Manager.md §5.2; it takes recipe ids, never package names.
+#
+#   pspexp-pkg-apt update        the catalogue (signature and serial checked, §5.1), then apt's lists
+#   pspexp-pkg-apt install ID    the recipe's meta-package pspexp-recipe-ID, built here from the
+#                                trusted recipe, installed (or upgraded) with apt; dependencies an
+#                                older version had and nothing needs any more are removed (§5.4, §5.6)
+#   pspexp-pkg-apt remove ID     the meta-package, then only its own dependencies apt reports unneeded
+#   pspexp-pkg-apt upgrade       newer versions of what the installed recipes depend on, and pspexp-*
+#   pspexp-pkg-apt repair        dpkg --configure -a, apt-get -f install
+set -e
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin DEBIAN_FRONTEND=noninteractive LC_ALL=C
+CAT=/usr/share/pspexp/catalogue
+KEYRING=/usr/share/keyrings/pspexp-archive-keyring.gpg
+META=/var/lib/pspexp/meta
+REPO=$(cat /etc/pspexp/repo 2>/dev/null || true)
+BOARD=$(cat /etc/pspexp/board 2>/dev/null || true)
+APT="apt-get -y -q -o DPkg::Lock::Timeout=120 -o APT::Status-Fd=1"
+die() { echo "pspexp-pkg-apt: $*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || die "runs as root (sudo)"
+
+# the value of KEY in [SECTION] of recipe R, [SECTION:<board>] first (as pspexp-pkg reads it)
+rget() {
+	awk -v sec="$2" -v key="$3" -v board="$BOARD" '
+	/^[ \t]*#/ || /^[ \t]*$/ { next }
+	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }
+	{ i = index($0, "="); if (!i) next; k = substr($0, 1, i - 1); v = substr($0, i + 1)
+	  gsub(/^[ \t]+|[ \t]+$/, "", k); gsub(/^[ \t]+|[ \t]+$/, "", v)
+	  if (k != key) next
+	  if (s == sec) base = v; else if (s == sec ":" board) { over = v; have = 1 } }
+	END { if (have) print over; else print base }' "$1"
+}
+
+recipe() {   # a recipe id -> its trusted recipe file
+	case "$1" in ""|*[!a-z0-9-]*) die "'$1' is not a recipe id" ;; esac
+	[ -f "$CAT/recipes/$1/recipe" ] || die "no recipe $1 in the catalogue"
+	echo "$CAT/recipes/$1/recipe"
+}
+
+pkg_names() { tr ', ' '\n\n' | sed 's/[ (].*//; s/|.*//' | grep -v '^$' | sort -u; }
+deps_of() { dpkg-query -W -f='${Depends}' "$1" 2>/dev/null | pkg_names; }
+installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"; }
+
+# remove what apt reports unneeded, but only among CANDIDATES and, as those go,
+# what they themselves depended on (never a general autoremove, §5.4)
+prune() {
+	cand=$(echo "$1" | tr ' ' '\n' | grep -v '^$' | sort -u)
+	n=0
+	while [ -n "$cand" ] && [ $n -lt 8 ]; do
+		n=$((n + 1))
+		unneeded=$(apt-get -s -q autoremove 2>/dev/null | sed -n 's/^Remv \([^ ]*\).*/\1/p' | sort -u)
+		drop=""
+		for p in $cand; do printf '%s\n' "$unneeded" | grep -qx "$p" && drop="$drop $p"; done
+		[ -n "$drop" ] || break
+		more=""
+		for p in $drop; do more="$more $(deps_of "$p" | tr '\n' ' ')"; done
+		echo "removing, no longer needed: $(echo $drop)"
+		$APT remove $drop >/dev/null
+		cand=$(echo "$more" | tr ' ' '\n' | grep -v '^$' | sort -u)
+	done
+}
+
+cmd="$1"; [ $# -gt 0 ] && shift
+case "$cmd" in
+update)
+	[ -n "$REPO" ] || die "no repository (/etc/pspexp/repo)"
+	t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
+	get() { curl -fsSL -o "$2" "$1" 2>/dev/null || wget -q -O "$2" "$1"; }
+	get "$REPO/catalogue.tar.gz" "$t/c.tgz" || die "cannot fetch the catalogue"
+	get "$REPO/catalogue.tar.gz.sig" "$t/c.sig" || die "cannot fetch its signature"
+	gpgv --keyring "$KEYRING" "$t/c.sig" "$t/c.tgz" 2>/dev/null || die "the catalogue's signature does not check: refused"
+	mkdir -p "$t/x" && tar -C "$t/x" -xzf "$t/c.tgz" && [ -d "$t/x/recipes" ] && [ -f "$t/x/serial" ] || die "the catalogue is not readable"
+	new=$(tr -dc 0-9 < "$t/x/serial"); old=$( [ -f "$CAT/serial" ] && tr -dc 0-9 < "$CAT/serial" || echo 0)
+	[ -n "$new" ] && [ "$new" -ge "${old:-0}" ] || die "the catalogue ($new) is older than the one installed ($old): refused"
+	rm -rf "$CAT.new" && mkdir -p "$CAT.new" && mv "$t/x/recipes" "$CAT.new/recipes" && cp "$t/x/serial" "$CAT.new/serial"
+	chown -R root:root "$CAT.new" && chmod -R u=rwX,go=rX "$CAT.new"
+	rm -rf "$CAT.old"; [ -d "$CAT" ] && mv "$CAT" "$CAT.old"; mv "$CAT.new" "$CAT"; rm -rf "$CAT.old"
+	echo "catalogue $new: $(ls "$CAT/recipes" | wc -l) recipes"
+	apt-get -q -o DPkg::Lock::Timeout=120 update >/dev/null 2>&1 || die "apt could not read its lists"
+	echo "apt lists updated" ;;
+install)
+	id="$1"; R=$(recipe "$id")
+	pk=$(rget "$R" debian apt); [ -n "$pk" ] || die "$id has nothing for this board"
+	v=$(rget "$R" package version); case "$v" in ""|*[!0-9]*) die "$id: bad version" ;; esac
+	olddeps=""; installed "pspexp-recipe-$id" && olddeps=$(deps_of "pspexp-recipe-$id" | tr '\n' ' ')
+	mkdir -p "$META"; w=$(mktemp -d); trap 'rm -rf "$w"' EXIT
+	mkdir -p "$w/p/DEBIAN" "$w/p/usr/share/doc/pspexp-recipe-$id"
+	echo "The PSPExp recipe $id (docs/Package_Manager.md §5.4): it holds the recipe's packages." > "$w/p/usr/share/doc/pspexp-recipe-$id/README"
+	cat > "$w/p/DEBIAN/control" <<C
+Package: pspexp-recipe-$id
+Version: $v
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: metapackages
+Priority: optional
+Depends: $(echo $pk | sed 's/ /, /g')
+Description: PSPExp recipe $id
+ Installed by PSPExp's Packages: it depends on what the recipe $id needs,
+ so apt keeps those while the recipe is installed.
+C
+	deb="$META/pspexp-recipe-${id}_${v}_all.deb"
+	dpkg-deb --root-owner-group -b "$w/p" "$deb" >/dev/null
+	# PSPExp's own packages first: they provide what Debian's ask for as a
+	# first-choice-or-other dependency (pspexp-retro is a libretro-frontend),
+	# and apt picks the first choice (RetroArch) when both are new
+	own=""; for p in $pk; do case "$p" in pspexp-*) installed "$p" || own="$own $p" ;; esac; done
+	if [ -n "$own" ]; then
+		$APT --no-install-recommends install $own
+		apt-mark auto $own >/dev/null   # held by the meta-package below, like the rest
+	fi
+	$APT --no-install-recommends install "$deb"
+	apt-mark manual "pspexp-recipe-$id" >/dev/null
+	# an older version's dependencies the new one dropped, when nothing needs them (§5.6)
+	[ -n "$olddeps" ] && prune "$olddeps"
+	echo "installed pspexp-recipe-$id $v" ;;
+remove)
+	id="$1"; case "$id" in ""|*[!a-z0-9-]*) die "'$id' is not a recipe id" ;; esac
+	if installed "pspexp-recipe-$id"; then
+		d=$(deps_of "pspexp-recipe-$id" | tr '\n' ' ')
+		$APT remove "pspexp-recipe-$id"
+		prune "$d"
+	fi
+	rm -f "$META/pspexp-recipe-${id}_"*.deb
+	echo "removed pspexp-recipe-$id" ;;
+upgrade)
+	list=$( { for m in $(dpkg-query -W -f='${Package} ${Status}\n' 'pspexp-recipe-*' 2>/dev/null | awk '/install ok installed/ {print $1}'); do deps_of "$m"; done
+	          dpkg-query -W -f='${Package} ${Status}\n' 'pspexp-*' 2>/dev/null | awk '/install ok installed/ && $1 !~ /^pspexp-recipe-/ {print $1}'; } | sort -u | tr '\n' ' ')
+	[ -n "$list" ] || { echo "nothing to upgrade"; exit 0; }
+	$APT --no-install-recommends --only-upgrade install $list ;;
+repair)
+	dpkg --configure -a
+	$APT -f install ;;
+*) echo "usage: pspexp-pkg-apt update | install ID | remove ID | upgrade | repair" >&2; exit 2 ;;
+esac

@@ -1,23 +1,50 @@
 #!/bin/sh
-# PSPExp packages on a board (installed on every board as pspexp-pkg; built
-# on the Mac by scripts/packages/pspexp-pkg-build): the titles the launcher shows.
-#   pspexp-pkg install FILE.tar.gz...   install or update (FILE holds one <id>/ directory)
-#   pspexp-pkg remove ID...
-#   pspexp-pkg list
-# A package is <id>/package (KEY=value: version, title, description, license,
-# requires = commands that must exist), one or more <id>/*.entry files (the
-# launcher's entries; exec runs in the package directory), optionally
-# <id>/systems/*.system (emulated systems, copied to $ROOT/systems) and
-# whatever files the entries run. The launcher notices installs and removals
-# by itself. Runs as the owner of $ROOT (cpi on the GameShell), no root needed.
+# PSPExp packages on a board (installed on every board as pspexp-pkg): the
+# titles the launcher shows. Two kinds (docs/Package_Manager.md):
+#
+#   recipes   (Debian boards) a recipe of the signed catalogue names what apt
+#             installs, through a per-recipe meta-package, and says how the
+#             title shows and plays on the PSP; this writes the launcher's files
+#   archives  (the Omega2+; older installs) FILE.tar.gz holding one <id>/ folder,
+#             built on the Mac by scripts/packages/pspexp-pkg-build
+#
+#   pspexp-pkg install ID|FILE.tar.gz...   install or update
+#   pspexp-pkg remove ID...                its launcher files, then what apt no longer needs
+#   pspexp-pkg upgrade                     changed recipes, then newer versions of their packages
+#   pspexp-pkg list                        installed
+#   pspexp-pkg available                   the catalogue: id|recipe version|state|category|title|description
+#   pspexp-pkg update                      the catalogue and apt's lists
+#   pspexp-pkg recover                     finish or clean up an interrupted operation (the console
+#                                          runs it at every start)
+#
+# One operation at a time (a lock); each recipe operation keeps a journal of
+# checkpoints under <root>/state (§5.3), so an interruption anywhere is
+# finished or cleaned up by recover. apt runs only through pspexp-pkg-apt
+# (root, one sudoers rule, §5.2). Runs as the console's user.
 # PSPEXP_ROOT: /opt/pspexp (GameShell, Pi), /mnt/mmcblk0p1/pspexp/opt (Omega2+).
+# Tests: PSPEXP_PKG_CRASH=<point> stops the operation dead at that point (see crash()).
 ROOT="${PSPEXP_ROOT:-/opt/pspexp}"
 APPS="$ROOT/apps"
 SYS="$ROOT/systems"
+STATE="$ROOT/state"
+CAT="${PSPEXP_CATALOGUE:-/usr/share/pspexp/catalogue}/recipes"
+APT_HELPER="${PSPEXP_PKG_APT:-sudo -n /usr/local/sbin/pspexp-pkg-apt}"
+BOARD=$(cat /etc/pspexp/board 2>/dev/null || echo "")
+case "$BOARD" in omega) FAMILY=omega ;; *) FAMILY=debian ;; esac
 die() { echo "pspexp-pkg: $*" >&2; exit 1; }
 field() { sed -n "s/^$2=//p" "$1/package" 2>/dev/null | head -1; }
 [ -d "$APPS" ] && [ -w "$APPS" ] || die "$APPS missing or not writable"
-mkdir -p "$SYS"
+mkdir -p "$SYS" "$STATE"
+
+# ---- the lock: one operation at a time ------------------------------------------------
+lock() {
+	exec 9>"$STATE/lock"
+	if command -v flock >/dev/null 2>&1; then
+		flock -w "${PSPEXP_PKG_WAIT:-600}" 9 || die "busy: another package operation is running"
+	fi
+}
+
+# ---- archives (the Omega2+, and packages installed before recipes) ---------------------
 
 # never the archive's owners (root on a FAT SD card, the Omega, cannot set them)
 untar() {
@@ -55,15 +82,326 @@ remove_one() {
 	echo "removed $id"
 }
 
+# ---- recipes: reading them ---------------------------------------------------------------
+
+# rget FILE SECTION KEY: the value ([SECTION:<board>] over [SECTION]); rall: every value
+rget() {
+	awk -v sec="$2" -v key="$3" -v board="$BOARD" '
+	/^[ \t]*#/ || /^[ \t]*$/ { next }
+	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }
+	{ i = index($0, "="); if (!i) next; k = substr($0, 1, i - 1); v = substr($0, i + 1)
+	  gsub(/^[ \t]+|[ \t]+$/, "", k); gsub(/^[ \t]+|[ \t]+$/, "", v)
+	  if (k != key) next
+	  if (s == sec) base = v; else if (s == sec ":" board) { over = v; have = 1 } }
+	END { if (have) print over; else print base }' "$1"
+}
+rall() {
+	awk -v sec="$2" -v key="$3" '
+	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }
+	{ i = index($0, "="); if (!i) next; k = substr($0, 1, i - 1); gsub(/^[ \t]+|[ \t]+$/, "", k)
+	  if (s == sec && k == key) { v = substr($0, i + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }' "$1"
+}
+
+serial() { tr -dc 0-9 < "${CAT%/recipes}/serial" 2>/dev/null; }
+meta_version() { dpkg-query -W -f='${Status} ${Version}' "pspexp-recipe-$1" 2>/dev/null | awk '/install ok installed/ {print $NF}'; }
+
+# the Debian folder of libretro cores (Debian's cores install there)
+libretro_dir() {
+	case "$(dpkg --print-architecture 2>/dev/null)" in
+	arm64) echo /usr/lib/aarch64-linux-gnu/libretro ;; armhf) echo /usr/lib/arm-linux-gnueabihf/libretro ;;
+	amd64) echo /usr/lib/x86_64-linux-gnu/libretro ;; *) echo /usr/lib/libretro ;;
+	esac
+}
+
+# ---- the journal (§5.3) ------------------------------------------------------------------
+# <root>/state/txn: op, id, recipe version, catalogue serial, checkpoint; rewritten
+# through a temporary file and a rename. Staging: <root>/state/stage/<id>/.
+
+J="$STATE/txn"
+jset() {   # jset CHECKPOINT: record it (the other fields from the current operation)
+	cat > "$J.tmp" <<T
+op=$OP
+id=$ID
+recipe_version=$RV
+catalogue_serial=$SERIAL
+checkpoint=$1
+T
+	mv "$J.tmp" "$J"
+}
+jget() { sed -n "s/^$1=//p" "$J" 2>/dev/null | head -1; }
+
+# PSPEXP_PKG_CRASH=<point> (tests): stop dead there, as a power cut would
+crash() { [ "${PSPEXP_PKG_CRASH:-}" = "$1" ] && { echo "pspexp-pkg: crash test at $1" >&2; kill -9 $$; }; return 0; }
+
+# the manifest of a staging folder: every file's checksum
+manifest() { (cd "$1" && find . -type f ! -name MANIFEST | sort | xargs sha256sum 2>/dev/null) ; }
+manifest_ok() { [ -f "$1/MANIFEST" ] && [ "$(manifest "$1")" = "$(cat "$1/MANIFEST")" ]; }
+
+# ---- recipes: staging ---------------------------------------------------------------------
+
+# stage ID: build everything the install will publish, under $STAGE
+stage() {
+	R="$CAT/$ID/recipe"
+	rm -rf "$STAGE"; mkdir -p "$STAGE/app" "$STAGE/systems"
+	A="$STAGE/app"
+	cat > "$A/package" <<P
+version=r$RV
+title=$(rget "$R" package title)
+description=$(rget "$R" package description)
+license=$(rget "$R" package license)
+recipe=$ID
+catalogue=$SERIAL
+requires=pspexp-run
+P
+	cat=$(rget "$R" package category)
+	if [ "$cat" = system ]; then
+		core=$(rget "$R" "$FAMILY" core)
+		sid=$(rget "$R" system id); sid=${sid:-$ID}
+		keys=$(rget "$R" system keys); nub=$(rget "$R" system nub)
+		# a system file of another package's name is an error of the recipe (§5.5)
+		if [ -f "$SYS/$sid.system" ]; then
+			own=$(sed -n 's/^pkg=//p' "$SYS/$sid.system" | head -1)
+			[ "$own" = "$ID" ] || die "$ID: the system $sid belongs to $own"
+		fi
+		mkdir -p "$A/systems"
+		{ echo "name=$(rget "$R" system name)"
+		  echo "short=$(rget "$R" system short)"
+		  icon=$(rget "$R" system icon); [ -n "$icon" ] && echo "icon=$icon"
+		  echo "roms=$(rget "$R" system roms)"
+		  echo "ext=$(rget "$R" system ext)"
+		  echo "exec=pspexp-run pspexp-retro $(libretro_dir)/$core %ROM%"
+		  echo "pkg=$ID"
+		  echo "env=SDL_VIDEODRIVER=dummy"; echo "env=SDL_AUDIODRIVER=dummy"
+		  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
+		  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
+		  rall "$R" system env | sed 's/^/env=/'
+		  th=$(rget "$R" system thumbs); [ -n "$th" ] && echo "thumbs=$th"
+		  echo "pspexp=1"; } > "$A/systems/$sid.system"
+		cp "$A/systems/$sid.system" "$STAGE/systems/"
+	else
+		eid=$(rget "$R" entry id); eid=${eid:-$ID}
+		keys=$(rget "$R" entry keys); nub=$(rget "$R" entry nub)
+		exec=$(rget "$R" entry exec)
+		[ "$(rget "$R" entry native)" = 1 ] || exec="pspexp-run $exec"
+		first=$(rget "$R" entry first-run)
+		if [ -n "$first" ]; then   # a settings file written once, when missing, then the program
+			f=${first%%:*}; body=${first#*:}
+			{ echo '#!/bin/sh'; echo "# written by pspexp-pkg from the recipe $ID: first-run settings, then the program"
+			  echo "[ -f \"\$HOME/$f\" ] || { mkdir -p \"\$(dirname \"\$HOME/$f\")\"; printf '%b' '$body' > \"\$HOME/$f\"; }"
+			  echo "exec $exec \"\$@\""; } > "$A/run.sh"
+			chmod 755 "$A/run.sh"
+			exec=./run.sh
+		fi
+		{ echo "title=$(rget "$R" entry title)"
+		  echo "type=$(rget "$R" entry type)"
+		  echo "description=$(rget "$R" entry description)"
+		  icon=$(rget "$R" entry icon); [ -n "$icon" ] && echo "icon=$icon"
+		  echo "exec=$exec"
+		  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
+		  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
+		  rall "$R" entry env | sed 's/^/env=/'
+		  echo "pspexp=1"; } > "$A/$eid.entry"
+		[ -f "$CAT/$ID/cover.png" ] && cp "$CAT/$ID/cover.png" "$A/$eid.png"
+	fi
+	# the published system files this package owns that the new version drops
+	: > "$STAGE/unpublish"
+	for s in "$SYS"/*.system; do
+		[ -f "$s" ] || continue
+		[ "$(sed -n 's/^pkg=//p' "$s" | head -1)" = "$ID" ] || continue
+		[ -f "$STAGE/systems/$(basename "$s")" ] || basename "$s" >> "$STAGE/unpublish"
+	done
+	manifest "$STAGE" > "$STAGE/MANIFEST"
+}
+
+# ---- recipes: publishing (§5.3, §5.5) ---------------------------------------------------
+
+# publish: the staged app folder and systems, checkpoint by checkpoint; every step can be redone
+publish() {
+	: > "$STATE/publishing"
+	jset app-swap-started; crash app-swap-started
+	if [ -d "$STAGE/app" ]; then   # not yet swapped in
+		if [ -d "$APPS/$ID" ]; then   # (after an interruption between the renames, the old one is already aside)
+			rm -rf "$APPS/.$ID.old"
+			mv "$APPS/$ID" "$APPS/.$ID.old"
+		fi
+		crash app-swap-half
+		mv "$STAGE/app" "$APPS/$ID"
+	fi
+	crash app-swap-unrecorded
+	jset app-swapped; crash app-swapped
+	publish_systems
+	finish
+}
+
+publish_systems() {
+	jset systems-started; crash systems-started
+	for s in "$STAGE"/systems/*.system; do
+		[ -f "$s" ] || continue
+		n=$(basename "$s")
+		cp "$s" "$SYS/.$n.tmp" && mv "$SYS/.$n.tmp" "$SYS/$n"
+		crash system-renamed
+	done
+	while read -r n; do [ -n "$n" ] && rm -f "$SYS/$n"; done < "$STAGE/unpublish"
+	jset systems-published
+}
+
+finish() {
+	rm -rf "$APPS/.$ID.old" "$STAGE"
+	rm -f "$STATE/publishing" "$J"
+}
+
+# ---- recipes: the operations ---------------------------------------------------------------
+
+begin() {   # begin OP ID
+	OP="$1"; ID="$2"; STAGE="$STATE/stage/$ID"
+	case "$ID" in ""|*[!a-z0-9-]*) die "'$ID' is not a recipe id" ;; esac
+	[ ! -f "$J" ] || die "an earlier operation was interrupted: run pspexp-pkg recover"
+	SERIAL=$(serial); RV=""
+}
+
+install_recipe() {
+	begin install "$1"
+	R="$CAT/$ID/recipe"
+	[ -f "$R" ] || die "$ID: not in the catalogue (pspexp-pkg update?)"
+	[ "$FAMILY" = debian ] || die "$ID: recipes install through apt, on the Debian boards; this board takes archives"
+	[ -n "$(rget "$R" debian apt)" ] || die "$ID: nothing for this board"
+	RV=$(rget "$R" package version)
+	stage
+	jset staged; crash staged
+	jset apt-started; crash apt-started
+	$APT_HELPER install "$ID" || { echo "pspexp-pkg: apt did not finish; $ID is broken (retry: pspexp-pkg recover, or remove it)" >&2; exit 1; }
+	crash apt-unrecorded
+	jset apt-done; crash apt-done
+	# a system's core must now exist where the system file says
+	for s in "$STAGE"/systems/*.system; do
+		[ -f "$s" ] || continue
+		c=$(sed -n 's/^exec=pspexp-run pspexp-retro \([^ ]*\) .*/\1/p' "$s")
+		[ -z "$c" ] || [ -f "$c" ] || die "$ID: its core $c is not where Debian puts cores"
+	done
+	publish
+	echo "installed $ID (recipe $RV)"
+}
+
+remove_recipe() {
+	begin remove "$1"
+	if [ ! -f "$APPS/$ID/package" ] || [ -z "$(field "$APPS/$ID" recipe)" ]; then
+		[ -d "$APPS/$ID" ] || [ -n "$(meta_version "$ID")" ] || die "$ID is not installed"
+	fi
+	RV=$(field "$APPS/$ID" version | tr -dc 0-9)
+	# staged: nothing to publish, and every system file it owns to unpublish
+	rm -rf "$STAGE"; mkdir -p "$STAGE/systems"
+	: > "$STAGE/unpublish"
+	for s in "$SYS"/*.system; do [ -f "$s" ] && [ "$(sed -n 's/^pkg=//p' "$s" | head -1)" = "$ID" ] && basename "$s" >> "$STAGE/unpublish"; done
+	manifest "$STAGE" > "$STAGE/MANIFEST"
+	jset staged; crash staged
+	# the launcher's files go first: no entry is left pointing at a removed program
+	: > "$STATE/publishing"
+	jset app-swap-started; crash app-swap-started
+	rm -rf "$APPS/.$ID.old"; [ -d "$APPS/$ID" ] && mv "$APPS/$ID" "$APPS/.$ID.old"
+	jset app-swapped
+	publish_systems
+	rm -rf "$APPS/.$ID.old"; rm -f "$STATE/publishing"
+	jset apt-started; crash apt-started
+	if [ -n "$(meta_version "$ID")" ]; then $APT_HELPER remove "$ID" || { echo "pspexp-pkg: apt did not finish removing; run pspexp-pkg recover" >&2; exit 1; }; fi
+	crash apt-unrecorded
+	rm -rf "$STAGE"; rm -f "$J"
+	echo "removed $ID"
+}
+
+# ---- recover (§5.3) --------------------------------------------------------------------
+
+recover() {
+	[ -f "$J" ] || { rm -f "$STATE/publishing"; return 0; }
+	OP=$(jget op); ID=$(jget id); RV=$(jget recipe_version); SERIAL=$(jget catalogue_serial); CP=$(jget checkpoint)
+	STAGE="$STATE/stage/$ID"
+	echo "recovering: $OP $ID (recipe $RV, catalogue $SERIAL) from $CP"
+	if [ "$OP" = remove ]; then
+		case "$CP" in
+		staged) rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; echo "nothing had changed"; return 0 ;;
+		esac
+		# the launcher's files: finish removing them
+		rm -rf "$APPS/$ID" "$APPS/.$ID.old"
+		[ -f "$STAGE/unpublish" ] && while read -r n; do [ -n "$n" ] && rm -f "$SYS/$n"; done < "$STAGE/unpublish"
+		rm -f "$STATE/publishing"
+		$APT_HELPER repair >/dev/null 2>&1 || true
+		[ -n "$(meta_version "$ID")" ] && { $APT_HELPER remove "$ID" || { echo "$ID: apt could not remove it (still broken)" >&2; return 1; }; }
+		rm -rf "$STAGE"; rm -f "$J"; echo "removed $ID"; return 0
+	fi
+	case "$CP" in
+	staged)
+		rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; echo "nothing had changed"; return 0 ;;
+	apt-started)   # did apt do it? ask dpkg (after finishing anything half-installed)
+		$APT_HELPER repair >/dev/null 2>&1 || true
+		if [ "$(meta_version "$ID")" != "$RV" ]; then
+			# once more, with the kept staging (Retry)
+			$APT_HELPER install "$ID" >/dev/null 2>&1 || true
+		fi
+		[ "$(meta_version "$ID")" = "$RV" ] || { echo "$ID is broken: its programs were not installed (retry: pspexp-pkg recover; or remove it)" >&2; return 1; }
+		jset apt-done ;;
+	esac
+	CP=$(jget checkpoint)
+	if [ "$CP" = apt-done ] || [ "$CP" = app-swap-started ] || [ "$CP" = app-swapped ] || [ "$CP" = systems-started ] || [ "$CP" = systems-published ]; then
+		if [ -d "$STAGE/app" ] || [ -d "$APPS/$ID" ]; then
+			if [ -d "$STAGE/app" ] && [ "$CP" != apt-done ] && ! manifest_ok "$STAGE"; then
+				# the staging is damaged: back to exactly the old install
+				[ -d "$APPS/.$ID.old" ] && { rm -rf "$APPS/$ID"; mv "$APPS/.$ID.old" "$APPS/$ID"; }
+				[ -d "$APPS/$ID/systems" ] && for s in "$APPS/$ID"/systems/*.system; do [ -f "$s" ] && cp "$s" "$SYS/"; done
+				rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"
+				echo "$ID: its staged files were damaged; the previous install is back" >&2; return 1
+			fi
+			case "$CP" in systems-started|systems-published) publish_systems; finish ;; *) publish ;; esac
+			echo "installed $ID (recipe $RV)"
+		fi
+	fi
+}
+
+# ---- the catalogue for the Packages app ------------------------------------------------------
+
+state_of() {   # installed | update | new | broken
+	[ -f "$APPS/$1/package" ] || { [ -n "$(meta_version "$1")" ] && echo broken || echo new; return; }
+	m=$(meta_version "$1")
+	[ -z "$(field "$APPS/$1" recipe)" ] && { echo update; return; }   # an archive install of the same title: the recipe replaces it
+	[ -n "$m" ] || { echo broken; return; }
+	[ "$m" = "$(rget "$CAT/$1/recipe" package version)" ] && echo installed || echo update
+}
+
 cmd="$1"; [ $# -gt 0 ] && shift
 case "$cmd" in
-install) [ $# -ge 1 ] || die "usage: pspexp-pkg install FILE.tar.gz..."; for f in "$@"; do install_one "$f"; done ;;
-remove)  [ $# -ge 1 ] || die "usage: pspexp-pkg remove ID..."; for i in "$@"; do remove_one "$i"; done ;;
+install)
+	[ $# -ge 1 ] || die "usage: pspexp-pkg install ID|FILE.tar.gz..."
+	lock
+	for f in "$@"; do
+		case "$f" in *.tar.gz|*.tgz|*/*) install_one "$f" ;; *) install_recipe "$f" ;; esac
+	done ;;
+remove)
+	[ $# -ge 1 ] || die "usage: pspexp-pkg remove ID..."
+	lock
+	for i in "$@"; do
+		if [ -n "$(field "$APPS/$i" recipe)" ] || [ -n "$(meta_version "$i")" ]; then remove_recipe "$i"; else remove_one "$i"; fi
+	done ;;
+upgrade)
+	lock
+	for r in "$CAT"/*/recipe; do
+		[ -f "$r" ] || continue
+		i=$(basename "$(dirname "$r")")
+		[ "$(state_of "$i")" = update ] && [ -n "$(meta_version "$i")" ] && install_recipe "$i"
+	done
+	$APT_HELPER upgrade ;;
+recover) lock; recover ;;
+update) lock; $APT_HELPER update ;;
 list)
 	for d in "$APPS"/*/; do
 		[ -f "$d/package" ] || continue
 		d=${d%/}
 		printf '%-14s %-10s %s\n' "$(basename "$d")" "$(field "$d" version)" "$(field "$d" title)"
 	done ;;
-*) echo "usage: pspexp-pkg install FILE.tar.gz... | remove ID... | list" >&2; exit 2 ;;
+available)
+	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
+	for r in "$CAT"/*/recipe; do
+		[ -f "$r" ] || continue
+		id=$(basename "$(dirname "$r")")
+		[ -n "$(rget "$r" "$FAMILY" apt)$(rget "$r" "$FAMILY" build)" ] || continue   # nothing for this board
+		printf '%s|%s|%s|%s|%s|%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "$(rget "$r" package description)"
+	done ;;
+*) echo "usage: pspexp-pkg install ID|FILE.tar.gz... | remove ID... | upgrade | list | available | update | recover" >&2; exit 2 ;;
 esac

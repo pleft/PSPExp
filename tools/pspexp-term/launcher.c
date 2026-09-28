@@ -1446,8 +1446,12 @@ int launcher_needs_frame(uint64_t now)
 {
     static uint64_t last_check;
     if (!g_running && now - last_check > 3000000u) {   /* packages installed or removed, ROMs added */
+        char mark[700];
         last_check = now;
-        if (lib_changed(&L)) library_changed(now);
+        /* pspexp-pkg is publishing an install: never read a half-published one
+         * (docs/Package_Manager.md §5.3); the next check sees it whole */
+        snprintf(mark, sizeof(mark), "%s/state/publishing", L.root);
+        if (access(mark, F_OK) != 0 && lib_changed(&L)) library_changed(now);
     }
     bg_poll(now);
     scan_poll();
