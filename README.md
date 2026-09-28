@@ -233,7 +233,7 @@ it (`doom`) hands the PSP to the game and takes it back afterwards
 | host keyboard (Linux) | types directly (US layout); Shift + PgUp / PgDn scroll back |
 | host mouse (Linux) | wheel scrolls back; clicks go to programs that ask for the mouse |
 
-The console also has a two-panel file manager (System > Files in the
+The console also has a two-panel file manager (Apps > Files in the
 launcher, or Files here from the terminal's menu). It can copy, move,
 delete, rename and create folders; it shows pictures and reads text;
 opening a ROM starts it in its emulator, and a package gets installed.

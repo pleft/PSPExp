@@ -665,6 +665,11 @@ Drive belong. (The SNES and Mega Drive were taken off the Omega on the morning o
 
 ## 7. The terminal and the file manager (2026-09-27)
 
+Both are built-in apps: the first two entries of the launcher's **Apps**
+(Terminal, Files), with covers of their own (the icon large on a fixed
+gradient, `CoverSpec.hero`), favourites and recents like any app; the
+System section keeps the board's settings only.
+
 ### 7.1 The terminal
 
 Buttons were reviewed with the user for comfort on the PSP-1000 (the
@@ -703,7 +708,7 @@ button still held when a mode or menu changes is ignored until released.
 `files.c`, a third view of the console next to the launcher and the
 terminal, inspired by Midnight Commander and drawn like the launcher:
 two panels (folder, path, entries with an icon by type and their size,
-marks, a footer). System > Files opens it at home, the terminal menu's
+marks, a footer). Apps > Files opens it at home, the terminal menu's
 Files here at the shell's folder; select closes it.
 
 | | |

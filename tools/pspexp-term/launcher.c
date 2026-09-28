@@ -98,6 +98,20 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
     snprintf(e->tags, sizeof(e->tags), "%s", detail);
 }
 
+/* apps built into the console, first in Apps: the terminal and the file manager */
+static LEntry g_builtin[2];
+static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 };
+
+static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp(e->id, "a:", 2); }
+
+/* an id from recents or favourites: a library entry or a built-in app */
+static LEntry *find_any(const char *id)
+{
+    int i;
+    for (i = 0; i < 2; i++) if (!strcmp(g_builtin[i].id, id)) return &g_builtin[i];
+    return lib_find(&L, id);
+}
+
 static uint32_t system_colour(const char *id)
 {
     static const uint32_t pal[] = { 0x38bdf8, 0xa78bfa, 0xfb7185, 0x34d399, 0xfbbf24, 0x60a5fa, 0xf472b6, 0x2dd4bf, 0xfb923c, 0xc084fc };
@@ -142,14 +156,21 @@ static void cats_build(void)
         if (g_cat[g_cur].n) snprintf(keep_id, sizeof(keep_id), "%s", g_cat[g_cur].it[g_cat[g_cur].sel]->id);
     }
     cats_free();
+    action(&g_builtin[0], "console", "Terminal", "square-terminal", "This board's shell on the PSP: up to four, themes, copy and paste");
+    action(&g_builtin[1], "files", "Files", "folder-open", "The board's drives and the PSP's memory stick: copy, move, view");
+    for (i = 0; i < 2; i++) {
+        int k;
+        g_builtin[i].type = LT_APP;
+        for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
+    }
     if (L.nrecent) {
         c = cat_add("Recent", "history", 0xf5a524, CK_RECENT, "item");
-        for (i = 0; i < L.nrecent; i++) { LEntry *e = lib_find(&L, L.recent[i]); if (e) cat_push(c, e); }
+        for (i = 0; i < L.nrecent; i++) { LEntry *e = find_any(L.recent[i]); if (e) cat_push(c, e); }
         if (!c->n) g_ncat--;
     }
     if (L.nfavs) {
         c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "item");
-        for (i = 0; i < L.nfavs; i++) { LEntry *e = lib_find(&L, L.favs[i]); if (e) cat_push(c, e); }
+        for (i = 0; i < L.nfavs; i++) { LEntry *e = find_any(L.favs[i]); if (e) cat_push(c, e); }
         if (!c->n) g_ncat--;
     }
     c = cat_add("Games", "gamepad-2", 0x818cf8, CK_GAMES, "game");
@@ -161,6 +182,8 @@ static void cats_build(void)
         for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
     }
     c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
+    cat_push(c, &g_builtin[0]);
+    cat_push(c, &g_builtin[1]);
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
     c = cat_add("System", "settings", 0x94a3b8, CK_SETTINGS, "item");
     g_nactions = 0;
@@ -170,8 +193,6 @@ static void cats_build(void)
         action(&g_actions[g_nactions++], "wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
     action(&g_actions[g_nactions++], "tz", "Time zone", "clock", "The board's time zone, for the clock");
     action(&g_actions[g_nactions++], "boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
-    action(&g_actions[g_nactions++], "console", "Console", "square-terminal", "This board's shell on the PSP");
-    action(&g_actions[g_nactions++], "files", "Files", "folder-open", "Browse, copy and move this board's files");
     action(&g_actions[g_nactions++], "reboot", "Restart", "rotate-ccw", "Restart this board");
     action(&g_actions[g_nactions++], "poweroff", "Power off", "power", "Shut this board down");
     action(&g_actions[g_nactions++], "about", "About", "info", "This board, the PSP and the connection");
@@ -418,6 +439,7 @@ static void draw_cover(const LEntry *e, int x, int y, int alpha)
     char png[700] = "";
     memset(&cs, 0, sizeof(cs));
     cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
+    if (is_builtin(e)) { cs.hero = 1; cs.grad = !strcmp(e->id, "a:files") ? GRAD_FILES : GRAD_TERMINAL; }
     if (e->art[0]) cs.art = e->art;
     else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
     gfx_cover(&cs, x, y, alpha);
@@ -576,6 +598,7 @@ static void run_action(LEntry *e, uint64_t now)
 static void launch(LEntry *e, uint64_t now)
 {
     if (e->type == LT_ACTION) { run_action(e, now); return; }
+    if (is_builtin(e)) { lib_recent_push(&L, e->id); run_action(e, now); cats_build(); return; }
     lib_command(&L, e, g_launch_cmd, sizeof(g_launch_cmd));
     snprintf(g_launch_cwd, sizeof(g_launch_cwd), "%s", e->dir[0] ? e->dir : "/");
     g_launch_aware = e->pspexp || strstr(g_launch_cmd, "pspexp-") != NULL;
@@ -1229,7 +1252,7 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         toast("star", on ? "Added to favourites" : "Removed from favourites", now);
     }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) {
-        if (e->type == LT_ACTION) toast(e->icon, e->tags, now);
+        if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
         else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
     }
 }
@@ -1500,7 +1523,10 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         if (e->tags[0]) snprintf(s, n, "%s  /  %s  /  %s", L.sys[e->sys].shortname, e->tags, sz);
         else snprintf(s, n, "%s  /  %s", L.sys[e->sys].name, sz);
         break;
-    case LT_APP: snprintf(s, n, "App%s", e->pspexp ? "  /  PSP native" : ""); break;
+    case LT_APP:
+        if (is_builtin(e)) snprintf(s, n, "Built in  /  %s", e->tags);
+        else snprintf(s, n, "App%s", e->pspexp ? "  /  PSP native" : "");
+        break;
     case LT_TOOL: snprintf(s, n, "Tool"); break;
     case LT_ACTION:
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");

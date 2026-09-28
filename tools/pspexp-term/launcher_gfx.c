@@ -764,7 +764,7 @@ static int load_art(const char *path, uint8_t *out, int s)
 static void cover_generate(const CoverSpec *c, uint8_t *px, int s)
 {
     uint32_t h = gfx_hash(c->title);
-    const uint32_t *gr = GRADS[h % (sizeof(GRADS) / sizeof(GRADS[0]))];
+    const uint32_t *gr = c->grad ? c->grad : GRADS[h % (sizeof(GRADS) / sizeof(GRADS[0]))];
     char lines[3][64];
     int x, y, n, i;
     float tp = 17.0f;
@@ -778,6 +778,19 @@ static void cover_generate(const CoverSpec *c, uint8_t *px, int s)
             uint8_t *p = px + (y * s + x) * 4;
             p[0] = (uint8_t)lroundf(r * (1 - shade) * 255); p[1] = (uint8_t)lroundf(g * (1 - shade) * 255); p[2] = (uint8_t)lroundf(b * (1 - shade) * 255); p[3] = 255;
         }
+    if (c->hero && have_icons && icon_cp(c->icon)) {   /* the icon itself, centred above the title, with a soft shadow */
+        int ip = 60, ox = (s - ip) / 2, oy = 24, pass;
+        uint8_t *cov = icon_bitmap(icon_cp(c->icon), ip);
+        if (cov) {
+            for (pass = 0; pass < 2; pass++)
+                for (y = 0; y < ip; y++) for (x = 0; x < ip; x++) {
+                    int tx = ox + x + (pass ? 0 : 2), ty = oy + y + (pass ? 0 : 3);
+                    if (tx >= 0 && ty >= 0 && tx < s && ty < s && cov[y * ip + x])
+                        blend_px(px + (ty * s + tx) * 4, pass, pass, pass, cov[y * ip + x] / 255.0f * (pass ? 0.96f : 0.25f));
+                }
+            free(cov);
+        }
+    } else
     /* watermark icon, large and faint, off the right edge */
     if (have_icons && icon_cp(c->icon)) {
         int ip = 96;

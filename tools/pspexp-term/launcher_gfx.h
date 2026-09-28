@@ -30,6 +30,8 @@ typedef struct CoverSpec {
     const char *badge;      /* "GBA", "GAME", ... */
     const char *icon;       /* watermark icon name */
     const char *art;        /* PNG to show instead, or NULL */
+    const uint32_t *grad;   /* two colours for the generated cover, or NULL: by the title */
+    int hero;               /* the icon large and bright at the top, not a faint watermark */
 } CoverSpec;
 
 int  gfx_init(PspExpContext *ctx, const char *assets_dir);
