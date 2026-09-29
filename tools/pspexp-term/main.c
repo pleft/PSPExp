@@ -2641,7 +2641,7 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
         if (g_launcher_on && (llabs(diff) > 90 || st.zone_result == 1)) launcher_notice("clock", msg);
     } else if (note[0]) fprintf(stderr, "[pspexp-term] the PSP: %s\n", note);
     if (st.result < 0) fprintf(stderr, "[pspexp-term] the PSP could not set its clock (%d)\n", st.result);
-    else if (llabs(diff) > 90) fprintf(stderr, "[pspexp-term] the PSP's clock is %s %s; left (%s)\n", span, diff < 0 ? "behind" : "ahead",
+    else if (st.result == 0 && llabs(diff) > 90) fprintf(stderr, "[pspexp-term] the PSP's clock is %s %s; left (%s)\n", span, diff < 0 ? "behind" : "ahead",
                                      min_diff == PSPEXP_CLOCK_REPORT_ONLY ? "off, or this board's clock is not set" : "this board's clock is not from the network yet");
     snprintf(g_clock_report, sizeof(g_clock_report), "result=%d zone_result=%d off_s=%lld psp_tz=%d board_tz=%d board_synced=%d board_zone=%d",
              st.result, st.zone_result, (long long)diff, psp_off, tz, synced, zone);

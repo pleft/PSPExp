@@ -825,9 +825,20 @@ because boards differ.
     own files; `scripts/pi/install.sh build` only builds, to package the
     arm64 core. Run on the Pi 400 (already moved by hand in step 4), it
     changed nothing but two stale developer tools in `/usr/local/bin`.
-  - **Still to do with the PSP on the GameShell:** the games suite (it
-    says whether Debian's Nestopia keeps full speed there, or the lighter
-    QuickNES is needed), and the runtime update from its console.
+  - **With the PSP on the GameShell:** the whole real-PSP suite passes
+    (37 checks). Games: Cave Story 49 fps (the game's own 50), Freedoom 35,
+    Simutrans 24, and every system at full speed: Game Boy and Game Boy
+    Color 60, Mega Drive (PicoDrive) 59, NES (Debian's Nestopia) and SNES
+    (snes9x2005) 50 with European ROMs. Debian's Nestopia is enough, so no
+    QuickNES package.
+  - **Found there:** Cave Story's package starts the game through a shell
+    script, and the GameShell's SDL layer, built without naming SDL2 as a
+    library it needs, could not load into that shell. It's now linked
+    against a stand-in SDL2 naming the functions it calls, like the Pi's
+    build, so it loads anywhere and resolves them from the board's SDL2.
+  - **A runtime update from the GameShell:** a newer `pspexp-runtime`
+    reached it through apt, its console offered System > Update the PSP,
+    and the update filled slot a while the PSP ran slot b.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.
