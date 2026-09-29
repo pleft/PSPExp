@@ -31,6 +31,18 @@
 		clocks = <&rtc CLK_OSC32K_FANOUT>;
 		clock-names = "ext_clock";
 	};
+
+	/* the green LED on the board: on while the GameShell runs (the orange
+	 * one is the power chip's charge LED) */
+	leds {
+		compatible = "gpio-leds";
+
+		led-power {
+			label = "gameshell:green:power";
+			gpios = <&pio 1 7 GPIO_ACTIVE_LOW>; /* PB7 */
+			default-state = "on";
+		};
+	};
 };
 
 &cpu0 {

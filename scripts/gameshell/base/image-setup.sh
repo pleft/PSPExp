@@ -137,6 +137,7 @@ chroot "$R" systemctl enable pspexp-bootlog >/dev/null 2>&1
 # computer to see how far a failed boot got): U-Boot writes pspexp-1-script,
 # pspexp-2-loaded, and pspexp-3-bootm-failed if the kernel was refused
 cat > $W/boot.cmd <<'B'
+gpio clear PB7
 setenv bootargs console=ttyS0,115200n8 root=PARTUUID=5053504d-02 rootfstype=ext4 rootwait panic=10 loglevel=7
 mw.b 0x4a000000 0x2e 1
 fatwrite mmc 0:1 0x4a000000 pspexp-1-script 1
@@ -160,7 +161,7 @@ mkfs.ext4 -q -L rootfs -d "$R" $ROOTIMG ${SIZE}M
 IMG=/out/pspexp-gameshell.img; rm -f $IMG
 TOTAL=$(( 4 + 64 + SIZE ))
 truncate -s ${TOTAL}M $IMG
-dd if="$IN/uboot.bin" of=$IMG bs=512 seek=1 conv=notrunc status=none
+dd if="$IN/uboot.bin" of=$IMG bs=512 seek=$(cat "$IN/uboot.seek") conv=notrunc status=none   # 16: ours (8 KiB); 1: the stock one
 sfdisk -q $IMG <<P
 label: dos
 label-id: $DISKID

@@ -632,10 +632,20 @@ It stays as built, with these changes:
   GameShell's own files come from `stage.sh` with `GS_CORE=apt`. The console
   service is enabled: a PSP running PSPExp connects on USB, or on the
   GameShell's own access point, with nothing to set up.
-- **Still taken from the ClockworkOS image file:** its U-Boot and the Wi-Fi
-  chip's firmware and calibration file. U-Boot must be built from source
-  before the image is published (a GPL binary without its source can't be
-  passed on), and the calibration file's terms checked.
+- **U-Boot from mainline source** (`scripts/gameshell/base/build-uboot.sh`,
+  U-Boot 2026.07): ClockworkPi never published the source of theirs, so the
+  board's settings were found from it. Its SPL holds 1200000000 (the DRAM
+  PLL at twice the memory clock) and not 864000000, and a running board's
+  PLL_DDR1 is at 1200 MHz: DRAM 600 MHz; ZQ and ODT as the community
+  configs have them; the AXP223's voltages as the running board reports
+  them (`uboot.config`). One small patch hands the orange charge LED to the
+  charger (REG 32H bit 3, as the datasheet has it); the boot script and the
+  device tree light the green one (PB7). Booted on a GameShell: the green
+  LED on, the PSP connected.
+- **Still taken from the ClockworkOS image file:** the Wi-Fi chip's
+  calibration file (Debian has the chip's firmware, in another version, but
+  no calibration for this board) and the Bluetooth firmware PSPExp doesn't
+  use; the calibration file's terms are to be checked before publishing.
 - **Tried on a GameShell:** first boot grew the card and finished; the PSP
   connected and got its clock; Wi-Fi joined from System > Wi-Fi network;
   all nine recipes installed through apt (903 MB used after).

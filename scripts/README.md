@@ -53,8 +53,9 @@ gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
                      (~/.pspexp/repo-url) it sets the board up for apt and PSPExp comes
                      as pspexp-core, the GameShell's own files still from here
   stage.sh           the list of files every GameShell gets (install.sh, the card image)
-  base/              the card image: a minimal Debian 13, Linux 6.18, device tree, kernel
-                     config; PSPExp from its apt repository, no games
+  base/              the card image: a minimal Debian 13, Linux 6.18 (build-kernel.sh), U-Boot
+                     from mainline (build-uboot.sh), device tree, kernel and U-Boot config;
+                     PSPExp from its apt repository, no games
   pspexp-firstboot(.service)   a card's first boot: the root partition grown to the card
   pspexp-wifi-mode(.service), hostapd.conf, usb0.interfaces   home Wi-Fi or the
                      PSP's own access point; USB networking

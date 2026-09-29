@@ -1,0 +1,17 @@
+The GameShell's orange LED is the AXP223's CHGLED pin. Its reset state leaves
+the pin to REG32H[5:4] (tri-stated), so it stays dark while charging; the
+board's own U-Boot handed it to the charger (REG32H bit 3), as this does.
+--- a/drivers/power/axp221.c
++++ b/drivers/power/axp221.c
+@@ -233,6 +233,11 @@ int axp_init(void)
+ 	if (ret)
+ 		return ret;
+ 
++	/* the charge LED (CHGLED) driven by the charger, not left tri-stated */
++	ret = pmic_bus_setbits(0x32, 0x08);
++	if (ret)
++		return ret;
++
+ 	return 0;
+ }
+ 
