@@ -176,14 +176,14 @@ handed over; anything else runs in the X session and the mirror shows it
 until it exits. Hold select cycles launcher / terminal / mirror; System >
 Console opens the terminal.
 
-The same launcher runs on every PSPExp board; only the installer and the
-package builds differ (`BOARD=` for `scripts/packages/pspexp-pkg-build`):
+The same launcher runs on every PSPExp board; only the installer and where
+the games come from differ (docs/Package_Manager.md):
 
 | Board | Installer (from the Mac) | Packages in | Games |
 |---|---|---|---|
-| GameShell (Debian 13 armhf) | `scripts/gameshell/install.sh`, or the card image | `/opt/pspexp` | Debian's Chocolate Doom and an OpenTyrian compiled on the board, the SDL layer preloaded (`pspexp-run`) |
-| Omega2+ (OpenWrt, MIPS, no FPU) | `scripts/omega/install.sh` | `/mnt/mmcblk0p1/pspexp/opt` (SD card) | static builds with the SDL layer linked in (`build-omega.sh doom`, `build-omega.sh tyrian`), run through `pspexp-exec` |
-| Raspberry Pi (Debian arm64) | `scripts/pi/install.sh` (PSPExp from the package repository; without one, built on the Pi) | `/opt/pspexp` | as on the GameShell; OpenTyrian compiled on the Pi (`install-pi.sh tyrian`) |
+| GameShell (Debian 13 armhf) | `scripts/gameshell/install.sh`, or the card image | `/opt/pspexp` | recipes through apt: Debian's programs and cores, PSPExp's own packages where Debian lacks them, the SDL layer preloaded (`pspexp-run`) |
+| Omega2+ (OpenWrt, MIPS, no FPU) | `scripts/omega/install.sh` | `/mnt/mmcblk0p1/pspexp/opt` (SD card) | the same recipes, from PSPExp's static builds with the SDL layer linked in (`scripts/omega/build.sh doom`, ...), run through `pspexp-exec` |
+| Raspberry Pi (Debian arm64) | `scripts/pi/install.sh` (PSPExp from the package repository; without one, built on the Pi) | `/opt/pspexp` | as on the GameShell |
 
 The installers ship what is already built: run `build-gameshell.sh` or
 `build-omega.sh` first after a source change (`install-pi.sh` builds itself).
@@ -367,6 +367,11 @@ folder changed and reloads ("Library updated"); System > Refresh library
 does it at once.
 
 ### 4.2 Packages
+
+> **Superseded (2026-09-29):** games and emulators are now the recipes in
+> `recipes/`, installed through apt on the Debian boards and from our own
+> builds on the Omega2+ (docs/Package_Manager.md). What follows describes the
+> archives as they were; only the Omega2+'s builds are still made this way.
 
 `scripts/packages/pspexp-pkg-build build ID` runs the recipe `scripts/packages/recipes/ID.sh`,
 which fills the package folder (downloads cached in build/gameshell/pkg-cache,
@@ -986,6 +991,10 @@ once a second, so it costs the link very little.
     launcher started. Others show a lock.
 
 ### 10.2 Packages
+
+> **Superseded (2026-09-29):** the app now shows the recipe catalogue on every
+> board (docs/Package_Manager.md §7, §9); the folder and web repositories
+> below are gone.
 
 `store.c` reads the repositories and compares them with what is installed
 (`<root>/apps/*/package`). Each package shows as Installed, Update, or Get.

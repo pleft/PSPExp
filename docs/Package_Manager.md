@@ -213,6 +213,13 @@ A shared script turns that into `.deb` files on the Mac (§6).
   apt=pspexp-snes9x2005
   ```
 
+- **Any section can change per board:** `[package:omega]` gives the Omega2+
+  its own `description`, for instance, when it plays the title with a
+  different core.
+- **The Omega2+:** `[omega]` names our static build (`build=`, made by
+  `scripts/packages/recipes/ID.sh`), and `warn=` says what the board can't
+  do well; the Packages app shows it first ("Too heavy for the Omega2+: ...").
+  A recipe without `[omega]` isn't offered there.
 - **Contributing:** a new package is a pull request adding one folder. A
   check script validates the file: sections, names, checksums, cover size.
 
@@ -619,10 +626,23 @@ It stays as built, with these changes:
 
 OpenWrt has none of these programs and the Omega has no compiler.
 
-**Proposal:** it keeps today's system of our own static builds, published as
-our archives, but reads the **same recipes**:
-- a recipe's `[omega]` section names our build;
-- the same Packages app shows them.
+It keeps our own static builds, as archives, but reads the **same recipes**:
+- **A recipe's `[omega]` section** names our build (`build=nes`), and may
+  warn (`warn=`) when the board plays it badly.
+- **Publishing, from the Mac over SSH:** `scripts/packages/pspexp-pkg-build
+  build ID...` makes the archives; `publish` puts them in `<root>/repo` and
+  the same catalogue the Debian boards get (`build/apt/catalogue.tar.gz`,
+  refused when the recipes changed since) in `<root>/catalogue`. SSH from the
+  Mac is the trusted path, so the Omega checks no signature of its own (it
+  has no gpgv).
+- **Installing:** `pspexp-pkg` (`PSPEXP_BOARD=omega`, set by its wrapper)
+  installs a recipe from the build it names, as any archive, and records the
+  recipe, its version, the catalogue and the build in the package file.
+  Installed, Update and Get come from that record against the published
+  build's version. No network is needed: `update` only reports the
+  catalogue the Mac last published.
+- **The Packages app** is the same as on the Debian boards; it finds the
+  catalogue in `<root>/catalogue`.
 
 Later, the same idea as §6 with opkg: an `.ipk` feed.
 
@@ -840,6 +860,32 @@ because boards differ.
     reached it through apt, its console offered System > Update the PSP,
     and the update filled slot a while the PSP ran slot b; the next start
     booted slot a and the runtime confirmed it. Step 6 is done.
+
+- **Step 7:**
+  - **The Omega2+ on recipes:** eight recipes gained `[omega] build=` (all
+    but Simutrans, which the Omega can't run), Mega Drive and SNES with a
+    warning; the systems' descriptions name the Omega's cores through
+    `[package:omega]` (and the GameShell's, which also differ, through
+    `[package:gameshell]`). On the Omega, `pspexp-pkg-build publish` put the
+    builds and the catalogue on it; all eight installed from their recipes,
+    replacing the archive installs; remove and reinstall work. The apps
+    suite, the Omega's console on a stand-in PSP (the Mac's
+    `pspexp-sdl-server`), passes 4 of 4, the Packages app removing and
+    reinstalling Cave Story itself. (`tests/psp/run.py --term` names a
+    console off the PATH, as the Omega's is.) The failure suite still
+    passes 28 of 28 on the Pi with the new lock.
+  - **Found there:** BusyBox's `flock` has no `-w`, so every operation said
+    "busy"; the lock now retries `flock -n` each second (both kinds of
+    board). GNU tar as root can't set owners on the FAT card
+    (`--no-same-owner`). `upgrade` and `recover` exited 1 on the Omega.
+  - **Archives retired from the Debian boards:** `pspexp-pkg-build` builds
+    for the Omega only; the build scripts lost their GameShell and Pi
+    branches (Simutrans's script and `build-simutrans.sh` went: Debian's
+    Simutrans replaced them); the Packages app lost its folder and web
+    repositories and reads only the catalogue; the Pi's old repository
+    folder is gone. Titles installed from an archive stay removable.
+  - **Not yet:** the GameShell card image's first boot still installs the
+    bundled archives; it moves to recipes with the image work.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.

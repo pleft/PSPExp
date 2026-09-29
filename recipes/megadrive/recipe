@@ -8,6 +8,12 @@ category=system
 license=Genesis Plus GX licence (non-commercial); pspexp-retro is part of PSPExp
 version=1
 
+[package:gameshell]
+description=Sega Mega Drive / Genesis: PSPExp's PicoDrive core (lighter; Debian armhf has no Mega Drive core); ROMs in ~/roms/md
+
+[package:omega]
+description=Sega Mega Drive / Genesis: PSPExp's static player with the PicoDrive core; ROMs in ~/roms/md
+
 [debian]
 apt=pspexp-retro libretro-genesisplusgx
 core=genesis_plus_gx_libretro.so
@@ -16,6 +22,13 @@ core=genesis_plus_gx_libretro.so
 [debian:gameshell]
 apt=pspexp-retro pspexp-libretro-picodrive
 core=picodrive_libretro.so
+
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/megadrive.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=megadrive
+warn=Too heavy for the Omega2+: runs far below full speed
 
 [system]
 id=md

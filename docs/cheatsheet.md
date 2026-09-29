@@ -91,7 +91,7 @@ cable pull, so pull the cable to read it after a session.
 | **the PSP as this machine's console** | `build/host/pspexp-term` |
 | the PSP's memory stick from a shell (list, copy both ways, mkdir, rm, mv, free space) | `build/host/pspexp-ms [--tcp <host>] ls ms0:/PSP/GAME` / `get ms0:/X [file]` / `put file ms0:/PSP/GAME/X/` / `mkdir` / `rm` / `mv` / `df` |
 | a stand-in PSP whose memory stick is a folder (file manager, `pspexp-ms`) | `PSPEXP_MS0=<folder> build/host/pspexp-sdl-server` |
-| a board's package repository for Apps > Packages (every built package, index, covers) | `BOARD=<board> HOST=<user@board> scripts/packages/pspexp-pkg-build publish` |
+| PSPExp's apt repository and catalogue: build (signed) / push to the home server | `scripts/packages/apt-repo build build/debs` / `scripts/packages/apt-repo push` |
 | **integration tests on a real PSP** (on a board's console; report + the PSP's screenshots in `build/psp-tests/`) | `tests/psp/run.py --host <user@board> [link stick launcher files terminal]` |
 | drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |
@@ -100,13 +100,14 @@ cable pull, so pull the cable to read it after a session.
 
 ## Any board: packages and ROMs
 
-Every board script takes `HOST=user@host` (the board over SSH) and, for
-packages, `BOARD=gameshell|omega|pi` (which build to package).
+Every board script takes `HOST=user@host` (the board over SSH). Games and
+emulators are the recipes in `recipes/` (docs/Package_Manager.md): on the
+Debian boards through apt, on the Omega2+ from our own builds.
 
 | goal | command |
 |---|---|
-| what can be packaged (recipes in `scripts/packages/recipes/`) | `scripts/packages/pspexp-pkg-build recipes` |
-| build / install / remove / list packages | `BOARD=<board> HOST=<host> scripts/packages/pspexp-pkg-build install nes gameboy` / `remove ID` / `list` |
+| install / remove / list / what the catalogue offers (on the board) | `pspexp-pkg install nes gameboy` / `remove ID` / `list` / `available` |
+| check the recipes | `scripts/packages/check-recipes` |
 | copy the test ROMs (`roms/<system>/`, git-ignored) to a board | `scripts/packages/push-roms.sh <host> [nes gb ...]` |
 | launcher screenshots from a board (stand-in PSP on the Mac) | board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` (or `tz`, `wifi`, `password:<name>`) |
 | installers ship the existing build: after a source change | the board's `build.sh` first (the Pi's `install.sh` builds on the Pi) |
@@ -133,7 +134,8 @@ packages, `BOARD=gameshell|omega|pi` (which build to package).
 | build the tools / Doom / OpenTyrian / an emulator (static, SDL layer linked in) | `scripts/omega/build.sh` / `... doom` / `... tyrian` / `CORE=quicknes scripts/omega/build.sh retro` |
 | Cave Story's / Jazz's engine (static, SDL layer linked in) | `scripts/omega/build.sh cavestory` / `... jazz` |
 | install or update (the console, launcher, fonts, package tool) | `HOST=omega scripts/omega/install.sh` |
-| packages that suit it: Freedoom, OpenTyrian, NES (30 fps), Game Boy | `BOARD=omega HOST=omega scripts/packages/pspexp-pkg-build install freedoom opentyrian nes gameboy` |
+| its builds of the recipes (`scripts/packages/recipes/ID.sh`) / onto it with the catalogue | `HOST=omega scripts/packages/pspexp-pkg-build build freedoom opentyrian nes gameboy` / `... publish` |
+| then install (Apps > Packages, or on the Omega) | `pspexp-pkg install freedoom` |
 
 ## Raspberry Pi (`scripts/pi/`)
 

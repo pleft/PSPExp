@@ -1,17 +1,13 @@
 #!/bin/sh
 # title: Freedoom Phase 1 and 2 (Chocolate Doom, drawn by the PSP)
-# Freedoom 0.13 (BSD licence), two entries, one per phase. GameShell and Pi:
-# the system's Chocolate Doom (apt) through pspexp-run, 35 fps on the PSP;
-# Omega2+: a static Chocolate Doom with the SDL layer linked in.
+# Freedoom 0.13 (BSD licence), two entries, one per phase, on a static
+# Chocolate Doom with the SDL layer linked in (the Omega2+).
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"; V=0.13.0
 Z=$(fetch "https://github.com/freedoom/freedoom/releases/download/v$V/freedoom-$V.zip")
 unzip -q -j -o "$Z" "freedoom-$V/freedoom1.wad" "freedoom-$V/freedoom2.wad" "freedoom-$V/COPYING.txt" -d "$D"
 case "$BOARD" in
-gameshell|pi)   # the system's Chocolate Doom (apt), the SDL layer preloaded
-	REQ="chocolate-doom pspexp-run"
-	RUN="exec pspexp-run chocolate-doom"; ARGS="" ;;
 omega)       # a static Chocolate Doom with the SDL layer built in (build-omega.sh doom)
 	BIN="$ROOT/build/omega/bin/chocolate-doom"
 	[ -x "$BIN" ] || "$ROOT/scripts/omega/build.sh" doom

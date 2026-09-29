@@ -558,7 +558,7 @@ def suite_apps(r):
         installed = set(l.split()[0] for l in t.sh("pspexp-pkg list 2>/dev/null || true").splitlines() if l.strip())
         shown = set(k for k, v in pk.items() if v in ("installed", "update", "local"))
         r.expect(shown == installed, "installed per the app %s, per pspexp-pkg %s" % (sorted(shown), sorted(installed)))
-        r.note("packages: %d offered or installed, %d installed, repositories %s" % (len(pk), len(installed), s["store.sources"]))
+        r.note("packages: %d offered or installed, %d installed, catalogue %s" % (len(pk), len(installed), "published with the builds" if s.get("store.local") == "1" else "apt's"))
         r.shot("store", "Packages")
     r.check("Packages lists what the repositories offer and what is installed", store)
 
@@ -601,6 +601,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", help="user@board whose console drives the PSP")
     ap.add_argument("--local", action="store_true", help="a console on this machine")
+    ap.add_argument("--term", help="the board's pspexp-term when it isn't on the PATH (the Omega: /mnt/mmcblk0p1/pspexp/pspexp-term)")
     ap.add_argument("--min-fps", type=int, default=0, help="games: also require this frame rate (off: rates are only recorded)")
     ap.add_argument("--store-writes", action="store_true", help="apps: the Packages app also removes and reinstalls the smallest package")
     ap.add_argument("suites", nargs="*", help="some of: " + " ".join(n for n, _ in SUITES))
@@ -613,7 +614,9 @@ def main():
     want = a.suites or [n for n, _ in SUITES]
     out = os.path.join(ROOT, "build/psp-tests", datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     os.makedirs(out)
-    r = Run(Target(a.host, out), out)
+    tg = Target(a.host, out)
+    if a.term: tg.term = a.term
+    r = Run(tg, out)
     ok, lines = r.t.ctl("ping")
     if not ok:
         sys.exit("the console does not answer: %s" % lines)

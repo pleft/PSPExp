@@ -5,8 +5,10 @@
 #   recipes   (Debian boards) a recipe of the signed catalogue names what apt
 #             installs, through a per-recipe meta-package, and says how the
 #             title shows and plays on the PSP; this writes the launcher's files
-#   archives  (the Omega2+; older installs) FILE.tar.gz holding one <id>/ folder,
-#             built on the Mac by scripts/packages/pspexp-pkg-build
+#   archives  FILE.tar.gz holding one <id>/ folder, built on the Mac by
+#             scripts/packages/pspexp-pkg-build: the Omega2+'s static builds, which
+#             it installs through the same recipes (their [omega] build=, §9), and
+#             older installs on the Debian boards (removable; a recipe replaces them)
 #
 #   pspexp-pkg install ID|FILE.tar.gz...   install or update
 #   pspexp-pkg remove ID...                its launcher files, then what apt no longer needs
@@ -22,20 +24,23 @@
 # finished or cleaned up by recover. apt runs only through pspexp-pkg-apt
 # (root, one sudoers rule, §5.2). Runs as the console's user.
 # PSPEXP_ROOT: /opt/pspexp (GameShell, Pi), /mnt/mmcblk0p1/pspexp/opt (Omega2+).
+# PSPEXP_BOARD: the board kind, else /etc/pspexp/board. On the Omega the catalogue and
+# its builds are what the Mac last published over SSH: <root>/catalogue, <root>/repo.
 # Tests: PSPEXP_PKG_CRASH=<point> stops the operation dead at that point (see crash()).
 ROOT="${PSPEXP_ROOT:-/opt/pspexp}"
 APPS="$ROOT/apps"
 SYS="$ROOT/systems"
 STATE="$ROOT/state"
-CAT="${PSPEXP_CATALOGUE:-/usr/share/pspexp/catalogue}/recipes"
+BOARD=${PSPEXP_BOARD:-$(cat /etc/pspexp/board 2>/dev/null || echo "")}
+case "$BOARD" in omega) FAMILY=omega; CATDIR="$ROOT/catalogue" ;; *) FAMILY=debian; CATDIR=/usr/share/pspexp/catalogue ;; esac
+CAT="${PSPEXP_CATALOGUE:-$CATDIR}/recipes"
+REPO="$ROOT/repo"
 # the root helper: the pspexp-core package's (/usr/sbin) or an installer's (/usr/local/sbin)
 if [ -z "${PSPEXP_PKG_APT:-}" ]; then
 	for h in /usr/sbin/pspexp-pkg-apt /usr/local/sbin/pspexp-pkg-apt; do [ -x "$h" ] && break; done
 	PSPEXP_PKG_APT="sudo -n $h"
 fi
 APT_HELPER="$PSPEXP_PKG_APT"
-BOARD=$(cat /etc/pspexp/board 2>/dev/null || echo "")
-case "$BOARD" in omega) FAMILY=omega ;; *) FAMILY=debian ;; esac
 die() { echo "pspexp-pkg: $*" >&2; exit 1; }
 field() { sed -n "s/^$2=//p" "$1/package" 2>/dev/null | head -1; }
 [ -d "$APPS" ] && [ -w "$APPS" ] || die "$APPS missing or not writable"
@@ -44,8 +49,12 @@ mkdir -p "$SYS" "$STATE"
 # ---- the lock: one operation at a time ------------------------------------------------
 lock() {
 	exec 9>"$STATE/lock"
-	if command -v flock >/dev/null 2>&1; then
-		flock -w "${PSPEXP_PKG_WAIT:-600}" 9 || die "busy: another package operation is running"
+	if command -v flock >/dev/null 2>&1; then   # -n and a retry: BusyBox's flock (the Omega) has no -w
+		_w=0
+		until flock -n 9; do
+			_w=$((_w + 1)); [ $_w -le "${PSPEXP_PKG_WAIT:-600}" ] || die "busy: another package operation is running"
+			sleep 1
+		done
 	fi
 }
 
@@ -110,7 +119,7 @@ rall() {
 serial() { tr -dc 0-9 < "${CAT%/recipes}/serial" 2>/dev/null; }
 # the recipe's sections of a kind, in order: [entry], [entry.phase2], ... (not the [x:board] overrides)
 sections() { sed -n "s/^\[\($2\(\.[a-z0-9-]*\)\{0,1\}\)\][ \t]*\$/\1/p" "$1" | awk '!seen[$0]++'; }
-meta_version() { dpkg-query -W -f='${Status} ${Version}' "pspexp-recipe-$1" 2>/dev/null | awk '/install ok installed/ {print $NF}'; }
+meta_version() { [ "$FAMILY" = debian ] || return 0; dpkg-query -W -f='${Status} ${Version}' "pspexp-recipe-$1" 2>/dev/null | awk '/install ok installed/ {print $NF}'; }
 
 # the Debian folder of libretro cores (Debian's cores install there)
 libretro_dir() {
@@ -271,7 +280,22 @@ begin() {   # begin OP ID
 	SERIAL=$(serial); RV=""
 }
 
+# the Omega: a recipe names our static build ([omega] build=), an archive the Mac
+# published to <root>/repo; installed as any archive, then marked as the recipe's
+build_version() { awk -F'|' -v id="$1" '$1 == id { print $2 }' "$REPO/index" 2>/dev/null | head -1; }
+install_build() {
+	ID="$1"; R="$CAT/$ID/recipe"
+	[ -f "$R" ] || die "$ID: not in the catalogue (publish it from the Mac: pspexp-pkg-build publish)"
+	b=$(rget "$R" omega build); [ -n "$b" ] || die "$ID: nothing for this board"
+	[ -f "$REPO/$b.tar.gz" ] || die "$ID: its build $b is not in $REPO (pspexp-pkg-build publish)"
+	install_one "$REPO/$b.tar.gz" >/dev/null
+	[ "$b" = "$ID" ] || { rm -rf "$APPS/$ID"; mv "$APPS/$b" "$APPS/$ID"; }
+	printf 'recipe=%s\nrecipe_version=%s\ncatalogue=%s\nbuild=%s\n' "$ID" "$(rget "$R" package version)" "$(serial)" "$b" >> "$APPS/$ID/package"
+	echo "installed $ID ($b $(field "$APPS/$ID" version))"
+}
+
 install_recipe() {
+	[ "$FAMILY" = omega ] && { install_build "$1"; return; }
 	begin install "$1"
 	R="$CAT/$ID/recipe"
 	[ -f "$R" ] || die "$ID: not in the catalogue (pspexp-pkg update?)"
@@ -370,6 +394,13 @@ recover() {
 # ---- the catalogue for the Packages app ------------------------------------------------------
 
 state_of() {   # installed | update | new | broken
+	if [ "$FAMILY" = omega ]; then   # installed from the build the recipe names, at the version published
+		[ -f "$APPS/$1/package" ] || { echo new; return; }
+		b=$(rget "$CAT/$1/recipe" omega build)
+		[ -n "$(field "$APPS/$1" recipe)" ] && [ "$(field "$APPS/$1" build)" = "$b" ] &&
+			[ "$(field "$APPS/$1" version)" = "$(build_version "$b")" ] && [ "$(field "$APPS/$1" recipe_version)" = "$(rget "$CAT/$1/recipe" package version)" ] && echo installed || echo update
+		return
+	fi
 	[ -f "$APPS/$1/package" ] || { [ -n "$(meta_version "$1")" ] && echo broken || echo new; return; }
 	m=$(meta_version "$1")
 	[ -z "$(field "$APPS/$1" recipe)" ] && { echo update; return; }   # an archive install of the same title: the recipe replaces it
@@ -389,18 +420,21 @@ remove)
 	[ $# -ge 1 ] || die "usage: pspexp-pkg remove ID..."
 	lock
 	for i in "$@"; do
-		if [ -n "$(field "$APPS/$i" recipe)" ] || [ -n "$(meta_version "$i")" ]; then remove_recipe "$i"; else remove_one "$i"; fi
+		if [ "$FAMILY" = debian ] && { [ -n "$(field "$APPS/$i" recipe)" ] || [ -n "$(meta_version "$i")" ]; }; then remove_recipe "$i"; else remove_one "$i"; fi
 	done ;;
 upgrade)
 	lock
 	for r in "$CAT"/*/recipe; do
 		[ -f "$r" ] || continue
 		i=$(basename "$(dirname "$r")")
-		[ "$(state_of "$i")" = update ] && [ -n "$(meta_version "$i")" ] && install_recipe "$i"
+		if [ "$FAMILY" = omega ]; then [ -f "$APPS/$i/package" ] && [ "$(state_of "$i")" = update ] && install_build "$i"
+		else [ "$(state_of "$i")" = update ] && [ -n "$(meta_version "$i")" ] && install_recipe "$i"; fi
 	done
-	$APT_HELPER upgrade ;;
-recover) lock; recover ;;
-update) lock; $APT_HELPER update ;;
+	if [ "$FAMILY" = debian ]; then $APT_HELPER upgrade; fi ;;
+recover) lock; if [ "$FAMILY" = debian ]; then recover; fi ;;
+update)
+	[ "$FAMILY" = debian ] || { echo "catalogue $(serial): $(ls "$CAT" 2>/dev/null | wc -l) recipes (the Mac publishes it: pspexp-pkg-build publish)"; exit 0; }
+	lock; $APT_HELPER update ;;
 list)
 	for d in "$APPS"/*/; do
 		[ -f "$d/package" ] || continue
@@ -413,7 +447,8 @@ available)
 		[ -f "$r" ] || continue
 		id=$(basename "$(dirname "$r")")
 		[ -n "$(rget "$r" "$FAMILY" apt)$(rget "$r" "$FAMILY" build)" ] || continue   # nothing for this board
-		printf '%s|%s|%s|%s|%s|%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "$(rget "$r" package description)"
+		w=$(rget "$r" "$FAMILY" warn)   # e.g. too heavy for this board: said first
+		printf '%s|%s|%s|%s|%s|%s%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)"
 	done ;;
 *) echo "usage: pspexp-pkg install ID|FILE.tar.gz... | remove ID... | upgrade | list | available | update | recover" >&2; exit 2 ;;
 esac

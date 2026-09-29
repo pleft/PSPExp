@@ -8,9 +8,18 @@ category=system
 license=GPL-2.0 (Gambatte); pspexp-retro is part of PSPExp
 version=1
 
+[package:omega]
+description=Game Boy and Game Boy Color: PSPExp's static player with the Gambatte core; ROMs in ~/roms/gb and ~/roms/gbc
+
 [debian]
 apt=pspexp-retro libretro-gambatte
 core=gambatte_libretro.so
+
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/gameboy.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=gameboy
 
 [system]
 id=gb

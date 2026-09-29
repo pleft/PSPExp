@@ -9,9 +9,18 @@ category=system
 license=GPL-2.0 (Nestopia); pspexp-retro is part of PSPExp
 version=1
 
+[package:omega]
+description=Nintendo Entertainment System: PSPExp's static player with the QuickNES core; ROMs in ~/roms/nes
+
 [debian]
 apt=pspexp-retro libretro-nestopia
 core=nestopia_libretro.so
+
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/nes.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=nes
 
 [system]
 id=nes

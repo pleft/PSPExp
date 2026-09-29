@@ -1,21 +1,11 @@
 #!/bin/sh
 # title: OpenTyrian 2.1 (SDL2 build, drawn by the PSP)
-# OpenTyrian (SDL2) and the Tyrian 2.1 freeware data. GameShell and Pi:
-# compiled on the board (scripts/gameshell/build.sh tyrian,
-# scripts/pi/install.sh tyrian; run here when the binary is missing), through
-# pspexp-run, 35 fps on the PSP; Omega2+: static, the SDL layer linked in.
+# OpenTyrian (SDL2) and the Tyrian 2.1 freeware data, static with the SDL
+# layer linked in (the Omega2+).
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
-case "${BOARD:-gameshell}" in
-gameshell)   # compiled on the GameShell against its libSDL2; the SDL layer preloaded
-	BIN="$ROOT/build/gameshell/bin/opentyrian"
-	[ -x "$BIN" ] || "$ROOT/scripts/gameshell/build.sh" tyrian
-	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
-pi)          # compiled on the Pi against its libSDL2 (install-pi.sh tyrian); preloaded
-	BIN="$ROOT/build/pi/bin/opentyrian"
-	[ -x "$BIN" ] || HOST="$HOST" "$ROOT/scripts/pi/install.sh" tyrian
-	RUN="pspexp-run ./opentyrian"; REQ="pspexp-run" ;;
+case "${BOARD:-omega}" in
 omega)       # static, the SDL layer built in (build-omega.sh tyrian)
 	BIN="$ROOT/build/omega/bin/opentyrian"
 	[ -x "$BIN" ] || "$ROOT/scripts/omega/build.sh" tyrian

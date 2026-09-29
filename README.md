@@ -145,9 +145,9 @@ PSPExp from it as `pspexp-core`, so later updates come through Apps >
 Packages; it adds the console as a systemd service with the launcher, and
 packages go to `/opt/pspexp`. Without a repository address
 (`~/.pspexp/repo-url`) it builds the source on the Pi and installs into
-`/usr/local` instead. Packages:
-`BOARD=pi HOST=user@host scripts/packages/pspexp-pkg-build install freedoom opentyrian`
-(Freedoom runs Debian's Chocolate Doom; OpenTyrian is compiled on the Pi).
+`/usr/local` instead. Games and emulators: Apps > Packages on the PSP, or
+`pspexp-pkg install freedoom opentyrian` on the Pi (recipes installed through
+apt, docs/Package_Manager.md).
 
 ## Onion Omega2+ as the host
 
@@ -163,10 +163,12 @@ The Omega also runs the PSPExp launcher: `scripts/omega/install.sh` puts
 the console (`pspexp-term --launcher`), its fonts, the package manager and
 the init script on it, everything that grows on the SD card
 (`/mnt/mmcblk0p1/pspexp`: packages in `opt/`, settings and box art in
-`home/`). Packages are built per board:
-`BOARD=omega HOST=root@<omega> scripts/packages/pspexp-pkg-build install freedoom` (a static
-Chocolate Doom with the SDL layer built in, tuned for the FPU-less CPU) and
-`opentyrian` (a static OpenTyrian, `scripts/omega/build.sh tyrian`). The
+`home/`). Its packages are our own static builds (a Chocolate Doom with the
+SDL layer built in and tuned for the FPU-less CPU, OpenTyrian, emulators),
+offered through the same recipes as on the other boards:
+`HOST=root@<omega> scripts/packages/pspexp-pkg-build build freedoom ...` and
+`publish` put the builds and the catalogue on it, then Apps > Packages
+installs them. The
 launcher starts in about 2 s there and uses under 4 MB of memory.
 
 ## Emulators on the launcher
@@ -176,7 +178,8 @@ core, one ROM, no menus. The launcher is the menu (a rail tile per system,
 ROM lists, box art); the SDL layer puts the player on the PSP like any other
 game, at the core's native size, scaled by the PSP's GE, 256-colour pages as
 CLUT8. Packages bring the player, a core and a `.system` file: the NES with
-FCEUmm first (`scripts/packages/recipes/nes.sh`); ROMs go in `~/roms/<system>`.
+Debian's cores where Debian has them (`recipes/nes`, `recipes/snes`, ...),
+PSPExp's own builds elsewhere; ROMs go in `~/roms/<system>`.
 Details: docs/Launcher_and_Boards.md, section 6.
 
 ## ClockworkPi GameShell as the host
@@ -187,10 +190,10 @@ PSP draws itself (docs/Launcher_and_Boards.md).
 
 - `scripts/gameshell/build.sh` cross-compiles the tools (static ARMv7) and the
   SDL layer (for the image's own SDL2 programs).
-- `scripts/packages/pspexp-pkg-build build|install|remove|list ID` builds and installs packages
-  from the recipes in `scripts/packages/recipes/` (Freedoom, OpenTyrian so far);
-  a package is a folder in `/opt/pspexp/apps` with its `.entry` files, and the
-  launcher picks it up by itself. `pspexp-pkg` does the same on the GameShell.
+- Games and emulators come from the recipes in `recipes/`, installed through
+  apt (Apps > Packages, or `pspexp-pkg install ID` on the GameShell); each one's
+  launcher files go to `/opt/pspexp/apps`, and the launcher picks them up by
+  itself (docs/Package_Manager.md).
 - `scripts/gameshell/prep-stock-image.sh <image> [--wifi]` prepares a card image:
   the tools, the console service with the launcher, udev and sudoers rules,
   audio, the Wi-Fi mode switch, and every built package. On its first boot

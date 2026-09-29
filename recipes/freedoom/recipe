@@ -12,6 +12,12 @@ version=1
 [debian]
 apt=chocolate-doom freedoom
 
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/freedoom.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=freedoom
+
 [entry]
 id=freedoom1
 title=Freedoom: Phase 1

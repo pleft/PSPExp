@@ -6,7 +6,9 @@
 # the flash is small. Then the console restarts.
 #   scripts/omega/build.sh
 #   HOST=root@host scripts/omega/install.sh      (default: the ssh alias "omega"; OMEGA= still read)
-# Packages: BOARD=omega HOST=<same host> scripts/packages/pspexp-pkg-build install freedoom
+# Packages: the recipes' [omega] builds, from the Mac: HOST=<same host>
+# scripts/packages/pspexp-pkg-build build ID... and publish (the builds and the
+# catalogue), then Apps > Packages on the PSP, or pspexp-pkg install ID here
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OM="${HOST:-${OMEGA:-omega}}"
@@ -23,7 +25,7 @@ scp -O -q "$ROOT/tools/pspexp-term/assets/Inter-Regular.ttf" "$ROOT/tools/pspexp
 scp -O -q "$ROOT/scripts/omega/pspexp-term.init" "$OM:/tmp/pspexp-term.init"
 # pspexp-pkg for the Omega: the packages' files on the SD card
 W=$(mktemp); trap 'rm -f "$W"' EXIT
-printf '#!/bin/sh\n# PSPExp packages on the Omega: their files on the SD card\nexport PSPEXP_ROOT=%s/opt PATH=%s:$PATH\nexec sh %s/pspexp-pkg "$@"\n' "$DIR" "$DIR" "$DIR" > "$W"
+printf '#!/bin/sh\n# PSPExp packages on the Omega: their files on the SD card\nexport PSPEXP_ROOT=%s/opt PSPEXP_BOARD=omega PATH=%s:$PATH\nexec sh %s/pspexp-pkg "$@"\n' "$DIR" "$DIR" "$DIR" > "$W"
 scp -O -q "$W" "$OM:/tmp/pspexp-pkg.wrapper"
 # a running program cannot be overwritten: new files are moved into place
 ssh "$OM" "set -e

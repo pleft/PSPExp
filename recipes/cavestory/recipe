@@ -12,6 +12,12 @@ version=1
 [debian]
 apt=pspexp-cavestory
 
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/cavestory.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=cavestory
+
 [entry]
 title=Cave Story
 type=game

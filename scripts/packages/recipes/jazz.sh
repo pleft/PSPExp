@@ -2,19 +2,15 @@
 # title: Jazz Jackrabbit shareware (OpenJazz, drawn by the PSP)
 # Jazz Jackrabbit (Epic MegaGames, 1994), its shareware episode "Turtle
 # Terror", on OpenJazz at 480x272 (the PSP's screen: a wider view of the
-# level). OpenJazz cross-compiled here for every board
-# (scripts/packages/build-openjazz.sh). Epic's shareware license lets anyone
+# level). OpenJazz cross-compiled here, static for the Omega2+
+# (scripts/omega/build.sh jazz). Epic's shareware license lets anyone
 # pass the shareware on as long as no file is altered or removed, it is called
 # shareware and Epic MegaGames is credited: data/ is the archive's 78 files as
 # they are (LICENSE.DOC among them).
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
-case "${BOARD:-gameshell}" in
-gameshell|pi)   # cross-compiled here against the board's SDL2; the SDL layer preloaded
-	BIN="$ROOT/build/$BOARD/bin/openjazz"
-	[ -x "$BIN" ] || "$ROOT/scripts/packages/cross-glibc.sh" "$BOARD" "$ROOT/scripts/packages/build-openjazz.sh" openjazz
-	RUN="pspexp-run ./openjazz"; REQ="pspexp-run" ;;
+case "${BOARD:-omega}" in
 omega)          # static, the SDL layer built in
 	BIN="$ROOT/build/omega/bin/openjazz"
 	[ -x "$BIN" ] || "$ROOT/scripts/omega/build.sh" jazz

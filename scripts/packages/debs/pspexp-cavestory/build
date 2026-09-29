@@ -2,7 +2,8 @@
 # pspexp-cavestory: Cave Story on NXEngine-evo (GPL-3.0), which Debian does not
 # carry, with the freeware data (Studio Pixel 2004; Aeon Genesis translation).
 # The engine: build/pi/bin/nxengine-evo (scripts/pi/install.sh cavestory) or
-# build/gameshell/bin/nxengine-evo (scripts/packages/build-nxengine.sh); the
+# build/gameshell/bin/nxengine-evo (scripts/packages/cross-glibc.sh gameshell
+# scripts/packages/build-nxengine.sh nxengine-evo); the
 # data: build/cavestory-data (the recipes' cavestory_data). Installs
 # /usr/lib/pspexp/cavestory and /usr/games/pspexp-cavestory.
 # Usage: build OUTDIR ARCH   (arm64 | armhf)

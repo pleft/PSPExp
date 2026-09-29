@@ -24,14 +24,14 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
   pspexp-apt-setup   set a Debian board up for the repository: board kind, key, apt source, sudo rule
 
 packages/          what the launcher offers, for any board
-  pspexp-pkg-build   build packages from recipes and install them (BOARD=, HOST=);
-                     `publish`: the board's repository for Apps > Packages
-  recipes/           one recipe per package: freedoom, opentyrian, cavestory, jazz,
-                     simutrans, nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
+  pspexp-pkg-build   the Omega2+'s builds of the recipes as archives (HOST=);
+                     `publish`: the builds and the catalogue onto it, for Apps > Packages
+  recipes/           the Omega2+'s build scripts, one per recipe it has: freedoom, opentyrian,
+                     cavestory, jazz, nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
+                     (the recipes themselves are in recipes/ at the top)
   art/               the games' 128x128 launcher pictures (sources and licenses in its README)
   build-nxengine.sh  Cave Story's engine and its libraries, cross-compiled with Zig
   build-openjazz.sh  Jazz Jackrabbit's engine (OpenJazz) and its bundled libraries, the same way
-  build-simutrans.sh Simutrans with zlib, libpng, bzip2 and FreeType, through its own Makefile
   cross-glibc.sh     a game (one of the two above) for the GameShell or the Pi: Zig,
                      linked against the board's own SDL2 (seconds, not the Pi's half hour)
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
