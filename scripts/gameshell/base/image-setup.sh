@@ -14,11 +14,11 @@ R=$W/rootfs
 rm -rf "$R"
 # only what the board and PSPExp need: Wi-Fi (NetworkManager; hostapd for the
 # PSP's own access point), the USB network (ifupdown, dhclient), SSH and .local
-# names, the clock, growing the card at first boot, and a small editor for
+# names, Bluetooth (bluez), the clock, growing the card at first boot, and a small editor for
 # the terminal; PSPExp itself and its dependencies come from apt below
 PKGS="systemd-sysv,udev,dbus,openssh-server,sudo,network-manager,wpasupplicant,hostapd,iw,wireless-regdb,\
 firmware-brcm80211,curl,ca-certificates,gpgv,avahi-daemon,libnss-mdns,ifupdown,isc-dhcp-client,\
-cloud-guest-utils,fdisk,iproute2,kmod,nano,less,procps,tzdata,systemd-timesyncd,locales"
+cloud-guest-utils,fdisk,iproute2,kmod,nano,less,procps,tzdata,systemd-timesyncd,locales,bluez"
 mmdebstrap --arch=armhf --variant=minbase --mode=root --include="$PKGS" \
 	--components="main contrib non-free-firmware" trixie "$R" \
 	"deb http://deb.debian.org/debian trixie main contrib non-free-firmware" \
@@ -41,11 +41,13 @@ chroot "$R" depmod -a "$KR"
 printf 'g_ether\nuinput\n' > "$R/etc/modules-load.d/pspexp-base.conf"   # (pspexp.conf is the stage's old name, removed by it)
 # fixed addresses: the computer sees the same USB network device every time
 echo 'options g_ether host_addr=02:50:53:50:00:01 dev_addr=02:50:53:50:00:02' > "$R/etc/modprobe.d/g_ether.conf"
-# the Wi-Fi chip's firmware and this board's calibration (from ClockworkOS)
+# the Wi-Fi chip's settings for this board (Ampak's AP6212 NVRAM, in scripts/gameshell/base)
+# (the firmware is Debian's, firmware-brcm80211; brcmfmac looks for the board's
+# settings file by the device tree's compatible)
 mkdir -p "$R/usr/lib/firmware/updates/brcm"
-cp "$IN/fw/brcmfmac43430a0-sdio.bin" "$R/usr/lib/firmware/updates/brcm/"
-cp "$IN/fw/brcmfmac43430a0-sdio.txt" "$R/usr/lib/firmware/updates/brcm/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt"
-cp "$IN/fw/bcm43438a0.hcd" "$R/usr/lib/firmware/updates/brcm/"
+cp "$IN/fw/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt" "$R/usr/lib/firmware/updates/brcm/"
+# its Bluetooth firmware patch (Ampak's, as ClockworkOS had it; hci_bcm asks for this name)
+cp "$IN/fw/BCM4343A0.hcd" "$R/usr/lib/firmware/updates/brcm/"
 # locale
 sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' "$R/etc/locale.gen"
 chroot "$R" locale-gen >/dev/null
@@ -161,7 +163,7 @@ mkfs.ext4 -q -L rootfs -d "$R" $ROOTIMG ${SIZE}M
 IMG=/out/pspexp-gameshell.img; rm -f $IMG
 TOTAL=$(( 4 + 64 + SIZE ))
 truncate -s ${TOTAL}M $IMG
-dd if="$IN/uboot.bin" of=$IMG bs=512 seek=$(cat "$IN/uboot.seek") conv=notrunc status=none   # 16: ours (8 KiB); 1: the stock one
+dd if="$IN/uboot.bin" of=$IMG bs=512 seek=16 conv=notrunc status=none   # at 8 KiB, where the SoC looks
 sfdisk -q $IMG <<P
 label: dos
 label-id: $DISKID

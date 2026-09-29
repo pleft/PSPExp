@@ -1,18 +1,18 @@
 #!/bin/sh
 # The PSPExp GameShell card image: a minimal Debian 13 (armhf), the mainline
-# kernel from build-kernel.sh, the board's own U-Boot, and PSPExp from its apt
+# kernel from build-kernel.sh, U-Boot from mainline (build-uboot.sh), and PSPExp from its apt
 # repository (pspexp-core). No games: the user adds them in Apps > Packages
 # (docs/Package_Manager.md §8). Built on this machine in containers (OrbStack/Docker):
 #
 #   scripts/gameshell/build.sh                   (the GameShell's own files are staged from the tree)
 #   scripts/gameshell/base/build-kernel.sh
-#   scripts/gameshell/base/build-uboot.sh        (U-Boot from mainline; without it, the stock one)
-#   scripts/gameshell/base/build-image.sh STOCK.img [options]
+#   scripts/gameshell/base/build-uboot.sh
+#   scripts/gameshell/base/build-image.sh [options]
 #       -> build/gameshell-base/pspexp-gameshell.img  (write it to a card)
 #
-# STOCK.img is ClockworkOS v0.6 (clockworkos_v0.6.img): only the Wi-Fi chip's
-# firmware and calibration file are taken from it (and its U-Boot, when ours
-# isn't built).
+# Nothing is taken from a ClockworkOS image: the Wi-Fi chip's firmware is Debian's;
+# its settings (Ampak's AP6212 NVRAM) and its Bluetooth patch (Ampak's) are in
+# this folder.
 # Options (for your own card; they never go into the repository):
 #   --ssh-key FILE          allow this public key for cpi (default: none)
 #   --wifi-from USER@HOST   copy the Wi-Fi connections of a running GameShell
@@ -22,35 +22,22 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OUT="$ROOT/build/gameshell-base"
-STOCK="$1"; [ $# -gt 0 ] && shift
-[ -f "$STOCK" ] || { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 SSHKEY=""; WIFI_FROM=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--ssh-key) SSHKEY="$2"; shift 2 ;;
 	--wifi-from) WIFI_FROM="$2"; shift 2 ;;
-	*) echo "unknown option $1" >&2; exit 2 ;;
+	*) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 	esac
 done
 [ -f "$OUT/kernel/uImage" ] || { echo "run scripts/gameshell/base/build-kernel.sh first" >&2; exit 1; }
-DF="$(brew --prefix e2fsprogs 2>/dev/null)/sbin/debugfs"
-[ -x "$DF" ] || { echo "debugfs not found: brew install e2fsprogs" >&2; exit 1; }
+[ -f "$OUT/uboot/u-boot-sunxi-with-spl.bin" ] || { echo "run scripts/gameshell/base/build-uboot.sh first" >&2; exit 1; }
 
 IN="$OUT/in"; rm -rf "$IN"; mkdir -p "$IN/fw" "$IN/wifi"
-# U-Boot: ours from mainline (build-uboot.sh) when built, written at 8 KiB on the
-# card; else the stock image's (everything before the first partition, after the MBR)
-if [ -f "$OUT/uboot/u-boot-sunxi-with-spl.bin" ]; then
-	cp "$OUT/uboot/u-boot-sunxi-with-spl.bin" "$IN/uboot.bin"; echo 16 > "$IN/uboot.seek"
-	echo "U-Boot: $(cat "$OUT/uboot/version")"
-else
-	dd if="$STOCK" of="$IN/uboot.bin" bs=512 skip=1 count=8191 2>/dev/null; echo 1 > "$IN/uboot.seek"
-	echo "U-Boot: the stock image's (scripts/gameshell/base/build-uboot.sh builds ours)"
-fi
-OFF=$(python3 -c "import struct,sys; d=open(sys.argv[1],'rb').read(512); print(struct.unpack('<I', d[446+16+8:446+16+12])[0]*512)" "$STOCK")
-for f in brcmfmac43430a0-sdio.bin brcmfmac43430a0-sdio.txt bcm43438a0.hcd; do
-	"$DF" -R "dump /lib/firmware/brcm/$f $IN/fw/$f" "$STOCK?offset=$OFF" 2>/dev/null
-	[ -s "$IN/fw/$f" ] || { echo "stock image: /lib/firmware/brcm/$f missing" >&2; exit 1; }
-done
+# U-Boot (written at 8 KiB on the card) and the Wi-Fi chip's settings
+cp "$OUT/uboot/u-boot-sunxi-with-spl.bin" "$IN/uboot.bin"
+echo "U-Boot: $(cat "$OUT/uboot/version")"
+cp "$ROOT/scripts/gameshell/base/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt" "$ROOT/scripts/gameshell/base/BCM4343A0.hcd" "$IN/fw/"
 [ -n "$SSHKEY" ] && cp "$SSHKEY" "$IN/authorized_keys"
 # Wi-Fi connections: fetched from a running GameShell and kept in
 # build/gameshell-base/local (never in the repository), reused when it is off

@@ -649,10 +649,19 @@ It stays as built, with these changes:
   nine recipes installed through apt from a card with no apt lists (900 MB
   used after); the real-PSP suite passed 38 of 38, the Packages app removing
   and reinstalling Cave Story itself, every system at full speed.
-- **Still taken from the ClockworkOS image file:** the Wi-Fi chip's
-  calibration file (Debian has the chip's firmware, in another version, but
-  no calibration for this board) and the Bluetooth firmware PSPExp doesn't
-  use; the calibration file's terms are to be checked before publishing.
+- **Nothing from ClockworkOS any more:** the Wi-Fi chip's firmware is
+  Debian's (firmware-brcm80211, 7.13.53.9; Wi-Fi joined and worked). Its
+  settings file was never ClockworkPi's own: it is Ampak's generic AP6212
+  NVRAM (as Armbian and LibreELEC carry it, one line added), which
+  linux-firmware carries under GPL-2.0; it is in `scripts/gameshell/base`.
+- **Bluetooth, which the board has and our base had never enabled:** the
+  kernel's hci_uart with the Broadcom protocol, the AP6212's Bluetooth node
+  on UART1 in the device tree (wired as on the Banana Pi M2M: PL8, PL9,
+  PL10, as ClockworkOS drives them), BlueZ in the image, and Ampak's
+  firmware patch as `brcm/BCM4343A0.hcd` (ClockworkOS's copy; not in
+  linux-firmware or Debian, so its terms are still to be settled before
+  publishing). On the GameShell: patch loaded, the controller's own address,
+  a scan found 8 devices.
 - **Tried on a GameShell:** first boot grew the card and finished; the PSP
   connected and got its clock; Wi-Fi joined from System > Wi-Fi network;
   all nine recipes installed through apt (903 MB used after).
