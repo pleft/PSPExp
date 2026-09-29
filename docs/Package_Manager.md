@@ -662,6 +662,10 @@ It stays as built, with these changes:
   linux-firmware or Debian, so its terms are still to be settled before
   publishing). On the GameShell: patch loaded, the controller's own address,
   a scan found 8 devices.
+- **The final release build** (nothing from ClockworkOS, Bluetooth on, no
+  SSH key) tried end to end the same way: Bluetooth up at first boot (7
+  devices in a 10 s scan), all nine recipes through apt, the real-PSP suite
+  38 of 38.
 - **Tried on a GameShell:** first boot grew the card and finished; the PSP
   connected and got its clock; Wi-Fi joined from System > Wi-Fi network;
   all nine recipes installed through apt (903 MB used after).
