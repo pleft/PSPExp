@@ -800,6 +800,30 @@ because boards differ.
     fallback again: the console now removes `fallback` from the stick once
     it has reported it (its log keeps the record).
 
+- **Step 6, on the GameShell (without the PSP so far):**
+  - **armhf packages:** `pspexp-core`, `pspexp-retro` and `pspexp-cavestory`
+    from the Zig cross build (`scripts/gameshell/build.sh`), in the same
+    repository as the Pi's.
+  - **Cores Debian armhf lacks:** Debian 13 armhf has no Mega Drive
+    (Genesis Plus GX) or SNES (Snes9x) core. `pspexp-libretro-picodrive`
+    and `pspexp-libretro-snes9x2005` (`scripts/packages/debs/pspexp-libretro`)
+    put the GameShell's lighter cores in Debian's libretro folder, each with
+    its licence, and the two recipes choose them in `[debian:gameshell]`.
+    NES (Nestopia) and Game Boy (Gambatte) are Debian's, as on the Pi.
+  - **The installer:** with a repository address set,
+    `scripts/gameshell/install.sh` runs `pspexp-apt-setup gameshell`,
+    installs `pspexp-core` from apt, and stages only the GameShell's own
+    files (Wi-Fi mode, first boot, the service now on `/usr/bin/pspexp-term`),
+    removing the `/usr/local` copies. The setup installs `gpgv` when a card
+    lacks it.
+  - **All nine recipes installed through apt** (26 to 41 s each), replacing
+    the archive installs of the same names; no RetroArch or dsda-doom.
+  - **The failure suite** (`tests/pkg/run.py`) passes 28 of 28 on the
+    GameShell.
+  - **Still to do with the PSP on the GameShell:** the games suite (it
+    says whether Debian's Nestopia keeps full speed there, or the lighter
+    QuickNES is needed), and the runtime update from its console.
+
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.
 

@@ -6,6 +6,8 @@
 set -e
 BOARD="$1"; U="$2"; REPO="$3"; KEYRING="$4"; HELPER="$5"
 [ -n "$HELPER" ] || { echo "usage: pspexp-apt-setup BOARD USER REPO_URL KEYRING HELPER" >&2; exit 2; }
+# the catalogue's signature is checked with gpgv (a trimmed card may lack it; apt itself no longer needs it)
+command -v gpgv >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive apt-get install -y -q gpgv >/dev/null
 mkdir -p /etc/pspexp /usr/share/pspexp/catalogue
 echo "$BOARD" > /etc/pspexp/board
 echo "$REPO" > /etc/pspexp/repo

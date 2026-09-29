@@ -39,7 +39,8 @@ packages/          what the launcher offers, for any board
   check-recipes      check the catalogue's recipes (docs/Package_Manager.md §4)
   debs/              our own .deb packages, each with a `build` script: pspexp-core,
                      pspexp-runtime, pspexp-retro, pspexp-cavestory, tyrian-data,
-                     jazz-shareware-data
+                     jazz-shareware-data, pspexp-libretro (cores Debian lacks for a
+                     board: the GameShell's PicoDrive and snes9x2005)
   mkdeb.py           a .deb without dpkg (the Mac has none)
   apt-repo           the signed apt repository and catalogue: build, push to the home server
   runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole
@@ -48,7 +49,9 @@ packages/          what the launcher offers, for any board
 gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
   build.sh           tools and the SDL layer (Zig cross build); cavestory, retro cross-built;
                      tyrian on the board
-  install.sh         install or update a running GameShell
+  install.sh         install or update a running GameShell; with a package repository
+                     (~/.pspexp/repo-url) it sets the board up for apt and PSPExp comes
+                     as pspexp-core, the GameShell's own files still from here
   stage.sh           the list of files every GameShell gets (install.sh, the card image)
   base/              the card image: Debian 13, Linux 6.18, device tree, kernel config
   prep-stock-image.sh     (older) PSPExp into a stock ClockworkOS image

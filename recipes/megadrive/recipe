@@ -12,6 +12,11 @@ version=1
 apt=pspexp-retro libretro-genesisplusgx
 core=genesis_plus_gx_libretro.so
 
+# the GameShell: Debian armhf has no such core; PSPExp's lighter PicoDrive plays at full speed there
+[debian:gameshell]
+apt=pspexp-retro pspexp-libretro-picodrive
+core=picodrive_libretro.so
+
 [system]
 id=md
 name=Mega Drive

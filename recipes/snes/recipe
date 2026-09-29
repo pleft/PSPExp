@@ -12,6 +12,11 @@ version=1
 apt=pspexp-retro libretro-snes9x
 core=snes9x_libretro.so
 
+# the GameShell: Debian armhf has no such core; PSPExp's lighter Snes9x 2005 plays at full speed there
+[debian:gameshell]
+apt=pspexp-retro pspexp-libretro-snes9x2005
+core=snes9x2005_libretro.so
+
 [system]
 id=snes
 name=Super Nintendo

@@ -5,6 +5,9 @@
 # the PSP console. The Wi-Fi mode is not switched (see pspexp-wifi-mode).
 #   scripts/gameshell/build.sh
 #   HOST=user@host scripts/gameshell/install.sh
+# With a package repository (~/.pspexp/repo-url) PSPExp itself comes from apt as
+# pspexp-core (build it first: scripts/packages/debs/pspexp-core/build OUTDIR armhf,
+# then scripts/packages/apt-repo build and push); the GameShell's own files still come from here.
 # HOST defaults to cpi@gameshell (GAMESHELL= is still read, its old name);
 # cpi needs sudo without a password
 # (the GameShell OS default). Games and apps are packages: scripts/packages/pspexp-pkg-build.
@@ -21,6 +24,25 @@ gs_fetch() { ssh "$GS" "cat '$1' 2>/dev/null" > "$2" || : ; }
 ssh "$GS" 'test -f /etc/pspexp/firstboot-done' 2>/dev/null && export GS_PREINSTALL=0
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
+
+# packages from recipes (docs/Package_Manager.md), when the repository's address is
+# set (a local setting, never in git: $PSPEXP_REPO_URL or ~/.pspexp/repo-url): the
+# board set up for apt (kind, key, source, root helper, sudo rule, catalogue), then
+# PSPExp itself as the pspexp-core package, and the stage without its own copies
+# (GS_CORE=apt). GS_CORE=local keeps the older /usr/local install.
+REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+if [ -n "$REPO_URL" ] && [ "${GS_CORE:-apt}" = apt ]; then
+	gpg --dearmor < "$ROOT/scripts/packages/pspexp-archive-key.asc" > "$W/keyring.gpg"
+	scp -q "$W/keyring.gpg" "$ROOT/scripts/board/pspexp-apt-setup" "$ROOT/scripts/board/pspexp-pkg-apt" "$GS:/tmp/"
+	ssh "$GS" "set -e; sudo sh /tmp/pspexp-apt-setup gameshell cpi '$REPO_URL' /tmp/keyring.gpg /tmp/pspexp-pkg-apt
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends pspexp-core >/dev/null
+		rm -f /tmp/keyring.gpg /tmp/pspexp-apt-setup /tmp/pspexp-pkg-apt
+		dpkg-query -W pspexp-core pspexp-runtime"
+	export GS_CORE=apt
+else
+	[ -n "$REPO_URL" ] || echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): PSPExp from this build, into /usr/local"
+	export GS_CORE=local
+fi
 gs_stage "$W/stage"
 
 # the stage over, then the manifest applied as root on the GameShell

@@ -21,11 +21,21 @@ gs_stage() {
 	gs_dir 0755 0 0 /etc/pspexp
 	gs_dir 0755 1000 1000 /home/cpi/pspexp
 
-	# tools, the SDL layer and its run wrappers
-	for f in pspexp-term pspexp-bench pspexp-sprite-demo; do gs_copy "$B/bin/$f" 0755 0 0 "/usr/local/bin/$f"; done
-	gs_copy "$ROOT/scripts/board/pspexp-exec" 0755 0 0 /usr/local/bin/pspexp-exec
-	gs_copy "$B/lib/libsdl-pspexp.so" 0644 0 0 /usr/local/lib/libsdl-pspexp.so
-	gs_copy "$ROOT/scripts/board/pspexp-run" 0755 0 0 /usr/local/bin/pspexp-run
+	# tools, the SDL layer and its run wrappers. GS_CORE=apt: they come from the
+	# pspexp-core package instead (/usr/bin, /usr/lib/pspexp, /usr/share/pspexp),
+	# and the copies here go, since /usr/local would shadow the package's
+	if [ "${GS_CORE:-}" = apt ]; then
+		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg; do gs_rm "/usr/local/bin/$f"; done
+		gs_rm /usr/local/lib/libsdl-pspexp.so
+		gs_rm /usr/local/share/pspexp/launcher
+		CONSOLE=/usr/bin/pspexp-term
+	else
+		for f in pspexp-term pspexp-bench pspexp-sprite-demo; do gs_copy "$B/bin/$f" 0755 0 0 "/usr/local/bin/$f"; done
+		gs_copy "$ROOT/scripts/board/pspexp-exec" 0755 0 0 /usr/local/bin/pspexp-exec
+		gs_copy "$B/lib/libsdl-pspexp.so" 0644 0 0 /usr/local/lib/libsdl-pspexp.so
+		gs_copy "$ROOT/scripts/board/pspexp-run" 0755 0 0 /usr/local/bin/pspexp-run
+		CONSOLE=/usr/local/bin/pspexp-term
+	fi
 	gs_rm /usr/local/bin/pspexp-tyrian   # replaced by the opentyrian package
 
 	# PSPExp packages: the launcher's games and apps (scripts/packages/pspexp-pkg-build on the
@@ -33,7 +43,7 @@ gs_stage() {
 	gs_dir 0755 1000 1000 /opt/pspexp
 	gs_dir 0755 1000 1000 /opt/pspexp/apps
 	gs_dir 0755 1000 1000 /opt/pspexp/systems
-	gs_copy "$ROOT/scripts/board/pspexp-pkg" 0755 0 0 /usr/local/bin/pspexp-pkg
+	[ "${GS_CORE:-}" = apt ] || gs_copy "$ROOT/scripts/board/pspexp-pkg" 0755 0 0 /usr/local/bin/pspexp-pkg
 	# the card's first boot: the stock launcher and games removed, the bundled
 	# packages (every build/gameshell/pkg/*.tar.gz) installed; once
 	gs_dir 0755 0 0 /usr/local/lib/pspexp
@@ -50,11 +60,13 @@ gs_stage() {
 
 	# the launcher's fonts and icons (Inter, Lucide: open licences, kept beside
 	# them) and the commands its System page may run without a password
-	gs_dir 0755 0 0 /usr/local/share/pspexp
-	gs_dir 0755 0 0 /usr/local/share/pspexp/launcher
-	for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
-		gs_copy "$ROOT/tools/pspexp-term/assets/$f" 0644 0 0 "/usr/local/share/pspexp/launcher/$f"
-	done
+	if [ "${GS_CORE:-}" != apt ]; then
+		gs_dir 0755 0 0 /usr/local/share/pspexp
+		gs_dir 0755 0 0 /usr/local/share/pspexp/launcher
+		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
+			gs_copy "$ROOT/tools/pspexp-term/assets/$f" 0644 0 0 "/usr/local/share/pspexp/launcher/$f"
+		done
+	fi
 	echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli' > "$S/pspexp.sudoers"
 	gs_copy "$S/pspexp.sudoers" 0440 0 0 /etc/sudoers.d/pspexp
 
@@ -69,7 +81,7 @@ After=multi-user.target
 User=cpi
 WorkingDirectory=/home/cpi
 Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/games
-ExecStart=/usr/local/bin/pspexp-term --shell /usr/bin/bash --launcher --mirror /dev/fb0 --usb --tcp 192.168.50.2
+ExecStart=$CONSOLE --shell /usr/bin/bash --launcher --mirror /dev/fb0 --usb --tcp 192.168.50.2
 Restart=always
 RestartSec=2
 
