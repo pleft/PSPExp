@@ -7,10 +7,10 @@ title=Drascula: The Vampire Strikes Back
 description=A 1996 comedy vampire adventure, freeware since 2006
 category=game
 license=Freeware (Alcachofa Soft); ScummVM is GPL-3.0
-version=1
+version=2
 
 [debian]
-apt=scummvm drascula
+apt=scummvm drascula drascula-music
 
 [entry]
 title=Drascula: The Vampire Strikes Back
