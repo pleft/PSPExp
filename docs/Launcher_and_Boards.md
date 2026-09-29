@@ -183,7 +183,7 @@ package builds differ (`BOARD=` for `scripts/packages/pspexp-pkg-build`):
 |---|---|---|---|
 | GameShell (Debian 13 armhf) | `scripts/gameshell/install.sh`, or the card image | `/opt/pspexp` | Debian's Chocolate Doom and an OpenTyrian compiled on the board, the SDL layer preloaded (`pspexp-run`) |
 | Omega2+ (OpenWrt, MIPS, no FPU) | `scripts/omega/install.sh` | `/mnt/mmcblk0p1/pspexp/opt` (SD card) | static builds with the SDL layer linked in (`build-omega.sh doom`, `build-omega.sh tyrian`), run through `pspexp-exec` |
-| Raspberry Pi (Debian arm64) | `scripts/pi/install.sh` (builds on the Pi) | `/opt/pspexp` | as on the GameShell; OpenTyrian compiled on the Pi (`install-pi.sh tyrian`) |
+| Raspberry Pi (Debian arm64) | `scripts/pi/install.sh` (PSPExp from the package repository; without one, built on the Pi) | `/opt/pspexp` | as on the GameShell; OpenTyrian compiled on the Pi (`install-pi.sh tyrian`) |
 
 The installers ship what is already built: run `build-gameshell.sh` or
 `build-omega.sh` first after a source change (`install-pi.sh` builds itself).

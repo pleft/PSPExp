@@ -139,7 +139,8 @@ packages, `BOARD=gameshell|omega|pi` (which build to package).
 
 | goal | command |
 |---|---|
-| install the console and launcher (builds on the Pi) | `HOST=user@<ip> scripts/pi/install.sh` |
+| install the console and launcher (from the package repository; without one, builds on the Pi) | `HOST=user@<ip> scripts/pi/install.sh` |
+| build on the Pi only, to package `pspexp-core` for arm64 | `HOST=user@<ip> scripts/pi/install.sh build` |
 | OpenTyrian / the emulator player and a core, compiled on the Pi | `HOST=user@<ip> scripts/pi/install.sh tyrian` / `CORE=quicknes HOST=user@<ip> scripts/pi/install.sh retro` |
 | Cave Story's engine, compiled on the Pi (~30 min) | `HOST=user@<ip> scripts/pi/install.sh cavestory` |
 | on the Pi itself: a development build (host tools, Doom from apt) | `scripts/pi/build.sh` |

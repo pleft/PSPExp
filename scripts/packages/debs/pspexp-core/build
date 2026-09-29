@@ -4,7 +4,7 @@
 # -pkg / -ms, the root helper pspexp-pkg-apt, the board setup script, the
 # launcher's fonts. Its scripts never restart the running console: it notices
 # the new file and offers System > Restart PSPExp.
-#   build OUTDIR arm64 USER@PI      the Pi's own build (~/pspexp/src/build, scripts/pi/install.sh)
+#   build OUTDIR arm64 USER@PI      the Pi's own build (~/pspexp/src/build: scripts/pi/install.sh build)
 #   build OUTDIR armhf              the GameShell's (scripts/gameshell/build.sh: build/gameshell)
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"

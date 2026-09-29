@@ -1,15 +1,21 @@
 #!/bin/sh
 # PSPExp with the launcher on a Raspberry Pi (Debian / Raspberry Pi OS,
-# 64-bit), from the Mac over SSH. Same layout as the GameShell's, so the
-# launcher's packages (scripts/packages/pspexp-pkg-build, BOARD=pi) install the same way:
-#   /usr/local/bin      pspexp-term, pspexp-exec, pspexp-run, pspexp-pkg, ...
-#   /usr/local/lib      libsdl-pspexp.so (preloaded into SDL2 games)
-#   /usr/local/share/pspexp/launcher   fonts and icons
-#   /opt/pspexp/{apps,systems}         packages, owned by the Pi's user
-#   pspexp-term.service the launcher on the PSP at boot (USB), as that user
-# The source is copied to ~/pspexp/src on the Pi and built there (its gcc, its
-# SDL2); a checkout of the repo on the Pi is left alone.
-#   HOST=user@host scripts/pi/install.sh          build + install + restart (PI= still read)
+# 64-bit), from the Mac over SSH.
+# With a package repository (its address in $PSPEXP_REPO_URL or ~/.pspexp/repo-url,
+# a local setting), PSPExp comes from apt like any other package:
+#   the board set up for the repository (pspexp-apt-setup pi), then pspexp-core
+#   (/usr/bin, /usr/lib/pspexp, /usr/share/pspexp) and its updates through
+#   Apps > Packages; this script adds only the Pi's own files: the service, the
+#   USB rule, the sudo rule, /opt/pspexp; older /usr/local copies are removed.
+# Without one (or PSPEXP_CORE=local), the older way: the source built on the Pi
+# and copied into /usr/local (/usr/local/bin, /usr/local/lib/libsdl-pspexp.so,
+# /usr/local/share/pspexp/launcher).
+# Either way the launcher's packages go to /opt/pspexp/{apps,systems}, owned by
+# the Pi's user, and pspexp-term.service runs the launcher on the PSP at boot (USB).
+#   HOST=user@host scripts/pi/install.sh          install + restart (PI= still read)
+#   HOST=user@host scripts/pi/install.sh build    only build on the Pi (~/pspexp/src/build), to
+#       package: scripts/packages/debs/pspexp-core/build OUTDIR arm64 user@host
+#       (the source is copied to ~/pspexp/src; a checkout of the repo on the Pi is left alone)
 #   HOST=user@host scripts/pi/install.sh cavestory   Cave Story (NXEngine-evo)
 #       compiled on the Pi -> build/pi/bin/nxengine-evo
 #   HOST=user@host scripts/pi/install.sh tyrian   OpenTyrian (SDL2) compiled on
@@ -58,39 +64,62 @@ if [ "$1" = cavestory ]; then
 	exit 0
 fi
 
-# the tracked files as they are in this tree (uncommitted edits included)
-(cd "$ROOT" && git ls-files -z --cached --others --exclude-standard | COPYFILE_DISABLE=1 xargs -0 tar --no-xattrs -cf - 2>/dev/null) |
-	ssh "$PI" 'mkdir -p ~/pspexp/src && tar -C ~/pspexp/src -xf -'
-ssh "$PI" 'set -e; cd ~/pspexp/src
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
-	cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
-	[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
+REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+[ -n "$REPO_URL" ] || PSPEXP_CORE=local
+[ "$1" = build ] && PSPEXP_CORE=build
 
-# a Pi whose PSPExp comes from apt (pspexp-core, docs/Package_Manager.md §6): only the build;
-# then scripts/packages/debs/pspexp-core/build build/debs arm64 $PI, apt-repo build and push,
-# and pspexp-pkg upgrade on the Pi (the console offers System > Restart PSPExp)
-# (automatic once the Pi has pspexp-core: /usr/local copies would shadow the package's)
-[ -n "${PSPEXP_CORE:-}" ] || { ssh "$PI" 'dpkg-query -W -f="\${Status}" pspexp-core 2>/dev/null' | grep -q "ok installed" && PSPEXP_CORE=apt; }
-if [ "${PSPEXP_CORE:-}" = apt ]; then echo "built on $PI (~/pspexp/src/build); its PSPExp comes from apt: package it as pspexp-core"; exit 0; fi
+if [ "${PSPEXP_CORE:-apt}" != apt ]; then
+	# the tracked files as they are in this tree (uncommitted edits included), built on the Pi
+	(cd "$ROOT" && git ls-files -z --cached --others --exclude-standard | COPYFILE_DISABLE=1 xargs -0 tar --no-xattrs -cf - 2>/dev/null) |
+		ssh "$PI" 'mkdir -p ~/pspexp/src && tar -C ~/pspexp/src -xf -'
+	ssh "$PI" 'set -e; cd ~/pspexp/src
+		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
+		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
+		[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
+	if [ "$PSPEXP_CORE" = build ]; then
+		echo "built on $PI (~/pspexp/src/build): package it with scripts/packages/debs/pspexp-core/build OUTDIR arm64 $PI"
+		exit 0
+	fi
+	[ -n "$REPO_URL" ] || echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): PSPExp from this build, into /usr/local"
+	ssh "$PI" 'set -e; S=~/pspexp/src
+		sudo install -d -m 0755 /usr/local/bin /usr/local/lib /usr/local/share/pspexp/launcher
+		for f in pspexp-term pspexp-bench pspexp-sprite-demo; do sudo install -m 0755 $S/build/$f /usr/local/bin/$f.new && sudo mv /usr/local/bin/$f.new /usr/local/bin/$f; done
+		sudo install -m 0755 $S/scripts/board/pspexp-exec /usr/local/bin/pspexp-exec
+		sudo install -m 0755 $S/scripts/board/pspexp-run /usr/local/bin/pspexp-run
+		sudo install -m 0755 $S/scripts/board/pspexp-pkg /usr/local/bin/pspexp-pkg
+		sudo install -m 0644 $S/build/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp.so.new && sudo mv /usr/local/lib/libsdl-pspexp.so.new /usr/local/lib/libsdl-pspexp.so
+		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
+			sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
+		done'
+	CONSOLE=/usr/local/bin/pspexp-term
+else
+	# the board set up for the repository, then PSPExp itself from apt
+	W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+	gpg --dearmor < "$ROOT/scripts/packages/pspexp-archive-key.asc" > "$W/keyring.gpg"
+	scp -q "$W/keyring.gpg" "$ROOT/scripts/board/pspexp-apt-setup" "$ROOT/scripts/board/pspexp-pkg-apt" "$PI:/tmp/"
+	ssh "$PI" "set -e; sudo sh /tmp/pspexp-apt-setup pi \$(id -un) '$REPO_URL' /tmp/keyring.gpg /tmp/pspexp-pkg-apt
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends pspexp-core >/dev/null
+		rm -f /tmp/keyring.gpg /tmp/pspexp-apt-setup /tmp/pspexp-pkg-apt
+		# copies from the older way would come first in PATH and shadow the package's
+		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
+		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/share/pspexp/launcher
+		dpkg-query -W pspexp-core pspexp-runtime"
+	CONSOLE=/usr/bin/pspexp-term
+fi
 
-# install; the running console is swapped for the new one at the end
-ssh "$PI" 'set -e; S=~/pspexp/src; U=$(id -un); H=$HOME
-	sudo install -d -m 0755 /usr/local/bin /usr/local/lib /usr/local/share/pspexp/launcher /etc/pspexp
-	for f in pspexp-term pspexp-bench pspexp-sprite-demo; do sudo install -m 0755 $S/build/$f /usr/local/bin/$f.new && sudo mv /usr/local/bin/$f.new /usr/local/bin/$f; done
-	sudo install -m 0755 $S/scripts/board/pspexp-exec /usr/local/bin/pspexp-exec
-	sudo install -m 0755 $S/scripts/board/pspexp-run /usr/local/bin/pspexp-run
-	sudo install -m 0755 $S/scripts/board/pspexp-pkg /usr/local/bin/pspexp-pkg
-	sudo install -m 0644 $S/build/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp.so.new && sudo mv /usr/local/lib/libsdl-pspexp.so.new /usr/local/lib/libsdl-pspexp.so
-	for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
-		sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
-	done
-	sudo install -d -m 0755 -o $U -g $U /opt/pspexp /opt/pspexp/apps /opt/pspexp/systems
-	echo "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli" | sudo tee /etc/sudoers.d/pspexp >/dev/null
-	sudo chmod 0440 /etc/sudoers.d/pspexp
-	echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"054c\", ATTR{idProduct}==\"01ca\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
-	sudo udevadm control --reload-rules || true
-	SH=$(getent passwd $U | cut -d: -f7)
-	sudo tee /etc/systemd/system/pspexp-term.service >/dev/null <<U
+# the Pi's own files: the package folders, the sudo rule for the System page, the
+# PSP's USB rule, and the service; the running console is swapped for the new one
+ssh "$PI" "CONSOLE=$CONSOLE sh -s" <<'BOARD'
+set -e
+U=$(id -un); H=$HOME
+sudo install -d -m 0755 /etc/pspexp
+sudo install -d -m 0755 -o $U -g $U /opt/pspexp /opt/pspexp/apps /opt/pspexp/systems
+echo "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli" | sudo tee /etc/sudoers.d/pspexp >/dev/null
+sudo chmod 0440 /etc/sudoers.d/pspexp
+echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"054c\", ATTR{idProduct}==\"01ca\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
+sudo udevadm control --reload-rules || true
+SH=$(getent passwd $U | cut -d: -f7)
+sudo tee /etc/systemd/system/pspexp-term.service >/dev/null <<U
 [Unit]
 Description=PSPExp console on the PSP (pspexp-term)
 After=multi-user.target
@@ -99,26 +128,16 @@ After=multi-user.target
 User=$U
 WorkingDirectory=$H
 Environment=PSPEXP_TERM=1 HOME=$H SHELL=${SH:-/bin/bash} PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/games
-ExecStart=/usr/local/bin/pspexp-term --shell ${SH:-/bin/bash} --launcher --usb
+ExecStart=$CONSOLE --shell ${SH:-/bin/bash} --launcher --usb
 Restart=always
 RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
 U
-	sudo systemctl daemon-reload
-	sudo systemctl enable pspexp-term >/dev/null 2>&1
-	sudo systemctl restart pspexp-term
-	sleep 1; systemctl is-active pspexp-term'
-# packages from recipes (docs/Package_Manager.md): the board kind, the project key, the
-# apt source, the root helper and its sudo rule, the catalogue. The repository's address
-# is a local setting, never in git: $PSPEXP_REPO_URL or ~/.pspexp/repo-url (http://host:port)
-REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
-if [ -n "$REPO_URL" ]; then
-	ssh "$PI" "set -e; S=~/pspexp/src; gpg --dearmor < \$S/scripts/packages/pspexp-archive-key.asc > /tmp/pspexp-keyring.gpg
-		sudo sh \$S/scripts/board/pspexp-apt-setup pi \$(id -un) '$REPO_URL' /tmp/pspexp-keyring.gpg \$S/scripts/board/pspexp-pkg-apt
-		rm -f /tmp/pspexp-keyring.gpg"
-else
-	echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): Packages keeps to folder repositories"
-fi
-echo "PSPExp installed on $PI; the console restarted with the launcher"
+sudo systemctl daemon-reload
+sudo systemctl enable pspexp-term >/dev/null 2>&1
+sudo systemctl restart pspexp-term
+sleep 1; systemctl is-active pspexp-term
+BOARD
+echo "PSPExp installed on $PI ($CONSOLE); the console restarted with the launcher"

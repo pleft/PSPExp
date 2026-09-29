@@ -140,10 +140,12 @@ launcher picks SDL's dummy drivers when there is no display, and the SDL
 layer paces the game's audio itself on such a host.
 
 The Pi also runs the PSPExp launcher: `HOST=user@host scripts/pi/install.sh`
-(from the Mac) copies the source to `~/pspexp/src` on the Pi, builds it
-there and installs the same layout as the GameShell: the console as a
-systemd service with the launcher, the SDL layer in `/usr/local/lib`,
-packages in `/opt/pspexp`. Packages:
+(from the Mac) sets the Pi up for PSPExp's package repository and installs
+PSPExp from it as `pspexp-core`, so later updates come through Apps >
+Packages; it adds the console as a systemd service with the launcher, and
+packages go to `/opt/pspexp`. Without a repository address
+(`~/.pspexp/repo-url`) it builds the source on the Pi and installs into
+`/usr/local` instead. Packages:
 `BOARD=pi HOST=user@host scripts/packages/pspexp-pkg-build install freedoom opentyrian`
 (Freedoom runs Debian's Chocolate Doom; OpenTyrian is compiled on the Pi).
 

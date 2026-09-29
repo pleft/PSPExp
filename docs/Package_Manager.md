@@ -820,6 +820,11 @@ because boards differ.
     the archive installs of the same names; no RetroArch or dsda-doom.
   - **The failure suite** (`tests/pkg/run.py`) passes 28 of 28 on the
     GameShell.
+  - **The Pi's installer does the same now:** with a repository address it
+    sets the Pi up, installs `pspexp-core` from apt and adds only the Pi's
+    own files; `scripts/pi/install.sh build` only builds, to package the
+    arm64 core. Run on the Pi 400 (already moved by hand in step 4), it
+    changed nothing but two stale developer tools in `/usr/local/bin`.
   - **Still to do with the PSP on the GameShell:** the games suite (it
     says whether Debian's Nestopia keeps full speed there, or the lighter
     QuickNES is needed), and the runtime update from its console.

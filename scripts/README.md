@@ -67,7 +67,9 @@ omega/             Onion Omega2+ (MT7688 MIPS, OpenWrt): static builds, data on 
   doom.sh            Doom from the console (older; the Freedoom package replaces it)
 
 pi/                Raspberry Pi (Debian, arm64)
-  install.sh         from the Mac: build on the Pi, install the console and launcher;
+  install.sh         from the Mac: the console and launcher, as pspexp-core from the package
+                     repository (without one: built on the Pi, into /usr/local); `build`
+                     only builds on the Pi, to package pspexp-core;
                      tyrian, cavestory, retro build OpenTyrian, Cave Story and the
                      emulator player on the Pi
   build.sh           on the Pi: a development build (host tools, Doom from apt)
