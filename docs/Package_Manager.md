@@ -657,10 +657,13 @@ It stays as built, with these changes:
 - **Bluetooth, which the board has and our base had never enabled:** the
   kernel's hci_uart with the Broadcom protocol, the AP6212's Bluetooth node
   on UART1 in the device tree (wired as on the Banana Pi M2M: PL8, PL9,
-  PL10, as ClockworkOS drives them), BlueZ in the image, and Ampak's
-  firmware patch as `brcm/BCM4343A0.hcd` (ClockworkOS's copy; not in
-  linux-firmware or Debian, so its terms are still to be settled before
-  publishing). On the GameShell: patch loaded, the controller's own address,
+  PL10, as ClockworkOS drives them), BlueZ in the image, and the
+  firmware patch as `brcm/BCM4343A0.hcd`: not in linux-firmware or Debian,
+  but ClockworkPi publishes it under GPL-3.0 (github.com/clockworkpi/bluetooth),
+  so the build fetches it from there, pinned to a commit and checked by
+  SHA-256. Armbian's AP6212 patch (build 0242) was tried too: it doesn't
+  read the chip's own address, so BlueZ refused the controller;
+  ClockworkPi's (build 0253) does. On the GameShell: patch loaded, the controller's own address,
   a scan found 8 devices.
 - **The final release build** (nothing from ClockworkOS, Bluetooth on, no
   SSH key) tried end to end the same way: Bluetooth up at first boot (7

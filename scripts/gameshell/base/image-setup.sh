@@ -46,7 +46,7 @@ echo 'options g_ether host_addr=02:50:53:50:00:01 dev_addr=02:50:53:50:00:02' > 
 # settings file by the device tree's compatible)
 mkdir -p "$R/usr/lib/firmware/updates/brcm"
 cp "$IN/fw/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt" "$R/usr/lib/firmware/updates/brcm/"
-# its Bluetooth firmware patch (Ampak's, as ClockworkOS had it; hci_bcm asks for this name)
+# its Bluetooth firmware patch (ClockworkPi's, fetched by build-image.sh; hci_bcm asks for this name)
 cp "$IN/fw/BCM4343A0.hcd" "$R/usr/lib/firmware/updates/brcm/"
 # locale
 sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' "$R/etc/locale.gen"

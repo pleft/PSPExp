@@ -11,8 +11,8 @@
 #       -> build/gameshell-base/pspexp-gameshell.img  (write it to a card)
 #
 # Nothing is taken from a ClockworkOS image: the Wi-Fi chip's firmware is Debian's;
-# its settings (Ampak's AP6212 NVRAM) and its Bluetooth patch (Ampak's) are in
-# this folder.
+# its settings (Ampak's AP6212 NVRAM) are in this folder, and its Bluetooth patch
+# is fetched from ClockworkPi's own repository (github.com/clockworkpi/bluetooth).
 # Options (for your own card; they never go into the repository):
 #   --ssh-key FILE          allow this public key for cpi (default: none)
 #   --wifi-from USER@HOST   copy the Wi-Fi connections of a running GameShell
@@ -37,7 +37,15 @@ IN="$OUT/in"; rm -rf "$IN"; mkdir -p "$IN/fw" "$IN/wifi"
 # U-Boot (written at 8 KiB on the card) and the Wi-Fi chip's settings
 cp "$OUT/uboot/u-boot-sunxi-with-spl.bin" "$IN/uboot.bin"
 echo "U-Boot: $(cat "$OUT/uboot/version")"
-cp "$ROOT/scripts/gameshell/base/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt" "$ROOT/scripts/gameshell/base/BCM4343A0.hcd" "$IN/fw/"
+cp "$ROOT/scripts/gameshell/base/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt" "$IN/fw/"
+# its Bluetooth firmware patch: ClockworkPi publishes it (github.com/clockworkpi/bluetooth,
+# GPL-3.0); fetched once, pinned to a commit and checked
+BT_URL=https://raw.githubusercontent.com/clockworkpi/bluetooth/52feb7abb39a8e8b71b2a593851638c76a3e59c1/bcm43438a0.hcd
+BT_SHA=58b8142caddda4559fbc400d923ee44e7dc021dc92c3cacfb4464c6a729d6d2d
+BT="$OUT/cache/bcm43438a0.hcd"; mkdir -p "$OUT/cache"
+[ -s "$BT" ] || curl -fsSL -o "$BT" "$BT_URL" || { echo "cannot fetch $BT_URL" >&2; exit 1; }
+[ "$(shasum -a 256 "$BT" | cut -d' ' -f1)" = "$BT_SHA" ] || { rm -f "$BT"; echo "$BT_URL: checksum differs" >&2; exit 1; }
+cp "$BT" "$IN/fw/BCM4343A0.hcd"
 [ -n "$SSHKEY" ] && cp "$SSHKEY" "$IN/authorized_keys"
 # Wi-Fi connections: fetched from a running GameShell and kept in
 # build/gameshell-base/local (never in the repository), reused when it is off
