@@ -431,6 +431,11 @@ back could wedge both sides).
 
 ### 4.3 The card image and the first boot
 
+> **Superseded (2026-09-29):** the ClockworkOS image and its clean-up are gone.
+> The card image is the minimal one of `scripts/gameshell/base/build-image.sh`
+> (docs/Package_Manager.md §8): no bundled packages, and a first boot that only
+> grows the card. What follows is how it was.
+
 `scripts/gameshell/prep-stock-image.sh` (and `install-gameshell.sh` for a running
 GameShell) stage every built package into `/opt/pspexp/preinstall` and
 enable `pspexp-firstboot.service`, which runs once before the login shell

@@ -194,19 +194,15 @@ PSP draws itself (docs/Launcher_and_Boards.md).
   apt (Apps > Packages, or `pspexp-pkg install ID` on the GameShell); each one's
   launcher files go to `/opt/pspexp/apps`, and the launcher picks them up by
   itself (docs/Package_Manager.md).
-- `scripts/gameshell/prep-stock-image.sh <image> [--wifi]` prepares a card image:
-  the tools, the console service with the launcher, udev and sudoers rules,
-  audio, the Wi-Fi mode switch, and every built package. On its first boot
-  the card removes ClockworkOS's own launcher and games
-  (`scripts/gameshell/clean-stock.sh`) and installs the packages
-  (`pspexp-firstboot`, logged to /var/log/pspexp-firstboot.log).
+- **The card image** replaces ClockworkOS: `scripts/gameshell/base/build-kernel.sh`
+  and `build-image.sh STOCK.img` build a minimal Debian 13 with mainline
+  Linux 6.18 and our own device tree for the board, and PSPExp from its apt
+  repository; the console starts at boot, so a PSP running PSPExp connects
+  with nothing to set up. No games: they come from Apps > Packages
+  (docs/Package_Manager.md §8). Of ClockworkOS only its U-Boot and the Wi-Fi
+  firmware and calibration are still taken, from its image file.
 - `scripts/gameshell/install.sh` puts the same files on a running GameShell
-  over SSH (the list is `scripts/gameshell/stage.sh`); a reboot then runs the
-  same first boot.
-- `scripts/gameshell/base/build-kernel.sh` and `build-image.sh STOCK.img`
-  build a card on a fresh base instead: Debian 13 and mainline Linux 6.18
-  with our own device tree for the board, nothing of ClockworkOS but its
-  U-Boot and Wi-Fi firmware (docs/Launcher_and_Boards.md, section 5).
+  over SSH (the list is `scripts/gameshell/stage.sh`).
 
 With the PSP on the OTG port the USB link measures 24–26 MB/s, the sprite
 demo runs at 60 fps up to 15,000 sprites, and Freedoom and OpenTyrian play

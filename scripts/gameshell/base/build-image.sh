@@ -65,8 +65,7 @@ echo "$REPO_URL" > "$IN/pkg/repo-url"
 gpg --dearmor < "$ROOT/scripts/packages/pspexp-archive-key.asc" > "$IN/pkg/keyring.gpg"
 cp "$ROOT/scripts/board/pspexp-apt-setup" "$ROOT/scripts/board/pspexp-pkg-apt" "$IN/pkg/"
 . "$ROOT/scripts/gameshell/stage.sh"
-gs_fetch() { : > "$2"; }
-GS_CORE=apt GS_PREINSTALL=0 gs_stage "$IN/stage"
+GS_CORE=apt gs_stage "$IN/stage"
 cp "$ROOT/scripts/gameshell/base/image-setup.sh" "$IN/"
 
 # a .local repository name resolves here (mDNS), not in the container: pass its address

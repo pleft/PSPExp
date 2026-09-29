@@ -1,9 +1,9 @@
-# Everything PSPExp installs on a ClockworkPi GameShell, in one place, for
-# both installers: scripts/gameshell/prep-stock-image.sh (writes it into an image
-# before flashing) and scripts/gameshell/install.sh (a running GameShell over
-# SSH). Sourced, not run. The caller defines
-#   gs_fetch PATH OUT   copy the target's PATH to local OUT (empty if missing)
-# and calls gs_stage DIR, which fills DIR/root/<path> with the files and
+# The GameShell's own PSPExp files, in one place, for both installers: the
+# card image (scripts/gameshell/base/build-image.sh) and scripts/gameshell/install.sh
+# (a running GameShell over SSH). With GS_CORE=apt, PSPExp itself is the
+# pspexp-core package and this is only what is the GameShell's own; otherwise
+# (no package repository) the tools too, into /usr/local. Sourced, not run.
+# The caller calls gs_stage DIR, which fills DIR/root/<path> with the files and
 # writes DIR/manifest, one entry per line, in order:
 #   dir  MODE UID GID PATH      a directory (created when missing)
 #   file MODE UID GID PATH      DIR/root/PATH installed at PATH
@@ -44,19 +44,12 @@ gs_stage() {
 	gs_dir 0755 1000 1000 /opt/pspexp/apps
 	gs_dir 0755 1000 1000 /opt/pspexp/systems
 	[ "${GS_CORE:-}" = apt ] || gs_copy "$ROOT/scripts/board/pspexp-pkg" 0755 0 0 /usr/local/bin/pspexp-pkg
-	# the card's first boot: the stock launcher and games removed, the bundled
-	# packages (every build/gameshell/pkg/*.tar.gz) installed; once
-	gs_dir 0755 0 0 /usr/local/lib/pspexp
-	gs_copy "$G/clean-stock.sh" 0755 0 0 /usr/local/lib/pspexp/clean-stock.sh
+	# the card's first boot: the root partition grown to the card; once
+	gs_rm /usr/local/lib/pspexp/clean-stock.sh   # ClockworkOS's clean-up, gone with ClockworkOS
+	gs_rm /opt/pspexp/preinstall                  # bundled archives, gone with them
 	gs_copy "$G/pspexp-firstboot" 0755 0 0 /usr/local/bin/pspexp-firstboot
 	gs_copy "$G/pspexp-firstboot.service" 0644 0 0 /etc/systemd/system/pspexp-firstboot.service
 	gs_link /etc/systemd/system/pspexp-firstboot.service /etc/systemd/system/multi-user.target.wants/pspexp-firstboot.service
-	if [ "${GS_PREINSTALL:-1}" = 1 ]; then
-		gs_dir 0755 1000 1000 /opt/pspexp/preinstall
-		for p in "$B"/pkg/*.tar.gz; do
-			[ -f "$p" ] && gs_copy "$p" 0644 1000 1000 "/opt/pspexp/preinstall/$(basename "$p")"
-		done
-	fi
 
 	# the launcher's fonts and icons (Inter, Lucide: open licences, kept beside
 	# them) and the commands its System page may run without a password
@@ -128,32 +121,8 @@ A
 	gs_copy "$G/hostapd.conf" 0600 0 0 /etc/pspexp/hostapd.conf
 	gs_copy "$G/pspexp-wifi-mode.service" 0644 0 0 /etc/systemd/system/pspexp-wifi-mode.service
 	gs_link /etc/systemd/system/pspexp-wifi-mode.service /etc/systemd/system/multi-user.target.wants/pspexp-wifi-mode.service
-	gs_fetch /etc/network/interfaces.d/usb "$S/usb.orig"
-	if [ -s "$S/usb.orig" ] && ! grep -q PSPExp "$S/usb.orig"; then
-		# kept outside interfaces.d: ifupdown reads every file there, and the
-		# stock stanza's "auto usb0" raced ours at boot
-		gs_copy "$S/usb.orig" 0644 0 0 /etc/pspexp/usb.interfaces.stock
-	fi
 	gs_rm /etc/network/interfaces.d/usb.pspexp-bak
 	gs_copy "$G/usb0.interfaces" 0644 0 0 /etc/network/interfaces.d/usb
-
-	# The launcher's X session: fbdev (fbturbo is not installed, and the
-	# modesetting fallback never draws into /dev/fb0, which the mirror reads);
-	# without ~/.lima it uses that config. Its start in ~/.bashrc skips the
-	# PSP console's own login shell (PSPEXP_TERM=1), which would otherwise
-	# take the one-time autologin flag and try to run X on a pseudo-terminal.
-	gs_fetch /home/cpi/launchergo/.xorg.conf "$S/xorg.conf"
-	if [ -s "$S/xorg.conf" ] && grep -q fbturbo "$S/xorg.conf"; then
-		sed 's/Driver *"fbturbo"/Driver          "fbdev"/' "$S/xorg.conf" > "$S/xorg.conf.new"
-		gs_copy "$S/xorg.conf.new" 0644 1000 1000 /home/cpi/launchergo/.xorg.conf
-	fi
-	gs_rm /home/cpi/.lima
-	gs_fetch /home/cpi/.bashrc "$S/bashrc"
-	if [ -s "$S/bashrc" ] && ! grep -q PSPEXP_TERM "$S/bashrc"; then
-		sed 's|^if \[ -f ~/launchergo/.cpirc \]; then|# PSPExp: the PSP console'"'"'s shell (PSPEXP_TERM=1) must not start the X session\
-if [ -f ~/launchergo/.cpirc ] \&\& [ -z "$PSPEXP_TERM" ]; then|' "$S/bashrc" > "$S/bashrc.new"
-		gs_copy "$S/bashrc.new" 0644 1000 1000 /home/cpi/.bashrc
-	fi
 }
 
 gs_dir()  { echo "dir $1 $2 $3 $4" >> "$M"; }

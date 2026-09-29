@@ -1,25 +1,20 @@
 #!/bin/sh
 # The first boot of a PSPExp GameShell card (pspexp-firstboot.service, once):
-# removes ClockworkOS's own launcher, games and apps (clean-stock.sh), then
-# installs every package in /opt/pspexp/preinstall. /etc/pspexp/firstboot-done
-# marks it done; delete that file to run it again. Log: /var/log/pspexp-firstboot.log
+# the card image is smaller than the card, so the root partition grows to fill
+# it. /etc/pspexp/firstboot-done marks it done; delete that file to run it
+# again. Log: /var/log/pspexp-firstboot.log
 DONE=/etc/pspexp/firstboot-done
 [ -f "$DONE" ] && exit 0
 exec >>/var/log/pspexp-firstboot.log 2>&1
 echo "== $(date): PSPExp first boot"
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games
-# a card image is smaller than the card: grow the root partition to fill it
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 src=$(findmnt -no SOURCE /)
 case "$src" in
 /dev/mmcblk*p[0-9]*)
 	disk=${src%p*}; part=${src##*p}
 	if command -v growpart >/dev/null && growpart "$disk" "$part"; then resize2fs "$src"; fi ;;
 esac
-sh /usr/local/lib/pspexp/clean-stock.sh || echo "clean-stock failed: $?"
-for f in /opt/pspexp/preinstall/*.tar.gz; do
-	[ -f "$f" ] || continue
-	if su cpi -s /bin/sh -c "PATH=$PATH pspexp-pkg install '$f'"; then rm -f "$f"; else echo "not installed: $f"; fi
-done
+echo "free: $(df -h / | awk 'NR == 2 {print $4}')"
 mkdir -p /etc/pspexp
 date > "$DONE"
 echo "== done"

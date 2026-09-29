@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install or update PSPExp on a running ClockworkPi GameShell over SSH: the
-# same files as scripts/gameshell/prep-stock-image.sh puts on a card (the list is
+# same files as the card image (scripts/gameshell/base/build-image.sh) has (the list is
 # scripts/gameshell/stage.sh), then reloads systemd and udev and restarts
 # the PSP console. The Wi-Fi mode is not switched (see pspexp-wifi-mode).
 #   scripts/gameshell/build.sh
@@ -11,7 +11,6 @@
 # HOST defaults to cpi@gameshell (GAMESHELL= is still read, its old name);
 # cpi needs sudo without a password
 # (the GameShell OS default). Games and apps are packages: scripts/packages/pspexp-pkg-build.
-# Removing ClockworkOS's own launcher and games, once: scripts/gameshell/clean-stock.sh.
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GS="${HOST:-${GAMESHELL:-cpi@gameshell}}"
@@ -19,9 +18,6 @@ GS="${HOST:-${GAMESHELL:-cpi@gameshell}}"
 ssh -o ConnectTimeout=8 "$GS" true 2>/dev/null || { echo "cannot reach $GS over SSH (off, or not on the network?)" >&2; exit 1; }
 ssh -o ConnectTimeout=8 "$GS" 'sudo -n true' 2>/dev/null || { echo "cannot run sudo on $GS without a password" >&2; exit 1; }
 
-gs_fetch() { ssh "$GS" "cat '$1' 2>/dev/null" > "$2" || : ; }
-# after its first boot a GameShell gets packages with scripts/packages/pspexp-pkg-build, not the bundle
-ssh "$GS" 'test -f /etc/pspexp/firstboot-done' 2>/dev/null && export GS_PREINSTALL=0
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 
