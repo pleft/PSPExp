@@ -838,7 +838,8 @@ because boards differ.
     build, so it loads anywhere and resolves them from the board's SDL2.
   - **A runtime update from the GameShell:** a newer `pspexp-runtime`
     reached it through apt, its console offered System > Update the PSP,
-    and the update filled slot a while the PSP ran slot b.
+    and the update filled slot a while the PSP ran slot b; the next start
+    booted slot a and the runtime confirmed it. Step 6 is done.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.
