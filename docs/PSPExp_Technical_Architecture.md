@@ -980,7 +980,10 @@ Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications
 - network/storage services;
 - transparent or semi-transparent engine adapters;
 - additional transports;
-- additional presentation clients.
+- additional presentation clients;
+- **faster memory-stick copies over the link** (the FILE channel: file manager, `pspexp-ms`, runtime updates). Today 1.7–2.3 MB/s writing and 2.2–4.4 MB/s reading (4 MB, GameShell / Pi 400, 2026-09-29): every 64 KB piece is one request, and the PSP opens, writes and closes the file for each before the next is sent. Room: keep the file open for a copy, several requests in flight, larger pieces. Measure first how much of the time the stick itself is busy (its speed is the hard limit). Low priority: games live on the boards, so stick copies are occasional;
+- **the USB link's ceiling**, ≈ 24–26 MB/s either way on every host (Pi 400 USB 2 and USB 3 ports, MacBook), set by the PSP's pace (≈ 3 packets per 125 µs microframe of the 13 USB 2.0 allows). Measured 2026-09-29; the host keeps two transfers queued each way since then (small transfers from the PSP ~25 % faster). Left to try, none needed by today's games (3–13 % of the link): two queued requests each way on the PSP side (a few percent expected, if Sony's driver takes a second request); 256 KB receive requests (tried: the PSP hung at start, likely the USB driver's three buffers in kernel memory; 128 KB, or buffers allocated rather than static, might work); a second bulk endpoint pair, in case the limit is per endpoint;
+- **fewer bytes for full-colour content**, should it come (whole 32-bit frames at 60 fps need ≈ 31 MB/s, over the ceiling): DXT textures, which the GE decodes itself (4x smaller, lossy), or LZ4 decoded on the PSP. Measured ratios on real traffic (2026-09-29): Doom 1.35x, OpenTyrian 2x, NES 7x, SNES 9x.
 
 ---
 
