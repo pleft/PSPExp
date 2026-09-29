@@ -783,10 +783,20 @@ because boards differ.
     three starts without a connection, a stale `VERSION` over a damaged
     file, an `active.new` naming that slot, and maintenance mode. Holding
     L can't be scripted in the emulator: it's a real-PSP check.
-  - **On the real PSP:** the slotted loader was installed once by the
-    manual route; it booted slot a and the runtime confirmed it. Still to
-    do with the PSP at hand: an update over the link to slot b, and a
-    fallback.
+  - **On the real PSP (PSP-1000 on the Pi 400, over USB):** the slotted
+    loader was installed once by the manual route and booted slot a. Then:
+    - the Pi upgraded `pspexp-core` and `pspexp-runtime` through apt; its
+      console offered System > Update the PSP, which filled slot b; the next
+      start booted slot b and the runtime confirmed it;
+    - holding L at start booted slot a;
+    - one byte changed in slot b's runtime under its old `VERSION`: the
+      loader refused slot b, booted slot a, wrote `from=b to=a reason=not
+      valid`, and the console reported it and offered the update again,
+      which repaired slot b.
+  - **Found on the PSP:** once the update was done, "Update the PSP" left
+    the System list and the cursor slid onto Restart; the launcher now keeps
+    the cursor on the entry above one that disappears. The notice was too
+    long for the screen and is shorter.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.

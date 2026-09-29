@@ -2526,7 +2526,7 @@ static int psp_runtime_update(const char *dir, char *msg, size_t n)
 {
     char err[300];
     int r = pspexp_slots_update(ctx, dir && *dir ? dir : runtime_dir(), getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
-    if (r == 0) snprintf(msg, n, "PSP update installed: leave PSPExp on the PSP (hold HOME) and start it again");
+    if (r == 0) snprintf(msg, n, "PSP updated: quit PSPExp on the PSP and start it again");
     else snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
     if (g_launcher_on) { launcher_notice(r == 0 ? "download" : "circle-x", msg); if (r == 0) launcher_set_psp_update(0); }
     return r;
@@ -2547,7 +2547,7 @@ static void psp_slots_check(void)
     }
     runtime_version(have, sizeof(have));
     if (!have[0] || !s.current) return;
-    if (s.pending) { if (g_launcher_on) launcher_notice("download", "PSP update installed: leave PSPExp on the PSP and start it again"); return; }
+    if (s.pending) { if (g_launcher_on) launcher_notice("download", "PSP updated: quit PSPExp on the PSP and start it again"); return; }
     if (!strcmp(have, s.version[s.current - 'a'])) { if (g_launcher_on) launcher_set_psp_update(0); return; }
     if (pspexp_link_maintenance(ctx)) { psp_runtime_update(NULL, msg, sizeof(msg)); return; }   /* nothing else works anyway */
     fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: System > Update the PSP\n", s.version[s.current - 'a'], have);

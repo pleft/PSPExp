@@ -216,7 +216,11 @@ static void cats_build(void)
     c = &g_cat[g_cur];
     c->sel = keep_sel < c->n ? keep_sel : (c->n ? c->n - 1 : 0);
     c->scroll = keep_scroll;
-    for (i = 0; i < c->n; i++) if (keep_id[0] && !strcmp(c->it[i]->id, keep_id)) c->sel = i;
+    if (keep_id[0]) {   /* the same entry; when it's gone (Update the PSP, once done), the one above it, never whatever slid into its place (Restart) */
+        int found = 0;
+        for (i = 0; i < c->n; i++) if (!strcmp(c->it[i]->id, keep_id)) { c->sel = i; found = 1; }
+        if (!found && keep_sel > 0 && keep_sel - 1 < c->n) c->sel = keep_sel - 1;
+    }
 }
 
 static LEntry *cur_entry(void)
