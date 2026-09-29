@@ -7,7 +7,7 @@ title=Flight of the Amazon Queen
 description=A 1995 jungle adventure with a pilot and a mad scientist, freeware since 2004
 category=game
 license=Freeware (John Passfield, Steven Stamatiadis); ScummVM is GPL-3.0
-version=1
+version=2
 
 [debian]
 apt=scummvm flight-of-the-amazon-queen

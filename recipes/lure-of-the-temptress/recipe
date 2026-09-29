@@ -7,7 +7,7 @@ title=Lure of the Temptress
 description=Revolution's 1992 fantasy adventure, freeware since 2003
 category=game
 license=Freeware (Revolution Software); ScummVM is GPL-3.0
-version=1
+version=2
 
 [debian]
 apt=scummvm lure-of-the-temptress

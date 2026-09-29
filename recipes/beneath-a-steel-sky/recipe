@@ -7,7 +7,7 @@ title=Beneath a Steel Sky
 description=Revolution's 1994 cyberpunk adventure, freeware since 2003
 category=game
 license=Freeware (Revolution Software); ScummVM is GPL-3.0
-version=1
+version=2
 
 [debian]
 apt=scummvm beneath-a-steel-sky
