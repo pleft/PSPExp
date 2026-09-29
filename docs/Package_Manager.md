@@ -642,6 +642,13 @@ It stays as built, with these changes:
   charger (REG 32H bit 3, as the datasheet has it); the boot script and the
   device tree light the green one (PB7). Booted on a GameShell: the green
   LED on, the PSP connected.
+- **The release build, as a user gets it** (no SSH key, no Wi-Fi), tried end
+  to end on a GameShell (2026-09-29): the PSP connected at first boot, green
+  LED on; Wi-Fi joined and the time zone chosen from the PSP; the default
+  password let an SSH key in; the Wi-Fi password never reached the log; all
+  nine recipes installed through apt from a card with no apt lists (900 MB
+  used after); the real-PSP suite passed 38 of 38, the Packages app removing
+  and reinstalling Cave Story itself, every system at full speed.
 - **Still taken from the ClockworkOS image file:** the Wi-Fi chip's
   calibration file (Debian has the chip's firmware, in another version, but
   no calibration for this board) and the Bluetooth firmware PSPExp doesn't
