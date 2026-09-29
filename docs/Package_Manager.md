@@ -796,7 +796,9 @@ because boards differ.
   - **Found on the PSP:** once the update was done, "Update the PSP" left
     the System list and the cursor slid onto Restart; the launcher now keeps
     the cursor on the entry above one that disappears. The notice was too
-    long for the screen and is shorter.
+    long for the screen and is shorter. Each new console reported the same
+    fallback again: the console now removes `fallback` from the stick once
+    it has reported it (its log keeps the record).
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.

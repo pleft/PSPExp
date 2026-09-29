@@ -38,7 +38,8 @@ ms0:/PSP/GAME/PSPExp/
   slot-a/, slot-b/ each a whole runtime: pspexp_runtime.prx, pspexp_usb.prx, VERSION
   active           slot=a|b, tries=N (starts not yet confirmed by a connection)
   active.new       a finished update: the loader makes it `active` at the next start
-  fallback         why the loader last booted the other slot (from=, to=, reason=)
+  fallback         why the loader last booted the other slot (from=, to=, reason=);
+                   the console reports it, logs it and removes it
 ```
 
 - A slot boots only when every file matches its size and SHA-256 in

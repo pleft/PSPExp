@@ -2544,6 +2544,11 @@ static void psp_slots_check(void)
         fprintf(stderr, "[pspexp-term] PSP runtime fallback: %s\n", s.fallback);
         if (g_launcher_on) launcher_notice("circle-x", strstr(s.fallback, "not valid") ? "The PSP's new runtime did not check out; the previous one is running"
                                                                                       : "The PSP's new runtime did not start; the previous one is running");
+        {   /* reported (this log keeps it): gone from the stick, so the next console doesn't report it again */
+            char path[200];
+            snprintf(path, sizeof(path), "%s/fallback", s.dir);
+            pspexp_fs_remove(ctx, path);
+        }
     }
     runtime_version(have, sizeof(have));
     if (!have[0] || !s.current) return;
