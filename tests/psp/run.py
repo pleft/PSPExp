@@ -30,13 +30,13 @@ class Fail(Exception):
 class Target:
     """The board (over ssh, one shared connection) or this machine."""
 
-    def __init__(self, host, out):
+    def __init__(self, host, out, known_hosts=None):
         self.host, self.out = host, out
         self.ssh = []
         if host:
             sock = "/tmp/pspexp-it-ssh-%d" % os.getpid()
             self.ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ControlMaster=auto", "-o", "ControlPath=" + sock,
-                        "-o", "ControlPersist=120", host]
+                        "-o", "ControlPersist=120"] + (["-o", "UserKnownHostsFile=" + known_hosts] if known_hosts else []) + [host]
         self.term = "pspexp-term" if host else os.path.join(ROOT, "build/host/pspexp-term")
 
     def sh(self, cmd, check=True, timeout=120):
@@ -601,6 +601,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", help="user@board whose console drives the PSP")
     ap.add_argument("--local", action="store_true", help="a console on this machine")
+    ap.add_argument("--known-hosts", help="an SSH known-hosts file of its own (a freshly flashed card: new host keys)")
     ap.add_argument("--term", help="the board's pspexp-term when it isn't on the PATH (the Omega: /mnt/mmcblk0p1/pspexp/pspexp-term)")
     ap.add_argument("--min-fps", type=int, default=0, help="games: also require this frame rate (off: rates are only recorded)")
     ap.add_argument("--store-writes", action="store_true", help="apps: the Packages app also removes and reinstalls the smallest package")
@@ -614,7 +615,7 @@ def main():
     want = a.suites or [n for n, _ in SUITES]
     out = os.path.join(ROOT, "build/psp-tests", datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     os.makedirs(out)
-    tg = Target(a.host, out)
+    tg = Target(a.host, out, a.known_hosts)
     if a.term: tg.term = a.term
     r = Run(tg, out)
     ok, lines = r.t.ctl("ping")

@@ -114,7 +114,8 @@ set -e
 U=$(id -un); H=$HOME
 sudo install -d -m 0755 /etc/pspexp
 sudo install -d -m 0755 -o $U -g $U /opt/pspexp /opt/pspexp/apps /opt/pspexp/systems
-echo "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli" | sudo tee /etc/sudoers.d/pspexp >/dev/null
+# nmcli joins Wi-Fi with the password among its arguments: sudo must not log those
+printf '%s\n' "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli" 'Defaults!/usr/bin/nmcli !log_allowed' | sudo tee /etc/sudoers.d/pspexp >/dev/null
 sudo chmod 0440 /etc/sudoers.d/pspexp
 echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"054c\", ATTR{idProduct}==\"01ca\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
 sudo udevadm control --reload-rules || true

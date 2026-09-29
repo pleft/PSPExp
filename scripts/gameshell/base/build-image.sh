@@ -1,10 +1,10 @@
 #!/bin/sh
-# The PSPExp GameShell card image on a fresh base: Debian 13 (armhf), the
-# mainline kernel from build-kernel.sh, the board's own U-Boot, and PSPExp
-# with its packages. Built on this machine in containers (OrbStack/Docker):
+# The PSPExp GameShell card image: a minimal Debian 13 (armhf), the mainline
+# kernel from build-kernel.sh, the board's own U-Boot, and PSPExp from its apt
+# repository (pspexp-core). No games: the user adds them in Apps > Packages
+# (docs/Package_Manager.md §8). Built on this machine in containers (OrbStack/Docker):
 #
-#   scripts/gameshell/build.sh                   (the tools and the SDL layer)
-#   scripts/packages/pspexp-pkg-build build freedoom opentyrian     (the packages to bundle)
+#   scripts/gameshell/build.sh                   (the GameShell's own files are staged from the tree)
 #   scripts/gameshell/base/build-kernel.sh
 #   scripts/gameshell/base/build-image.sh STOCK.img [options]
 #       -> build/gameshell-base/pspexp-gameshell.img  (write it to a card)
@@ -14,7 +14,9 @@
 # Options (for your own card; they never go into the repository):
 #   --ssh-key FILE          allow this public key for cpi (default: none)
 #   --wifi-from USER@HOST   copy the Wi-Fi connections of a running GameShell
-# Login: cpi / cpi (change it), sudo without a password as on ClockworkOS.
+# The package repository's address: $PSPEXP_REPO_URL or ~/.pspexp/repo-url (a local
+# setting; the card's apt source points there). Login: cpi / cpi (change it),
+# sudo without a password as on ClockworkOS.
 set -e
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OUT="$ROOT/build/gameshell-base"
@@ -54,13 +56,27 @@ if [ -n "$WIFI_FROM" ]; then
 	rm -f "$IN/wifi.tar"
 	cp "$LOCAL"/*.nmconnection "$IN/wifi/" 2>/dev/null || echo "no Wi-Fi connection: the card will use USB networking only" >&2
 fi
-# PSPExp: the same file list as every GameShell install (with the built packages)
+# PSPExp: pspexp-core from the repository, then the GameShell's own files, the
+# same list as every GameShell install (scripts/gameshell/stage.sh, GS_CORE=apt)
+REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+[ -n "$REPO_URL" ] || { echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url)" >&2; exit 1; }
+mkdir -p "$IN/pkg"
+echo "$REPO_URL" > "$IN/pkg/repo-url"
+gpg --dearmor < "$ROOT/scripts/packages/pspexp-archive-key.asc" > "$IN/pkg/keyring.gpg"
+cp "$ROOT/scripts/board/pspexp-apt-setup" "$ROOT/scripts/board/pspexp-pkg-apt" "$IN/pkg/"
 . "$ROOT/scripts/gameshell/stage.sh"
 gs_fetch() { : > "$2"; }
-gs_stage "$IN/stage"
+GS_CORE=apt GS_PREINSTALL=0 gs_stage "$IN/stage"
 cp "$ROOT/scripts/gameshell/base/image-setup.sh" "$IN/"
 
+# a .local repository name resolves here (mDNS), not in the container: pass its address
+RH=$(echo "$REPO_URL" | sed -E 's#^[a-z]+://([^:/]+).*#\1#'); ADDHOST=""
+case "$RH" in *.local)
+	RIP=$(dscacheutil -q host -a name "$RH" 2>/dev/null | awk '/^ip_address/ {print $2; exit}')
+	[ -n "$RIP" ] || { echo "cannot resolve $RH" >&2; exit 1; }
+	ADDHOST="--add-host=$RH:$RIP" ;;
+esac
 docker volume create pspexp-imgbuild >/dev/null
-docker run --rm --privileged --platform linux/arm64 \
+docker run --rm --privileged --platform linux/arm64 $ADDHOST \
 	-v pspexp-imgbuild:/work -v "$OUT":/out debian:trixie sh /out/in/image-setup.sh
 ls -la "$OUT/pspexp-gameshell.img"

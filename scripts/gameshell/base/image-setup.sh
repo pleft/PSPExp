@@ -1,8 +1,10 @@
 #!/bin/sh
 # Runs inside the image build container (build-image.sh): /out/in holds the
 # inputs, /out/kernel the kernel, /work is scratch. Builds the Debian 13 armhf
-# root file system, configures it for the GameShell, applies the PSPExp stage,
-# and assembles /out/pspexp-gameshell.img.
+# root file system (as small as the board allows), configures it for the
+# GameShell, installs PSPExp from its apt repository (pspexp-core; games and
+# emulators are for the user to add through Apps > Packages), applies the
+# GameShell's own files, and assembles /out/pspexp-gameshell.img.
 set -e
 export DEBIAN_FRONTEND=noninteractive
 IN=/out/in K=/out/kernel W=/work
@@ -10,9 +12,13 @@ apt-get -qq update && apt-get -qq install -y --no-install-recommends \
 	mmdebstrap arch-test debian-archive-keyring dosfstools mtools e2fsprogs fdisk u-boot-tools ca-certificates >/dev/null
 R=$W/rootfs
 rm -rf "$R"
+# only what the board and PSPExp need: Wi-Fi (NetworkManager; hostapd for the
+# PSP's own access point), the USB network (ifupdown, dhclient), SSH and .local
+# names, the clock, growing the card at first boot, and a small editor for
+# the terminal; PSPExp itself and its dependencies come from apt below
 PKGS="systemd-sysv,udev,dbus,openssh-server,sudo,network-manager,wpasupplicant,hostapd,iw,wireless-regdb,\
-firmware-brcm80211,libsdl2-2.0-0,chocolate-doom,curl,ca-certificates,avahi-daemon,libnss-mdns,ifupdown,isc-dhcp-client,\
-cloud-guest-utils,fdisk,alsa-utils,iproute2,iputils-ping,iptables,kmod,nano,htop,unzip,less,procps,tzdata,systemd-timesyncd,locales,bash-completion"
+firmware-brcm80211,curl,ca-certificates,gpgv,avahi-daemon,libnss-mdns,ifupdown,isc-dhcp-client,\
+cloud-guest-utils,fdisk,iproute2,kmod,nano,less,procps,tzdata,systemd-timesyncd,locales"
 mmdebstrap --arch=armhf --variant=minbase --mode=root --include="$PKGS" \
 	--components="main contrib non-free-firmware" trixie "$R" \
 	"deb http://deb.debian.org/debian trixie main contrib non-free-firmware" \
@@ -57,7 +63,22 @@ for c in "$IN"/wifi/*.nmconnection; do
 	[ -f "$c" ] && install -m 600 "$c" "$R/etc/NetworkManager/system-connections/"
 done
 
-# ---- PSPExp: the staged file list -------------------------------------------------
+# ---- PSPExp from its apt repository (docs/Package_Manager.md §8) ---------------------
+# the board set up for the repository (kind, key, source, root helper, sudo rule,
+# the signed catalogue), then pspexp-core and what it needs, as on a running
+# GameShell (scripts/gameshell/install.sh)
+cp /etc/resolv.conf "$R/etc/resolv.conf"
+cp "$R/etc/hosts" $W/hosts.card; cp /etc/hosts "$R/etc/hosts"   # the build's (a .local repository's address), put back below
+mount -t proc proc "$R/proc"
+cp "$IN/pkg/keyring.gpg" "$IN/pkg/pspexp-apt-setup" "$IN/pkg/pspexp-pkg-apt" "$R/tmp/"
+chroot "$R" sh /tmp/pspexp-apt-setup gameshell cpi "$(cat "$IN/pkg/repo-url")" /tmp/keyring.gpg /tmp/pspexp-pkg-apt
+chroot "$R" apt-get -qq install -y --no-install-recommends pspexp-core >/dev/null
+chroot "$R" dpkg-query -W pspexp-core pspexp-runtime
+rm -f "$R"/tmp/keyring.gpg "$R"/tmp/pspexp-apt-setup "$R"/tmp/pspexp-pkg-apt
+umount "$R/proc"
+rm -f "$R/etc/resolv.conf"; cp $W/hosts.card "$R/etc/hosts"
+
+# ---- PSPExp: the GameShell's own files (the staged list) --------------------------
 while read -r kind a b c d; do
 	case $kind in
 	dir)  install -d -m "$a" -o "$b" -g "$c" "$R$d" ;;

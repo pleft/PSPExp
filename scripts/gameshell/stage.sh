@@ -67,7 +67,9 @@ gs_stage() {
 			gs_copy "$ROOT/tools/pspexp-term/assets/$f" 0644 0 0 "/usr/local/share/pspexp/launcher/$f"
 		done
 	fi
-	echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli' > "$S/pspexp.sudoers"
+	# nmcli joins Wi-Fi with the password among its arguments: sudo must not log those
+	{ echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli'
+	  echo 'Defaults!/usr/bin/nmcli !log_allowed'; } > "$S/pspexp.sudoers"
 	gs_copy "$S/pspexp.sudoers" 0440 0 0 /etc/sudoers.d/pspexp
 
 	# the console at boot: the PSPExp launcher as the home view, showing the

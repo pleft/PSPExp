@@ -622,6 +622,29 @@ It stays as built, with these changes:
   downloads go to the card, and free space shows in System Monitor and in
   Packages before installing.
 
+**Built (2026-09-29):** `scripts/gameshell/base/build-image.sh` makes it:
+- **Debian 13 armhf, as small as the board allows:** 254 packages
+  (ClockworkOS-era card: 359), 519 MB used; Chocolate Doom, htop, the sound
+  tools, ping, iptables, unzip and bash completion left out.
+- **PSPExp from its apt repository:** the build runs `pspexp-apt-setup
+  gameshell` in the image (key, source, root helper, sudo rule, the signed
+  catalogue) and installs `pspexp-core` (with `pspexp-runtime`); the
+  GameShell's own files come from `stage.sh` with `GS_CORE=apt`. The console
+  service is enabled: a PSP running PSPExp connects on USB, or on the
+  GameShell's own access point, with nothing to set up.
+- **Still taken from the ClockworkOS image file:** its U-Boot and the Wi-Fi
+  chip's firmware and calibration file. U-Boot must be built from source
+  before the image is published (a GPL binary without its source can't be
+  passed on), and the calibration file's terms checked.
+- **Tried on a GameShell:** first boot grew the card and finished; the PSP
+  connected and got its clock; Wi-Fi joined from System > Wi-Fi network;
+  all nine recipes installed through apt (903 MB used after).
+- **Found on it:** the image ships no apt lists, so the first install found
+  nothing; the root helper now fetches them when missing. The launcher's
+  Wi-Fi join passed the password to `nmcli` as an argument, which `sudo`
+  logged to the journal: the sudo rule now keeps `nmcli` out of the log
+  (`Defaults!/usr/bin/nmcli !log_allowed`).
+
 ## 9. The Omega2+
 
 OpenWrt has none of these programs and the Omega has no compiler.
