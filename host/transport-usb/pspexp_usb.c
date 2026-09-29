@@ -38,7 +38,21 @@ static libusb_context *shared_context(char *err, size_t errlen)
     return g_ctx;
 }
 
-typedef struct Usb {
+/* PSPEXP_USB_DEPTH=N (default 2, at most 8): N transfers queued each way
+ * (libusb's async API), so the PSP never waits for this side to submit the next
+ * one: small transfers from the PSP ~25% faster (4 KB: 12.5 -> 15.7 MB/s); 4
+ * gains nothing over 2. 1: one blocking transfer at a time, as before. */
+#define MAX_DEPTH 8
+
+typedef struct Usb Usb;
+typedef struct Slot {
+    Usb *u;
+    struct libusb_transfer *x;
+    uint8_t *buf;
+    volatile int busy;
+} Slot;
+
+struct Usb {
     PspExpTransport t;
     libusb_context *ctx;   /* the shared context, not owned */
     libusb_device_handle *h;
@@ -54,7 +68,11 @@ typedef struct Usb {
     Chunk *qhead, *qtail;
     size_t queued;
     PspExpUsbStats st;
-} Usb;
+    int depth;                    /* transfers queued each way (1: blocking) */
+    Slot out[MAX_DEPTH], in[MAX_DEPTH];
+    int out_next;
+    volatile int in_live;         /* IN transfers still submitted */
+};
 
 static const uint8_t SYNC[PSPEXP_USB_SYNC_LEN] = PSPEXP_USB_SYNC_BYTES;
 
@@ -85,6 +103,53 @@ static int bulk_out(Usb *u, const uint8_t *data, int len)
     return 0;
 }
 
+static void mark_dead(Usb *u)
+{
+    u->dead = 1;
+    pthread_mutex_lock(&u->mu);
+    pthread_cond_broadcast(&u->cv);
+    pthread_mutex_unlock(&u->mu);
+}
+
+static void LIBUSB_CALL out_done(struct libusb_transfer *x)
+{
+    Slot *s = (Slot *)x->user_data;
+    Usb *u = s->u;
+    if (x->status == LIBUSB_TRANSFER_COMPLETED && x->actual_length == x->length) {
+        u->st.bytes_sent += (uint64_t)x->actual_length;
+        u->st.transfers_out++;
+    } else {
+        if (u->verbose) fprintf(stderr, "usb: bulk out failed: status %d\n", x->status);
+        u->dead = 1;
+    }
+    pthread_mutex_lock(&u->mu);
+    s->busy = 0;
+    pthread_cond_broadcast(&u->cv);
+    pthread_mutex_unlock(&u->mu);
+}
+
+/* one piece into the next free OUT slot (waits while all are in flight); the
+ * reader thread runs libusb's events, so completions arrive there */
+static int out_async(Usb *u, const uint8_t *data, int len)
+{
+    Slot *s = &u->out[u->out_next];
+    pthread_mutex_lock(&u->mu);
+    while (s->busy && !u->dead) pthread_cond_wait(&u->cv, &u->mu);
+    pthread_mutex_unlock(&u->mu);
+    if (u->dead) return -1;
+    memcpy(s->buf, data, (size_t)len);
+    libusb_fill_bulk_transfer(s->x, u->h, PSPEXP_USB_EP_OUT, s->buf, len, out_done, s, (unsigned)u->timeout_ms);
+    s->busy = 1;
+    if (libusb_submit_transfer(s->x) != 0) { s->busy = 0; u->dead = 1; return -1; }
+    u->out_next = (u->out_next + 1) % u->depth;
+    return 0;
+}
+
+static int send_piece(Usb *u, const uint8_t *data, int len)
+{
+    return u->depth > 1 ? out_async(u, data, len) : bulk_out(u, data, len);
+}
+
 static int tr_send(PspExpTransport *t, const void *data, size_t len)
 {
     Usb *u = (Usb *)t->user;
@@ -95,10 +160,10 @@ static int tr_send(PspExpTransport *t, const void *data, size_t len)
         if (n < PSPEXP_USB_CHUNK && (n % (size_t)u->packet) == 0) {
             /* Ends on a packet boundary: split so both transfers end short. */
             u->st.splits++;
-            if (bulk_out(u, p, (int)(n - PSPEXP_USB_SPLIT)) < 0) return -1;
-            if (bulk_out(u, p + n - PSPEXP_USB_SPLIT, PSPEXP_USB_SPLIT) < 0) return -1;
+            if (send_piece(u, p, (int)(n - PSPEXP_USB_SPLIT)) < 0) return -1;
+            if (send_piece(u, p + n - PSPEXP_USB_SPLIT, PSPEXP_USB_SPLIT) < 0) return -1;
         } else {
-            if (bulk_out(u, p, (int)n) < 0) return -1;
+            if (send_piece(u, p, (int)n) < 0) return -1;
         }
         p += n; len -= n;
     }
@@ -119,10 +184,56 @@ static void queue_push(Usb *u, const uint8_t *data, size_t len)
     pthread_mutex_unlock(&u->mu);
 }
 
+static void LIBUSB_CALL in_done(struct libusb_transfer *x)
+{
+    Slot *s = (Slot *)x->user_data;
+    Usb *u = s->u;
+    if (x->status == LIBUSB_TRANSFER_COMPLETED) {
+        if (x->actual_length > 0) {
+            u->st.bytes_received += (uint64_t)x->actual_length;
+            u->st.transfers_in++;
+            queue_push(u, x->buffer, (size_t)x->actual_length);
+        }
+        if (!u->stop && !u->dead && libusb_submit_transfer(x) == 0) return;
+    } else if (x->status != LIBUSB_TRANSFER_CANCELLED) {
+        if (u->verbose) fprintf(stderr, "usb: bulk in failed: status %d\n", x->status);
+        mark_dead(u);
+    }
+    s->busy = 0;
+    u->in_live--;
+}
+
+/* depth > 1: every IN transfer queued at once, resubmitted as each completes
+ * (USB keeps their order); this thread runs libusb's events for both ways */
+static void reader_async(Usb *u)
+{
+    int i;
+    for (i = 0; i < u->depth; i++) {
+        Slot *s = &u->in[i];
+        libusb_fill_bulk_transfer(s->x, u->h, PSPEXP_USB_EP_IN, s->buf, PSPEXP_USB_CHUNK, in_done, s, 0);
+        if (libusb_submit_transfer(s->x) == 0) { s->busy = 1; u->in_live++; }
+    }
+    while (!u->stop && !u->dead) {
+        struct timeval tv = { 0, 200000 };
+        libusb_handle_events_timeout_completed(u->ctx, &tv, NULL);
+    }
+    for (i = 0; i < u->depth; i++) if (u->in[i].busy) libusb_cancel_transfer(u->in[i].x);
+    for (i = 0; i < u->depth; i++) if (u->out[i].busy) libusb_cancel_transfer(u->out[i].x);
+    for (i = 0; i < 50; i++) {   /* the cancellations complete through the event loop */
+        int j, busy = u->in_live;
+        struct timeval tv = { 0, 20000 };
+        for (j = 0; j < u->depth; j++) busy += u->out[j].busy;
+        if (!busy) break;
+        libusb_handle_events_timeout_completed(u->ctx, &tv, NULL);
+    }
+}
+
 static void *reader_main(void *arg)
 {
     Usb *u = (Usb *)arg;
-    uint8_t *buf = (uint8_t *)malloc(PSPEXP_USB_CHUNK);
+    uint8_t *buf;
+    if (u->depth > 1) { reader_async(u); return NULL; }
+    buf = (uint8_t *)malloc(PSPEXP_USB_CHUNK);
     if (!buf) { u->dead = 1; return NULL; }
     while (!u->stop && !u->dead) {
         int got = 0;
@@ -190,6 +301,14 @@ static void tr_close(PspExpTransport *t)
     if (!u) return;
     u->stop = 1;
     if (u->reader_running) pthread_join(u->reader, NULL);
+    {
+        int i;
+        for (i = 0; i < MAX_DEPTH; i++) {
+            if (u->out[i].x) libusb_free_transfer(u->out[i].x);
+            if (u->in[i].x) libusb_free_transfer(u->in[i].x);
+            free(u->out[i].buf); free(u->in[i].buf);
+        }
+    }
     if (u->h) {
         libusb_release_interface(u->h, 0);
         libusb_close(u->h);
@@ -275,6 +394,27 @@ PspExpTransport *pspexp_usb_open(const PspExpUsbOptions *o, char *err, size_t er
     libusb_clear_halt(u->h, PSPEXP_USB_EP_OUT);
 
     if (do_sync(u, err, errlen) < 0) { tr_close(&u->t); return NULL; }
+
+    {
+        const char *d = getenv("PSPEXP_USB_DEPTH");
+        int i;
+        u->depth = d && *d ? atoi(d) : 2;
+        if (u->depth < 1) u->depth = 1;
+        if (u->depth > MAX_DEPTH) u->depth = MAX_DEPTH;
+        for (i = 0; u->depth > 1 && i < u->depth; i++) {
+            u->out[i].u = u->in[i].u = u;
+            u->out[i].x = libusb_alloc_transfer(0);
+            u->in[i].x = libusb_alloc_transfer(0);
+            u->out[i].buf = (uint8_t *)malloc(PSPEXP_USB_CHUNK);
+            u->in[i].buf = (uint8_t *)malloc(PSPEXP_USB_CHUNK);
+            if (!u->out[i].x || !u->in[i].x || !u->out[i].buf || !u->in[i].buf) {
+                snprintf(err, errlen, "out of memory for USB transfers");
+                tr_close(&u->t);
+                return NULL;
+            }
+        }
+        if (u->verbose && u->depth > 1) fprintf(stderr, "usb: %d transfers queued each way\n", u->depth);
+    }
 
     if (pthread_create(&u->reader, NULL, reader_main, u) != 0) {
         snprintf(err, errlen, "cannot start reader thread");
