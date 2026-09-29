@@ -641,7 +641,7 @@ It stays as built, with these changes:
   them (`uboot.config`). One small patch hands the orange charge LED to the
   charger (REG 32H bit 3, as the datasheet has it); the boot script and the
   device tree light the green one (PB7). Booted on a GameShell: the green
-  LED on, the PSP connected.
+  LED on, the PSP connected; the orange one lights while charging.
 - **The release build, as a user gets it** (no SSH key, no Wi-Fi), tried end
   to end on a GameShell (2026-09-29): the PSP connected at first boot, green
   LED on; Wi-Fi joined and the time zone chosen from the PSP; the default
