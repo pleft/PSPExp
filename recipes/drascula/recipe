@@ -1,0 +1,22 @@
+# Drascula: The Vampire Strikes Back: Debian's freeware game data on Debian's ScummVM, a point-and-click
+# adventure played with the nub as the mouse.
+
+[package]
+id=drascula
+title=Drascula: The Vampire Strikes Back
+description=A 1996 comedy vampire adventure, freeware since 2006
+category=game
+license=Freeware (Alcachofa Soft); ScummVM is GPL-3.0
+version=1
+
+[debian]
+apt=scummvm drascula
+
+[entry]
+title=Drascula: The Vampire Strikes Back
+type=game
+description=A 1996 comedy vampire adventure, freeware since 2006
+icon=puzzle
+exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/drascula/en drascula
+keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
+nub=mouse

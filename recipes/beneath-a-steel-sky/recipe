@@ -1,0 +1,22 @@
+# Beneath a Steel Sky: Debian's freeware game data on Debian's ScummVM, a point-and-click
+# adventure played with the nub as the mouse.
+
+[package]
+id=beneath-a-steel-sky
+title=Beneath a Steel Sky
+description=Revolution's 1994 cyberpunk adventure, freeware since 2003
+category=game
+license=Freeware (Revolution Software); ScummVM is GPL-3.0
+version=1
+
+[debian]
+apt=scummvm beneath-a-steel-sky
+
+[entry]
+title=Beneath a Steel Sky
+type=game
+description=Revolution's 1994 cyberpunk adventure, freeware since 2003
+icon=puzzle
+exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/beneath-a-steel-sky sky
+keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
+nub=mouse

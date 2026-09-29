@@ -1,0 +1,22 @@
+# Lure of the Temptress: Debian's freeware game data on Debian's ScummVM, a point-and-click
+# adventure played with the nub as the mouse.
+
+[package]
+id=lure-of-the-temptress
+title=Lure of the Temptress
+description=Revolution's 1992 fantasy adventure, freeware since 2003
+category=game
+license=Freeware (Revolution Software); ScummVM is GPL-3.0
+version=1
+
+[debian]
+apt=scummvm lure-of-the-temptress
+
+[entry]
+title=Lure of the Temptress
+type=game
+description=Revolution's 1992 fantasy adventure, freeware since 2003
+icon=puzzle
+exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/lure-of-the-temptress/en lure
+keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
+nub=mouse
