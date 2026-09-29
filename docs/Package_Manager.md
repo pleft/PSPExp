@@ -873,7 +873,9 @@ because boards differ.
     `pspexp-sdl-server`), passes 4 of 4, the Packages app removing and
     reinstalling Cave Story itself. (`tests/psp/run.py --term` names a
     console off the PATH, as the Omega's is.) The failure suite still
-    passes 28 of 28 on the Pi with the new lock.
+    passes 28 of 28 on the Pi with the new lock. With the real PSP on the
+    Omega the apps suite passes 4 of 4 too, the warnings showing in
+    Emulators. Step 7 is done.
   - **Found there:** BusyBox's `flock` has no `-w`, so every operation said
     "busy"; the lock now retries `flock -n` each second (both kinds of
     board). GNU tar as root can't set owners on the FAT card
