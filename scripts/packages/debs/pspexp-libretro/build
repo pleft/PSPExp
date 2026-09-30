@@ -5,18 +5,27 @@
 # Mega Drive or SNES core, and these two are the lighter ones it plays at full
 # speed. The core is the one scripts/gameshell/build.sh retro CORE=... built
 # from ../retro/libretro-CORE; its licence goes with it.
-# Usage: build OUTDIR CORE ARCH   (CORE: picodrive | snes9x2005; ARCH: armhf)
+# Handy (the Atari Lynx) is in no Debian at all: both boards get ours; it runs
+# without Atari's boot ROM (a built-in replacement), using a real lynxboot.img only
+# when one is in the core's system folder.
+# Usage: build OUTDIR CORE ARCH   (CORE: picodrive | snes9x2005 | handy; ARCH: armhf | arm64)
+# arm64: the Pi's build (CORE=... scripts/pi/install.sh retro -> build/pi/bin)
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; CORE="$2"; ARCH="$3"
-case "$ARCH" in armhf) B="$ROOT/build/gameshell/bin"; TRIPLET=arm-linux-gnueabihf ;; *) echo "arch: armhf" >&2; exit 2 ;; esac
+case "$ARCH" in
+armhf) B="$ROOT/build/gameshell/bin"; TRIPLET=arm-linux-gnueabihf ;;
+arm64) B="$ROOT/build/pi/bin"; TRIPLET=aarch64-linux-gnu ;;
+*) echo "arch: armhf | arm64" >&2; exit 2 ;;
+esac
 case "$CORE" in
 picodrive)  DESC="Sega Mega Drive / Genesis, Master System, Game Gear, Sega CD and 32X (PicoDrive)"; LIC=COPYING ;;
 snes9x2005) DESC="Super Nintendo (Snes9x 2005: an older, lighter Snes9x)"; LIC=copyright ;;
-*) echo "core: picodrive | snes9x2005" >&2; exit 2 ;;
+handy)      DESC="Atari Lynx (Handy)"; LIC=lynx/license.txt ;;
+*) echo "core: picodrive | snes9x2005 | handy" >&2; exit 2 ;;
 esac
 SRC="$ROOT/../retro/libretro-$CORE"
-[ -f "$B/${CORE}_libretro.so" ] || { echo "no $B/${CORE}_libretro.so: CORE=$CORE scripts/gameshell/build.sh retro" >&2; exit 1; }
+[ -f "$B/${CORE}_libretro.so" ] || { echo "no $B/${CORE}_libretro.so: CORE=$CORE scripts/gameshell/build.sh retro (armhf) or scripts/pi/install.sh retro (arm64)" >&2; exit 1; }
 [ -f "$SRC/$LIC" ] || { echo "no licence $SRC/$LIC" >&2; exit 1; }
 V="$(git -C "$SRC" log -1 --format=%cd --date=format:%Y.%m.%d)+$(git -C "$SRC" rev-parse --short HEAD)"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT

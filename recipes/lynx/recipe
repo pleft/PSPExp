@@ -1,0 +1,26 @@
+# The Atari Lynx: the Handy core, PSPExp's package (no Debian carries it), played by
+# pspexp-retro. It runs without Atari's boot ROM (a built-in replacement); a real
+# lynxboot.img, when the user has one, goes in ~/.config/pspexp-retro/system.
+
+[package]
+id=lynx
+title=Atari Lynx
+description=Atari Lynx: the Handy core (PSPExp's package), no BIOS needed; ROMs in ~/roms/lynx
+category=system
+license=zlib (Handy, K. Wilkins); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro pspexp-libretro-handy
+core=handy_libretro.so
+
+[system]
+id=lynx
+name=Atari Lynx
+short=LYNX
+icon=gamepad-2
+ext=lnx,lyx
+roms=~/roms/lynx
+thumbs=Atari - Lynx
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys

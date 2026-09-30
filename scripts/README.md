@@ -40,7 +40,7 @@ packages/          what the launcher offers, for any board
   debs/              our own .deb packages, each with a `build` script: pspexp-core,
                      pspexp-runtime, pspexp-retro, pspexp-cavestory, tyrian-data,
                      jazz-shareware-data, pspexp-libretro (cores Debian lacks for a
-                     board: the GameShell's PicoDrive and snes9x2005)
+                     board: the GameShell's PicoDrive and snes9x2005, and Handy for the Lynx)
   mkdeb.py           a .deb without dpkg (the Mac has none)
   apt-repo           the signed apt repository and catalogue: build, push to the home server
   runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole
