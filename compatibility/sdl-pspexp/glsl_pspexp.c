@@ -856,8 +856,10 @@ typedef struct Ev {
     Var vars[512]; int nv;
     Sym *path;                  /* the condition this code runs under (NULL: always) */
     Sym *discard;               /* when the fragment is dropped */
-    int flow;                   /* 1 break, 2 continue, 3 return */
+    int flow;                   /* 1 break, 2 continue, 3 return, 4 a return under a condition (in a function) */
     Val ret;
+    int in_func;                /* inside a user function: ... */
+    Sym *fpath, *returned;      /* ...the condition it was called under; where it has returned already (NULL: nowhere) */
     int approx; char why[96];
     long steps;
     int depth;
@@ -1569,12 +1571,14 @@ static void exec(Ev *e, Node *s)
         mark = e->nv;
         exec(e, s->b);
         e->nv = mark;
+        if (e->flow == 4) e->flow = 0;   /* a return, taken care of */
         if (e->flow) { if (e->flow != 3 || e->stage == GLSL_VERTEX) approx(e, "a jump under a condition"); e->flow = 0; }
         if (s->c) {
             Sym *nc = op1(e, O_NOT, cond);
             e->path = saved ? op2(e, O_AND, saved, nc) : nc;
             exec(e, s->c);
             e->nv = mark;
+            if (e->flow == 4) e->flow = 0;
             if (e->flow) { approx(e, "a jump under a condition"); e->flow = 0; }
         }
         e->path = saved;
@@ -1608,6 +1612,20 @@ static void exec(Ev *e, Node *s)
         return;
     }
     case S_RETURN:
+        if (e->in_func && (e->path != e->fpath || e->returned)) {
+            /* a return under a condition: its value where that holds and nothing returned before */
+            Sym *c = e->path != e->fpath ? e->path : NULL;
+            Sym *take = c && e->returned ? op2(e, O_AND, c, op1(e, O_NOT, e->returned)) : c ? c : op1(e, O_NOT, e->returned);
+            if (s->a) {
+                Val v = eval(e, s->a);
+                int k;
+                for (k = 0; k < e->ret.n && k < v.n; k++) e->ret.c[k] = op3(e, O_SEL, take, v.c[k], e->ret.c[k]);
+            }
+            if (!c) { e->flow = 3; return; }   /* the rest: this one's */
+            e->returned = e->returned ? op2(e, O_OR, e->returned, c) : c;
+            e->flow = 4;
+            return;
+        }
         if (s->a) e->ret = eval(e, s->a);
         e->flow = 3;
         return;
@@ -1635,10 +1653,18 @@ static Val call_user(Ev *e, Func *f, Val *args, Node **argn, int na)
         if (!(f->p[i].qual & Q_OUT) || (f->p[i].qual & Q_INOUT)) for (k = 0; k < v.n; k++) v.c[k] = at(args[i], k);
         declare(e, f->p[i].name, v);
     }
-    e->ret = val_new(e, f->ret);
-    exec(e, f->body);
-    if (e->flow == 3 || e->flow == 0) e->flow = 0;
-    ret = e->ret;
+    {
+        int keep_in = e->in_func;
+        Sym *keep_fpath = e->fpath, *keep_ret = e->returned;
+        Val keep_val = e->ret;
+        e->in_func = 1; e->fpath = e->path; e->returned = NULL;
+        e->ret = val_new(e, f->ret);
+        for (i = 0; i < e->ret.n; i++) e->ret.c[i] = K(e, 0);
+        exec(e, f->body);
+        if (e->flow == 3 || e->flow == 4 || e->flow == 0) e->flow = 0;
+        ret = e->ret;
+        e->in_func = keep_in; e->fpath = keep_fpath; e->returned = keep_ret; e->ret = keep_val;
+    }
     for (i = 0; i < na && i < f->np; i++)   /* out parameters back to the caller */
         if (f->p[i].qual & (Q_OUT | Q_INOUT)) {
             Sym **slots;

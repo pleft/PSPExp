@@ -122,6 +122,7 @@ vertex attributes and the texture samples. The plan for the GE:
 | a discard on a texture the colour does not use | a pass before with its alpha test, the depth only |
 | `texture × texture2 × K (+ texture3)` (lightmaps, glows) | passes after the colour's, each with its own coordinates: texture2 multiplied in by blending (K up to 2; more: the texture sent brighter), texture3 added |
 | uniforms in `if`s and loops | the branch taken, the loop unrolled |
+| other conditions (per vertex), and a function returning from inside them | both sides worked out, each value where its condition holds (Quake's models light themselves so) |
 | anything else (two 2D textures, a texture channel used for another, per-pixel maths, a screen-door pattern on `gl_FragCoord`, framebuffer reads) | the nearest of the above; the program is logged once with what was left out |
 
 `glGetString(GL_VERSION)` is "2.1 PSPExp" (`PSPEXP_GL_VERSION` to change it:

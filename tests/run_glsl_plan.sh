@@ -29,4 +29,10 @@ check "plan: exact"; check "texture: yes unit 0"; check "multiplied in: unit 1, 
 OUT="$("$BUILD/glsl_plan" "$L" "$LF" uWall=0 uLight=1 uGlow=2 uBright=8 uUseGlow=0)"
 check "plan: exact"; check "multiplied in: unit 1, 8 times over"
 if echo "$OUT" | grep -q "added:"; then echo "$OUT"; echo "no added texture expected"; exit 1; fi
+# returns under a condition in a function: each side where it holds (the test vertex's normal: 0.1, 0.2, 0.3)
+SV="$ROOT/tests/glsl/shade.vert" SF="$ROOT/tests/glsl/shade.frag"
+OUT="$("$BUILD/glsl_plan" "$SV" "$SF" uLightDir=0,0,1)"
+check "plan: exact"; check "rgba 0.65 0.65 0.65 1.00"
+OUT="$("$BUILD/glsl_plan" "$SV" "$SF" uLightDir=0,0,-1)"
+check "plan: exact"; check "rgba 0.46 0.46 0.46 1.00"
 echo "glsl_plan: ok"
