@@ -710,7 +710,7 @@ Existing SDL application
 
 **Scope.** `sdl-pspexp` can only capture applications that draw through `SDL_Renderer` (SDL2) or its SDL3 equivalent: textures, copies, fills, and lines. Applications that perform software blits into an `SDL_Surface` and present the result — a common pattern in older 2D engines, including Stratagus — hand SDL a completed framebuffer, which is precisely what PSPExp is designed not to transport. Such engines need an engine-specific renderer backend instead (§18, v0.2). This limits the reach of goal 10 in §2.1, but the `SDL_Renderer` population is large enough to make the layer worthwhile.
 
-*Status (2026-09-22, v0.4 built).* The layer exists as `compatibility/sdl-pspexp`, an interposition library (`DYLD_INSERT_LIBRARIES` / `LD_PRELOAD`, `scripts/dev/pspexp-run`) rather than an SDL render driver: it needs no SDL rebuild and works with the SDL2 the program already links. It mirrors the `SDL_Render*` API into scaled quad batches (a 24-byte `PspExpQuadExRec` with `PSPEXP_BATCH_SCALED`, since `SDL_RenderCopy` scales and flips), rects and lines, shadows textures in RGBA8888 so `SDL_UpdateTexture` / `SDL_LockTexture` changes are re-uploaded, taps the audio device (callback or queue) into `AUDIO_STREAM`, and exposes the PSP's controls as a virtual game controller plus keyboard events. Against the paragraph above, the surface-blitting case turned out to be affordable after all at this resolution: a renderer-less program's window surface is shrunk to the PSP size and streamed as a texture every present, ≈270 KB per frame, which the measured USB link (§20a) carries at 30–60 fps. Not mirrored: rotation, render targets, `SDL_RenderGeometry`, OpenGL.
+*Status (2026-09-22, v0.4 built).* The layer exists as `compatibility/sdl-pspexp`, an interposition library (`DYLD_INSERT_LIBRARIES` / `LD_PRELOAD`, `scripts/dev/pspexp-run`) rather than an SDL render driver: it needs no SDL rebuild and works with the SDL2 the program already links. It mirrors the `SDL_Render*` API into scaled quad batches (a 24-byte `PspExpQuadExRec` with `PSPEXP_BATCH_SCALED`, since `SDL_RenderCopy` scales and flips), rects and lines, shadows textures in RGBA8888 so `SDL_UpdateTexture` / `SDL_LockTexture` changes are re-uploaded, taps the audio device (callback or queue) into `AUDIO_STREAM`, and exposes the PSP's controls as a virtual game controller plus keyboard events. Against the paragraph above, the surface-blitting case turned out to be affordable after all at this resolution: a renderer-less program's window surface is shrunk to the PSP size and streamed as a texture every present, ≈270 KB per frame, which the measured USB link (§20a) carries at 30–60 fps. Not mirrored: rotation, render targets, `SDL_RenderGeometry`, OpenGL (OpenGL 1.x since 2026-09-30: §12a).
 
 The two components must remain conceptually distinct:
 
@@ -718,6 +718,33 @@ The two components must remain conceptually distinct:
 pspexp-sdl : PSPExp -> SDL
 sdl-pspexp : SDL    -> PSPExp
 ```
+
+---
+
+## 12a. OpenGL 1.x
+
+*Added 2026-09-30.* The GE is fixed-function hardware of OpenGL 1.x's kind: a projection, view and world matrix, four lights with materials and colour-material, linear fog, a depth buffer, alpha test, blending, texture functions (modulate, decal, blend, replace, add), and texture-coordinate generation from a texture matrix or an environment map. So an OpenGL 1.x program can be translated rather than captured: the board keeps GL's state, the PSP does the per-vertex and per-pixel work. Shaders (GL 2 and later) cannot; the only route for those would be rendering on a board with a GPU and streaming frames, left aside.
+
+**Where.** `compatibility/sdl-pspexp/gl_pspexp.c`, an OpenGL implementation inside the SDL layer: programs that make their context through SDL2 get ours (`SDL_GL_*` hooked; on a headless board the window's `SDL_WINDOW_OPENGL` flag is dropped, SDL's dummy driver having no GL). The `gl*` functions are exported (Linux, first through `LD_PRELOAD`) or interposed (macOS), and `glXGetProcAddress`, `eglGetProcAddress` and `SDL_GL_GetProcAddress` return them, so GLEW, GLU and libraries such as QuesoGLC work unchanged.
+
+**Messages** (GRAPHICS channel, only when HELLO has `PSPEXP_FEATURE_3D`; `HELLO_ACK` flag `PSPEXP_ACK_DEPTH` asks for a depth buffer, which takes the 272 KB after the two framebuffers; a repeated `HELLO_ACK` changes it while no texture is in VRAM):
+
+| message | content |
+|---|---|
+| `3D_STATE` (96 B) | the render state in GE values: enables, depth/alpha/blend functions, winding kept by culling, texture handle, function, filters and wrap, fog, viewport and depth range, scissor, pixel mask, texture-coordinate mode |
+| `3D_MATRICES` (192 B) | projection, modelview (the GE's world matrix; its view matrix stays the identity, so lighting and fog are in eye space), texture matrix |
+| `3D_LIGHTS` (288 B) | scene ambient, material, colour-material, four lights |
+| `3D_DRAW` | a primitive and its vertices in a GE vertex format: optional float texture coordinates, 8888 colour, float normal, float position |
+| `RESOURCE_UPLOAD_MESH` / `3D_DRAW_MESH` | vertices or 16-bit indices kept in the PSP's RAM (a resource like a texture); a draw names them (16 bytes) or brings its own indices |
+| `3D_CLEAR` | colour and/or depth within the scissor |
+
+The board sends the state, matrices and lights only when they change (and once per frame), and translates GL's conventions: depth runs 65535 near to 0 far on the GE, so the comparisons turn round; `GL_ONE`/`GL_ZERO` blend factors become fixed colours; the framebuffer is 5650, so destination alpha counts as one; GL's viewport maps to the letterboxed window on the PSP. 2D draws may follow 3D ones in a frame: the executor puts its 2D state back first.
+
+**Bytes.** Vertices sent with every draw cost 28–36 bytes each; a scene of Neverball's (60,000 vertices in 56 buffer-object draws) was 2.1 MB a frame, 3 fps. Buffer objects are therefore **meshes**: converted once, whole, into the GE format and kept on the PSP, keyed on everything the conversion read (arrays, buffer versions, vertex type); a vertex without a colour of its own takes the current colour from the material (the GE's rule for colourless vertices), so one mesh serves any `glColor`. Neverball: 85 KB a frame. Texture-coordinate generation stays on the GE too (object/eye-linear through the texture matrix with the vertex position as source; sphere maps as the environment map with two spare light slots as the x and y axes, exact for a view straight ahead), so it does not stop a draw being a mesh.
+
+**Measured** 2026-09-30, PSP-1000 over USB from the Pi 400: the demo (`examples/gl-demo`) 59.9 fps, PSP CPU 1.9 ms and GE 0.12 ms a frame; Chromium B.S.U. (menu) 36 fps, 230 KB a frame of immediate-mode vertices; Neverball (title) 30 fps, GE 20 ms a frame. The GE's clipping of large polygons near the camera showed no holes in Neverball's level. The first real-PSP run also showed that PPSSPP's framebuffer dumps are stale (the emulator keeps drawn frames in its own GPU): the runtime now takes screenshots with a GE block transfer, which PPSSPP copies back faithfully.
+
+**Next.** Fewer bytes per vertex (16-bit positions and texture coordinates, 8-bit normals and colours: about half); display lists as meshes (Chromium B.S.U. and older engines draw through them or immediate mode); Neverball's 20 ms of GE time (fill: large blended or filtered polygons); more games (Quakespasm, ioquake3, Pinball, Trigger Rally); the SDL executor has no 3D, so the Mac stand-in shows nothing of these programs (PPSSPP and the PSP do).
 
 ---
 
@@ -974,7 +1001,7 @@ Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications
 
 ### Later research
 
-- triangle-based batches for rotation/skew, then static meshes and 3D commands (3D vertex formats, matrices, depth state);
+- triangle-based batches for rotation/skew (static meshes and 3D commands: done for OpenGL 1.x, §12a);
 - offloading batch expansion or audio mixing to the Media Engine;
 - compute/RPC services;
 - network/storage services;

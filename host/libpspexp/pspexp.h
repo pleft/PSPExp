@@ -29,6 +29,7 @@ typedef struct PspExpConfig {
     uint16_t max_batch_records; /* batch split size; clamped to the runtime's */
     int      max_in_flight;     /* frames sent but not presented before should_render() says no (default 1) */
     int      retain_uploads;    /* keep copies of uploads to replay after reconnect (default 1) */
+    int      depth_buffer;      /* ask for a depth buffer (3D programs; default 0) */
 } PspExpConfig;
 
 typedef enum PspExpLinkState {
@@ -153,6 +154,31 @@ void pspexp_draw_tile_batch_ex(PspExpContext *ctx, uint16_t atlas, int16_t origi
 void pspexp_draw_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 void pspexp_fill_rect(PspExpContext *ctx, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t alpha);
 void pspexp_draw_line(PspExpContext *ctx, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha);
+/* 3D (OpenGL programs), when the runtime offers it (PSPEXP_FEATURE_3D); see
+ * the 3D messages in pspexp_protocol.h. A depth buffer needs
+ * PspExpConfig.depth_buffer or pspexp_set_depth_buffer (connected already:
+ * it takes effect if no texture is in the PSP's VRAM yet). The draw calls
+ * go in a frame. */
+int  pspexp_3d_supported(const PspExpContext *ctx);
+void pspexp_set_depth_buffer(PspExpContext *ctx, int on);
+void pspexp_3d_state(PspExpContext *ctx, const PspExp3DState *s);
+void pspexp_3d_matrices(PspExpContext *ctx, const float projection[16], const float modelview[16], const float texture[16]);
+void pspexp_3d_lights(PspExpContext *ctx, const PspExp3DLights *l);
+void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_t depth);
+/* Space for `count` vertices of `vertex_type` (pspexp_3d_vertex_size each)
+ * in the frame, valid until the next call on ctx; NULL on error. */
+void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count);
+/* Meshes (resources, like textures): `kind` PSPEXP_MESH_VERTICES (count
+ * vertices of vertex_type) or PSPEXP_MESH_INDICES16 (count indices). Two
+ * steps: begin returns where to write `count` of them, commit sends it. */
+void *pspexp_upload_mesh_begin(PspExpContext *ctx, uint16_t id, uint8_t kind, uint32_t vertex_type, uint32_t count);
+int   pspexp_upload_mesh_commit(PspExpContext *ctx);
+/* Draw from meshes (in a frame): `indices` a mesh handle, PSPEXP_MESH_NONE,
+ * or PSPEXP_MESH_INLINE, which returns where to write the `count` indices
+ * (else a non-NULL pointer that is not to be written; NULL on error). */
+uint16_t *pspexp_3d_draw_mesh(PspExpContext *ctx, uint16_t vertices, uint16_t indices, uint8_t primitive,
+                              uint32_t first, uint32_t count);
+
 /* Sends the frame. Returns its frame_seq, or -1 if the transport is gone. */
 long pspexp_present(PspExpContext *ctx);
 

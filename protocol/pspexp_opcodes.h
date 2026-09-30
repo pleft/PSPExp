@@ -26,6 +26,13 @@ enum PspExpOpcode {
     PSPEXP_OP_DRAW_RECT         = 0x0106,  /* PspExpDrawRect */
     PSPEXP_OP_PRESENT           = 0x0107,  /* no payload */
     PSPEXP_OP_DRAW_LINE         = 0x0108,  /* PspExpDrawLine */
+    /* 3D, only with PSPEXP_FEATURE_3D */
+    PSPEXP_OP_3D_STATE          = 0x0110,  /* PspExp3DState */
+    PSPEXP_OP_3D_MATRICES       = 0x0111,  /* PspExp3DMatrices */
+    PSPEXP_OP_3D_LIGHTS         = 0x0112,  /* PspExp3DLights */
+    PSPEXP_OP_3D_DRAW           = 0x0113,  /* PspExp3DDraw + vertices */
+    PSPEXP_OP_3D_CLEAR          = 0x0114,  /* PspExp3DClear */
+    PSPEXP_OP_3D_DRAW_MESH      = 0x0115,  /* PspExp3DDrawMesh [+ 16-bit indices] */
 
     /* RESOURCE (0x02xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE = 0x0201,  /* host -> PSP, PspExpTextureUpload + data + frames */
@@ -36,6 +43,7 @@ enum PspExpOpcode {
     PSPEXP_OP_RESOURCE_TIER           = 0x0206,  /* PSP -> host, PspExpResourceReady */
     PSPEXP_OP_RESOURCE_MISS           = 0x0207,  /* PSP -> host, PspExpResourceError */
     PSPEXP_OP_RESOURCE_UPLOAD_PALETTE = 0x0208,  /* host -> PSP, PspExpPaletteUpload + entries */
+    PSPEXP_OP_RESOURCE_UPLOAD_MESH    = 0x0209,  /* host -> PSP, PspExpMeshUpload + data (PSPEXP_FEATURE_3D) */
 
     /* AUDIO (0x03xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_SOUND = 0x0301,  /* host -> PSP, PspExpSoundUpload + s16 PCM */

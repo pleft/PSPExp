@@ -70,7 +70,8 @@ enum PspExpChannel {
 #define PSPEXP_FRAME_MAX_WIDTH  64       /* texture-cache friendly strip width */
 #define PSPEXP_VRAM_BYTES       (2u * 1024u * 1024u)
 #define PSPEXP_FRAMEBUFFER_BYTES ((uint32_t)PSPEXP_DISPLAY_STRIDE * PSPEXP_DISPLAY_HEIGHT * 2u)
-/* Two 16-bit framebuffers, no depth buffer (2D does not need one). */
+/* Two 16-bit framebuffers, no depth buffer (2D does not need one; a 3D
+ * program asks for one with PSPEXP_ACK_DEPTH, and textures lose its room). */
 #define PSPEXP_VRAM_TEXTURE_BUDGET (PSPEXP_VRAM_BYTES - 2u * PSPEXP_FRAMEBUFFER_BYTES)
 
 /* Texture pixel formats. Values equal the PSP GE GU_PSM_* constants so the
@@ -197,6 +198,8 @@ enum PspExpExecutorKind {
                                                   A host must not send on that channel otherwise: runtimes
                                                   before it drop a link on a channel they do not know */
 #define PSPEXP_FEATURE_CLOCK      0x00000008u  /* answers CLOCK_SET: the host may set the PSP's clock */
+#define PSPEXP_FEATURE_3D         0x00000010u  /* draws the 3D messages (GRAPHICS 0x0110..0x0114): OpenGL
+                                                  programs. A host must not send them otherwise */
 
 /* Host -> PSP (CLOCK_SET): the board's clock, for a PSP whose own one is
  * wrong (a flat clock battery puts it back years). The PSP keeps UTC; what
@@ -234,6 +237,7 @@ typedef struct PspExpHelloAck {
 /* maintenance: the host speaks another protocol version; only SYSTEM and FILE
  * are used (docs/Package_Manager.md §6.1: to install a matching runtime) */
 #define PSPEXP_ACK_MAINTENANCE 0x01
+#define PSPEXP_ACK_DEPTH       0x02   /* keep a depth buffer (3D): VRAM for textures shrinks by one framebuffer */
 PSPEXP_STATIC_ASSERT(sizeof(PspExpHelloAck) == 16, hello_ack_size);
 
 /* PSP -> host after each vblank at which a new frame was displayed. */
@@ -340,6 +344,188 @@ typedef struct PspExpTileBatch {
     uint8_t  reserved[14];
 } PspExpTileBatch;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpTileBatch) == 32, tile_batch_size);
+
+/* ---- 3D (PSPEXP_FEATURE_3D) ---------------------------------------------
+ *
+ * OpenGL 1.x fixed-function programs, translated on the host into the GE's
+ * own terms: the fields below hold GE values (the GU_* constants of
+ * pspgu.h, noted beside each), so the PSP passes them on unchanged. The PSP
+ * transforms and lights the vertices; the host keeps GL's state and sends
+ * it when it changed. Every 3D message may come in any order within a frame;
+ * 2D draws may be mixed in (the executor restores its 2D state for them).
+ */
+
+enum PspExp3DEnable {
+    PSPEXP_3D_DEPTH_TEST  = 0x0001,
+    PSPEXP_3D_DEPTH_WRITE = 0x0002,
+    PSPEXP_3D_CULL        = 0x0004,
+    PSPEXP_3D_BLEND       = 0x0008,
+    PSPEXP_3D_ALPHA_TEST  = 0x0010,
+    PSPEXP_3D_TEXTURE     = 0x0020,
+    PSPEXP_3D_FOG         = 0x0040,
+    PSPEXP_3D_LIGHTING    = 0x0080,
+    PSPEXP_3D_SMOOTH      = 0x0100,   /* Gouraud shading, else flat */
+    PSPEXP_3D_DITHER      = 0x0200
+};
+
+/* 3D_STATE: the render state for the draws that follow. */
+typedef struct PspExp3DState {
+    uint32_t enable;            /* PspExp3DEnable bits */
+    uint8_t  depth_func;        /* GU_NEVER..GU_GEQUAL (the GE's depth runs 65535 near .. 0 far) */
+    uint8_t  alpha_func;        /* GU_NEVER..GU_GEQUAL */
+    uint8_t  alpha_ref;
+    uint8_t  front_face;        /* GU_CW / GU_CCW: the winding that is kept when culling */
+    uint8_t  blend_op;          /* GU_ADD .. GU_ABS */
+    uint8_t  blend_src;         /* GU_SRC_COLOR .. GU_FIX */
+    uint8_t  blend_dst;
+    uint8_t  tex_func;          /* GU_TFX_MODULATE .. GU_TFX_ADD */
+    uint8_t  tex_alpha;         /* GU_TCC_RGB / GU_TCC_RGBA */
+    uint8_t  tex_min, tex_mag;  /* GU_NEAREST / GU_LINEAR */
+    uint8_t  tex_wrap_s, tex_wrap_t;   /* GU_REPEAT / GU_CLAMP */
+    uint8_t  reserved0;
+    uint16_t texture;           /* texture handle (with PSPEXP_3D_TEXTURE) */
+    uint32_t blend_fix_src;     /* 0xBBGGRR for GU_FIX */
+    uint32_t blend_fix_dst;
+    uint32_t tex_env_color;     /* 0xBBGGRR, GU_TFX_BLEND */
+    uint32_t fog_color;         /* 0xBBGGRR */
+    float    fog_near, fog_far; /* eye-space distances */
+    float    tex_scale_u, tex_scale_v, tex_offset_u, tex_offset_v;
+    int16_t  viewport_x, viewport_y;   /* centre on the PSP's screen, pixels (y down) */
+    int16_t  viewport_w, viewport_h;   /* size; the GL y flip is the GE's own */
+    uint16_t depth_near, depth_far;    /* the GE's depth range, 0..65535 */
+    int16_t  scissor_x, scissor_y, scissor_w, scissor_h;
+    uint32_t pixel_mask;        /* 0xAABBGGRR bits NOT written (glColorMask) */
+    uint8_t  tex_map;           /* GU_TEXTURE_COORDS; GU_TEXTURE_MATRIX: the coordinates are the texture
+                                   matrix (3D_MATRICES) times tex_source; GU_ENVIRONMENT_MAP: (1 + n.L) / 2 of
+                                   the eye-space normal and two lights' directions (tex_env_lights) */
+    uint8_t  tex_source;        /* GU_POSITION, GU_UV, GU_NORMALIZED_NORMAL, GU_NORMAL */
+    uint8_t  tex_env_lights;    /* the two lights for u and v: first | second << 4 */
+    uint8_t  reserved[9];
+} PspExp3DState;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DState) == 96, state3d_size);
+
+/* 3D_MATRICES: OpenGL's matrices, column-major as glLoadMatrixf takes them.
+ * The GE's world matrix is the modelview (its last row taken as 0 0 0 1),
+ * its view matrix the identity, so lighting happens in eye space. The
+ * texture matrix counts with 3D_STATE.tex_map GU_TEXTURE_MATRIX: its rows
+ * give u, v and q (divided by). */
+typedef struct PspExp3DMatrices {
+    float projection[16];
+    float modelview[16];
+    float texture[16];
+} PspExp3DMatrices;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DMatrices) == 192, matrices3d_size);
+
+#define PSPEXP_3D_LIGHTS 4      /* the GE's light count */
+
+typedef struct PspExp3DLight {
+    uint8_t  enabled;
+    uint8_t  type;              /* GU_DIRECTIONAL, GU_POINTLIGHT, GU_SPOTLIGHT */
+    uint8_t  components;        /* GU_AMBIENT_AND_DIFFUSE, GU_DIFFUSE_AND_SPECULAR */
+    uint8_t  reserved0;
+    uint32_t ambient, diffuse, specular;   /* 0xBBGGRR */
+    float    position[3];       /* eye space; the direction towards it when directional */
+    float    direction[3];      /* spot direction, eye space */
+    float    attenuation[3];    /* constant, linear, quadratic */
+    float    spot_exponent, spot_cutoff;   /* cutoff: the cosine */
+    uint8_t  reserved[4];
+} PspExp3DLight;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DLight) == 64, light3d_size);
+
+/* 3D_LIGHTS: the lights and the material. A light that is not enabled
+ * still sets its position (an environment map's direction). */
+typedef struct PspExp3DLights {
+    uint32_t scene_ambient;     /* 0xAABBGGRR, glLightModel */
+    uint32_t emissive, ambient, diffuse, specular;   /* the material, 0xAABBGGRR */
+    float    shininess;
+    uint32_t color_material;    /* GU_AMBIENT | GU_DIFFUSE | GU_SPECULAR: taken from the vertex colour */
+    uint8_t  reserved[4];
+    PspExp3DLight light[PSPEXP_3D_LIGHTS];
+} PspExp3DLights;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DLights) == 288, lights3d_size);
+
+/* 3D_DRAW: followed by `count` vertices of the GE vertex type `vertex_type`
+ * (GU_TRANSFORM_3D), each laid out texture, colour, normal, position:
+ *   texture  none or GU_TEXTURE_32BITF (u, v normalised to the texture)
+ *   colour   none or GU_COLOR_8888
+ *   normal   none or GU_NORMAL_32BITF
+ *   position GU_VERTEX_32BITF
+ * Nothing else is accepted (no weights, morphs or indices). */
+typedef struct PspExp3DDraw {
+    uint8_t  primitive;         /* GU_POINTS .. GU_TRIANGLE_FAN (not GU_SPRITES) */
+    uint8_t  reserved0[3];
+    uint32_t vertex_type;
+    uint32_t count;
+    uint32_t reserved;
+} PspExp3DDraw;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDraw) == 16, draw3d_size);
+
+#define PSPEXP_3D_VT_TEXTURE   (3u << 0)    /* GU_TEXTURE_32BITF */
+#define PSPEXP_3D_VT_COLOR     (7u << 2)    /* GU_COLOR_8888 */
+#define PSPEXP_3D_VT_NORMAL    (3u << 5)    /* GU_NORMAL_32BITF */
+#define PSPEXP_3D_VT_POSITION  (3u << 7)    /* GU_VERTEX_32BITF */
+#define PSPEXP_3D_PRIM_MAX     5u           /* GU_TRIANGLE_FAN */
+/* A vertex's size for a vertex type; 0 when the type is not accepted. */
+static inline uint32_t pspexp_3d_vertex_size(uint32_t vt)
+{
+    uint32_t n = 12;
+    if ((vt & PSPEXP_3D_VT_POSITION) != PSPEXP_3D_VT_POSITION) return 0;
+    if (vt & ~(PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_COLOR | PSPEXP_3D_VT_NORMAL | PSPEXP_3D_VT_POSITION)) return 0;
+    if ((vt & PSPEXP_3D_VT_TEXTURE) && (vt & PSPEXP_3D_VT_TEXTURE) != PSPEXP_3D_VT_TEXTURE) return 0;
+    if ((vt & PSPEXP_3D_VT_COLOR) && (vt & PSPEXP_3D_VT_COLOR) != PSPEXP_3D_VT_COLOR) return 0;
+    if ((vt & PSPEXP_3D_VT_NORMAL) && (vt & PSPEXP_3D_VT_NORMAL) != PSPEXP_3D_VT_NORMAL) return 0;
+    if (vt & PSPEXP_3D_VT_TEXTURE) n += 8;
+    if (vt & PSPEXP_3D_VT_COLOR) n += 4;
+    if (vt & PSPEXP_3D_VT_NORMAL) n += 12;
+    return n;
+}
+#define PSPEXP_3D_MAX_VERTICES 65535u       /* the GE's count field */
+
+/* 3D_CLEAR: clears the colour and/or depth buffer within the state's scissor
+ * (glClear). */
+#define PSPEXP_3D_CLEAR_COLOR 0x1u
+#define PSPEXP_3D_CLEAR_DEPTH 0x4u          /* the GE's own bits */
+typedef struct PspExp3DClear {
+    uint32_t flags;
+    uint32_t color;             /* 0xAABBGGRR */
+    uint16_t depth;             /* the GE's value: 0 is the far end */
+    uint8_t  reserved[6];
+} PspExp3DClear;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DClear) == 16, clear3d_size);
+
+/* Meshes: vertices (a 3D vertex type, as in 3D_DRAW) or 16-bit indices,
+ * uploaded once (RESOURCE_UPLOAD_MESH, kept in main RAM) and drawn by
+ * 3D_DRAW_MESH as often as wanted: static geometry (OpenGL buffer objects)
+ * crosses the link once. */
+enum PspExpMeshKind {
+    PSPEXP_MESH_VERTICES  = 0,
+    PSPEXP_MESH_INDICES16 = 1
+};
+typedef struct PspExpMeshUpload {
+    uint16_t id;
+    uint8_t  kind;              /* PspExpMeshKind */
+    uint8_t  reserved0;
+    uint32_t vertex_type;       /* vertices: the 3D vertex type */
+    uint32_t count;             /* vertices, or indices */
+    uint32_t data_length;       /* count x the vertex size, or count x 2 */
+} PspExpMeshUpload;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpMeshUpload) == 16, mesh_upload_size);
+
+#define PSPEXP_MESH_NONE   0xFFFFu  /* 3D_DRAW_MESH.indices: vertices first.. first+count-1 in order */
+#define PSPEXP_MESH_INLINE 0xFFFEu  /* 3D_DRAW_MESH.indices: `count` 16-bit indices follow the header */
+
+/* 3D_DRAW_MESH: `count` vertices of a vertex mesh, in order from `first`,
+ * or through an index mesh (its indices first.. first+count-1), or through
+ * indices that follow. The render state, matrices and lights are 3D_DRAW's. */
+typedef struct PspExp3DDrawMesh {
+    uint16_t vertices;          /* vertex mesh handle */
+    uint16_t indices;           /* index mesh handle, PSPEXP_MESH_NONE or PSPEXP_MESH_INLINE */
+    uint8_t  primitive;         /* GU_POINTS .. GU_TRIANGLE_FAN */
+    uint8_t  reserved[3];
+    uint32_t first;
+    uint32_t count;
+} PspExp3DDrawMesh;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDrawMesh) == 16, draw_mesh_size);
 
 /* PRESENT has no payload. */
 

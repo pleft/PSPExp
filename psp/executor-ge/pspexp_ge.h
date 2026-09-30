@@ -18,6 +18,7 @@ typedef struct PspExpGeStats {
     uint32_t last_ge_us;          /* sceGuSync wait for the last frame */
     uint32_t last_vertex_bytes;
     uint32_t vram_alloc_failures; /* fragmentation: demoted to RAM */
+    uint32_t draws3d, dropped3d;  /* 3D draws, and those dropped for lack of vertex space */
 } PspExpGeStats;
 
 typedef struct PspExpGeExecutor {
@@ -33,12 +34,21 @@ typedef struct PspExpGeExecutor {
     PspExpRuntime *rt;
     PspExpGeStats stats;
     uint32_t displayed_offset;   /* VRAM offset of the framebuffer on screen */
+    uint32_t tex_base;           /* VRAM offset where textures start: after the framebuffers (and depth buffer) */
+    int16_t  clip_x, clip_y, clip_w, clip_h;   /* the 2D scissor, restored after 3D draws */
+    /* 3D */
+    int      depth_on;           /* the host asked for a depth buffer */
+    int      mode3d;             /* the GE holds the 3D state (else the 2D one) */
+    int      state_dirty;
+    int      have_state;
+    PspExp3DState st;
 } PspExpGeExecutor;
 
 /* Copies the displayed framebuffer (480x272 RGB565) into `out` (row stride 480). */
 void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out);
 
-/* Initialises the GU (framebuffers at VRAM 0 and 0x44000, no depth buffer). */
+/* Initialises the GU (framebuffers at VRAM 0 and 0x44000; a depth buffer at
+ * 0x88000 when the host asks for one). */
 int  pspexp_ge_init(PspExpGeExecutor *ge);
 /* Fills the executor ops; the caller sets ops->now_us and ops->log itself. */
 void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops);

@@ -139,7 +139,7 @@ static uint32_t op_now(void *u) { return sceKernelGetSystemTimeLow(); }
 #include "../../runtime/pspexp_bmp.h"
 static void op_screenshot(void *u, uint16_t index)
 {
-    static uint16_t row16[PSPEXP_DISPLAY_WIDTH * PSPEXP_DISPLAY_HEIGHT];
+    static uint16_t row16[PSPEXP_DISPLAY_WIDTH * PSPEXP_DISPLAY_HEIGHT] __attribute__((aligned(64)));   /* whole cache lines: the GE writes it */
     static uint8_t row[PSPEXP_DISPLAY_WIDTH * 3 + 4];
     uint8_t hdr[54];
     char path[256];

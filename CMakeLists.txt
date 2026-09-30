@@ -91,7 +91,7 @@ endif()
 
 # --- sdl-pspexp: interposition library for unmodified SDL2 programs (v0.4) ---
 if(SDL2_FOUND)
-  add_library(sdl-pspexp SHARED compatibility/sdl-pspexp/sdl_pspexp.c)
+  add_library(sdl-pspexp SHARED compatibility/sdl-pspexp/sdl_pspexp.c compatibility/sdl-pspexp/gl_pspexp.c)
   target_link_libraries(sdl-pspexp PRIVATE pspexp pspexp_null pspexp_sdl pspexp_tcp ${SDL2_LINK_LIBRARIES})
   target_include_directories(sdl-pspexp PRIVATE ${SDL2_INCLUDE_DIRS})
   target_compile_options(sdl-pspexp PRIVATE ${SDL2_CFLAGS_OTHER})
@@ -102,6 +102,9 @@ if(SDL2_FOUND)
   endif()
   if(NOT APPLE)
     target_link_libraries(sdl-pspexp PRIVATE ${CMAKE_DL_LIBS} m)
+  else()
+    # gl_pspexp.c interposes the framework's OpenGL functions
+    target_link_libraries(sdl-pspexp PRIVATE "-framework OpenGL")
   endif()
 
   add_executable(sdl-game examples/sdl-game/main.c)
@@ -111,6 +114,18 @@ if(SDL2_FOUND)
   endif()
   target_include_directories(sdl-game PRIVATE ${SDL2_INCLUDE_DIRS})
   target_compile_options(sdl-game PRIVATE ${SDL2_CFLAGS_OTHER})
+
+  # an SDL2 + OpenGL 1.x program, for the SDL layer's OpenGL part
+  find_package(OpenGL QUIET)
+  if(OPENGL_FOUND)
+    add_executable(gl-demo examples/gl-demo/main.c)
+    target_link_libraries(gl-demo PRIVATE ${SDL2_LINK_LIBRARIES} OpenGL::GL)
+    if(NOT APPLE)
+      target_link_libraries(gl-demo PRIVATE m)
+    endif()
+    target_include_directories(gl-demo PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_compile_options(gl-demo PRIVATE ${SDL2_CFLAGS_OTHER} -DGL_SILENCE_DEPRECATION)
+  endif()
 
   # libretro player: a plain SDL2 program (the SDL layer puts it on the PSP)
   add_executable(pspexp-retro tools/pspexp-retro/main.c)

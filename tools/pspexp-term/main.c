@@ -2553,8 +2553,10 @@ static void psp_slots_check(void)
     runtime_version(have, sizeof(have));
     if (!have[0] || !s.current) return;
     if (s.pending) { if (g_launcher_on) launcher_notice("download", "PSP updated: quit PSPExp on the PSP and start it again"); return; }
-    if (!strcmp(have, s.version[s.current - 'a'])) { if (g_launcher_on) launcher_set_psp_update(0); return; }
     if (pspexp_link_maintenance(ctx)) { psp_runtime_update(NULL, msg, sizeof(msg)); return; }   /* nothing else works anyway */
+    /* only a newer one is an update (versions start with their build time,
+     * so they sort): a PSP with a newer runtime than this board's keeps it */
+    if (strcmp(have, s.version[s.current - 'a']) <= 0) { if (g_launcher_on) launcher_set_psp_update(0); return; }
     fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: System > Update the PSP\n", s.version[s.current - 'a'], have);
     if (g_launcher_on) { launcher_set_psp_update(1); launcher_notice("download", "A newer PSP runtime is here: System > Update the PSP"); }
 }

@@ -110,8 +110,10 @@ scripts/dev/pspexp-run /path/to/any/sdl2/game     # yours
 ```
 
 `compatibility/sdl-pspexp/README.md` lists what is mirrored (and what is
-not: rotation, OpenGL) and the environment variables. Render targets are
-replayed, so pixel-art ports that upscale through one work too.
+not: rotation, shaders) and the environment variables. Render targets are
+replayed, so pixel-art ports that upscale through one work too. OpenGL 1.x
+programs are drawn by the PSP's GE (`build/host/gl-demo` to try it;
+Chromium B.S.U. and Neverball from Debian run).
 
 Doom is the showcase: `brew install chocolate-doom`, unzip a Freedoom
 release into `../doom/`, and

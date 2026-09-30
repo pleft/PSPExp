@@ -2,7 +2,7 @@
 # Runs the PSP runtime under PPSSPP so the real PSP executor can be exercised
 # without hardware (section 11, "PSP executor under PPSSPP"; section 14).
 #
-#   scripts/dev/run-ppsspp.sh            install dist/PSPExp into PPSSPP's memory stick and boot it
+#   scripts/dev/run-ppsspp.sh            install dist/PSPExp into PPSSPP's memory stick (slot a) and boot it
 #   scripts/dev/run-ppsspp.sh stop       stop PPSSPP
 #
 # PPSSPP must have networking enabled (ppsspp.ini: EnableWlan = True). The
@@ -31,7 +31,10 @@ if [ "$1" = "stop" ]; then pkill -f "$(basename "$PPSSPP")" || true; exit 0; fi
 if ! grep -q "^EnableWlan = True" "$MEMSTICK/SYSTEM/ppsspp.ini" 2>/dev/null; then
 	echo "warning: PPSSPP networking is off; set EnableWlan = True in $MEMSTICK/SYSTEM/ppsspp.ini" >&2
 fi
-mkdir -p "$GAME"
-cp "$ROOT/dist/PSPExp/"* "$GAME/"
+# a fresh slotted install of this build (the loader runs the active slot, so
+# copying the modules next to it would leave an older slot running)
+rm -rf "$GAME/slot-a" "$GAME/slot-b" "$GAME/active" "$GAME/active.new" "$GAME/fallback" \
+	"$GAME/pspexp_runtime.prx" "$GAME/pspexp_usb.prx" "$GAME/pspexp-rt.log"
+"$ROOT/scripts/packages/runtime-slot" --install "$GAME" >/dev/null
 "$PPSSPP" "$GAME/EBOOT.PBP" > "$ROOT/build/ppsspp.log" 2>&1 &
 echo "PPSSPP started (log: build/ppsspp.log); the runtime listens on 127.0.0.1:3838"

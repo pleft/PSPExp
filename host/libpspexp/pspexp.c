@@ -32,6 +32,7 @@ struct PspExpContext {
     uint8_t *batch; size_t batch_len, batch_cap;   /* sends gathered into one transfer */
     int batching;
     uint32_t pending_upload_len;
+    uint16_t pending_id;                /* between pspexp_upload_mesh_begin and _commit */
     PspExpStream in;
     PspExpWriter frame;
     PspExpWriter msg;
@@ -416,6 +417,7 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
     if (ctx->hello.input_rate_max && ack.input_rate > ctx->hello.input_rate_max) ack.input_rate = ctx->hello.input_rate_max;
     ack.audio_rate = ctx->cfg.audio_rate;
     ack.audio_channels = ctx->cfg.audio_channels;
+    if (ctx->cfg.depth_buffer && (ctx->hello.features & PSPEXP_FEATURE_3D)) ack.flags |= PSPEXP_ACK_DEPTH;
     if (pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_HELLO_ACK, &ack, sizeof(ack)) < 0) return;
     ctx->state = PSPEXP_LINK_CONNECTED;
     ctx_log(ctx, "connected: executor %u, %ux%u, vram %u KiB, ram %u KiB, formats 0x%x",
@@ -1003,6 +1005,124 @@ void pspexp_draw_line(PspExpContext *ctx, int16_t x0, int16_t y0, int16_t x1, in
     memset(&l, 0, sizeof(l));
     l.x0 = x0; l.y0 = y0; l.x1 = x1; l.y1 = y1; l.color = color; l.alpha = alpha;
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_DRAW_LINE, 0, &l, sizeof(l));
+}
+
+int pspexp_3d_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && (ctx->hello.features & PSPEXP_FEATURE_3D) != 0;
+}
+
+/* Connected already: the answer to HELLO again, now asking for it (the
+ * runtime takes a repeated HELLO_ACK as a change of these settings). */
+void pspexp_set_depth_buffer(PspExpContext *ctx, int on)
+{
+    PspExpHelloAck ack;
+    if (ctx->cfg.depth_buffer == on) return;
+    ctx->cfg.depth_buffer = on;
+    if (!pspexp_3d_supported(ctx)) return;
+    memset(&ack, 0, sizeof(ack));
+    ack.protocol = PSPEXP_PROTOCOL_VERSION;
+    ack.input_rate = ctx->cfg.input_rate;
+    if (ctx->hello.input_rate_max && ack.input_rate > ctx->hello.input_rate_max) ack.input_rate = ctx->hello.input_rate_max;
+    ack.audio_rate = ctx->cfg.audio_rate;
+    ack.audio_channels = ctx->cfg.audio_channels;
+    ack.flags = on ? PSPEXP_ACK_DEPTH : 0;
+    pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_HELLO_ACK, &ack, sizeof(ack));
+}
+
+void pspexp_3d_state(PspExpContext *ctx, const PspExp3DState *s)
+{
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_STATE, 0, s, sizeof(*s));
+}
+
+void pspexp_3d_matrices(PspExpContext *ctx, const float projection[16], const float modelview[16], const float texture[16])
+{
+    PspExp3DMatrices m;
+    memcpy(m.projection, projection, sizeof(m.projection));
+    memcpy(m.modelview, modelview, sizeof(m.modelview));
+    memcpy(m.texture, texture, sizeof(m.texture));
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_MATRICES, 0, &m, sizeof(m));
+}
+
+void pspexp_3d_lights(PspExpContext *ctx, const PspExp3DLights *l)
+{
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_LIGHTS, 0, l, sizeof(*l));
+}
+
+void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_t depth)
+{
+    PspExp3DClear c;
+    memset(&c, 0, sizeof(c));
+    c.flags = flags; c.color = color; c.depth = depth;
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_CLEAR, 0, &c, sizeof(c));
+}
+
+void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count)
+{
+    PspExp3DDraw d;
+    uint32_t size = pspexp_3d_vertex_size(vertex_type);
+    void *v;
+    if (!size || !count || count > PSPEXP_3D_MAX_VERTICES || primitive > PSPEXP_3D_PRIM_MAX) return NULL;
+    memset(&d, 0, sizeof(d));
+    d.primitive = primitive; d.vertex_type = vertex_type; d.count = count;
+    if (pspexp_writer_begin(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_DRAW, 0) < 0 ||
+        pspexp_writer_append(&ctx->frame, &d, sizeof(d)) < 0 ||
+        !(v = pspexp_writer_reserve(&ctx->frame, PSPEXP_ALIGN_UP((size_t)size * count)))) return NULL;
+    pspexp_writer_end(&ctx->frame);   /* already padded: nothing moves the reserved bytes */
+    return v;
+}
+
+void *pspexp_upload_mesh_begin(PspExpContext *ctx, uint16_t id, uint8_t kind, uint32_t vertex_type, uint32_t count)
+{
+    PspExpMeshUpload u;
+    uint32_t size = kind == PSPEXP_MESH_VERTICES ? pspexp_3d_vertex_size(vertex_type) : kind == PSPEXP_MESH_INDICES16 ? 2 : 0;
+    uint8_t *p;
+    if (!size || !count) return NULL;
+    memset(&u, 0, sizeof(u));
+    u.id = id; u.kind = kind; u.vertex_type = vertex_type; u.count = count; u.data_length = size * count;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_UPLOAD_MESH, 0) < 0) return NULL;
+    p = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(u) + PSPEXP_ALIGN_UP(u.data_length));
+    if (!p) return NULL;
+    memcpy(p, &u, sizeof(u));
+    ctx->pending_id = id;
+    return p + sizeof(u);
+}
+
+int pspexp_upload_mesh_commit(PspExpContext *ctx)
+{
+    Resource *r;
+    const uint8_t *payload;
+    uint32_t len;
+    if (pspexp_writer_end(&ctx->msg) < 0) return -1;
+    payload = ctx->msg.buf + PSPEXP_HEADER_SIZE;
+    len = (uint32_t)(ctx->msg.len - PSPEXP_HEADER_SIZE);
+    r = add_res(ctx, ctx->pending_id);
+    if (!r) return -1;
+    if (r->retained) { free(r->retained); r->retained = NULL; }
+    r->kind = PSPEXP_KIND_MESH;
+    r->opcode = PSPEXP_OP_RESOURCE_UPLOAD_MESH;
+    if (ctx->cfg.retain_uploads && (r->retained = (uint8_t *)malloc(len))) { memcpy(r->retained, payload, len); r->retained_len = len; }
+    r->state = PSPEXP_RES_PENDING;
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+uint16_t *pspexp_3d_draw_mesh(PspExpContext *ctx, uint16_t vertices, uint16_t indices, uint8_t primitive,
+                              uint32_t first, uint32_t count)
+{
+    static uint16_t none;
+    PspExp3DDrawMesh d;
+    uint16_t *p;
+    if (!count || count > PSPEXP_3D_MAX_VERTICES || primitive > PSPEXP_3D_PRIM_MAX) return NULL;
+    memset(&d, 0, sizeof(d));
+    d.vertices = vertices; d.indices = indices; d.primitive = primitive; d.first = first; d.count = count;
+    if (pspexp_writer_begin(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_DRAW_MESH, 0) < 0 ||
+        pspexp_writer_append(&ctx->frame, &d, sizeof(d)) < 0) return NULL;
+    if (indices != PSPEXP_MESH_INLINE) { pspexp_writer_end(&ctx->frame); return &none; }
+    if (!(p = (uint16_t *)pspexp_writer_reserve(&ctx->frame, PSPEXP_ALIGN_UP((size_t)count * 2u)))) return NULL;
+    pspexp_writer_end(&ctx->frame);   /* already padded: nothing moves the reserved bytes */
+    return p;
 }
 
 long pspexp_present(PspExpContext *ctx)

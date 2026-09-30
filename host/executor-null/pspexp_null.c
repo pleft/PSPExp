@@ -58,6 +58,32 @@ static uint32_t op_present(void *u)
     }
     return (uint32_t)now;
 }
+/* 3D: counted (a check of the messages, not a renderer) */
+static void op_depth_buffer(void *u, int on) { ((PspExpNullExecutor *)u)->stats.depth_buffer = on; }
+static void op_state3d(void *u, const PspExp3DState *s) { (void)s; ((PspExpNullExecutor *)u)->stats.states3d++; }
+static void op_matrices3d(void *u, const PspExp3DMatrices *m) { (void)m; ((PspExpNullExecutor *)u)->stats.matrices3d++; }
+static void op_lights3d(void *u, const PspExp3DLights *l) { (void)l; ((PspExpNullExecutor *)u)->stats.lights3d++; }
+static void op_clear3d(void *u, const PspExp3DClear *c) { (void)c; ((PspExpNullExecutor *)u)->stats.clears3d++; }
+static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal, uint8_t prim, uint32_t vt, uint32_t count, const void *v)
+{
+    PspExpNullExecutor *x = (PspExpNullExecutor *)u;
+    (void)pal; (void)prim; (void)vt; (void)v;
+    x->stats.draws3d++;
+    x->stats.vertices3d += count;
+    if (tex) x->stats.textured3d++;
+}
+
+static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal, uint8_t prim, uint32_t vt, uint32_t count,
+                           const void *v, const uint16_t *ix, int inl)
+{
+    PspExpNullExecutor *x = (PspExpNullExecutor *)u;
+    (void)pal; (void)prim; (void)vt; (void)v; (void)ix; (void)inl;
+    x->stats.draws3d++;
+    x->stats.mesh_draws3d++;
+    x->stats.vertices3d += count;
+    if (tex) x->stats.textured3d++;
+}
+
 static void op_log(void *u, const char *msg) { (void)u; fprintf(stderr, "null-executor: %s\n", msg); }
 static int  op_audio_start(void *u, PspExpMixer *m, uint32_t rate) { (void)rate; ((PspExpNullExecutor *)u)->mixer = m; return 0; }
 static void op_audio_stop(void *u) { ((PspExpNullExecutor *)u)->mixer = NULL; }
@@ -115,6 +141,13 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.present = op_present;
     ops.audio_start = op_audio_start;
     ops.audio_stop = op_audio_stop;
+    ops.depth_buffer = op_depth_buffer;
+    ops.state3d = op_state3d;
+    ops.matrices3d = op_matrices3d;
+    ops.lights3d = op_lights3d;
+    ops.draw3d = op_draw3d;
+    ops.clear3d = op_clear3d;
+    ops.draw3d_mesh = op_draw3d_mesh;
     ops.log = op_log;
     pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick */
     pspexp_clock_posix_install(&ops);      /* a clock CLOCK_SET can move (in this process only) */

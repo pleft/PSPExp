@@ -12,7 +12,7 @@ dev/               run and test from the build tree, a PSP on the Mac's USB or a
   pspexp-run         any SDL2 program on the PSP (the SDL layer from build/host)
   pspexp-doom        Chocolate Doom + Freedoom on the PSP
   pspexp-tyrian      OpenTyrian on the PSP
-  run-ppsspp.sh      the PSP runtime in the PPSSPP emulator
+  run-ppsspp.sh      the PSP runtime in the PPSSPP emulator (installed fresh into slot a)
   bench-shim.sh      the SDL layer's upload benchmark (Doom timedemo), here or on a board
   export-stratagus-patch.sh   the Warcraft (Stratagus) backend as a patch
 

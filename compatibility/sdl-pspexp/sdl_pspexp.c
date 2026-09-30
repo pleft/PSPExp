@@ -210,6 +210,8 @@ static struct {
     /* window-surface streaming (no renderer) */
     Tex *surface_tex; int surface_w, surface_h;
     unsigned long total_frames;
+    /* OpenGL (gl_pspexp.c) */
+    int want_depth, gl_context; SDL_Window *gl_window;
 } S;
 
 enum { B_CROSS, B_CIRCLE, B_SQUARE, B_TRIANGLE, B_L, B_R, B_START, B_SELECT, B_UP, B_DOWN, B_LEFT, B_RIGHT, B_COUNT };
@@ -353,6 +355,7 @@ static void connect_once(void)
     if (!S.transport && S.mode == 2) { logf_("%s", err[0] ? err : "no transport"); return; }
     S.ctx = pspexp_create(S.transport, NULL);
     pspexp_set_log(S.ctx, lib_log, NULL);
+    if (S.want_depth) pspexp_set_depth_buffer(S.ctx, 1);   /* an OpenGL program: before the handshake asks for it */
     if (!S.transport) logf_("%s: retrying every second", err[0] ? err : "no PSP yet");
     else if (pspexp_connect(S.ctx, 5000) < 0) {
         logf_("no HELLO from the runtime: retrying every second");
@@ -1450,6 +1453,14 @@ HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, in
         w = PSP_W; h = PSP_H;   /* "the desktop's size" or none at all: the PSP's screen */
         flags &= ~(Uint32)SDL_WINDOW_FULLSCREEN_DESKTOP;
     }
+#ifndef PSPEXP_STATIC_RENAME
+    if (headless_display() && (flags & SDL_WINDOW_OPENGL)) {
+        /* SDL's dummy driver has no OpenGL; ours needs no GPU (gl_pspexp.c) */
+        flags &= ~(Uint32)SDL_WINDOW_OPENGL;
+        win = REAL(SDL_CreateWindow)(title, x, y, w, h, flags);
+        if (win) S.gl_window = win;
+    } else
+#endif
     win = REAL(SDL_CreateWindow)(title, x, y, w, h, flags);
     if (win && !S.win) { S.win = win; S.win_w = w; S.win_h = h; S.px = w / 2.0f; S.py = h / 2.0f; }   /* the pointer starts centred */
     return win;
@@ -1893,6 +1904,85 @@ HOOK(void, SDL_RenderPresent, (SDL_Renderer *r))
     if (r == S.ren) end_frame();
 }
 
+/* ---- hooks: OpenGL (gl_pspexp.c draws; here the context and the frames) ---------- */
+
+#ifndef PSPEXP_STATIC_RENAME
+#include "gl_pspexp.h"
+
+PspExpContext *shim_gl_frame(void)
+{
+    if (!link_up() || !pspexp_3d_supported(S.ctx)) return NULL;
+    begin_frame();
+    return S.ctx;
+}
+
+void shim_gl_geometry(int *win_w, int *win_h, float *scale, int *ox, int *oy)
+{
+    *win_w = S.win_w > 0 ? S.win_w : 480;
+    *win_h = S.win_h > 0 ? S.win_h : 272;
+    *scale = S.sx > 0 ? S.sx : 1.0f;
+    *ox = S.ox; *oy = S.oy;
+}
+
+uint16_t shim_gl_handle(void) { return alloc_handle(); }
+int shim_gl_reconnects(void) { return S.ctx ? (int)pspexp_stats(S.ctx)->reconnects : 0; }
+
+void shim_gl_log(const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    fprintf(stderr, "[sdl-pspexp] "); vfprintf(stderr, fmt, ap); fprintf(stderr, "\n");
+    va_end(ap);
+}
+
+static int gl_context_token;   /* its address is the context handed out */
+
+HOOK(SDL_GLContext, SDL_GL_CreateContext, (SDL_Window *win))
+{
+    if (!S.win) { S.win = win; SDL_GetWindowSize(win, &S.win_w, &S.win_h); }
+    S.want_depth = 1;
+    if (S.inited && S.ctx) pspexp_set_depth_buffer(S.ctx, 1);   /* connected already (audio came first) */
+    connect_once();
+    update_scale();
+    pspexp_gl_init();
+    S.gl_context = 1;
+    if (S.active && S.ctx && link_up() && !pspexp_3d_supported(S.ctx))
+        logf_("the PSP's runtime cannot draw OpenGL programs (no 3D): update it");
+    if (S.hide_window && S.active) SDL_HideWindow(win);
+    return (SDL_GLContext)&gl_context_token;
+}
+HOOK(int, SDL_GL_MakeCurrent, (SDL_Window *win, SDL_GLContext c)) { (void)win; (void)c; return 0; }
+HOOK(SDL_GLContext, SDL_GL_GetCurrentContext, (void)) { return S.gl_context ? (SDL_GLContext)&gl_context_token : NULL; }
+HOOK(SDL_Window *, SDL_GL_GetCurrentWindow, (void)) { return S.gl_context ? S.win : NULL; }
+HOOK(void, SDL_GL_DeleteContext, (SDL_GLContext c)) { (void)c; }
+HOOK(void *, SDL_GL_GetProcAddress, (const char *proc)) { return pspexp_gl_proc(proc); }
+HOOK(SDL_bool, SDL_GL_ExtensionSupported, (const char *ext)) { return pspexp_gl_extension(ext) ? SDL_TRUE : SDL_FALSE; }
+HOOK(int, SDL_GL_LoadLibrary, (const char *path)) { (void)path; return 0; }
+HOOK(void, SDL_GL_UnloadLibrary, (void)) { }
+HOOK(int, SDL_GL_SetSwapInterval, (int interval)) { (void)interval; return 0; }
+HOOK(int, SDL_GL_GetSwapInterval, (void)) { return 1; }   /* the PSP's vertical blank paces every frame */
+HOOK(void, SDL_GL_GetDrawableSize, (SDL_Window *win, int *w, int *h)) { SDL_GetWindowSize(win, w, h); }
+HOOK(int, SDL_GL_SetAttribute, (SDL_GLattr attr, int value)) { (void)attr; (void)value; return 0; }
+HOOK(int, SDL_GL_GetAttribute, (SDL_GLattr attr, int *value))
+{
+    switch (attr) {
+    case SDL_GL_RED_SIZE: case SDL_GL_BLUE_SIZE: *value = 5; break;
+    case SDL_GL_GREEN_SIZE: *value = 6; break;
+    case SDL_GL_BUFFER_SIZE: case SDL_GL_DEPTH_SIZE: *value = 16; break;
+    case SDL_GL_DOUBLEBUFFER: case SDL_GL_ACCELERATED_VISUAL: case SDL_GL_CONTEXT_MAJOR_VERSION: *value = 1; break;
+    case SDL_GL_CONTEXT_MINOR_VERSION: *value = 3; break;
+    default: *value = 0; break;
+    }
+    return 0;
+}
+HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
+{
+    (void)win;
+    pspexp_gl_frame_done();
+    end_frame();
+    if (!link_up()) SDL_Delay(16);   /* no PSP to pace the frames */
+}
+#endif
+
 /* ---- hooks: event polling ------------------------------------------------------ */
 
 /* With the PSP as the screen, the host window is usually not the focused
@@ -1910,6 +2000,7 @@ static int hide_focus_loss(void)
 HOOK(Uint32, SDL_GetWindowFlags, (SDL_Window *win))
 {
     Uint32 f = REAL(SDL_GetWindowFlags)(win);
+    if (win && win == S.gl_window) f |= SDL_WINDOW_OPENGL;   /* as asked, though SDL made it without */
     if (hide_focus_loss() && win && win == S.win)
         f = (f | SDL_WINDOW_SHOWN | SDL_WINDOW_INPUT_FOCUS) & ~(Uint32)(SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN);
     return f;

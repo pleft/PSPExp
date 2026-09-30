@@ -3,6 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#if defined(__psp__)
+#include <malloc.h>
+#endif
 
 #define RUNTIME_VERSION 1
 
@@ -18,6 +21,17 @@ static void rt_log(PspExpRuntime *rt, const char *fmt, ...)
 }
 
 static uint32_t now_us(PspExpRuntime *rt) { return rt->ops.now_us(rt->ops.user); }
+
+/* 16-byte aligned (the GE reads meshes in place); freed with free(). */
+static void *memalign_portable(size_t n)
+{
+#if defined(__psp__)
+    return memalign(16, n);
+#else
+    void *p = NULL;
+    return posix_memalign(&p, 16, n ? n : 16) == 0 ? p : NULL;
+#endif
+}
 
 void pspexp_runtime_default_config(PspExpRuntimeConfig *cfg, uint8_t executor)
 {
@@ -55,6 +69,10 @@ static void audio_unlock(PspExpRuntime *rt) { if (rt->audio_active && rt->ops.au
 static void destroy_entry(PspExpRuntime *rt, PspExpCacheEntry *e)
 {
     if (e->kind == PSPEXP_KIND_PALETTE) { if (rt->ops.palette_destroy) rt->ops.palette_destroy(rt->ops.user, e); }
+    else if (e->kind == PSPEXP_KIND_MESH) {
+        free(e->user);
+        e->user = NULL;
+    }
     else if (e->kind == PSPEXP_KIND_SOUND) {
         audio_lock(rt);
         if (rt->audio_active) pspexp_mixer_stop_sound(&rt->mixer, e->id);
@@ -63,6 +81,7 @@ static void destroy_entry(PspExpRuntime *rt, PspExpCacheEntry *e)
         e->user = NULL;
     }
     else if (rt->ops.texture_destroy) rt->ops.texture_destroy(rt->ops.user, e);
+    if (e == rt->tex3d || e == rt->pal3d) rt->tex3d = rt->pal3d = NULL;   /* looked up again at the next draw */
     pspexp_cache_remove(&rt->cache, e);
 }
 
@@ -85,6 +104,8 @@ static void release_all(PspExpRuntime *rt)
     audio_shutdown(rt);
     rt->connected = 0;
     rt->in_frame = 0;
+    rt->tex3d = rt->pal3d = NULL;
+    rt->tex3d_on = 0;
     rt->bench_active = 0;
     rt->uplink_remaining = 0;
     pspexp_stream_reset(&rt->in);
@@ -120,7 +141,8 @@ static void send_hello(PspExpRuntime *rt)
     h.vram_budget = rt->cache.vram_budget;
     h.ram_budget = rt->cache.ram_budget;
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
-                 (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0);
+                 (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
+                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -367,6 +389,136 @@ static void handle_tile_batch(PspExpRuntime *rt, const PspExpMessage *m)
     rt->stats.tiles += b->count;
 }
 
+/* ---- 3D --------------------------------------------------------------------- */
+
+static void handle_draw_mesh(PspExpRuntime *rt, const PspExpMessage *m);
+
+static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    switch (m->header->opcode) {
+    case PSPEXP_OP_3D_STATE: {
+        const PspExp3DState *s;
+        if (pspexp_message_expect(m, sizeof(*s)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        s = (const PspExp3DState *)m->payload;
+        rt->tex3d_on = (s->enable & PSPEXP_3D_TEXTURE) != 0;
+        if (!rt->tex3d_on || s->texture != rt->tex3d_id) rt->tex3d = rt->pal3d = NULL;
+        rt->tex3d_id = s->texture;
+        if (rt->ops.state3d) rt->ops.state3d(rt->ops.user, s);
+        return;
+    }
+    case PSPEXP_OP_3D_MATRICES:
+        if (pspexp_message_expect(m, sizeof(PspExp3DMatrices)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        if (rt->ops.matrices3d) rt->ops.matrices3d(rt->ops.user, (const PspExp3DMatrices *)m->payload);
+        return;
+    case PSPEXP_OP_3D_LIGHTS:
+        if (pspexp_message_expect(m, sizeof(PspExp3DLights)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        if (rt->ops.lights3d) rt->ops.lights3d(rt->ops.user, (const PspExp3DLights *)m->payload);
+        return;
+    case PSPEXP_OP_3D_CLEAR:
+        if (pspexp_message_expect(m, sizeof(PspExp3DClear)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        if (rt->ops.clear3d) rt->ops.clear3d(rt->ops.user, (const PspExp3DClear *)m->payload);
+        return;
+    case PSPEXP_OP_3D_DRAW_MESH:
+        handle_draw_mesh(rt, m);
+        return;
+    case PSPEXP_OP_3D_DRAW: {
+        const PspExp3DDraw *d;
+        uint32_t size;
+        if (pspexp_message_expect(m, sizeof(*d)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        d = (const PspExp3DDraw *)m->payload;
+        size = pspexp_3d_vertex_size(d->vertex_type);
+        if (!size || d->primitive > PSPEXP_3D_PRIM_MAX) { send_error(rt, PSPEXP_ERR_BAD_VERTEX_FMT, m, d->vertex_type); return; }
+        if (d->count > PSPEXP_3D_MAX_VERTICES) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, d->count); return; }
+        if ((uint64_t)d->count * size > m->length - sizeof(*d)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, d->count); return; }
+        if (!d->count) return;
+        if (rt->tex3d_on && !rt->tex3d) {
+            rt->tex3d = batch_atlas(rt, rt->tex3d_id, PSPEXP_PALETTE_DEFAULT, &rt->pal3d);
+            if (!rt->tex3d) rt->tex3d_on = 0;   /* reported once; drawn untextured until the next state */
+        }
+        if (rt->ops.draw3d)
+            rt->ops.draw3d(rt->ops.user, rt->tex3d_on ? rt->tex3d : NULL, rt->tex3d_on ? rt->pal3d : NULL,
+                           d->primitive, d->vertex_type, d->count, m->payload + sizeof(*d));
+        rt->stats.draws3d++;
+        rt->stats.vertices3d += d->count;
+        return;
+    }
+    default:
+        return;
+    }
+}
+
+static void handle_mesh_upload(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    const PspExpMeshUpload *u;
+    PspExpCacheEntry *e;
+    int reason;
+    uint32_t size, i;
+    if (pspexp_message_expect(m, sizeof(*u)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    u = (const PspExpMeshUpload *)m->payload;
+    size = u->kind == PSPEXP_MESH_VERTICES ? pspexp_3d_vertex_size(u->vertex_type) : u->kind == PSPEXP_MESH_INDICES16 ? 2 : 0;
+    if (!size || u->count == 0 || (uint64_t)u->count * size != u->data_length || u->data_length > m->length - sizeof(*u) ||
+        (u->kind == PSPEXP_MESH_VERTICES && u->count > PSPEXP_3D_MAX_VERTICES + 1)) {
+        send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, u->id, PSPEXP_RERR_BAD_LENGTH, 0);
+        return;
+    }
+    e = pspexp_cache_insert_mesh(&rt->cache, u, &reason);
+    if (!e) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, u->id, (uint16_t)reason, 0); return; }
+    e->user = memalign_portable(u->data_length);
+    if (!e->user) { pspexp_cache_remove(&rt->cache, e); send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, u->id, PSPEXP_RERR_OUT_OF_MEMORY, 0); return; }
+    memcpy(e->user, m->payload + sizeof(*u), u->data_length);
+    if (u->kind == PSPEXP_MESH_INDICES16)   /* once here, so a draw checks its range only */
+        for (i = 0; i < u->count; i++) if (((const uint16_t *)e->user)[i] > e->max_index) e->max_index = ((const uint16_t *)e->user)[i];
+    send_ready(rt, PSPEXP_OP_RESOURCE_READY, e->id, e->tier);
+}
+
+static PspExpCacheEntry *find_mesh(PspExpRuntime *rt, uint16_t id, uint8_t kind)
+{
+    PspExpCacheEntry *e = pspexp_cache_find(&rt->cache, id);
+    if (!e) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, id, PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); return NULL; }
+    if (e->kind != PSPEXP_KIND_MESH || e->format != kind) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, id, PSPEXP_RERR_WRONG_KIND, rt->frame_seq); return NULL; }
+    return e;
+}
+
+static void handle_draw_mesh(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    const PspExp3DDrawMesh *d;
+    PspExpCacheEntry *v, *ix = NULL;
+    const uint16_t *indices = NULL;
+    int inl = 0;
+    uint32_t size, i, top = 0;
+    if (pspexp_message_expect(m, sizeof(*d)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    d = (const PspExp3DDrawMesh *)m->payload;
+    if (d->primitive > PSPEXP_3D_PRIM_MAX) { send_error(rt, PSPEXP_ERR_BAD_VERTEX_FMT, m, d->primitive); return; }
+    if (!d->count) return;
+    if (d->count > PSPEXP_3D_MAX_VERTICES) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, d->count); return; }
+    if (!(v = find_mesh(rt, d->vertices, PSPEXP_MESH_VERTICES))) return;
+    size = pspexp_3d_vertex_size(v->vertex_type);
+    if (d->indices == PSPEXP_MESH_NONE) {
+        if ((uint64_t)d->first + d->count > v->count) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, d->count); return; }
+    } else if (d->indices == PSPEXP_MESH_INLINE) {
+        if ((uint64_t)d->count * 2u > m->length - sizeof(*d)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, d->count); return; }
+        indices = (const uint16_t *)(const void *)(m->payload + sizeof(*d));
+        for (i = 0; i < d->count; i++) if (indices[i] > top) top = indices[i];
+        if (top >= v->count) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, top); return; }
+        inl = 1;
+    } else {
+        if (!(ix = find_mesh(rt, d->indices, PSPEXP_MESH_INDICES16))) return;
+        if ((uint64_t)d->first + d->count > ix->count || ix->max_index >= v->count) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, d->count); return; }
+        indices = (const uint16_t *)ix->user + d->first;
+    }
+    if (rt->tex3d_on && !rt->tex3d) {
+        rt->tex3d = batch_atlas(rt, rt->tex3d_id, PSPEXP_PALETTE_DEFAULT, &rt->pal3d);
+        if (!rt->tex3d) rt->tex3d_on = 0;
+    }
+    if (rt->ops.draw3d_mesh)
+        rt->ops.draw3d_mesh(rt->ops.user, rt->tex3d_on ? rt->tex3d : NULL, rt->tex3d_on ? rt->pal3d : NULL, d->primitive,
+                            v->vertex_type, d->count,
+                            d->indices == PSPEXP_MESH_NONE ? (const uint8_t *)v->user + (size_t)d->first * size : v->user,
+                            indices, inl);
+    rt->stats.draws3d++;
+    rt->stats.vertices3d += d->count;
+}
+
 static void handle_bench(PspExpRuntime *rt, const PspExpMessage *m)
 {
     switch (m->header->opcode) {
@@ -572,7 +724,9 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         rt->connected = 1;
         rt->maintenance = (rt->ack.flags & PSPEXP_ACK_MAINTENANCE) != 0;
         if (rt->maintenance) { rt_log(rt, "maintenance: the host speaks protocol %u; files only", rt->ack.protocol); return; }
-        rt_log(rt, "connected: input %u Hz, audio %u Hz", rt->ack.input_rate, rt->ack.audio_rate);
+        rt_log(rt, "connected: input %u Hz, audio %u Hz%s", rt->ack.input_rate, rt->ack.audio_rate,
+               rt->ack.flags & PSPEXP_ACK_DEPTH ? ", depth buffer" : "");
+        if (rt->ops.depth_buffer) rt->ops.depth_buffer(rt->ops.user, (rt->ack.flags & PSPEXP_ACK_DEPTH) != 0);
         if (rt->ack.audio_rate >= 8000 && rt->ack.audio_rate <= 48000 && rt->ops.audio_start && !rt->audio_active) {
             /* 32768-frame ring, start playing once 100 ms is buffered */
             if (pspexp_mixer_init(&rt->mixer, rt->ack.audio_rate, 32768, rt->ack.audio_rate / 10) == 0) {
@@ -730,6 +884,16 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
             d.sprites_dropped = rt->stats.frame_dropped;
             pspexp_writer_message(&rt->out, PSPEXP_CH_SYSTEM, PSPEXP_OP_PRESENT_DONE, 0, &d, sizeof(d));
         }
+        break;
+    case PSPEXP_OP_RESOURCE_UPLOAD_MESH:
+        if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        handle_mesh_upload(rt, m);
+        break;
+    case PSPEXP_OP_3D_STATE: case PSPEXP_OP_3D_MATRICES: case PSPEXP_OP_3D_LIGHTS:
+    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH:
+        if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        if (!rt->in_frame) { send_error(rt, PSPEXP_ERR_NOT_IN_FRAME, m, 0); return; }
+        handle_3d(rt, m);
         break;
     default:
         send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0);

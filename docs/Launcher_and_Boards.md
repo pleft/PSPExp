@@ -59,7 +59,8 @@ PSPExp is a 2D quad-and-texture protocol; the PSP GE has no shaders. So:
 - **SDL2 surface programs**: the shim streams the finished window surface
   (one texture per present). Pixels, not commands; the tile mirror is cheaper
   for static screens, the shim better for full-motion.
-- **OpenGL / GL ES**: cannot be translated. Only capture is possible.
+- **OpenGL / GL ES**: shaders cannot be translated; OpenGL 1.x can, and is
+  since 2026-09-30 (`compatibility/sdl-pspexp/README.md`, "OpenGL 1.x").
 - **Anything else** (X drawing, raw fbdev): capture only.
 
 ### 2.2 The shim as a preload library for glibc armhf

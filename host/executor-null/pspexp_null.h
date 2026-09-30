@@ -19,6 +19,8 @@ typedef struct PspExpNullStats {
     uint32_t frames, clips, sprite_draws, sprites, rects;
     uint32_t vertices_expanded;
     uint32_t palettes_created, indexed_draws, alpha_draws, flipped_draws, lines;
+    uint32_t states3d, matrices3d, lights3d, draws3d, vertices3d, textured3d, clears3d, mesh_draws3d;
+    int      depth_buffer;
 } PspExpNullStats;
 
 /* `cfg` may be NULL for defaults. */

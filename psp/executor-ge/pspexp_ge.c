@@ -7,8 +7,7 @@
 #include <string.h>
 
 #define FB_BYTES        ((uint32_t)PSPEXP_DISPLAY_STRIDE * PSPEXP_DISPLAY_HEIGHT * 2u)
-#define VRAM_TEX_BASE   (2u * FB_BYTES)
-#define VRAM_TEX_SIZE   (PSPEXP_VRAM_BYTES - VRAM_TEX_BASE)
+#define VRAM_TEX_SIZE   (PSPEXP_VRAM_BYTES - ge->tex_base)
 #define UNCACHED(p)     ((void *)((uintptr_t)(p) | 0x40000000u))
 
 typedef struct GeTexture {
@@ -70,7 +69,7 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
     if (e->tier == PSPEXP_TIER_VRAM) {
         uint32_t off;
         if (vram_alloc(ge, e->bytes, &off) == 0) {
-            t->ptr = (unsigned char *)sceGeEdramGetAddr() + VRAM_TEX_BASE + off;
+            t->ptr = (unsigned char *)sceGeEdramGetAddr() + ge->tex_base + off;
             t->vram_off = off;
             t->tier = PSPEXP_TIER_VRAM;
             memcpy(UNCACHED(t->ptr), pixels, e->bytes);
@@ -123,6 +122,216 @@ static void op_palette_destroy(void *u, PspExpCacheEntry *e)
     if (ge->cur_palette == e) ge->cur_palette = NULL;
 }
 
+/* ---- 3D state --------------------------------------------------------------- */
+
+/* Back to the state the 2D draws expect (pspexp_ge_init's). */
+static void leave_3d(PspExpGeExecutor *ge)
+{
+    if (!ge->mode3d) return;
+    sceGuDisable(GU_DEPTH_TEST);
+    sceGuDepthMask(GU_TRUE);
+    sceGuDisable(GU_CULL_FACE);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuDisable(GU_FOG);
+    sceGuDisable(GU_LIGHTING);
+    sceGuDisable(GU_DITHER);
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    sceGuShadeModel(GU_FLAT);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuPixelMask(0);
+    sceGuScissor(ge->clip_x, ge->clip_y, ge->clip_w, ge->clip_h);
+    ge->tex_enabled = 0;
+    ge->mode3d = 0;
+    ge->state_dirty = 1;
+}
+
+static void bind_texture(PspExpGeExecutor *ge, PspExpCacheEntry *atlas, PspExpCacheEntry *palette)
+{
+    GeTexture *t = (GeTexture *)atlas->user;
+    if (palette && (palette != ge->cur_palette || atlas != ge->cur_atlas)) {
+        /* CLUT bound per draw: index mask 0xF for T4, 0xFF for T8; blocks of 8 entries. */
+        sceGuClutMode(palette->format, 0, atlas->format == PSPEXP_TEX_T4 ? 0x0F : 0xFF, 0);
+        sceGuClutLoad((int)(palette->width / 8), palette->user);
+        ge->cur_palette = palette;
+    }
+    if (atlas != ge->cur_atlas) {
+        sceGuTexMode(atlas->format, 0, 0, atlas->layout == PSPEXP_LAYOUT_SWIZZLED);
+        sceGuTexImage(0, atlas->width, atlas->height, atlas->width, t->ptr);
+        sceGuTexFlush();
+        ge->cur_atlas = atlas;
+        ge->stats.texture_changes++;
+    }
+}
+
+static void set_enabled(int cap, int on) { if (on) sceGuEnable(cap); else sceGuDisable(cap); }
+
+/* The stored 3D state onto the GE (all of it: cheap next to a frame). */
+static void apply_3d(PspExpGeExecutor *ge)
+{
+    const PspExp3DState *s = &ge->st;
+    int depth = ge->depth_on;
+    ge->mode3d = 1;
+    ge->state_dirty = 0;
+    set_enabled(GU_DEPTH_TEST, depth && (s->enable & PSPEXP_3D_DEPTH_TEST));
+    sceGuDepthMask(depth && (s->enable & PSPEXP_3D_DEPTH_WRITE) && (s->enable & PSPEXP_3D_DEPTH_TEST) ? GU_FALSE : GU_TRUE);
+    sceGuDepthFunc(s->depth_func);
+    sceGuDepthRange(s->depth_near, s->depth_far);
+    set_enabled(GU_CULL_FACE, s->enable & PSPEXP_3D_CULL);
+    sceGuFrontFace(s->front_face);
+    set_enabled(GU_BLEND, s->enable & PSPEXP_3D_BLEND);
+    sceGuBlendFunc(s->blend_op, s->blend_src, s->blend_dst, s->blend_fix_src, s->blend_fix_dst);
+    set_enabled(GU_ALPHA_TEST, s->enable & PSPEXP_3D_ALPHA_TEST);
+    sceGuAlphaFunc(s->alpha_func, s->alpha_ref, 0xFF);
+    set_enabled(GU_FOG, s->enable & PSPEXP_3D_FOG);
+    if (s->enable & PSPEXP_3D_FOG) sceGuFog(s->fog_near, s->fog_far, s->fog_color);
+    set_enabled(GU_LIGHTING, s->enable & PSPEXP_3D_LIGHTING);
+    set_enabled(GU_DITHER, s->enable & PSPEXP_3D_DITHER);
+    sceGuShadeModel(s->enable & PSPEXP_3D_SMOOTH ? GU_SMOOTH : GU_FLAT);
+    sceGuTexFunc(s->tex_func, s->tex_alpha);
+    sceGuTexFilter(s->tex_min, s->tex_mag);
+    sceGuTexWrap(s->tex_wrap_s, s->tex_wrap_t);
+    sceGuTexEnvColor(s->tex_env_color);
+    sceGuTexScale(s->tex_scale_u, s->tex_scale_v);
+    sceGuTexOffset(s->tex_offset_u, s->tex_offset_v);
+    if (s->tex_map == GU_ENVIRONMENT_MAP) sceGuTexMapMode(GU_ENVIRONMENT_MAP, s->tex_env_lights & 3, (s->tex_env_lights >> 4) & 3);
+    else sceGuTexMapMode(s->tex_map == GU_TEXTURE_MATRIX ? GU_TEXTURE_MATRIX : GU_TEXTURE_COORDS, 0, 0);
+    if (s->tex_map == GU_TEXTURE_MATRIX) sceGuTexProjMapMode(s->tex_source & 3);
+    sceGuViewport(2048 - PSPEXP_DISPLAY_WIDTH / 2 + s->viewport_x, 2048 - PSPEXP_DISPLAY_HEIGHT / 2 + s->viewport_y,
+                  s->viewport_w, s->viewport_h);
+    {
+        int x0 = s->scissor_x < 0 ? 0 : s->scissor_x, y0 = s->scissor_y < 0 ? 0 : s->scissor_y;
+        int x1 = s->scissor_x + s->scissor_w, y1 = s->scissor_y + s->scissor_h;
+        if (x1 > PSPEXP_DISPLAY_WIDTH) x1 = PSPEXP_DISPLAY_WIDTH;
+        if (y1 > PSPEXP_DISPLAY_HEIGHT) y1 = PSPEXP_DISPLAY_HEIGHT;
+        if (x1 <= x0 || y1 <= y0) { x0 = y0 = 0; x1 = y1 = 1; }
+        sceGuScissor(x0, y0, x1 - x0, y1 - y0);
+    }
+    sceGuPixelMask(s->pixel_mask);
+    sceGuEnable(GU_CLIP_PLANES);
+    ge->tex_enabled = -1;   /* texturing is set per draw */
+}
+
+static void op_depth_buffer(void *u, int on)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    uint32_t base = on ? 3u * FB_BYTES : 2u * FB_BYTES;
+    int i;
+    if (base == ge->tex_base) { ge->depth_on = on; return; }
+    for (i = 0; i < PSPEXP_GE_VRAM_BLOCKS; i++)
+        if (ge->vram[i].used) return;   /* textures already in VRAM: cannot move them (HELLO drops them all first) */
+    if (ge->in_frame) return;         /* the depth buffer's place is drawn over mid-frame */
+    ge->tex_base = base;
+    ge->depth_on = on;
+}
+
+static void op_state3d(void *u, const PspExp3DState *s)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    ge->st = *s;
+    ge->have_state = 1;
+    ge->state_dirty = 1;
+}
+
+static void op_matrices3d(void *u, const PspExp3DMatrices *m)
+{
+    static const ScePspFMatrix4 identity = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
+    (void)u;
+    sceGuSetMatrix(GU_PROJECTION, (const ScePspFMatrix4 *)m->projection);
+    sceGuSetMatrix(GU_VIEW, &identity);
+    sceGuSetMatrix(GU_MODEL, (const ScePspFMatrix4 *)m->modelview);
+    sceGuSetMatrix(GU_TEXTURE, (const ScePspFMatrix4 *)m->texture);
+}
+
+static void op_lights3d(void *u, const PspExp3DLights *l)
+{
+    int i;
+    (void)u;
+    sceGuAmbient(l->scene_ambient);
+    sceGuModelColor(l->emissive & 0xFFFFFF, l->ambient & 0xFFFFFF, l->diffuse & 0xFFFFFF, l->specular & 0xFFFFFF);
+    sceGuAmbientColor((l->ambient & 0xFFFFFF) | (l->diffuse & 0xFF000000u));   /* the lit alpha: GL takes the diffuse one */
+    sceGuColorMaterial((int)l->color_material);
+    sceGuSpecular(l->shininess);
+    sceGuLightMode(GU_SINGLE_COLOR);
+    for (i = 0; i < PSPEXP_3D_LIGHTS; i++) {
+        const PspExp3DLight *li = &l->light[i];
+        sceGuLight(i, li->type, li->components, (const ScePspFVector3 *)li->position);
+        if (!li->enabled) { sceGuDisable(GU_LIGHT0 + i); continue; }
+        sceGuLightColor(i, GU_AMBIENT, li->ambient);
+        sceGuLightColor(i, GU_DIFFUSE, li->diffuse);
+        sceGuLightColor(i, GU_SPECULAR, li->specular);
+        sceGuLightAtt(i, li->attenuation[0], li->attenuation[1], li->attenuation[2]);
+        if (li->type == GU_SPOTLIGHT)
+            sceGuLightSpot(i, (const ScePspFVector3 *)li->direction, li->spot_exponent, li->spot_cutoff);
+        sceGuEnable(GU_LIGHT0 + i);
+    }
+}
+
+static void op_clear3d(void *u, const PspExp3DClear *c)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    int flags = (int)(c->flags & PSPEXP_3D_CLEAR_COLOR);
+    if (ge->depth_on) flags |= (int)(c->flags & PSPEXP_3D_CLEAR_DEPTH);
+    if (!flags) return;
+    if (!ge->mode3d || ge->state_dirty) {
+        if (ge->have_state) apply_3d(ge);
+        else leave_3d(ge);
+    }
+    sceGuClearColor(c->color);
+    sceGuClearDepth(c->depth);
+    sceGuClear(flags);
+}
+
+static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t prim,
+                      uint32_t vtype, uint32_t count, const void *vertices)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    uint32_t bytes = count * pspexp_3d_vertex_size(vtype), rounded = (bytes + 15u) & ~15u;
+    unsigned char *v;
+    int textured = tex && tex->user;   /* coordinates in the vertices, or from the texture matrix */
+    if (ge->ring_used + rounded > PSPEXP_GE_RING_HALF) { ge->stats.dropped3d++; return; }
+    v = ge->ring[ge->ring_cur] + ge->ring_used;
+    ge->ring_used += rounded;
+    memcpy(v, vertices, bytes);
+    sceKernelDcacheWritebackRange(v, rounded);
+    if (!ge->mode3d || ge->state_dirty) apply_3d(ge);
+    if (textured) {
+        bind_texture(ge, tex, palette);
+        if (ge->tex_enabled != 1) { sceGuEnable(GU_TEXTURE_2D); ge->tex_enabled = 1; }
+    } else if (ge->tex_enabled != 0) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
+    sceGuDrawArray(prim, (int)vtype | GU_TRANSFORM_3D, (int)count, 0, v);
+    ge->stats.draws3d++;
+    ge->stats.last_vertex_bytes = ge->ring_used;
+}
+
+static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t prim, uint32_t vtype,
+                           uint32_t count, const void *vertices, const uint16_t *indices, int indices_inline)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    int textured = tex && tex->user;
+    if (indices_inline) {   /* into the ring: the message is gone before the GE reads it */
+        uint32_t bytes = count * 2u, rounded = (bytes + 15u) & ~15u;
+        unsigned char *p;
+        if (ge->ring_used + rounded > PSPEXP_GE_RING_HALF) { ge->stats.dropped3d++; return; }
+        p = ge->ring[ge->ring_cur] + ge->ring_used;
+        ge->ring_used += rounded;
+        memcpy(p, indices, bytes);
+        sceKernelDcacheWritebackRange(p, rounded);
+        indices = (const uint16_t *)p;
+    }
+    if (!ge->mode3d || ge->state_dirty) apply_3d(ge);
+    if (textured) {
+        bind_texture(ge, tex, palette);
+        if (ge->tex_enabled != 1) { sceGuEnable(GU_TEXTURE_2D); ge->tex_enabled = 1; }
+    } else if (ge->tex_enabled != 0) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
+    /* meshes are written back with the whole data cache at present */
+    sceGuDrawArray(prim, (int)vtype | GU_TRANSFORM_3D | (indices ? GU_INDEX_16BIT : 0), (int)count, indices, vertices);
+    ge->stats.draws3d++;
+}
+
 static void op_frame_begin(void *u, uint32_t seq)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
@@ -135,19 +344,22 @@ static void op_frame_begin(void *u, uint32_t seq)
     ge->cur_palette = NULL;
     ge->tex_enabled = 0;
     ge->in_frame = 1;
-    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
-    sceGuDisable(GU_TEXTURE_2D);
+    ge->clip_x = ge->clip_y = 0; ge->clip_w = PSPEXP_DISPLAY_WIDTH; ge->clip_h = PSPEXP_DISPLAY_HEIGHT;
+    ge->mode3d = 1;   /* whatever the last frame left: set the 2D state afresh */
+    leave_3d(ge);
+    if (ge->depth_on) sceGuDepthBuffer((void *)(2u * FB_BYTES), PSPEXP_DISPLAY_STRIDE);
 }
 
 static void op_set_clip(void *u, int16_t x, int16_t y, int16_t w, int16_t h)
 {
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     int x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y;
     int x1 = x + w, y1 = y + h;
-    (void)u;
     if (x1 > PSPEXP_DISPLAY_WIDTH) x1 = PSPEXP_DISPLAY_WIDTH;
     if (y1 > PSPEXP_DISPLAY_HEIGHT) y1 = PSPEXP_DISPLAY_HEIGHT;
     if (x1 <= x0 || y1 <= y0) { x0 = y0 = 0; x1 = y1 = 1; }   /* empty: clip everything */
-    sceGuScissor(x0, y0, x1 - x0, y1 - y0);
+    ge->clip_x = (int16_t)x0; ge->clip_y = (int16_t)y0; ge->clip_w = (int16_t)(x1 - x0); ge->clip_h = (int16_t)(y1 - y0);
+    if (!ge->mode3d) sceGuScissor(x0, y0, x1 - x0, y1 - y0);   /* else leave_3d sets it */
 }
 
 static PspExpVertex2D *op_vertex_alloc(void *u, uint32_t vertex_count)
@@ -167,19 +379,8 @@ static void op_draw_sprites(void *u, PspExpCacheEntry *atlas, PspExpCacheEntry *
     GeTexture *t = (GeTexture *)atlas->user;
     if (!t) return;
     sceKernelDcacheWritebackRange((void *)v, count * 2u * sizeof(PspExpVertex2D));
-    if (palette && (palette != ge->cur_palette || atlas != ge->cur_atlas)) {
-        /* CLUT bound per draw: index mask 0xF for T4, 0xFF for T8; blocks of 8 entries. */
-        sceGuClutMode(palette->format, 0, atlas->format == PSPEXP_TEX_T4 ? 0x0F : 0xFF, 0);
-        sceGuClutLoad((int)(palette->width / 8), palette->user);
-        ge->cur_palette = palette;
-    }
-    if (atlas != ge->cur_atlas) {
-        sceGuTexMode(atlas->format, 0, 0, atlas->layout == PSPEXP_LAYOUT_SWIZZLED);
-        sceGuTexImage(0, atlas->width, atlas->height, atlas->width, t->ptr);
-        sceGuTexFlush();
-        ge->cur_atlas = atlas;
-        ge->stats.texture_changes++;
-    }
+    leave_3d(ge);
+    bind_texture(ge, atlas, palette);
     if (!ge->tex_enabled) {
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
@@ -207,6 +408,7 @@ static void op_draw_rect(void *u, int16_t x, int16_t y, int16_t w, int16_t h, ui
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     FlatVertex *rv = (FlatVertex *)sceGuGetMemory(2 * sizeof(FlatVertex));
     if (!rv) return;
+    leave_3d(ge);
     if (ge->tex_enabled) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
     rv[0].color = flat_color(color, alpha); rv[0].x = x; rv[0].y = y; rv[0].z = 0; rv[0].pad = 0;
     rv[1].color = rv[0].color; rv[1].x = (int16_t)(x + w); rv[1].y = (int16_t)(y + h); rv[1].z = 0; rv[1].pad = 0;
@@ -219,6 +421,7 @@ static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     FlatVertex *lv = (FlatVertex *)sceGuGetMemory(2 * sizeof(FlatVertex));
     if (!lv) return;
+    leave_3d(ge);
     if (ge->tex_enabled) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
     lv[0].color = flat_color(color, alpha); lv[0].x = x0; lv[0].y = y0; lv[0].z = 0; lv[0].pad = 0;
     lv[1].color = lv[0].color; lv[1].x = x1; lv[1].y = y1; lv[1].z = 0; lv[1].pad = 0;
@@ -253,6 +456,19 @@ void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out)
 {
     const uint16_t *fb = (const uint16_t *)UNCACHED((unsigned char *)sceGeEdramGetAddr() + ge->displayed_offset);
     int y;
+    if (!ge->in_frame && ((uintptr_t)out & 15u) == 0) {
+        /* The GE copies it (a block transfer): the same bytes on the PSP, and
+         * PPSSPP, which keeps drawn frames in its own GPU, copies the real
+         * frame back for it (a CPU read of VRAM gets a stale one there). */
+        sceGuStart(GU_DIRECT, ge->list);
+        sceGuCopyImage(GU_PSM_5650, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT, PSPEXP_DISPLAY_STRIDE,
+                       (unsigned char *)sceGeEdramGetAddr() + ge->displayed_offset, 0, 0, PSPEXP_DISPLAY_WIDTH, out);
+        sceGuTexSync();
+        sceGuFinish();
+        sceGuSync(0, 0);
+        sceKernelDcacheInvalidateRange(out, PSPEXP_DISPLAY_WIDTH * PSPEXP_DISPLAY_HEIGHT * 2);
+        return;
+    }
     for (y = 0; y < PSPEXP_DISPLAY_HEIGHT; y++)
         memcpy(out + (size_t)y * PSPEXP_DISPLAY_WIDTH, fb + (size_t)y * PSPEXP_DISPLAY_STRIDE, PSPEXP_DISPLAY_WIDTH * 2);
 }
@@ -266,6 +482,8 @@ int pspexp_ge_init(PspExpGeExecutor *ge)
     memset(&ge->stats, 0, sizeof(ge->stats));
     memset(ge->vram, 0, sizeof(ge->vram));
     ge->ring_cur = 0; ge->ring_used = 0; ge->in_frame = 0; ge->cur_atlas = NULL; ge->tex_enabled = 0;
+    ge->tex_base = 2u * FB_BYTES; ge->depth_on = 0; ge->mode3d = 0; ge->have_state = 0; ge->state_dirty = 1;
+    ge->clip_x = ge->clip_y = 0; ge->clip_w = PSPEXP_DISPLAY_WIDTH; ge->clip_h = PSPEXP_DISPLAY_HEIGHT;
     ge->displayed_offset = FB_BYTES;   /* sceGuDispBuffer below */
     sceGuInit();
     sceGuStart(GU_DIRECT, ge->list);
@@ -310,6 +528,13 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->draw_line = op_draw_line;
     ops->present = op_present;
     ops->frame_ge_us = op_frame_ge_us;
+    ops->depth_buffer = op_depth_buffer;
+    ops->state3d = op_state3d;
+    ops->matrices3d = op_matrices3d;
+    ops->lights3d = op_lights3d;
+    ops->draw3d = op_draw3d;
+    ops->clear3d = op_clear3d;
+    ops->draw3d_mesh = op_draw3d_mesh;
 }
 
 void pspexp_ge_bind(PspExpGeExecutor *ge, PspExpRuntime *rt) { ge->rt = rt; }

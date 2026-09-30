@@ -51,13 +51,55 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 | PSP controls | a virtual game controller ("PSP (PSPExp)": a/b/x/y = cross/circle/square/triangle, shoulders, start/back, d-pad, left stick = nub) when the program initialised joysticks, plus keyboard events per `PSPEXP_KEYS` |
 
 Not mirrored: rotation, `SDL_RenderGeometry`, lines drawn into a render
-target, reading a render target back (`SDL_RenderReadPixels`), OpenGL /
-Vulkan drawing, and SDL 1.2 programs.
+target, reading a render target back (`SDL_RenderReadPixels`), OpenGL
+beyond 1.x (shaders), Vulkan, and SDL 1.2 programs. OpenGL 1.x is drawn:
+see below.
 
 The PSP is double-buffered: a program that never clears and redraws only
 the parts that changed (relying on the previous frame staying put) shows
 flicker between its two last frames; the window-surface path is immune
 since the whole surface goes every frame, behind a black letterbox clear.
+
+## OpenGL 1.x
+
+`gl_pspexp.c` is an OpenGL implementation of its own, in the same library:
+a program that makes an OpenGL context through SDL2 (`SDL_GL_CreateContext`)
+draws on the PSP, and no GPU on the board is used (a headless board's SDL
+has none: the `SDL_WINDOW_OPENGL` flag is taken off the window and the
+context is ours). The PSP's GE is fixed-function hardware much like
+OpenGL 1.x, so the translation is close: the board keeps GL's state and
+sends it in the GE's own terms (the 3D messages, `PSPEXP_FEATURE_3D`), the
+PSP transforms, lights, clips and draws. Needs a runtime with 3D (from
+2026-09-30); an older one gets nothing drawn and the log says so.
+
+| OpenGL | on the PSP |
+|---|---|
+| `glBegin`/`glEnd`, vertex arrays, `glDrawArrays`/`glDrawElements`, `glInterleavedArrays` | vertices in the GE's format (texture, colour, normal, position as floats), sent with the draw |
+| buffer objects (`glGenBuffers`...; not `GL_STREAM_DRAW`) | **meshes**: the buffer converted once and kept on the PSP (`RESOURCE_UPLOAD_MESH`), element buffers too; a draw is then 16 bytes. Neverball: 2.1 MB to 90 KB a frame |
+| display lists | recorded, replayed on the board (their vertices go every frame) |
+| matrix stacks, `glFrustum`, `glOrtho`, `glRotate`... | the GE's projection and world matrices (lighting in eye space) |
+| `glTexImage2D`, `glTexSubImage2D`, parameters, `glTexEnv` modulate / replace / decal / blend / add | textures resampled to powers of two of at most `PSPEXP_GL_TEXMAX` (256), 4444 with alpha or 5650, swizzled; sent before the first draw that uses them, again after a change |
+| lighting (4 lights), materials, `glColorMaterial`, linear fog (exp fog as a line) | the GE's own |
+| texture coordinate generation: object and eye linear, texture matrix | the GE's texture matrix (no per-vertex work here) |
+| sphere maps | the GE's environment map (the normal's eye-space x and y: GL's sphere map for a view straight ahead) |
+| depth, alpha test, blending (5650 framebuffer: no destination alpha), culling, scissor, `glColorMask`, `glClear` | the GE's own; a 16-bit depth buffer (VRAM for textures shrinks by 272 KB) |
+| queries (`glGet*`, `glGetString`: "1.3 PSPExp"), `glGetError`, `glPushAttrib` | answered here |
+
+Not there: shaders, a second texture unit (`GL_ARB_multitexture` is
+advertised with one unit: what goes in the others is left out), stencil,
+reading pixels back (`glReadPixels` gives black), copying from the
+framebuffer, clip planes, polygon modes other than fill, line width,
+`glBitmap`/`glDrawPixels`. Each is logged once when a program uses it.
+
+Measured 2026-09-30 on the PSP-1000 over USB from the Pi 400:
+`build/host/gl-demo` (a lit, textured, fogged scene: immediate mode, vertex
+arrays, a display list, blending, 2D on top) 59.9 fps, 84 KB a frame, PSP
+CPU 1.9 ms, GE 0.12 ms. Chromium B.S.U. (menu) 36 fps, 230 KB a frame (all
+immediate mode). Neverball (title) 30 fps, 85 KB a frame, GE 20 ms.
+
+The functions are found by name through `pspexp_gl_proc`; its table,
+`gl_pspexp_procs.h`, is made by `gen-gl-procs.py` (run it after adding a
+function; the tests check it is current).
 
 ## Environment
 
@@ -72,6 +114,10 @@ since the whole surface goes every frame, behind a black letterbox clear.
 | `PSPEXP_LOCAL_AUDIO=0` | silence the host's audio device |
 | `PSPEXP_AUDIO=psp` | drive the game's audio callback from the shim's own thread on a precise clock instead of the host device's cadence; the default when the host audio driver is SDL's `dummy` (headless hosts: the dummy driver runs slow and jittery and the PSP underruns) |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
+| `PSPEXP_GL_TEXMAX=256` | OpenGL: the largest texture side sent to the PSP (a power of two up to 512) |
+| `PSPEXP_GL_LOG=1` | OpenGL: each frame's draws, meshes made, unknown queries; `2`: every draw, and why a draw was not a mesh |
+| `PSPEXP_GL_DUMP=DIR` | OpenGL: every texture as sent, `DIR/tex-<name>-<w>x<h>.rgba` |
+| `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
 | `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/dev/bench-shim.sh` |
 

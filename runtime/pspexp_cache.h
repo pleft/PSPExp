@@ -17,7 +17,8 @@ extern "C" {
 enum PspExpResourceKind {
     PSPEXP_KIND_TEXTURE = 0,
     PSPEXP_KIND_PALETTE = 1,
-    PSPEXP_KIND_SOUND   = 2    /* width = channels, frame_count unused, height unused; user = PCM copy */
+    PSPEXP_KIND_SOUND   = 2,   /* width = channels, frame_count unused, height unused; user = PCM copy */
+    PSPEXP_KIND_MESH    = 3    /* format = PspExpMeshKind; count, vertex_type, max_index; user = the data (16-byte aligned) */
 };
 
 typedef struct PspExpCacheEntry {
@@ -33,6 +34,7 @@ typedef struct PspExpCacheEntry {
     uint16_t frame_count;
     uint16_t palette;       /* texture: palette handle for T4/T8 */
     PspExpFrame *frames;    /* owned copy of the frame table */
+    uint32_t count, vertex_type, max_index;   /* meshes */
     void    *user;          /* executor-specific (SDL_Texture*, VRAM pointer, ...) */
 } PspExpCacheEntry;
 
@@ -54,6 +56,8 @@ PspExpCacheEntry *pspexp_cache_insert_sound(PspExpCache *c, const PspExpSoundUpl
                                             uint32_t bytes, int *reason);
 PspExpCacheEntry *pspexp_cache_insert_palette(PspExpCache *c, const PspExpPaletteUpload *p,
                                               uint32_t bytes, int *reason);
+/* Meshes too. */
+PspExpCacheEntry *pspexp_cache_insert_mesh(PspExpCache *c, const PspExpMeshUpload *m, int *reason);
 void pspexp_cache_remove(PspExpCache *c, PspExpCacheEntry *e);
 /* Move an entry's accounting to another tier (the executor found VRAM
  * fragmented). -1 if the target tier's budget cannot take it. */

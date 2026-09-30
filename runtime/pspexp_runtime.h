@@ -48,6 +48,23 @@ typedef struct PspExpRuntimeOps {
                          uint16_t vertex_format, const PspExpVertex2D *v, uint32_t sprite_count);
     void (*draw_rect)(void *user, int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t alpha);
     void (*draw_line)(void *user, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, uint8_t alpha);
+    /* Optional 3D (PSPEXP_FEATURE_3D, advertised when draw3d is set). The
+     * runtime checks every message first. depth_buffer: at each connection,
+     * whether the host wants a depth buffer (PSPEXP_ACK_DEPTH). draw3d gets
+     * the state's texture (NULL: none, or not resident) and its palette;
+     * `vertices` is only valid during the call. */
+    void (*depth_buffer)(void *user, int on);
+    void (*state3d)(void *user, const PspExp3DState *s);
+    void (*matrices3d)(void *user, const PspExp3DMatrices *m);
+    void (*lights3d)(void *user, const PspExp3DLights *l);
+    void (*draw3d)(void *user, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t primitive,
+                   uint32_t vertex_type, uint32_t count, const void *vertices);
+    void (*clear3d)(void *user, const PspExp3DClear *c);
+    /* A mesh draw: `vertices` is a vertex mesh's data (kept until released);
+     * `indices` NULL, an index mesh's data, or (indices_inline) data only
+     * valid during the call. The runtime has checked every index. */
+    void (*draw3d_mesh)(void *user, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t primitive,
+                        uint32_t vertex_type, uint32_t count, const void *vertices, const uint16_t *indices, int indices_inline);
     /* Finish and display the frame; return the clock at the vblank it was shown. */
     uint32_t (*present)(void *user);
     /* Optional: GE render time of the frame just presented, microseconds. */
@@ -104,6 +121,7 @@ typedef struct PspExpRuntimeStats {
     uint32_t sounds, plays, stream_frames;
     uint32_t last_frame_bytes, last_execute_us;
     uint32_t frame_sprites, frame_dropped;   /* this frame: drawn / dropped for lack of vertex space */
+    uint32_t draws3d, vertices3d;            /* cumulative */
     uint32_t sprites_dropped;                /* cumulative */
     uint64_t bytes_in, bytes_out;
     uint32_t messages_in, messages_out;
@@ -131,6 +149,10 @@ typedef struct PspExpRuntime {
     uint8_t *fs_buf;                    /* FILE replies: allocated on the first request */
     uint8_t *scratch;            /* expansion scratch when vertex_alloc is NULL */
     size_t   scratch_cap;
+    /* 3D: the texture of the last 3D_STATE, resolved once */
+    uint16_t tex3d_id;
+    int      tex3d_on;
+    PspExpCacheEntry *tex3d, *pal3d;
     /* audio */
     PspExpMixer mixer;
     int      audio_active;
