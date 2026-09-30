@@ -10,6 +10,7 @@
 PspExpContext *shim_gl_frame(void);   /* the context with a frame open, or NULL: no PSP, or no 3D */
 void shim_gl_geometry(int *win_w, int *win_h, float *scale, int *ox, int *oy);
 uint16_t shim_gl_handle(void);        /* a resource handle of our own */
+void shim_gl_flush(void);             /* the frame so far to the PSP now (no game frame: a program still loading) */
 int shim_gl_reconnects(void);         /* changes when the PSP's state was lost */
 void shim_gl_log(const char *fmt, ...);
 

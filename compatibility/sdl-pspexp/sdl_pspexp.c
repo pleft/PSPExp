@@ -1926,6 +1926,16 @@ void shim_gl_geometry(int *win_w, int *win_h, float *scale, int *ox, int *oy)
 }
 
 uint16_t shim_gl_handle(void) { return alloc_handle(); }
+
+void shim_gl_flush(void)
+{
+    if (!S.frame_open || !link_up()) return;
+    pspexp_batch_flush(S.ctx);
+    pspexp_wait_present(S.ctx, 40);
+    pspexp_present(S.ctx);
+    S.frame_open = 0;
+    pspexp_pump(S.ctx, 0);
+}
 int shim_gl_reconnects(void) { return S.ctx ? (int)pspexp_stats(S.ctx)->reconnects : 0; }
 
 void shim_gl_log(const char *fmt, ...)

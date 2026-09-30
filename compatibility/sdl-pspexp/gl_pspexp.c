@@ -232,6 +232,8 @@ typedef struct GlTex {
     int dirty;                /* to be sent before the next draw with it */
     GLenum min_filter, mag_filter, wrap_s, wrap_t;
     int rt, rt_w, rt_h, rt_fmt;  /* a framebuffer object's colour: a render target on the PSP, drawn there */
+    uint32_t psp_bytes;          /* what it takes on the PSP now (0: not there) */
+    unsigned used;               /* the frame it was last drawn with */
     struct GlTex *next;
 } GlTex;
 
@@ -781,6 +783,15 @@ static int pow2_at_least(int v, int max)
  * power of two, 4444 when it has alpha, else 5650, swizzled for the GE. */
 static uint16_t mesh_handle(void);
 static void mesh_release(uint16_t h, uint32_t bytes);
+static int mesh_room(uint32_t bytes);
+static void frame_restart(void);
+static int texture_fits(PspExpContext *ctx, GlTex *keep, uint32_t bytes);
+static uint32_t texture_psp_bytes(const GlTex *t);
+static uint16_t free_handles[4096];
+static int nfree_handles;
+static uint32_t tex_bytes;          /* textures on the PSP (texture_room) */
+static unsigned tex_frame = 1;
+static void texture_room(PspExpContext *ctx, GlTex *keep, uint32_t bytes);
 static GlTex *fbo_texture(GLuint fb);
 
 /* Where the draws go: the render target of the framebuffer object bound
@@ -799,6 +810,10 @@ static int select_target(PspExpContext *ctx)
         bytes = want->rt_w * want->rt_h * (want->rt_fmt == PSPEXP_TEX_8888 ? 4 : 2);
         if (bytes > 512 * 1024) want->rt_fmt = want->has_alpha ? PSPEXP_TEX_4444 : PSPEXP_TEX_5650;
         if (want->handle) mesh_release(want->handle, 0);
+        tex_bytes -= want->psp_bytes;
+        want->psp_bytes = (uint32_t)want->rt_w * (uint32_t)want->rt_h * (want->rt_fmt == PSPEXP_TEX_8888 ? 4u : 2u);
+        texture_room(ctx, want, want->psp_bytes);
+        tex_bytes += want->psp_bytes;
         want->handle = mesh_handle();
         want->dirty = 0;
         pspexp_create_target(ctx, want->handle, (uint16_t)want->rt_w, (uint16_t)want->rt_h, (uint8_t)want->rt_fmt);
@@ -812,6 +827,49 @@ static int select_target(PspExpContext *ctx)
     return 1;
 }
 
+/* Textures on the PSP, against its memory: the least recently drawn go
+ * (released now: not drawn this frame, so no draw of it is waiting) and are
+ * sent again when drawn next. Meshes have their own share (MESH_BUDGET). */
+static uint32_t texture_budget(PspExpContext *ctx)
+{
+    const PspExpHello *h = pspexp_caps(ctx);
+    uint32_t total = h->ram_budget + h->vram_budget, mesh = 7u * 1024u * 1024u;
+    return total > mesh + 1024u * 1024u ? total - mesh : total / 2;
+}
+
+/* Whether `bytes` more would fit once what was not drawn this frame went. */
+static int texture_fits(PspExpContext *ctx, GlTex *keep, uint32_t bytes)
+{
+    GlTex *t;
+    uint32_t freeable = 0;
+    if (tex_bytes + bytes <= texture_budget(ctx)) return 1;
+    for (t = G.textures; t; t = t->next)
+        if (t != keep && t->handle && t->psp_bytes && !t->rt && t->used != tex_frame) freeable += t->psp_bytes;
+    return tex_bytes - freeable + bytes <= texture_budget(ctx);
+}
+
+static uint32_t texture_psp_bytes(const GlTex *t)
+{
+    return (uint32_t)pow2_at_least(t->w, G.texmax) * (uint32_t)pow2_at_least(t->h, G.texmax) * 2u;
+}
+
+static void texture_room(PspExpContext *ctx, GlTex *keep, uint32_t bytes)
+{
+    uint32_t budget = texture_budget(ctx);
+    while (tex_bytes + bytes > budget) {
+        GlTex *t, *oldest = NULL;
+        for (t = G.textures; t; t = t->next)
+            if (t != keep && t->handle && t->psp_bytes && !t->rt && t->used != tex_frame && (!oldest || t->used < oldest->used)) oldest = t;
+        if (!oldest) return;   /* all of it drawn this frame: the PSP says so if it cannot */
+        pspexp_release(ctx, oldest->handle);
+        free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = oldest->handle;
+        oldest->handle = 0;
+        tex_bytes -= oldest->psp_bytes;
+        oldest->psp_bytes = 0;
+        oldest->dirty = 1;
+    }
+}
+
 static void send_texture(PspExpContext *ctx, GlTex *t)
 {
     PspExpTextureDesc d;
@@ -821,8 +879,14 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     uint32_t bytes = (uint32_t)pw * (uint32_t)ph * 2u;
     t->dirty = 0;
     if (t->rt || !t->rgba || t->w <= 0 || t->h <= 0) return;   /* a render target: drawn on the PSP */
+    tex_bytes -= t->psp_bytes;
+    t->psp_bytes = 0;
+    texture_room(ctx, t, bytes);
     if (t->handle) pspexp_release(ctx, t->handle);
     else t->handle = mesh_handle();
+    t->psp_bytes = bytes;
+    tex_bytes += bytes;
+    if (G.log >= 2) gl_logf("texture %u sent: %dx%d as %dx%d", t->name, t->w, t->h, pw, ph);
     lin = (uint16_t *)malloc(bytes);
     if (!lin) return;
     for (y = 0; y < ph; y++) {
@@ -887,6 +951,17 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         G.reconnects = shim_gl_reconnects();
         G.state_sent = G.matrices_sent = G.lights_sent = 0;
         for (t = G.textures; t; t = t->next) if (t->handle && !t->rt) t->dirty = 1;
+        (void)0;   /* (the library resends what it kept: sizes are unchanged) */
+    }
+    {   /* a texture to send that does not fit beside this frame's: the frame goes now (a program
+         * loading draws hundreds of images into a target without ever swapping) */
+        GlTex *t = G.sh_active ? G.sh_tex : G.texture_2d ? find_texture(G.units[0]) : NULL;
+        if (t && t->rgba && !t->rt && (t->dirty || !t->handle) && !texture_fits(ctx, t, texture_psp_bytes(t) - t->psp_bytes)) {
+            if (G.log) gl_logf("frame sent early: textures to make room for");
+            shim_gl_flush();
+            frame_restart();
+            if (!(ctx = shim_gl_frame())) return NULL;
+        }
     }
     if (!select_target(ctx)) return NULL;
     if (!G.frame_cleared && !G.target) {
@@ -898,6 +973,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         pspexp_3d_clear(ctx, PSPEXP_3D_CLEAR_COLOR | PSPEXP_3D_CLEAR_DEPTH, 0xFF000000u, 0);
     }
     if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : G.texture_2d && (tex = find_texture(G.units[0])) && (tex->rgba || tex->rt)) {
+        tex->used = tex_frame;
         if (tex->dirty || !tex->handle) send_texture(ctx, tex);
         if (!tex->handle) tex = NULL;
     } else tex = NULL;
@@ -948,10 +1024,36 @@ static int texture_matrix_identity(void)
 }
 
 /* Send n vertices as one GE primitive (already split to fit). */
+static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uint8_t *data, int n);
+
+static void pack(uint8_t *out, uint32_t vt, const Vtx *v, int n)
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        if (vt & PSPEXP_3D_VT_TEXTURE) { memcpy(out, v[i].t, 8); out += 8; }
+        if (vt & PSPEXP_3D_VT_COLOR) { memcpy(out, &v[i].c, 4); out += 4; }
+        if (vt & PSPEXP_3D_VT_NORMAL) { memcpy(out, v[i].n, 12); out += 12; }
+        memcpy(out, v[i].p, 12); out += 12;
+    }
+}
+
 static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *v, int n)
 {
     uint8_t *out;
     int i;
+    if (n >= 512) {   /* a large draw: the same vertices as before may be a mesh on the PSP already */
+        static uint8_t *buf;
+        static size_t cap;
+        size_t bytes = (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
+        if (bytes > cap) { uint8_t *b = (uint8_t *)realloc(buf, bytes); if (b) { buf = b; cap = bytes; } }
+        if (bytes <= cap) {
+            pack(buf, vt, v, n);
+            if (content_mesh(ctx, prim, vt, buf, n)) { G.draws++; G.vertices += (unsigned)n; return; }
+            if ((out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n))) memcpy(out, buf, bytes);
+            G.draws++; G.vertices += (unsigned)n;
+            return;
+        }
+    }
     {   /* PSPEXP_GL_MAXDRAWS=N: only a frame's first N draws (bisecting) */
         static long max = -2;
         if (max == -2) max = getenv("PSPEXP_GL_MAXDRAWS") ? atol(getenv("PSPEXP_GL_MAXDRAWS")) : -1;
@@ -1105,6 +1207,14 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
 
 static void meshes_frame_done(PspExpContext *ctx);
 
+/* A new frame on the PSP: it has none of our state, and draws on the screen. */
+static void frame_restart(void)
+{
+    G.state_sent = G.matrices_sent = G.lights_sent = 0;
+    G.target = NULL;
+    tex_frame++;
+}
+
 void pspexp_gl_frame_done(void)
 {
     meshes_frame_done(shim_gl_frame());
@@ -1113,6 +1223,7 @@ void pspexp_gl_frame_done(void)
     G.state_sent = G.matrices_sent = G.lights_sent = 0;   /* each frame says it all again: small, and nothing gets stale */
     G.target = NULL;   /* every frame starts on the screen */
     G.frame_cleared = 0;
+    tex_frame++;
 }
 
 /* ---- display lists: recording ------------------------------------------------------ */
@@ -2089,6 +2200,8 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count)
 #define MESH_BUDGET (7u * 1024u * 1024u)   /* of the PSP's RAM for resources */
 
 typedef struct Mesh {
+    uint64_t hash;              /* a mesh by content (content_mesh): its vertices' hash; 0 for a buffer's */
+    int seen;                   /* ...drawn that many times; made on the PSP from the second */
     Array a[4];                 /* va, ca, na, ta as they were */
     uint32_t version[4];
     uint32_t vt;
@@ -2113,8 +2226,6 @@ static Mesh *meshes;
 static IndexMesh *index_meshes;
 static uint32_t mesh_bytes;
 static unsigned mesh_frame = 1;
-static uint16_t free_handles[4096];
-static int nfree_handles;
 /* Dropped meshes are released a frame late: this frame's display list,
  * which the GE runs at present, may still read them. */
 static uint16_t releases[2][2048];
@@ -2136,7 +2247,7 @@ static void meshes_forget_buffer(GLuint name)
     while (*pp) {
         Mesh *m = *pp;
         int k, hit = 0;
-        for (k = 0; k < 4; k++) if (m->a[k].enabled && m->a[k].buffer == name) hit = 1;
+        for (k = 0; k < 4; k++) if (!m->hash && m->a[k].enabled && m->a[k].buffer == name) hit = 1;
         if (hit) { *pp = m->next; mesh_release(m->handle, m->bytes); free(m); } else pp = &m->next;
     }
     while (*ip) {
@@ -2154,7 +2265,7 @@ static int mesh_room(uint32_t bytes)
         for (pp = &meshes; *pp; pp = &(*pp)->next) if ((*pp)->used != mesh_frame && (!oldest || (*pp)->used < (*oldest)->used)) oldest = pp;
         for (ip = &index_meshes; *ip; ip = &(*ip)->next) if ((*ip)->used != mesh_frame && (!ioldest || (*ip)->used < (*ioldest)->used)) ioldest = ip;
         if (oldest && (!ioldest || (*oldest)->used <= (*ioldest)->used)) {
-            Mesh *m = *oldest; *oldest = m->next; mesh_release(m->handle, m->bytes); free(m);
+            Mesh *m = *oldest; *oldest = m->next; if (m->handle) mesh_release(m->handle, m->bytes); free(m);
         } else if (ioldest) {
             IndexMesh *m = *ioldest; *ioldest = m->next; mesh_release(m->handle, m->bytes); free(m);
         } else return 0;
@@ -2206,7 +2317,7 @@ static Mesh *vertex_mesh(PspExpContext *ctx, uint32_t vt, int need)
     uint8_t *out;
     for (k = 0; k < 4; k++) ver[k] = a[k].enabled ? buffer_version(a[k].buffer) : 0;
     for (m = meshes; m; m = m->next) {
-        int same = m->vt == vt && m->count >= need;
+        int same = !m->hash && m->vt == vt && m->count >= need;
         for (k = 0; same && k < 4; k++)
             same = m->a[k].enabled == a[k].enabled && (!a[k].enabled ||
                    (m->a[k].buffer == a[k].buffer && m->a[k].ptr == a[k].ptr && m->a[k].size == a[k].size &&
@@ -2234,6 +2345,44 @@ static Mesh *vertex_mesh(PspExpContext *ctx, uint32_t vt, int need)
     m->next = meshes; meshes = m;
     if (G.log) gl_logf("mesh %u: %d vertices of buffer %u (%u KB, %u KB kept)", m->handle, n, a[0].buffer, m->bytes / 1024, mesh_bytes / 1024);
     return m;
+}
+
+/* A streamed draw's vertices by content: drawn once, remembered (hash);
+ * drawn again, made a mesh on the PSP; from then on 16 bytes a frame. For
+ * geometry a program rebuilds in client memory every frame unchanged. */
+static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uint8_t *data, int n)
+{
+    uint64_t h = 1469598103934665603ull;   /* FNV-1a */
+    size_t i, bytes = (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
+    Mesh *m;
+    uint8_t *out;
+    if (getenv("PSPEXP_GL_NOMESH")) return 0;
+    for (i = 0; i < bytes; i += 8) { uint64_t w; memcpy(&w, data + i, bytes - i >= 8 ? 8 : bytes - i); h = (h ^ w) * 1099511628211ull; }
+    h ^= (uint64_t)vt << 32 ^ (uint64_t)n;
+    if (!h) h = 1;
+    for (m = meshes; m; m = m->next) if (m->hash == h && m->vt == vt && m->count == n) break;
+    if (!m) {   /* first seen: remembered, sent as it is */
+        if (!(m = (Mesh *)calloc(1, sizeof(*m)))) return 0;
+        m->hash = h; m->vt = vt; m->count = n; m->seen = 1; m->used = mesh_frame;
+        m->next = meshes; meshes = m;
+        return 0;
+    }
+    m->used = mesh_frame;
+    if (!m->handle) {
+        if (++m->seen < 2 || !mesh_room((uint32_t)bytes)) return 0;
+        m->handle = mesh_handle();
+        m->bytes = (uint32_t)bytes;
+        if (!(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
+            free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle; m->handle = 0; m->bytes = 0;
+            return 0;
+        }
+        memcpy(out, data, bytes);
+        pspexp_upload_mesh_commit(ctx);
+        mesh_bytes += m->bytes;
+        if (G.log) gl_logf("mesh %u: %d vertices drawn again unchanged (%u KB)", m->handle, n, m->bytes / 1024);
+    }
+    pspexp_3d_draw_mesh(ctx, m->handle, PSPEXP_MESH_NONE, prim, 0, (uint32_t)n);
+    return 1;
 }
 
 /* GL primitive -> GE one, and the indices to draw it with (quads as
@@ -2370,6 +2519,14 @@ static void meshes_frame_done(PspExpContext *ctx)
     }
     nreleases[old] = 0;
     rel_cur = old;
+    {   /* remembered contents not seen again for a few frames: forgotten */
+        Mesh **pp = &meshes;
+        while (*pp) {
+            Mesh *m = *pp;
+            if (m->hash && !m->handle && m->used + 3 < mesh_frame) { *pp = m->next; free(m); }
+            else pp = &m->next;
+        }
+    }
     mesh_frame++;
 }
 
@@ -2877,6 +3034,7 @@ GLAPI(void, glDeleteTextures, (GLsizei n, const GLuint *names))
             *pp = t->next;
             /* released after this frame: releases go out ahead of its draws, which may use it */
             if (t->handle) mesh_release(t->handle, 0);
+            tex_bytes -= t->psp_bytes;
             if (G.target == t) G.target = NULL;
             free(t->rgba);
             free(t);
@@ -2996,6 +3154,8 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
     t->has_alpha = format_has_alpha(internal, format);
     if (t->rt && (pixels || t->rt_w < w || t->rt_h < h)) {   /* no longer that render target */
         if (t->handle) mesh_release(t->handle, 0);
+        tex_bytes -= t->psp_bytes;
+        t->psp_bytes = 0;
         t->handle = 0; t->rt = 0;
     }
     if (pixels) store_pixels(t, 0, 0, w, h, format, type, pixels);
