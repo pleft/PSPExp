@@ -19,3 +19,4 @@
 | `recipes/chromium-bsu/cover.png` | Debian's chromium-bsu package, its 64x64 icon, scaled 2x | Clarified Artistic (Chromium B.S.U.) |
 | `recipes/neverball/cover.png` | Debian's neverball package, its 128x128 icon | GPL-2.0+ (Neverball) |
 | `recipes/openmrac/cover.png` | a screenshot of openMrac on the PSP (a race), cropped and scaled | BSD-2-Clause (openMrac) |
+| `recipes/quake/cover.png` | a screenshot of Quake's shareware episode on the PSP (E1M1), cropped and scaled | id Software's (shareware) |

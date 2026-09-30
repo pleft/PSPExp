@@ -411,6 +411,19 @@ ship on the nub as a mouse, openMrac without its settings window. Started
 from the launcher on the Pi 400: SuperTux and openMrac 59.9 fps, Chromium
 B.S.U. 43, Neverball 30.
 
+Quake's shareware episode (recipe `quake`, 2026-09-30) runs on Debian's
+Quakespasm. Its data is our package `quake-shareware-data`
+(`scripts/packages/debs/quake-shareware-data`): the licence lets an end user
+pass the shareware on free of charge only as a whole, so id's `quake106.zip`
+goes in unaltered, and `/usr/games/quake-shareware` unpacks `id1/pak0.pak`
+from it on the first start (lhasa, into `~/.local/share/quake-shareware`)
+before running Quakespasm there. The recipe asks for three texture units
+(`env=PSPEXP_GL_UNITS=3`), which puts Quakespasm on its shader path. Keys only,
+on Quake's own bindings: the nub and d-pad move and turn, cross fires and
+selects, circle jumps, square changes weapon, L / R strafe, start is the
+menu, select the scores. Started from the launcher on the Pi 400: 48-59 fps
+in its demos.
+
 On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272

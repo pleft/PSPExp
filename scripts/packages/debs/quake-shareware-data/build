@@ -1,0 +1,59 @@
+#!/bin/sh
+# quake-shareware-data: Quake's shareware episode (id Software, 1996), for
+# Debian's Quakespasm. Its licence (slicnse.txt, inside) lets an end user pass
+# the software on free of charge only as a whole, so id's archive goes in
+# unaltered (/usr/share/games/quake-shareware/quake106.zip); /usr/games/quake-shareware
+# unpacks its id1/pak0.pak on the first start, into the user's data folder, and
+# runs Quakespasm there. Arch all. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
+Z="$CACHE/quake106.zip"
+if [ ! -s "$Z" ]; then
+	curl -fsSL -o "$Z.part" https://ftp.gwdg.de/pub/misc/ftp.idsoftware.com/idstuff/quake/quake106.zip || { rm -f "$Z.part"; echo "fetch failed: quake106.zip" >&2; exit 1; }
+	mv "$Z.part" "$Z"
+fi
+case "$(shasum -a 256 "$Z" 2>/dev/null || sha256sum "$Z")" in
+ec6c9d34b1ae0252ac0066045b6611a7919c2a0d78a3a66d9387a8f597553239*) ;;
+*) echo "quake106.zip: unexpected SHA-256" >&2; exit 1 ;;
+esac
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/share/games/quake-shareware" "$W/root/usr/games" "$W/root/usr/share/doc/quake-shareware-data"
+cp "$Z" "$W/root/usr/share/games/quake-shareware/quake106.zip"
+cat > "$W/root/usr/games/quake-shareware" <<'S'
+#!/bin/sh
+# Quake's shareware episode through Quakespasm: id1/pak0.pak unpacked from id's
+# archive on the first start (package quake-shareware-data), then the game.
+set -e
+D="${XDG_DATA_HOME:-$HOME/.local/share}/quake-shareware"
+if [ ! -s "$D/id1/pak0.pak" ]; then
+	T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+	unzip -q /usr/share/games/quake-shareware/quake106.zip resource.1 -d "$T"
+	(cd "$T" && lhasa -xq resource.1 >/dev/null)
+	mkdir -p "$D/id1"
+	mv "$T/id1/pak0.pak" "$D/id1/pak0.pak.part" && mv "$D/id1/pak0.pak.part" "$D/id1/pak0.pak"
+	cp "$T/slicnse.txt" "$D/" 2>/dev/null || true
+fi
+exec /usr/games/quakespasm -basedir "$D" "$@"
+S
+chmod 755 "$W/root/usr/games/quake-shareware"
+cat > "$W/root/usr/share/doc/quake-shareware-data/README" <<D
+Quake, shareware episode 1 (id Software, 1996), for Quakespasm: id's
+quake106.zip as released, unaltered. Its licence is slicnse.txt inside
+resource.1 in that archive (copied next to the game data on the first start).
+Packaged by PSPExp (docs/Package_Manager.md).
+D
+cat > "$W/control" <<C
+Package: quake-shareware-data
+Version: 1.06-pspexp1
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: non-free/games
+Priority: optional
+Depends: quakespasm, lhasa, unzip
+Description: Quake shareware episode, for Quakespasm
+ id Software's freely distributable shareware release of Quake (1996), its
+ archive unaltered; quake-shareware unpacks the game data on the first start
+ and runs Quakespasm. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/quake-shareware-data_1.06-pspexp1_all.deb"

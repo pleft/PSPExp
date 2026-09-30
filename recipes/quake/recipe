@@ -1,0 +1,27 @@
+# Quake: id Software's shareware episode (1996) on Debian's Quakespasm, its
+# world drawn by the PSP's GE through the SDL layer's shaders (three texture
+# units asked for: Quakespasm's fast path). Keys only, Quake's own bindings:
+# the nub and d-pad move and turn, cross fires (and selects), circle jumps,
+# square changes weapon, L / R strafe.
+
+[package]
+id=quake
+title=Quake (shareware)
+description=id Software's 1996 first-person shooter, shareware episode, on Quakespasm
+category=game
+license=GPL-2.0 (Quakespasm); shareware (Quake, id Software, 1996)
+version=1
+
+[debian]
+apt=quake-shareware-data
+
+[entry]
+title=Quake
+type=game
+description=id Software's 1996 shooter: the shareware episode
+icon=swords
+exec=/usr/games/quake-shareware -width 480 -height 272 -window
+keys=cross=lctrl+return,circle=space,square=slash,triangle=y,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_GL_UNITS=3
