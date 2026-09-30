@@ -15,3 +15,7 @@
 | `recipes/flight-of-the-amazon-queen/cover.png` | Debian's flight-of-the-amazon-queen package, its 200x125 icon letterboxed to 128x128 | the game's licence (freeware) |
 | `recipes/lure-of-the-temptress/cover.png` | Debian's lure-of-the-temptress package, its 128x128 icon | the game's licence (Revolution Software, freeware) |
 | `recipes/drascula/cover.png` | Debian's drascula package, its 128x128 icon | the game's licence (Alcachofa Soft, freeware) |
+| `recipes/supertux/cover.png` | Debian's supertux package, its 256x256 icon, scaled | GPL-3.0+ (SuperTux) |
+| `recipes/chromium-bsu/cover.png` | Debian's chromium-bsu package, its 64x64 icon, scaled 2x | Clarified Artistic (Chromium B.S.U.) |
+| `recipes/neverball/cover.png` | Debian's neverball package, its 128x128 icon | GPL-2.0+ (Neverball) |
+| `recipes/openmrac/cover.png` | a screenshot of openMrac on the PSP (a race), cropped and scaled | BSD-2-Clause (openMrac) |

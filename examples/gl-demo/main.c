@@ -17,6 +17,8 @@
  *                              textured, a cube map added along the reflected eye vector
  *                              (each face its own colour, a white band along its first
  *                              row, a dark one along its first column)
+ *   GLDEMO_SPHERE=1            the same torus through OpenGL 1.x's sphere map
+ *                              (glTexGen GL_SPHERE_MAP; a texture of four coloured quarters)
  *   GLDEMO_READ=file.ppm       the last frame's pixels written out (a reference, with a
  *                              real OpenGL)
  */
@@ -294,6 +296,60 @@ static void reflect_frame(GLuint tex, int n, int w, int h)
     glUseProgram(0);
 }
 
+/* GL 1.x: the torus with a sphere map (glTexGen), the texture four coloured quarters */
+static void sphere_frame(int n, int w, int h)
+{
+    static GLuint tex;
+    float a = n * 0.02f;
+    if (!tex) {
+        static unsigned char px[64 * 64 * 3];
+        static const unsigned char q[4][3] = { { 220, 40, 40 }, { 60, 220, 60 }, { 50, 70, 230 }, { 230, 220, 50 } };
+        int x, y, c;
+        for (y = 0; y < 64; y++)
+            for (x = 0; x < 64; x++)
+                for (c = 0; c < 3; c++)
+                    px[(y * 64 + x) * 3 + c] = (x > 29 && x < 34) || (y > 29 && y < 34) ? 255 : q[(y >= 32) * 2 + (x >= 32)][c];
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 64, 64, 0, GL_RGB, GL_UNSIGNED_BYTE, px);
+    }
+    glViewport(0, 0, w, h);
+    glClearColor(0.1f, 0.12f, 0.2f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_LIGHTING);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glFrustum(-0.2071 * w / h, 0.2071 * w / h, -0.2071, 0.2071, 0.5, 20.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glTranslatef(0, 0, -4);
+    glRotatef(60, 1, 0, 0);
+    glRotatef(a * 57.29578f, 0, 1, 0);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+    glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+    glEnable(GL_TEXTURE_GEN_S);
+    glEnable(GL_TEXTURE_GEN_T);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glNormalPointer(GL_FLOAT, 6 * sizeof(float), &torus_v[0][0]);
+    glVertexPointer(3, GL_FLOAT, 6 * sizeof(float), &torus_v[0][3]);
+    glDrawElements(GL_TRIANGLES, TORUS_RINGS * TORUS_SIDES * 6, GL_UNSIGNED_SHORT, torus_i);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisable(GL_TEXTURE_GEN_S);
+    glDisable(GL_TEXTURE_GEN_T);
+    glDisable(GL_TEXTURE_2D);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+}
+
 static void read_frame(const char *path, int w, int h)
 {
     unsigned char *px = (unsigned char *)malloc((size_t)w * (size_t)h * 3);
@@ -359,6 +415,13 @@ int main(int argc, char **argv)
         glFrustum(-0.1 * w / h, 0.1 * w / h, -0.1, 0.1, 0.2, 40.0);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        if (getenv("GLDEMO_SPHERE")) {
+            sphere_frame(n + first, w, h);
+            if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);
+            SDL_GL_SwapWindow(win);
+            if (++n == frames) running = 0;
+            continue;
+        }
         if (getenv("GLDEMO_CUBE")) {
             reflect_frame(tex, n + first, w, h);
             if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);

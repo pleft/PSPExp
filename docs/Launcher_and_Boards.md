@@ -402,6 +402,15 @@ Every game package puts a 128x128 picture next to its entry
 (`scripts/packages/art/`, where the README lists each one's source and
 license), which the launcher shows as the cover.
 
+OpenGL games from Debian are recipes too (2026-09-30): SuperTux,
+Chromium B.S.U., openMrac and Neverball, drawn by the PSP's GE through the
+SDL layer's OpenGL (`docs/PSPExp_Technical_Architecture.md` §12a). Their
+recipes carry the options found by playing them on the PSP: SuperTux at the
+PSP's size and on keys only (`env=PSPEXP_JOYSTICK=0`), Chromium B.S.U.'s
+ship on the nub as a mouse, openMrac without its settings window. Started
+from the launcher on the Pi 400: SuperTux and openMrac 59.9 fps, Chromium
+B.S.U. 43, Neverball 30.
+
 On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272

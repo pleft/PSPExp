@@ -1,0 +1,24 @@
+# openMrac: Debian's package, a GL 2 racing game whose shaders the SDL layer
+# reads and the PSP's GE draws (lighting, reflections). Its settings window
+# is skipped. Cross accelerates, square brakes.
+
+[package]
+id=openmrac
+title=openMrac
+description=3D arcade racing on country tracks
+category=game
+license=BSD-2-Clause (openMrac)
+version=1
+
+[debian]
+apt=openmrac
+
+[entry]
+title=openMrac
+type=game
+description=3D arcade racing on country tracks
+icon=gauge
+exec=/usr/games/openmrac --skip-settings
+keys=cross=up,square=down,start=return,select=escape,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0

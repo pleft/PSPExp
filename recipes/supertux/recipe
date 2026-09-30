@@ -1,0 +1,25 @@
+# SuperTux: Debian's package, drawn by the PSP's GE through the SDL layer's
+# OpenGL (its GL 2.0 path). At its own size its text is too small to read on
+# the PSP, so it runs at the PSP's. Keys only: it takes a controller button and
+# a key for each press otherwise. Its sound is OpenAL's, through pspexp-run's pipe.
+
+[package]
+id=supertux
+title=SuperTux
+description=Classic 2D jump 'n run with Tux the penguin
+category=game
+license=GPL-3.0+ (SuperTux)
+version=1
+
+[debian]
+apt=supertux
+
+[entry]
+title=SuperTux
+type=game
+description=Classic 2D jump 'n run with Tux the penguin
+icon=gamepad-2
+exec=/usr/games/supertux2 --window --geometry 480x272
+keys=cross=space+return,circle=escape,square=lctrl,triangle=lctrl,start=return,select=escape,up=up,down=down,left=left,right=right,l=pgup,r=pgdn
+nub=keys
+env=PSPEXP_JOYSTICK=0

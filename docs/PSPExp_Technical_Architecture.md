@@ -768,6 +768,8 @@ The board sends the state, matrices and lights only when they change (and once p
 | Widelands | 2 | 30 | loads (hundreds of images into a render target), its image shader as near as the GE can |
 | openMrac | 2 | 59.9 | `--skip-settings`, keys; lighting on the GE, reflections as sphere maps, shadow without flicker; the first seconds of a race slower |
 
+The four from Debian are recipes (`recipes/supertux`, `chromium-bsu`, `openmrac`, `neverball`, with these options): installed with `pspexp-pkg install` and started from the launcher on the Pi 400 on 2026-09-30, their menus at the rates above (SuperTux with its sound). The fixed-function sphere maps are checked against a real OpenGL like the reflections: `GLDEMO_SPHERE=1`, the torus through `glTexGen(GL_SPHERE_MAP)` with a texture of four coloured quarters, the same in PPSSPP as on the Mac.
+
 **Next.** Fewer bytes per vertex (16-bit positions and texture coordinates, 8-bit normals and colours: about half); display lists as meshes (Chromium B.S.U. and older engines draw through them or immediate mode); Neverball's 20 ms of GE time (fill: large blended or filtered polygons); more games (Quakespasm, ioquake3, Pinball, Trigger Rally); shaders that combine two textures; cube maps whose direction is not a reflection about a normal (a skybox drawn through one); a shorter warm-up before a churning shader draw is streamed (the first seconds of a race are slower); per-vertex branches (Widelands' image flavours) resolved per draw; the SDL layer's render targets onto `3D_TARGET`; the SDL executor has no 3D, so the Mac stand-in shows nothing of these programs (PPSSPP and the PSP do).
 
 ---
