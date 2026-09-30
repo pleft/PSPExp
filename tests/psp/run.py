@@ -41,7 +41,10 @@ class Target:
 
     def sh(self, cmd, check=True, timeout=120):
         argv = self.ssh + [cmd] if self.host else ["sh", "-c", cmd]
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:   # a board out of reach (a weak Wi-Fi link): this check fails, the run goes on
+            raise Fail("board command timed out after %d s: %s" % (timeout, cmd[:80]))
         if check and r.returncode != 0:
             raise Fail("board command failed: %s\n%s" % (cmd, (r.stderr or r.stdout).strip()))
         return r.stdout
@@ -50,7 +53,10 @@ class Target:
         """(ok, lines) of one control command."""
         line = "%s --ctl %s --ctl-timeout %d" % (self.term, shlex.quote(cmd), timeout)
         argv = self.ssh + [line] if self.host else ["sh", "-c", line]
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout + 15)
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout + 15)
+        except subprocess.TimeoutExpired:
+            raise Fail("console did not answer within %d s: %s" % (timeout + 15, cmd[:60]))
         if r.returncode == 2:
             raise Fail("no console answers: %s" % (r.stderr.strip() or r.stdout.strip()))
         lines = r.stdout.rstrip("\n").split("\n")
@@ -626,7 +632,11 @@ def main():
         for name, fn in SUITES:
             if name in want:
                 print("%s:" % name)
-                fn(r)
+                try:
+                    fn(r)
+                except Fail as e:   # its setup failed (the board out of reach): the next suite still runs
+                    r.results.append(("%s: setting up" % name, False, str(e), 0.0))
+                    print("  FAIL %s: setting up: %s" % (name, e))
     finally:
         try:
             r.t.ctl("open launcher"); r.t.ctl("end")
