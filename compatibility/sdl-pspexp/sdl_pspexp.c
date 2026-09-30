@@ -28,6 +28,7 @@
  *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons ("return+y": both)
  *   (holding START + SELECT leaves any game: SDL_QUIT after 1 s, exit after 2 s)
  *   PSPEXP_JOYSTICK=0                         no virtual game controller: the keys only
+ *   PSPEXP_SCRIPT="ms:key,ms:+key,ms:-key"    keys at those times (testing with nobody at the PSP)
  *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows; mouse: the nub moves
  *                                             a pointer drawn on the PSP, cross/circle click)
  *   PSPEXP_WINDOW=hide                        hide the program's own window
@@ -2021,6 +2022,40 @@ static void shot_trigger(void)
     }
 }
 
+/* PSPEXP_SCRIPT="ms:key,ms:+key,ms:-key,...": keys pressed at those times
+ * (ms from the first frame; +: held down, -: let go, else a tap): testing a
+ * game past its menus with nobody at the PSP */
+static void script_tick(void)
+{
+    static char *script;
+    static const char *next;
+    static Uint32 t0, tap_up_at;
+    static SDL_Keycode tapped;
+    const char *env = getenv("PSPEXP_SCRIPT");
+    Uint32 now = SDL_GetTicks();
+    if (!env) return;
+    if (!script) { script = strdup(env); next = script; t0 = now; }
+    if (tapped && now >= tap_up_at) { push_key(tapped, 0); tapped = 0; }
+    while (next && *next) {
+        char name[32];
+        const char *start = next;
+        long at = strtol(next, (char **)&next, 10);
+        int mode = 0, k = 0;
+        SDL_Keycode key;
+        if (now - t0 < (Uint32)at) { next = start; return; }   /* not yet */
+        if (*next == ':') next++;
+        if (*next == '+' || *next == '-') mode = *next++;
+        while (*next && *next != ',' && k < 31) name[k++] = *next++;
+        name[k] = 0;
+        if (*next == ',') next++;
+        key = key_from_name(name);
+        if (mode == '+') push_key(key, 1);
+        else if (mode == '-') push_key(key, 0);
+        else { if (tapped) push_key(tapped, 0); push_key(key, 1); tapped = key; tap_up_at = now + 120; }
+        logf_("script: %c%s at %ld ms", mode ? mode : ' ', name, at);
+    }
+}
+
 static void end_frame(void)
 {
     if (!S.active) return;
@@ -2052,6 +2087,7 @@ static void end_frame(void)
     pspexp_pump(S.ctx, 0);
     feed_input();
     shot_trigger();
+    script_tick();
     S.frames++;
     if (!S.total_frames) S.first_frame = SDL_GetPerformanceCounter();
     S.total_frames++;

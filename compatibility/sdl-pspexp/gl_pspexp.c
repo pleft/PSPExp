@@ -1672,10 +1672,13 @@ GLAPI(void, glEdgeFlag, (GLboolean f)) { (void)f; }
 
 static void meshes_forget_buffer(GLuint name);
 
+/* the last buffer found, and a small table: every vertex of a draw asks for its arrays' buffers */
+static GlBuf *buf_hash[1024];
 static GlBuf *find_buffer(GLuint name)
 {
-    GlBuf *b;
-    for (b = G.buffers; b; b = b->next) if (b->name == name) return b;
+    GlBuf *b = buf_hash[name & 1023];
+    if (b && b->name == name) return b;
+    for (b = G.buffers; b; b = b->next) if (b->name == name) { buf_hash[name & 1023] = b; return b; }
     return NULL;
 }
 
@@ -2256,24 +2259,11 @@ GLEXT(void, glReleaseShaderCompiler, (void)) { }
 GLEXT(void, glGetShaderPrecisionFormat, (GLenum s, GLenum p, GLint *range, GLint *precision))
 { (void)s; (void)p; range[0] = 127; range[1] = 127; *precision = 23; }
 
-/* One vertex's generic attribute i (vec4). */
-static void fetch_generic(int i, int k, float out[4])
-{
-    const Array *a = &G.gattr[i];
-    const uint8_t *b;
-    int c;
-    if (!a->enabled || !(b = array_base(a))) { memcpy(out, G.gcur[i], 16); return; }
-    {
-        int ts = type_size(a->type), st = a->stride ? a->stride : a->size * ts;
-        b += (size_t)k * (size_t)st;
-        for (c = 0; c < 4; c++) out[c] = c < a->size ? read_comp(b + c * ts, a->type, G.gnorm[i]) : c == 3 ? 1.0f : 0.0f;
-        if (a->bgra) { float t = out[0]; out[0] = out[2]; out[2] = t; }
-    }
-}
-
 /* A draw by a shader program: its plan for the uniforms of now, each
  * vertex's attributes through it, the GE drawing what the plan says. */
-static void shader_draw(GLenum mode, const int *idx, int first, int count)
+static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
+
+static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
     GlProgram *p = find_program(G.program);
     GlslPlan *pl;
@@ -2287,11 +2277,37 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count)
         if (!p->plan.exact && !p->reported) { p->reported = 1; gl_logf("program %u: drawn as near as the GE can (%s)", G.program, p->plan.why); }
     }
     pl = &p->plan;
+    if (shader_mesh(p, mode, idx, first, count, ibo, ioffset, itype)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
+    {   /* the arrays, found once for the draw: base, stride, element size (-1: the current value) */
+        static const uint8_t *base[16];
+        static int stride[16], ts[16], live[16], nlive;
+        nlive = 0;
+        for (a = 0; a < 16; a++) {
+            memcpy(attrs[a], G.gcur[a], 16);
+            if (!G.gattr[a].enabled || !(base[a] = array_base(&G.gattr[a]))) continue;
+            ts[a] = type_size(G.gattr[a].type);
+            stride[a] = G.gattr[a].stride ? G.gattr[a].stride : G.gattr[a].size * ts[a];
+            live[nlive++] = a;
+        }
     for (i = 0; i < count; i++) {
-        int k = idx ? idx[i] : first + i;
+        int k = idx ? idx[i] : first + i, l, cmp;
         float pos[4], uv[2], c[4];
-        for (a = 0; a < 16; a++) if (G.gattr[a].enabled) fetch_generic(a, k, attrs[a]); else memcpy(attrs[a], G.gcur[a], 16);
+        for (l = 0; l < nlive; l++) {
+            const Array *ar;
+            const uint8_t *b;
+            a = live[l];
+            ar = &G.gattr[a];
+            b = base[a] + (size_t)k * (size_t)stride[a];
+            if (ar->type == GL_FLOAT && !G.gnorm[a]) {
+                float f[4] = { 0, 0, 0, 1 };
+                memcpy(f, b, (size_t)(ar->size < 4 ? ar->size : 4) * 4);
+                memcpy(attrs[a], f, 16);
+            } else {
+                for (cmp = 0; cmp < 4; cmp++) attrs[a][cmp] = cmp < ar->size ? read_comp(b + cmp * ts[a], ar->type, G.gnorm[a]) : cmp == 3 ? 1.0f : 0.0f;
+                if (ar->bgra) { float t = attrs[a][0]; attrs[a][0] = attrs[a][2]; attrs[a][2] = t; }
+            }
+        }
         if (fixed) {   /* old shaders' gl_Vertex, gl_Color...: the fixed-function arrays */
             Vtx f;
             fetch(k, &f);
@@ -2308,6 +2324,7 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count)
         v[i].t[0] = uv[0]; v[i].t[1] = uv[1];
         v[i].c = abgr(c);
         v[i].n[0] = v[i].n[1] = 0; v[i].n[2] = 1;
+    }
     }
     if (G.log >= 3) {
         const float *m = pl->matrix;
@@ -2359,11 +2376,14 @@ typedef struct Mesh {
     uint32_t bytes;
     unsigned used;              /* the frame it was last drawn in */
     float *pos;                 /* the positions, here too: where they fall is worked out each frame (clipping) */
+    Vtx *vx;                    /* a shader's mesh: its vertices as worked out (the cut ones are made from them) */
+    uint64_t shkey;             /* ...and its key: the plan's per-vertex work, the arrays and buffers it read */
+    GLuint bufs[8]; int nbufs;  /* ...the buffers it was made from */
     unsigned *code, code_frame; int code_any; float code_m[16];
     struct Mesh *next;
 } Mesh;
 
-static void mesh_free(Mesh *m) { free(m->pos); free(m->code); free(m); }
+static void mesh_free(Mesh *m) { free(m->pos); free(m->code); free(m->vx); free(m); }
 static int mesh_clipped(PspExpContext *ctx, Mesh *m, const Clip *c, GLenum mode, const int *idx, int first, int count, uint32_t vt);
 
 typedef struct IndexMesh {
@@ -2400,7 +2420,8 @@ static void meshes_forget_buffer(GLuint name)
     while (*pp) {
         Mesh *m = *pp;
         int k, hit = 0;
-        for (k = 0; k < 4; k++) if (!m->hash && m->a[k].enabled && m->a[k].buffer == name) hit = 1;
+        for (k = 0; k < 4; k++) if (!m->hash && !m->shkey && m->a[k].enabled && m->a[k].buffer == name) hit = 1;
+        for (k = 0; k < m->nbufs; k++) if (m->bufs[k] == name) hit = 1;
         if (hit) { *pp = m->next; mesh_release(m->handle, m->bytes); mesh_free(m); } else pp = &m->next;
     }
     while (*ip) {
@@ -2470,7 +2491,7 @@ static Mesh *vertex_mesh(PspExpContext *ctx, uint32_t vt, int need)
     uint8_t *out;
     for (k = 0; k < 4; k++) ver[k] = a[k].enabled ? buffer_version(a[k].buffer) : 0;
     for (m = meshes; m; m = m->next) {
-        int same = !m->hash && m->vt == vt && m->count >= need;
+        int same = !m->hash && !m->shkey && m->vt == vt && m->count >= need;
         for (k = 0; same && k < 4; k++)
             same = m->a[k].enabled == a[k].enabled && (!a[k].enabled ||
                    (m->a[k].buffer == a[k].buffer && m->a[k].ptr == a[k].ptr && m->a[k].size == a[k].size &&
@@ -2568,6 +2589,9 @@ static int convert_indices(GLenum mode, const int *idx, int n, uint16_t *out, ui
 static int converted_max(GLenum mode, int n) { return mode == GL_QUADS ? n / 4 * 6 : n + 1; }
 
 /* The mesh path; 0 when the draw does not qualify (it is then streamed). */
+static int mesh_emit(PspExpContext *ctx, Mesh *m, GLenum mode, const int *idx, int first, int count,
+                     GLuint ibo, uintptr_t ioffset, GLenum itype, uint32_t vt);
+
 static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
     PspExpContext *ctx;
@@ -2600,6 +2624,15 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
     if (G.ca.enabled) vt |= PSPEXP_3D_VT_COLOR;
     if (G.lighting || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (!(m = vertex_mesh(ctx, vt, hi + 1))) NOT_MESH("no vertex mesh");
+    return mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
+}
+
+/* A mesh drawn: cut where it reaches outside the GE's range, else by
+ * index (a buffer's indices as an index mesh too) or in order. */
+static int mesh_emit(PspExpContext *ctx, Mesh *m, GLenum mode, const int *idx, int first, int count,
+                     GLuint ibo, uintptr_t ioffset, GLenum itype, uint32_t vt)
+{
+    int k;
     m->used = mesh_frame;
     if (m->pos && mode >= GL_TRIANGLES && !getenv("PSPEXP_GL_NOCLIP")) {   /* where its vertices fall, this frame */
         Clip c;
@@ -2675,6 +2708,157 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
     return 1;
 }
 
+/* A shader's draw as a mesh: its position a matrix times one attribute (the
+ * GE's projection), everything it reads in buffers or constant. The
+ * vertices are worked out through the plan once and kept on the PSP;
+ * the key is the plan's per-vertex work and the arrays it read. openMrac's
+ * track: every vertex every frame before. 0: not such a draw. */
+static unsigned vt_hint(const GlslPlan *pl) { return (unsigned)pl->textured; }
+
+/* Draws whose meshes would be made again frame after frame (a uniform in
+ * their per-vertex work that moves, a buffer rewritten each frame) are
+ * streamed instead for a while: making and sending a mesh a frame costs
+ * more than the vertices (openMrac: 684 meshes of one draw in 40 s). */
+typedef struct Churn { uint64_t sig; unsigned last, streak, until; } Churn;
+static Churn churn[4096];
+
+static Churn *churn_slot(uint64_t sig)
+{
+    Churn *c = &churn[sig & 4095];
+    int i;
+    for (i = 0; i < 8 && c->sig && c->sig != sig; i++) c = &churn[(sig + (uint64_t)i + 1) & 4095];   /* a few probes */
+    if (c->sig != sig) { memset(c, 0, sizeof(*c)); c->sig = sig; }
+    return c;
+}
+
+static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
+{
+    GlslPlan *pl = &pr->plan;
+    uint64_t sig = (uint64_t)pr->name * 2654435761u;
+    Churn *ch;
+    PspExpContext *ctx;
+    GlTex *tex;
+    Mesh *m;
+    uint64_t h;
+    unsigned used = pl->attribs_used;
+    uint32_t vt = PSPEXP_3D_VT_POSITION | PSPEXP_3D_VT_COLOR;
+    int a, k, hi = 0, n = 1 << 30, any = 0;
+    if (G.compiling || getenv("PSPEXP_GL_NOMESH") || !pl->matrix_ok || !pl->vertex_hash || (used >> 16)) return 0;
+    if (count < 192) return 0;   /* small draws (text, 2D: often from buffers made each frame) are cheaper streamed */
+    h = pl->vertex_hash;
+    for (a = 0; a < 16; a++) {
+        const Array *ar = &G.gattr[a];
+        if (!(used & (1u << a))) continue;
+        if (ar->enabled) {
+            GlBuf *b;
+            int size = ar->size, elem = size * type_size(ar->type), stride = ar->stride ? ar->stride : elem, c;
+            if (!ar->buffer || !(b = find_buffer(ar->buffer)) || !b->data || b->usage == 0x88E0 /* GL_STREAM_DRAW */) return 0;
+            if (elem <= 0 || (uintptr_t)ar->ptr + (size_t)elem > b->size) return 0;
+            c = (int)((b->size - (uintptr_t)ar->ptr - (size_t)elem) / (size_t)stride) + 1;
+            if (c < n) n = c;
+            h = (h ^ ((uint64_t)ar->buffer << 32 | b->version)) * 1099511628211ull;
+            h = (h ^ ((uint64_t)(uintptr_t)ar->ptr << 16 ^ (uint64_t)stride << 8 ^ (uint64_t)ar->type ^ (uint64_t)size << 40 ^ (uint64_t)G.gnorm[a] << 48 ^ (uint64_t)ar->bgra << 49)) * 1099511628211ull;
+            h = (h ^ (uint64_t)a) * 1099511628211ull;
+            sig = (sig ^ ((uint64_t)ar->buffer << 20 ^ (uint64_t)(uintptr_t)ar->ptr ^ (uint64_t)a << 56)) * 1099511628211ull;
+            any = 1;
+        } else {
+            uint64_t w[2];
+            memcpy(w, G.gcur[a], 16);
+            h = (h ^ w[0] ^ (uint64_t)a << 56) * 1099511628211ull;
+            h = (h ^ w[1]) * 1099511628211ull;
+        }
+    }
+    if (!any || n == 1 << 30) return 0;
+    sig ^= (uint64_t)vt_hint(pl) << 60;
+    ch = churn_slot(sig ? sig : 1);
+    if (ch->until > mesh_frame) return 0;   /* changing too often: streamed for now */
+    if (n > (int)PSPEXP_3D_MAX_VERTICES + 1) n = PSPEXP_3D_MAX_VERTICES + 1;
+    if (idx) { for (k = 0; k < count; k++) if (idx[k] > hi) hi = idx[k]; }
+    else hi = first + count - 1;
+    if (hi >= n) return 0;
+    if (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES) return 1;
+    /* the draw's state: the plan's */
+    G.sh_active = 1;
+    memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
+    G.sh_tex = pl->textured ? find_texture(G.units[pl->sampler_unit & 7]) : NULL;
+    G.sh_tex_alpha = pl->tex_alpha;
+    G.sh_alpha_test = pl->alpha_test;
+    G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
+    if (!(ctx = prepare_colour(&tex, NULL))) { G.sh_active = 0; return 1; }
+    if (tex) vt |= PSPEXP_3D_VT_TEXTURE;
+    h ^= (uint64_t)vt << 20;
+    if (!h) h = 1;
+    for (m = meshes; m; m = m->next) if (m->shkey == h && m->vt == vt && m->count >= hi + 1) break;
+    if (!m) {   /* one more made for this draw: a third frame running, and it is streamed for 5 s */
+        ch->streak = ch->last + 2 >= mesh_frame && ch->last ? ch->streak + 1 : 1;
+        ch->last = mesh_frame;
+        if (ch->streak >= 2) {
+            ch->until = mesh_frame + 300;
+            ch->streak = 0;
+            G.sh_active = 0;
+            if (G.log) gl_logf("program %u: a draw that changes every frame: streamed", pr->name);
+            return 0;
+        }
+    }
+    if (!m) {
+        uint8_t *out;
+        float attrs[GLSL_ATTR_ALL][4];
+        int i, nb = 0;
+        if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) { G.sh_active = 0; return 0; }
+        m->shkey = h; m->vt = vt; m->count = n;
+        m->handle = mesh_handle();
+        m->bytes = pspexp_3d_vertex_size(vt) * (uint32_t)n;
+        m->pos = (float *)malloc((size_t)n * 3 * sizeof(float));
+        m->vx = (Vtx *)malloc((size_t)n * sizeof(Vtx));
+        for (a = 0; a < 16 && nb < 8; a++) if ((used & (1u << a)) && G.gattr[a].enabled) m->bufs[nb++] = G.gattr[a].buffer;
+        m->nbufs = nb;
+        if (!m->pos || !m->vx ||
+            !(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
+            free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle;
+            mesh_free(m);
+            G.sh_active = 0;
+            return 0;
+        }
+        for (a = 0; a < 16; a++) memcpy(attrs[a], G.gcur[a], 16);
+        for (i = 0; i < n; i++) {
+            float pos[4], uv[2], c[4];
+            Vtx *v = &m->vx[i];
+            for (a = 0; a < 16; a++) {
+                const Array *ar = &G.gattr[a];
+                const uint8_t *b;
+                int cmp, ts;
+                if (!(used & (1u << a)) || !ar->enabled || !(b = array_base(ar))) continue;
+                ts = type_size(ar->type);
+                b += (size_t)i * (size_t)(ar->stride ? ar->stride : ar->size * ts);
+                for (cmp = 0; cmp < 4; cmp++) attrs[a][cmp] = cmp < ar->size ? read_comp(b + cmp * ts, ar->type, G.gnorm[a]) : cmp == 3 ? 1.0f : 0.0f;
+                if (ar->bgra) { float t = attrs[a][0]; attrs[a][0] = attrs[a][2]; attrs[a][2] = t; }
+            }
+            glsl_plan_vertex(pl, (const float (*)[4])attrs, pos, uv, c);
+            v->p[0] = pos[0]; v->p[1] = pos[1]; v->p[2] = pos[2];
+            v->t[0] = uv[0]; v->t[1] = uv[1];
+            v->c = abgr(c);
+            v->n[0] = v->n[1] = 0; v->n[2] = 1;
+            memcpy(m->pos + i * 3, v->p, 12);
+            pack_vertex(&out, vt, v);
+        }
+        pspexp_upload_mesh_commit(ctx);
+        mesh_bytes += m->bytes;
+        m->next = meshes; meshes = m;
+        if (G.log) gl_logf("mesh %u: program %u, %d vertices (%u KB, %u KB kept)", m->handle, pr->name, n, m->bytes / 1024, mesh_bytes / 1024);
+        if (G.log >= 3) {
+            int q;
+            char vers[160];
+            int off = 0;
+            for (q = 0; q < 16 && off < 150; q++)
+                if ((used & (1u << q)) && G.gattr[q].enabled) off += snprintf(vers + off, sizeof(vers) - (size_t)off, " a%d:b%u v%u", q, G.gattr[q].buffer, buffer_version(G.gattr[q].buffer));
+            gl_logf("  key: plan %016llx%s", (unsigned long long)pl->vertex_hash, vers);
+        }
+    }
+    k = mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
+    G.sh_active = 0;
+    return k;
+}
+
 /* At the end of a frame: the meshes dropped during the one before (whose
  * list the GE has run) are released. */
 /* A mesh draw that reaches outside the GE's range: its safe triangles by
@@ -2710,7 +2894,8 @@ static int mesh_clipped(PspExpContext *ctx, Mesh *m, const Clip *c, GLenum mode,
         if (!(ca | cb | cd)) { safe[ns++] = (uint16_t)a; safe[ns++] = (uint16_t)b; safe[ns++] = (uint16_t)d; }
         else if (!(ca & cb & cd)) {
             Vtx va, vb, vd;
-            fetch(a, &va); fetch(b, &vb); fetch(d, &vd);
+            if (m->vx) { va = m->vx[a]; vb = m->vx[b]; vd = m->vx[d]; }
+            else { fetch(a, &va); fetch(b, &vb); fetch(d, &vd); }
             k += clip_triangle(c, &va, &vb, &vd, out + k);
         }
     }
@@ -2752,7 +2937,7 @@ GLAPI(void, glDrawArrays, (GLenum mode, GLint first, GLsizei count))
     int i;
     ensure_init();
     if (count <= 0) return;
-    if (G.program) { shader_draw(mode, NULL, first, count); return; }
+    if (G.program) { shader_draw(mode, NULL, first, count, 0, 0, 0); return; }
     if (G.compiling && !replaying) { compile_arrays(mode, NULL, first, count); return; }
     if (draw_mesh(mode, NULL, first, count, 0, 0, 0)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
@@ -2781,7 +2966,7 @@ GLAPI(void, glDrawElements, (GLenum mode, GLsizei count, GLenum type, const GLvo
     ensure_init();
     if (count <= 0) return;
     if (!(idx = read_indices(count, type, indices))) { set_error(GL_INVALID_OPERATION); return; }
-    if (G.program) { shader_draw(mode, idx, 0, count); return; }
+    if (G.program) { shader_draw(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type); return; }
     if (G.compiling && !replaying) { compile_arrays(mode, idx, 0, count); return; }
     if (draw_mesh(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
@@ -2851,7 +3036,7 @@ GLAPI(void, glDeleteBuffers, (GLsizei n, const GLuint *names))
     for (i = 0; i < n; i++) {
         GlBuf **pp = &G.buffers;
         while (*pp && (*pp)->name != names[i]) pp = &(*pp)->next;
-        if (*pp) { GlBuf *b = *pp; *pp = b->next; free(b->data); free(b); meshes_forget_buffer(names[i]); }
+        if (*pp) { GlBuf *b = *pp; *pp = b->next; if (buf_hash[b->name & 1023] == b) buf_hash[b->name & 1023] = NULL; free(b->data); free(b); meshes_forget_buffer(names[i]); }
         if (G.array_buffer == names[i]) G.array_buffer = 0;
         if (G.element_buffer == names[i]) G.element_buffer = 0;
     }

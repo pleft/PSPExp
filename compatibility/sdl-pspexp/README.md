@@ -144,6 +144,7 @@ function; the tests check it is current).
 | `PSPEXP_KEYS=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=escape,up=up,down=down,left=left,right=right` | keyboard keys pressed for PSP buttons; this is the default. SDL key names, plus `lctrl`, `lshift`, `lalt`, `comma`, `period`, `enter`, `esc`, `pgup`, `none` and the like; unknown names are reported at start |
 | `PSPEXP_AUDIO_FIFO=PATH` | sound from a named pipe (made there) to the PSP: a WAV stream, 44.1 kHz 16-bit. The board's `pspexp-run` points OpenAL Soft's "wave" output at one, so OpenAL games (SuperTux) are heard |
 | `PSPEXP_SHOT_TRIGGER=FILE` | when FILE appears, the PSP's screen is copied back to FILE-N.bmp (looking at a game someone is playing) |
+| `PSPEXP_SCRIPT="8000:return,16000:+up,40000:-up"` | keys pressed at those times, in ms from the first frame (+ held, - let go, else a tap): a game tested past its menus with nobody at the PSP |
 | `PSPEXP_JOYSTICK=0` | no virtual game controller, the keys alone (a game that takes both gets each press twice: SuperTux) |
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
 | `PSPEXP_NUB=keys` | the nub presses the four arrow keys of `PSPEXP_KEYS` (for keyboard-only games such as Doom) |

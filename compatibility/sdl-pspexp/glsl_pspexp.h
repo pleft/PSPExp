@@ -65,7 +65,9 @@ typedef struct GlslPlan {
     int tex_alpha;              /* the texture's alpha counts (else only its colour) */
     int alpha_test;             /* the fragment is dropped when alpha fails: a GL comparison (GL_LESS...) */
     unsigned alpha_func; float alpha_ref;
-    unsigned attribs_used;      /* bit per attribute location read */
+    unsigned attribs_used;      /* bit per attribute location read (the position's, colour's and coordinates') */
+    unsigned long long vertex_hash;   /* what the per-vertex values are worked out from: the same hash, the same
+                                         vertices for the same attributes (meshes) */
     void *priv;                 /* the expressions: per vertex, glsl_plan_vertex */
 } GlslPlan;
 

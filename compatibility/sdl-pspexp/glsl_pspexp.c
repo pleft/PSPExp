@@ -1818,6 +1818,20 @@ static int alpha_test(const Sym *d, unsigned *func, float *ref)
     return 1;
 }
 
+/* The attributes a value reads, and a hash of the expression (its shape
+ * and constants): the per-vertex work of a plan, compared across draws. */
+static void sym_scan(const Sym *s, unsigned *used, uint64_t *h, int *budget)
+{
+    uint64_t v;
+    if (!s || --*budget < 0) return;
+    v = (uint64_t)s->kind * 131 + s->op * 31 + (uint64_t)s->comp * 7 + (uint64_t)(uint16_t)s->idx;
+    if (s->kind == Y_K) { uint32_t k; memcpy(&k, &s->k, 4); v ^= (uint64_t)k << 20; }
+    if (s->kind == Y_ATTR && s->idx < 32) *used |= 1u << s->idx;
+    *h = (*h ^ v) * 1099511628211ull;
+    if (s->kind == Y_OP || s->kind == Y_TEX || s->kind == Y_TEXC) { sym_scan(s->a, used, h, budget); sym_scan(s->b, used, h, budget); sym_scan(s->c, used, h, budget); }
+    *h = (*h ^ 0x5bd1e995u) * 1099511628211ull;   /* the end of a node: shapes told apart */
+}
+
 int glsl_plan(GlslProgram *p, GlslPlan *plan)
 {
     Ev *e;
@@ -1910,6 +1924,19 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
     plan->exact = !e->approx;
     snprintf(plan->why, sizeof(plan->why), "%s", e->why);
     plan->priv = p;
+    {   /* the per-vertex work: what it reads, and its hash */
+        uint64_t h = 1469598103934665603ull;
+        unsigned used = 0;
+        int budget = 200000;
+        if (plan->matrix_ok && loc >= 0) used |= 1u << loc;
+        else for (i = 0; i < 4; i++) sym_scan(pos[i], &used, &h, &budget);
+        sym_scan(p->uv[0], &used, &h, &budget);
+        sym_scan(p->uv[1], &used, &h, &budget);
+        for (i = 0; i < 4; i++) sym_scan(fc[i], &used, &h, &budget);
+        h ^= (uint64_t)plan->matrix_ok << 1 ^ (uint64_t)(loc + 1) << 3;
+        plan->attribs_used = used;
+        plan->vertex_hash = budget < 0 ? 0 : h;   /* 0: too large to be sure of */
+    }
     free(e);
     return 0;
 }
