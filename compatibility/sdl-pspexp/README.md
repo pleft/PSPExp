@@ -113,6 +113,7 @@ vertex attributes and the texture samples. The plan for the GE:
 | shader | on the PSP |
 |---|---|
 | `gl_Position = matrix * attribute` (any product of uniforms folding to one) | the GE's projection matrix, the attribute as the position |
+| `gl_Position = matrix * mix(pose1, pose2, blend)` (a weighted sum of attributes) | the sum made per vertex here, the matrix the GE's (which clips: vertices behind the eye stay right) |
 | another position | worked out per vertex here, sent divided by w |
 | a texture sample times the rest, per channel | the GE's texture, modulated by the rest worked out per vertex |
 | the colour alone | per-vertex colour |

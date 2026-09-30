@@ -35,4 +35,7 @@ OUT="$("$BUILD/glsl_plan" "$SV" "$SF" uLightDir=0,0,1)"
 check "plan: exact"; check "rgba 0.65 0.65 0.65 1.00"
 OUT="$("$BUILD/glsl_plan" "$SV" "$SF" uLightDir=0,0,-1)"
 check "plan: exact"; check "rgba 0.46 0.46 0.46 1.00"
+# two poses blended: the matrix, and their weighted sum per vertex (aPose1 at 0: 0.0 0.2 0.3; aPose2 at 1: 0.1 0.2 0.3)
+OUT="$("$BUILD/glsl_plan" "$ROOT/tests/glsl/poses.vert" "$SF" uBlend=0.5)"
+check "plan: exact"; check "position: matrix x attribute"; check "pos 0.10 0.40 0.60 1.00"
 echo "glsl_plan: ok"

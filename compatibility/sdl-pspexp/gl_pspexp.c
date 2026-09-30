@@ -3140,6 +3140,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     uint32_t vt = PSPEXP_3D_VT_POSITION | PSPEXP_3D_VT_COLOR;
     int a, k, hi = 0, n = 1 << 30, any = 0, pass;
     if (G.compiling || getenv("PSPEXP_GL_NOMESH") || !pl->matrix_ok || !pl->vertex_hash || (used >> 16)) return 0;
+    if (pl->pos_n > 1) return 0;   /* poses blended: other weights every frame (the sum is made per vertex) */
     if (count < 192) return 0;   /* small draws (text, 2D: often from buffers made each frame) are cheaper streamed */
     h = pl->vertex_hash;
     for (a = 0; a < 16; a++) {

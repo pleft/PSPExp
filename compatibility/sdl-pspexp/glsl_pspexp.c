@@ -1816,6 +1816,9 @@ static int linear(const Sym *s, float scale, float *coef /* [GLSL_ATTR_ALL][4] *
             if (s->b->kind == Y_K) return linear(s->a, scale * s->b->k, coef, c);
             return -1;
         case O_DIV: if (s->b->kind == Y_K && s->b->k != 0) return linear(s->a, scale / s->b->k, coef, c); return -1;
+        case O_MIX:   /* a (1 - k) + b k, k known */
+            if (!s->c || s->c->kind != Y_K) return -1;
+            return linear(s->a, scale * (1 - s->c->k), coef, c) < 0 || linear(s->b, scale * s->c->k, coef, c) < 0 ? -1 : 0;
         default: return -1;
         }
     default: return -1;
@@ -2124,22 +2127,43 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         }
         for (i = 0; i < 4; i++) fc[i] = out ? out->v.c[i] : K(e, 1);
     }
-    /* position: one matrix times one attribute? */
+    /* position: one matrix times one attribute, or times a weighted sum of several (two poses blended:
+     * Quake's models): the sum is made per vertex here, the matrix is the GE's, which clips */
     {
-        static float coef[GLSL_ATTR_ALL * 4];
-        float c[4];
-        int ok = 1, r, k, a;
+        static float coef[4][GLSL_ATTR_ALL * 4];
+        float c[4], ref2 = 0;
+        int ok = 1, r, k, a, n = 0, ref = -1, list[4];
         for (r = 0; r < 4 && ok; r++) {
-            memset(coef, 0, sizeof(coef));
+            memset(coef[r], 0, sizeof(coef[r]));
             c[r] = 0;
-            if (linear(pos[r], 1.0f, coef, &c[r]) < 0) { ok = 0; break; }
-            for (a = 0; a < GLSL_ATTR_ALL; a++)
-                for (k = 0; k < 4; k++) if (coef[a * 4 + k] != 0) {
-                    if (loc >= 0 && loc != a) ok = 0;
-                    loc = a;
-                }
-            if (loc >= 0) for (k = 0; k < 4; k++) plan->matrix[k * 4 + r] = coef[loc * 4 + k];
-            plan->matrix[12 + r] += c[r];   /* a constant: on w, which is 1 */
+            if (linear(pos[r], 1.0f, coef[r], &c[r]) < 0) ok = 0;
+        }
+        for (a = 0; a < GLSL_ATTR_ALL && ok; a++) {
+            float n2 = 0;
+            for (r = 0; r < 4; r++) for (k = 0; k < 4; k++) n2 += coef[r][a * 4 + k] * coef[r][a * 4 + k];
+            if (n2 == 0) continue;
+            if (n == 4) { ok = 0; break; }
+            list[n++] = a;
+            if (n2 > ref2) { ref2 = n2; ref = a; }
+        }
+        if (ok && n > 0) {
+            float wsum = 0;
+            for (k = 0; k < n; k++) {   /* each attribute's block a multiple of the largest one's */
+                float dotp = 0, res = 0, sc;
+                a = list[k];
+                for (r = 0; r < 4; r++) { int q; for (q = 0; q < 4; q++) dotp += coef[r][a * 4 + q] * coef[r][ref * 4 + q]; }
+                sc = dotp / ref2;
+                for (r = 0; r < 4; r++) { int q; for (q = 0; q < 4; q++) { float d = coef[r][a * 4 + q] - sc * coef[r][ref * 4 + q]; res += d * d; } }
+                if (res > 1e-8f * ref2) { ok = 0; break; }
+                plan->pos_attrs[k] = a; plan->pos_w[k] = sc; wsum += sc;
+            }
+            plan->pos_n = ok ? n : 0;
+            for (r = 0; r < 4 && ok; r++) {
+                for (k = 0; k < 3; k++) plan->matrix[k * 4 + r] = coef[r][ref * 4 + k];
+                /* w: the attributes' own (1 when not given) weighted, and a constant, which is on w */
+                plan->matrix[12 + r] = coef[r][ref * 4 + 3] * wsum + c[r];
+            }
+            loc = ref;
         }
         plan->matrix_ok = ok && loc >= 0;
         plan->pos_attr = loc;
@@ -2295,7 +2319,14 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         uint64_t h = 1469598103934665603ull;
         unsigned used = 0;
         int budget = 200000;
-        if (plan->matrix_ok && loc >= 0) used |= 1u << loc;
+        if (plan->matrix_ok && loc >= 0) {
+            used |= 1u << loc;
+            for (i = 0; i < plan->pos_n; i++) {   /* several: the weights are per-vertex work too */
+                uint32_t wb; memcpy(&wb, &plan->pos_w[i], 4);
+                used |= 1u << plan->pos_attrs[i];
+                h = (h ^ ((uint64_t)wb << 8 ^ (uint64_t)plan->pos_attrs[i])) * 1099511628211ull;
+            }
+        }
         else for (i = 0; i < 4; i++) sym_scan(pos[i], &used, &h, &budget);
         sym_scan(p->uv[0], &used, &h, &budget);
         sym_scan(p->uv[1], &used, &h, &budget);
@@ -2345,7 +2376,14 @@ void glsl_plan_vertex(const GlslPlan *plan, const float (*attrs)[4], float pos[4
 {
     const GlslProgram *p = (const GlslProgram *)plan->priv;
     int i;
-    if (plan->matrix_ok) memcpy(pos, attrs[plan->pos_attr], 4 * sizeof(float));
+    if (plan->matrix_ok && plan->pos_n <= 1) memcpy(pos, attrs[plan->pos_attr], 4 * sizeof(float));
+    else if (plan->matrix_ok) {   /* the weighted sum; w 1, the matrix carries the rest */
+        pos[0] = pos[1] = pos[2] = 0; pos[3] = 1;
+        for (i = 0; i < plan->pos_n; i++) {
+            const float *v = attrs[plan->pos_attrs[i]];
+            pos[0] += plan->pos_w[i] * v[0]; pos[1] += plan->pos_w[i] * v[1]; pos[2] += plan->pos_w[i] * v[2];
+        }
+    }
     else for (i = 0; i < 4; i++) pos[i] = nev(p->pos[i], attrs, 0);
     uv[0] = p->uv[0] ? nev(p->uv[0], attrs, 0) : 0;
     uv[1] = p->uv[1] ? nev(p->uv[1], attrs, 0) : 0;

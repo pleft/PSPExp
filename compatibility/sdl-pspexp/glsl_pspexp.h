@@ -60,6 +60,8 @@ typedef struct GlslPlan {
     char why[96];               /* when not exact: what was left out */
     int matrix_ok;              /* gl_Position = matrix x one attribute (x, y, z, w): the GE transforms */
     int pos_attr;
+    int pos_n, pos_attrs[4];    /* matrix times a weighted sum of these (pos_n > 1: two poses blended), w 1 */
+    float pos_w[4];
     float matrix[16];           /* column-major */
     int textured, sampler_unit;
     int tex_alpha;              /* the texture's alpha counts (else only its colour) */
