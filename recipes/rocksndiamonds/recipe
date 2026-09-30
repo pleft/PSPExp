@@ -1,0 +1,22 @@
+# Rocks'n'Diamonds: a Boulder Dash-style puzzle game with hundreds of levels,
+# Debian's package; plays with the PSP as its gamepad. Its screen (672x560) is
+# scaled to the PSP's: small, but whole.
+
+[package]
+id=rocksndiamonds
+title=Rocks'n'Diamonds
+description=Dig for diamonds and dodge falling rocks: a Boulder Dash-style puzzle game
+category=game
+license=GPL-2.0 (Rocks'n'Diamonds)
+version=1
+
+[debian]
+apt=rocksndiamonds
+
+[entry]
+title=Rocks'n'Diamonds
+type=game
+description=Dig for diamonds and dodge falling rocks: a Boulder Dash-style puzzle game
+icon=gamepad-2
+exec=/usr/games/rocksndiamonds
+keys=start=return,select=escape

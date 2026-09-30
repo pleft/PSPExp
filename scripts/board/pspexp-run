@@ -24,6 +24,16 @@ if [ "${PSPEXP_X:-0}" = 1 ]; then
 else
 	export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}" SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
 fi
+# a setuid or setgid program (Debian's games that keep a shared high-score file:
+# LTris, LBreakoutHD) runs in secure mode, where the loader ignores LD_PRELOAD:
+# start it through the loader itself, as the user (no extra group: a shared
+# score file may not be writable), and the SDL layer loads as for any other
+PROG=$(command -v "$1" 2>/dev/null || echo "$1")
+if [ -u "$PROG" ] || [ -g "$PROG" ]; then
+	for LD in /lib/ld-linux-aarch64.so.1 /lib/ld-linux-armhf.so.3 /lib64/ld-linux-x86-64.so.2 /lib/ld-linux.so.3; do
+		[ -x "$LD" ] && { shift; set -- "$LD" "$PROG" "$@"; break; }
+	done
+fi
 # preload into the program only: the shim's SDL symbols resolve from the
 # program's libSDL2, so a shell or env loading it would fail
 EXEC=$(command -v pspexp-exec || echo /usr/local/bin/pspexp-exec)

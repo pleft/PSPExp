@@ -1,4 +1,5 @@
-# The Mega Drive / Genesis: Debian's Genesis Plus GX core, played by pspexp-retro.
+# The Mega Drive / Genesis, and the Master System and Game Gear, which the same
+# cores play: Debian's Genesis Plus GX, played by pspexp-retro.
 
 [package]
 id=megadrive
@@ -6,7 +7,7 @@ title=Mega Drive
 description=Sega Mega Drive / Genesis: Debian's Genesis Plus GX core; ROMs in ~/roms/md
 category=system
 license=Genesis Plus GX licence (non-commercial); pspexp-retro is part of PSPExp
-version=1
+version=2
 
 [package:gameshell]
 description=Sega Mega Drive / Genesis: PSPExp's PicoDrive core (lighter; Debian armhf has no Mega Drive core); ROMs in ~/roms/md
@@ -38,5 +39,27 @@ icon=gamepad-2
 ext=md,gen,smd,bin
 roms=~/roms/md
 thumbs=Sega - Mega Drive - Genesis
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
+
+[system.sms]
+id=sms
+name=Master System
+short=SMS
+icon=gamepad-2
+ext=sms
+roms=~/roms/sms
+thumbs=Sega - Master System - Mark III
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
+
+[system.gg]
+id=gg
+name=Game Gear
+short=GG
+icon=gamepad-2
+ext=gg
+roms=~/roms/gg
+thumbs=Sega - Game Gear
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys

@@ -1395,9 +1395,62 @@ static void feed_input(void)
 
 /* ---- hooks: window / renderer ------------------------------------------------ */
 
+/* The display a program sees, on a headless board (SDL's dummy video driver,
+ * whose display has no real size): the PSP's own screen, 480x272 at 60 Hz. A
+ * program that sizes itself to the display (LTris, LBreakoutHD: a full-screen
+ * window at the desktop's size) then lays out for the PSP, not for 0x0. */
+#define PSP_W 480
+#define PSP_H 272
+static int headless_display(void)
+{
+    const char *d = SDL_GetCurrentVideoDriver();
+    return d && !strcmp(d, "dummy");
+}
+
+static void psp_mode(SDL_DisplayMode *m)
+{
+    if (!m) return;
+    m->w = PSP_W; m->h = PSP_H;
+    if (!m->refresh_rate) m->refresh_rate = 60;
+    if (!m->format) m->format = SDL_PIXELFORMAT_RGB888;
+}
+
+HOOK(int, SDL_GetDesktopDisplayMode, (int index, SDL_DisplayMode *mode))
+{
+    int r = REAL(SDL_GetDesktopDisplayMode)(index, mode);
+    if (r == 0 && headless_display()) psp_mode(mode);
+    return r;
+}
+
+HOOK(int, SDL_GetCurrentDisplayMode, (int index, SDL_DisplayMode *mode))
+{
+    int r = REAL(SDL_GetCurrentDisplayMode)(index, mode);
+    if (r == 0 && headless_display()) psp_mode(mode);
+    return r;
+}
+
+HOOK(int, SDL_GetDisplayBounds, (int index, SDL_Rect *rect))
+{
+    int r = REAL(SDL_GetDisplayBounds)(index, rect);
+    if (r == 0 && rect && headless_display()) { rect->x = 0; rect->y = 0; rect->w = PSP_W; rect->h = PSP_H; }
+    return r;
+}
+
+HOOK(int, SDL_GetDisplayUsableBounds, (int index, SDL_Rect *rect))
+{
+    int r = REAL(SDL_GetDisplayUsableBounds)(index, rect);
+    if (r == 0 && rect && headless_display()) { rect->x = 0; rect->y = 0; rect->w = PSP_W; rect->h = PSP_H; }
+    return r;
+}
+
 HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, int h, Uint32 flags))
 {
-    SDL_Window *win = REAL(SDL_CreateWindow)(title, x, y, w, h, flags);
+    SDL_Window *win;
+    if (headless_display() && ((flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP || w <= 1 || h <= 1)) {
+        w = PSP_W; h = PSP_H;   /* "the desktop's size" or none at all: the PSP's screen */
+        flags &= ~(Uint32)SDL_WINDOW_FULLSCREEN_DESKTOP;
+    }
+    win = REAL(SDL_CreateWindow)(title, x, y, w, h, flags);
     if (win && !S.win) { S.win = win; S.win_w = w; S.win_h = h; S.px = w / 2.0f; S.py = h / 2.0f; }   /* the pointer starts centred */
     return win;
 }
@@ -1405,11 +1458,11 @@ HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, in
 HOOK(SDL_Renderer *, SDL_CreateRenderer, (SDL_Window *win, int index, Uint32 flags))
 {
     SDL_Renderer *r = REAL(SDL_CreateRenderer)(win, index, flags);
-    if (!r && (flags & (SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC))) {
+    if (!r) {
         /* a headless board has only the software renderer, and the PSP draws
-         * anyway: a program that insists on acceleration (NXEngine) gets it */
-        fprintf(stderr, "[sdl-pspexp] no %s renderer here (%s): the software one\n",
-                (flags & SDL_RENDERER_ACCELERATED) ? "accelerated" : "vsync", SDL_GetError());
+         * anyway: a program that insists on acceleration (NXEngine), vsync, or
+         * a driver by its index (LTris, LBreakoutHD) gets that one */
+        fprintf(stderr, "[sdl-pspexp] no renderer as asked (index %d, flags 0x%x: %s): the software one\n", index, (unsigned)flags, SDL_GetError());
         r = REAL(SDL_CreateRenderer)(win, -1, (flags & ~(SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)) | SDL_RENDERER_SOFTWARE);
     }
     if (r && !S.ren) {

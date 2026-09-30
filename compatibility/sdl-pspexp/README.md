@@ -35,10 +35,11 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 
 | SDL2 | PSPExp |
 |---|---|
-| `SDL_CreateWindow`, `SDL_CreateRenderer`, `SDL_CreateWindowAndRenderer` | connect to the PSP (once) |
+| `SDL_CreateWindow`, `SDL_CreateRenderer`, `SDL_CreateWindowAndRenderer` | connect to the PSP (once); a renderer that can't be had as asked (acceleration, vsync, a driver by index) is the software one |
+| `SDL_GetDesktopDisplayMode`, `SDL_GetCurrentDisplayMode`, `SDL_GetDisplayBounds`, `SDL_GetDisplayUsableBounds`; a full-screen-desktop or zero-sized `SDL_CreateWindow` | on a headless board (SDL's dummy driver, whose display has no size): the PSP's screen, 480x272 at 60 Hz, so programs that size themselves to the display lay out for the PSP |
 | `SDL_RenderSetLogicalSize`, `SDL_RenderSetViewport`, `SDL_RenderSetClipRect` | the logical size (or window size) is fitted into 480x272 with letterboxing; viewport offsets and clip rectangles are applied |
 | `SDL_CreateTexture`, `SDL_CreateTextureFromSurface`, `SDL_UpdateTexture`, `SDL_LockTexture` / `SDL_UnlockTexture`, `SDL_DestroyTexture`, `SDL_SetTextureBlendMode` | a shadow copy (in the program's own ARGB8888 / ABGR8888 layout, else converted), uploaded swizzled in pages cut at power-of-two sizes of up to 512x512 (256x128 for streaming textures), so there is no padding (320x200: 256 + 64 by 128 + 64 + 8); a page with at most 256 colours goes as CLUT8 with its own palette, else 5650 when the blend mode is NONE, 4444 otherwise; only the pages whose pixels changed are sent again (see "Where the bytes go") |
-| `SDL_SetRenderTarget`, `SDL_RenderSetScale` | drawing into a render-target texture is recorded (copies and fills, up to 256 per target) and replayed, scaled and clipped, when the target is copied to the screen: the integer-upscaling pattern of pixel-art ports |
+| `SDL_SetRenderTarget`, `SDL_RenderSetScale` | drawing into a render-target texture is recorded (copies and fills, up to 256 per target) and replayed, scaled and clipped, when the target is copied to the screen: the integer-upscaling pattern of pixel-art ports. Programs that compose whole frames or menus in targets (LTris, LBreakoutHD, Project: Starfighter, C-Dogs SDL) draw partly or not at all yet |
 | `SDL_SetTextureColorMod`, `SDL_SetTextureAlphaMod` | per-quad tint (5650 when opaque, 4444 when translucent) |
 | `SDL_RenderCopy`, `SDL_RenderCopyEx`, `SDL_RenderCopyF`, `SDL_RenderCopyExF` | scaled quads (`PSPEXP_BATCH_SCALED`); horizontal and vertical flips; **rotation is ignored** (drawn unrotated) |
 | `SDL_RenderClear` | a full-screen rect, including the letterbox bars |

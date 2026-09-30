@@ -1,0 +1,36 @@
+# The WonderSwan and WonderSwan Color: Debian's Beetle WonderSwan core (Mednafen),
+# played by pspexp-retro.
+
+[package]
+id=wonderswan
+title=WonderSwan
+description=Bandai WonderSwan and WonderSwan Color: Debian's Beetle WonderSwan core; ROMs in ~/roms/ws and ~/roms/wsc
+category=system
+license=GPL-2.0 (Beetle WonderSwan, Mednafen); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro libretro-beetle-wswan
+core=mednafen_wswan_libretro.so
+
+[system]
+id=ws
+name=WonderSwan
+short=WS
+icon=gamepad-2
+ext=ws
+roms=~/roms/ws
+thumbs=Bandai - WonderSwan
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
+
+[system.wsc]
+id=wsc
+name=WonderSwan Color
+short=WSC
+icon=gamepad-2
+ext=wsc
+roms=~/roms/wsc
+thumbs=Bandai - WonderSwan Color
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys

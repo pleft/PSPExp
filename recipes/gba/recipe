@@ -1,0 +1,25 @@
+# The Game Boy Advance: Debian's mGBA core, played by pspexp-retro. mGBA needs no
+# BIOS (it has its own); a GBA BIOS in the core's system folder is used when present.
+
+[package]
+id=gba
+title=Game Boy Advance
+description=Nintendo Game Boy Advance: Debian's mGBA core; ROMs in ~/roms/gba
+category=system
+license=MPL-2.0 (mGBA); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro libretro-mgba
+core=mgba_libretro.so
+
+[system]
+id=gba
+name=Game Boy Advance
+short=GBA
+icon=gamepad-2
+ext=gba
+roms=~/roms/gba
+thumbs=Nintendo - Game Boy Advance
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
