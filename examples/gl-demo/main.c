@@ -8,15 +8,19 @@
  *
  *   gl-demo [frames [first]]   quit after that many frames (0: run until closed);
  *                              start the animation at frame `first`
+ *   GLDEMO_SHADER=1            a GLSL program (a matrix uniform, texture x colour,
+ *                              an alpha discard) instead: GL 2's path
  *   GLDEMO_ONE=degrees [GLDEMO_TX=x]   a lighting check instead: one sphere turned
  *                              about y (then moved along x), lit from the camera:
  *                              it must look the same at any angle
  */
+#define GL_GLEXT_PROTOTYPES   /* GL 2's functions declared (GLDEMO_SHADER) */
 #include <SDL.h>
 #ifdef __APPLE__
 #include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
+#include <GL/glext.h>
 #endif
 #include <math.h>
 #include <stdio.h>
@@ -43,6 +47,64 @@ static GLuint make_texture(void)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 64, 64, 0, GL_RGB, GL_UNSIGNED_BYTE, px);
     return t;
+}
+
+/* GL 2: a textured, coloured quad through a program */
+static void shader_frame(GLuint tex, int n, int w, int h)
+{
+    static GLuint prog;
+    static const char *vs =
+        "uniform mat4 uMvp;\n"
+        "attribute vec3 aPos;\n"
+        "attribute vec4 aColor;\n"
+        "attribute vec2 aTex;\n"
+        "varying vec2 vTex;\n"
+        "varying vec4 vColor;\n"
+        "void main() { vTex = aTex; vColor = aColor; gl_Position = uMvp * vec4(aPos, 1.0); }\n";
+    static const char *fs =
+        "uniform sampler2D uTex;\n"
+        "uniform int uDiscard;\n"
+        "varying vec2 vTex;\n"
+        "varying vec4 vColor;\n"
+        "void main() {\n"
+        "    gl_FragColor = texture2D(uTex, vTex) * vColor;\n"
+        "    if (uDiscard != 0 && gl_FragColor.a < 0.5) discard;\n"
+        "}\n";
+    static const float quad[4][9] = {   /* x y z  r g b a  u v */
+        { -1, -1, 0,  1, 0.3f, 0.3f, 1,  0, 1 }, {  1, -1, 0,  0.3f, 1, 0.3f, 1,  1, 1 },
+        {  1,  1, 0,  0.3f, 0.3f, 1, 1,  1, 0 }, { -1,  1, 0,  1, 1, 1, 1,  0, 0 } };
+    float a = n * 0.02f, c = cosf(a), s = sinf(a), asp = (float)w / (float)h;
+    float mvp[16] = { c / asp, s, 0, 0,  -s / asp, c, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
+    if (!prog) {
+        GLuint v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(v, 1, &vs, NULL); glCompileShader(v);
+        glShaderSource(f, 1, &fs, NULL); glCompileShader(f);
+        prog = glCreateProgram();
+        glAttachShader(prog, v); glAttachShader(prog, f);
+        glBindAttribLocation(prog, 0, "aPos");
+        glBindAttribLocation(prog, 1, "aColor");
+        glBindAttribLocation(prog, 2, "aTex");
+        glLinkProgram(prog);
+    }
+    glViewport(0, 0, w, h);
+    glClearColor(0.1f, 0.12f, 0.2f, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(prog);
+    glUniformMatrix4fv(glGetUniformLocation(prog, "uMvp"), 1, GL_FALSE, mvp);
+    glUniform1i(glGetUniformLocation(prog, "uTex"), 0);
+    glUniform1i(glGetUniformLocation(prog, "uDiscard"), 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), &quad[0][0]);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float), &quad[0][3]);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), &quad[0][7]);
+    {   /* a strip through indices: glDrawElements */
+        static const GLushort order[4] = { 0, 1, 3, 2 };
+        glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, order);
+    }
+    glDisableVertexAttribArray(0); glDisableVertexAttribArray(1); glDisableVertexAttribArray(2);
+    glUseProgram(0);
 }
 
 static void cube(void)
@@ -165,6 +227,12 @@ int main(int argc, char **argv)
         glFrustum(-0.1 * w / h, 0.1 * w / h, -0.1, 0.1, 0.2, 40.0);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        if (getenv("GLDEMO_SHADER")) {
+            shader_frame(tex, n + first, w, h);
+            SDL_GL_SwapWindow(win);
+            if (++n == frames) running = 0;
+            continue;
+        }
         if (getenv("GLDEMO_ONE")) {   /* a lighting test: one sphere turned by GLDEMO_ONE degrees about y, lit from the camera */
             static const float front[4] = { 0, 0, 1, 0 };
             int j, k;

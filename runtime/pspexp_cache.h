@@ -35,6 +35,7 @@ typedef struct PspExpCacheEntry {
     uint16_t palette;       /* texture: palette handle for T4/T8 */
     PspExpFrame *frames;    /* owned copy of the frame table */
     uint32_t count, vertex_type, max_index;   /* meshes */
+    uint8_t  target;        /* a render target (VRAM only) */
     void    *user;          /* executor-specific (SDL_Texture*, VRAM pointer, ...) */
 } PspExpCacheEntry;
 

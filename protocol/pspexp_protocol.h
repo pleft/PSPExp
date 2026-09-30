@@ -527,6 +527,26 @@ typedef struct PspExp3DDrawMesh {
 } PspExp3DDrawMesh;
 PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDrawMesh) == 16, draw_mesh_size);
 
+/* Render targets: textures in VRAM the GE draws into (OpenGL framebuffer
+ * objects). RESOURCE_CREATE_TARGET makes one (cleared to zero; a texture
+ * like any other for draws that sample it); 3D_TARGET, in a frame, sends
+ * the draws and clears that follow into it, or back to the screen. Row 0
+ * is the texture's first row (v = 0). */
+typedef struct PspExpTargetCreate {
+    uint16_t id;
+    uint16_t width, height;     /* powers of two, at most 512 */
+    uint8_t  format;            /* PSPEXP_TEX_5650, 5551, 4444 or 8888 */
+    uint8_t  reserved[9];
+} PspExpTargetCreate;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpTargetCreate) == 16, target_create_size);
+
+#define PSPEXP_TARGET_SCREEN 0xFFFFu
+typedef struct PspExp3DTarget {
+    uint16_t id;                /* a render target, or PSPEXP_TARGET_SCREEN */
+    uint8_t  reserved[14];
+} PspExp3DTarget;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DTarget) == 16, target3d_size);
+
 /* PRESENT has no payload. */
 
 /* ---- RESOURCE channel payloads ---------------------------------------- */

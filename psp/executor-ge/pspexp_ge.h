@@ -42,6 +42,7 @@ typedef struct PspExpGeExecutor {
     int      state_dirty;
     int      have_state;
     PspExp3DState st;
+    PspExpCacheEntry *target;    /* the render target drawn into, NULL: the screen */
 } PspExpGeExecutor;
 
 /* Copies the displayed framebuffer (480x272 RGB565) into `out` (row stride 480). */

@@ -72,7 +72,8 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
             t->ptr = (unsigned char *)sceGeEdramGetAddr() + ge->tex_base + off;
             t->vram_off = off;
             t->tier = PSPEXP_TIER_VRAM;
-            memcpy(UNCACHED(t->ptr), pixels, e->bytes);
+            if (pixels) memcpy(UNCACHED(t->ptr), pixels, e->bytes);
+            else memset(UNCACHED(t->ptr), 0, e->bytes);   /* a render target */
         } else {
             /* Fragmented: fall back to main RAM if the budget allows. */
             ge->stats.vram_alloc_failures++;
@@ -80,7 +81,9 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
         }
     }
     if (e->tier == PSPEXP_TIER_RAM) {
-        void *p = memalign(16, e->bytes);
+        void *p;
+        if (e->target) { free(t); return PSPEXP_RERR_OUT_OF_MEMORY; }   /* the GE draws into VRAM only */
+        p = memalign(16, e->bytes);
         if (!p) { free(t); return PSPEXP_RERR_OUT_OF_MEMORY; }
         memcpy(p, pixels, e->bytes);
         sceKernelDcacheWritebackRange(p, e->bytes);
@@ -91,11 +94,14 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
     return PSPEXP_RERR_NONE;
 }
 
+static void screen_target(PspExpGeExecutor *ge);
+
 static void op_texture_destroy(void *u, PspExpCacheEntry *e)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     GeTexture *t = (GeTexture *)e->user;
     if (!t) return;
+    if (ge->target == e && ge->in_frame) screen_target(ge);
     if (t->tier == PSPEXP_TIER_VRAM) vram_free(ge, t->vram_off);
     else free(t->ptr);
     free(t);
@@ -205,8 +211,9 @@ static void apply_3d(PspExpGeExecutor *ge)
     {
         int x0 = s->scissor_x < 0 ? 0 : s->scissor_x, y0 = s->scissor_y < 0 ? 0 : s->scissor_y;
         int x1 = s->scissor_x + s->scissor_w, y1 = s->scissor_y + s->scissor_h;
-        if (x1 > PSPEXP_DISPLAY_WIDTH) x1 = PSPEXP_DISPLAY_WIDTH;
-        if (y1 > PSPEXP_DISPLAY_HEIGHT) y1 = PSPEXP_DISPLAY_HEIGHT;
+        int w = ge->target ? ge->target->width : PSPEXP_DISPLAY_WIDTH, h = ge->target ? ge->target->height : PSPEXP_DISPLAY_HEIGHT;
+        if (x1 > w) x1 = w;
+        if (y1 > h) y1 = h;
         if (x1 <= x0 || y1 <= y0) { x0 = y0 = 0; x1 = y1 = 1; }
         sceGuScissor(x0, y0, x1 - x0, y1 - y0);
     }
@@ -280,9 +287,27 @@ static void op_clear3d(void *u, const PspExp3DClear *c)
         if (ge->have_state) apply_3d(ge);
         else leave_3d(ge);
     }
-    sceGuClearColor(c->color);
-    sceGuClearDepth(c->depth);
-    sceGuClear(flags);
+    if (!ge->target) {
+        sceGuClearColor(c->color);
+        sceGuClearDepth(c->depth);
+        sceGuClear(flags);
+        return;
+    }
+    {   /* a render target: sceGuClear covers the screen's size only; strips of 64 pixels over the target */
+        typedef struct { uint32_t color; int16_t x, y, z, pad; } ClearVertex;
+        int w = ge->target->width, h = ge->target->height, n = (w + 63) / 64 * 2, i;
+        ClearVertex *v = (ClearVertex *)sceGuGetMemory((unsigned)n * sizeof(ClearVertex));
+        if (!v) return;
+        for (i = 0; i < n; i += 2) {
+            int x0 = i / 2 * 64, x1 = x0 + 64 < w ? x0 + 64 : w;
+            v[i].color = v[i + 1].color = c->color;
+            v[i].x = (int16_t)x0; v[i].y = 0; v[i].z = (int16_t)c->depth; v[i].pad = 0;
+            v[i + 1].x = (int16_t)x1; v[i + 1].y = (int16_t)h; v[i + 1].z = (int16_t)c->depth; v[i + 1].pad = 0;
+        }
+        sceGuSendCommandi(211, (flags << 8) | 1);   /* clear mode, as sceGuClear does */
+        sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, n, 0, v);
+        sceGuSendCommandi(211, 0);
+    }
 }
 
 static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t prim,
@@ -332,12 +357,44 @@ static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal
     ge->stats.draws3d++;
 }
 
+/* ---- render targets ------------------------------------------------------------- */
+
+static uint32_t draw_offset(PspExpGeExecutor *ge) { return ge->displayed_offset == 0 ? FB_BYTES : 0; }
+
+static void screen_target(PspExpGeExecutor *ge)
+{
+    if (!ge->target) return;
+    sceGuDrawBufferList(GU_PSM_5650, (void *)draw_offset(ge), PSPEXP_DISPLAY_STRIDE);
+    sceGuTexFlush();   /* what was drawn into the target is read as a texture from here on */
+    ge->target = NULL;
+    ge->cur_atlas = NULL;
+    ge->state_dirty = 1;
+}
+
+static void op_target3d(void *u, PspExpCacheEntry *e)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    GeTexture *t;
+    if (!e) { screen_target(ge); return; }
+    t = (GeTexture *)e->user;
+    if (!t || t->tier != PSPEXP_TIER_VRAM) return;
+    if (ge->target) sceGuTexFlush();
+    sceGuDrawBufferList(e->format, (void *)(ge->tex_base + t->vram_off), e->width);
+    ge->target = e;
+    ge->cur_atlas = NULL;
+    ge->state_dirty = 1;   /* the scissor and viewport the host gave are the target's */
+}
+
 static void op_frame_begin(void *u, uint32_t seq)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     (void)seq;
     if (ge->in_frame) { sceGuFinish(); sceGuSync(0, 0); }
     sceGuStart(GU_DIRECT, ge->list);
+    if (ge->target) {   /* a frame that ended in a target: the screen again */
+        sceGuDrawBufferList(GU_PSM_5650, (void *)draw_offset(ge), PSPEXP_DISPLAY_STRIDE);
+        ge->target = NULL;
+    }
     ge->ring_cur ^= 1;
     ge->ring_used = 0;
     ge->cur_atlas = NULL;
@@ -433,6 +490,7 @@ static uint32_t op_present(void *u)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     uint32_t t0;
+    screen_target(ge);
     sceKernelDcacheWritebackAll();
     sceGuFinish();
     t0 = sceKernelGetSystemTimeLow();
@@ -535,6 +593,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->draw3d = op_draw3d;
     ops->clear3d = op_clear3d;
     ops->draw3d_mesh = op_draw3d_mesh;
+    ops->target3d = op_target3d;
 }
 
 void pspexp_ge_bind(PspExpGeExecutor *ge, PspExpRuntime *rt) { ge->rt = rt; }

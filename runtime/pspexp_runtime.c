@@ -421,6 +421,18 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
     case PSPEXP_OP_3D_DRAW_MESH:
         handle_draw_mesh(rt, m);
         return;
+    case PSPEXP_OP_3D_TARGET: {
+        const PspExp3DTarget *t;
+        PspExpCacheEntry *e = NULL;
+        if (pspexp_message_expect(m, sizeof(*t)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        t = (const PspExp3DTarget *)m->payload;
+        if (t->id != PSPEXP_TARGET_SCREEN) {
+            e = pspexp_cache_find(&rt->cache, t->id);
+            if (!e || !e->target) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, t->id, e ? PSPEXP_RERR_WRONG_KIND : PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); e = NULL; }
+        }
+        if (rt->ops.target3d && (e || t->id == PSPEXP_TARGET_SCREEN)) rt->ops.target3d(rt->ops.user, e);
+        return;
+    }
     case PSPEXP_OP_3D_DRAW: {
         const PspExp3DDraw *d;
         uint32_t size;
@@ -435,6 +447,12 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
             rt->tex3d = batch_atlas(rt, rt->tex3d_id, PSPEXP_PALETTE_DEFAULT, &rt->pal3d);
             if (!rt->tex3d) rt->tex3d_on = 0;   /* reported once; drawn untextured until the next state */
         }
+        if (!rt->stats.draws3d) {   /* the first of a connection, in the log: what the host sends */
+            const float *f = (const float *)(const void *)(m->payload + sizeof(*d));
+            int k = size / 4 - 3;   /* the position is last */
+            rt_log(rt, "3D: first draw: primitive %u, vertex type %x, %u vertices, the first at %d %d %d (x1000)", d->primitive,
+                   (unsigned)d->vertex_type, (unsigned)d->count, (int)(f[k] * 1000), (int)(f[k + 1] * 1000), (int)(f[k + 2] * 1000));
+        }
         if (rt->ops.draw3d)
             rt->ops.draw3d(rt->ops.user, rt->tex3d_on ? rt->tex3d : NULL, rt->tex3d_on ? rt->pal3d : NULL,
                            d->primitive, d->vertex_type, d->count, m->payload + sizeof(*d));
@@ -445,6 +463,41 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
     default:
         return;
     }
+}
+
+static void handle_target_create(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    const PspExpTargetCreate *c;
+    PspExpTextureUpload t;
+    PspExpCacheEntry *e;
+    int reason;
+    if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    c = (const PspExpTargetCreate *)m->payload;
+    memset(&t, 0, sizeof(t));
+    t.id = c->id; t.width = c->width; t.height = c->height; t.format = c->format;
+    t.layout = PSPEXP_LAYOUT_LINEAR; t.priority = PSPEXP_PRIORITY_HIGH;
+    t.data_length = pspexp_texture_data_length(c->width, c->height, c->format);
+    if (c->format > PSPEXP_TEX_8888 || (c->width & (c->width - 1)) || (c->height & (c->height - 1)) ||
+        !c->width || !c->height || c->width > PSPEXP_TEXTURE_MAX || c->height > PSPEXP_TEXTURE_MAX) {
+        send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, c->id, PSPEXP_RERR_BAD_DIMENSIONS, 0);
+        return;
+    }
+    e = pspexp_cache_insert(&rt->cache, &t, NULL, &reason);
+    if (!e) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, c->id, (uint16_t)reason, 0); return; }
+    if (e->tier != PSPEXP_TIER_VRAM) {   /* the GE draws into VRAM only */
+        pspexp_cache_remove(&rt->cache, e);
+        send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, c->id, PSPEXP_RERR_OUT_OF_MEMORY, 0);
+        return;
+    }
+    e->target = 1;
+    reason = rt->ops.texture_create ? rt->ops.texture_create(rt->ops.user, e, NULL) : PSPEXP_RERR_NONE;
+    if (reason != PSPEXP_RERR_NONE || (e->tier != PSPEXP_TIER_VRAM)) {
+        destroy_entry(rt, e);
+        send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, c->id, PSPEXP_RERR_OUT_OF_MEMORY, 0);
+        return;
+    }
+    rt->stats.uploads++;
+    send_ready(rt, PSPEXP_OP_RESOURCE_READY, e->id, e->tier);
 }
 
 static void handle_mesh_upload(PspExpRuntime *rt, const PspExpMessage *m)
@@ -889,8 +942,12 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         handle_mesh_upload(rt, m);
         break;
+    case PSPEXP_OP_RESOURCE_CREATE_TARGET:
+        if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        handle_target_create(rt, m);
+        break;
     case PSPEXP_OP_3D_STATE: case PSPEXP_OP_3D_MATRICES: case PSPEXP_OP_3D_LIGHTS:
-    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH:
+    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH: case PSPEXP_OP_3D_TARGET:
         if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         if (!rt->in_frame) { send_error(rt, PSPEXP_ERR_NOT_IN_FRAME, m, 0); return; }
         handle_3d(rt, m);

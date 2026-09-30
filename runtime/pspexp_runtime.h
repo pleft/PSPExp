@@ -63,6 +63,8 @@ typedef struct PspExpRuntimeOps {
     /* A mesh draw: `vertices` is a vertex mesh's data (kept until released);
      * `indices` NULL, an index mesh's data, or (indices_inline) data only
      * valid during the call. The runtime has checked every index. */
+    /* Optional render targets: the texture entry to draw into, NULL for the screen. */
+    void (*target3d)(void *user, PspExpCacheEntry *target);
     void (*draw3d_mesh)(void *user, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t primitive,
                         uint32_t vertex_type, uint32_t count, const void *vertices, const uint16_t *indices, int indices_inline);
     /* Finish and display the frame; return the clock at the vblank it was shown. */

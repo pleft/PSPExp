@@ -33,6 +33,7 @@ enum PspExpOpcode {
     PSPEXP_OP_3D_DRAW           = 0x0113,  /* PspExp3DDraw + vertices */
     PSPEXP_OP_3D_CLEAR          = 0x0114,  /* PspExp3DClear */
     PSPEXP_OP_3D_DRAW_MESH      = 0x0115,  /* PspExp3DDrawMesh [+ 16-bit indices] */
+    PSPEXP_OP_3D_TARGET         = 0x0116,  /* PspExp3DTarget: draw into a render target, or the screen */
 
     /* RESOURCE (0x02xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE = 0x0201,  /* host -> PSP, PspExpTextureUpload + data + frames */
@@ -44,6 +45,7 @@ enum PspExpOpcode {
     PSPEXP_OP_RESOURCE_MISS           = 0x0207,  /* PSP -> host, PspExpResourceError */
     PSPEXP_OP_RESOURCE_UPLOAD_PALETTE = 0x0208,  /* host -> PSP, PspExpPaletteUpload + entries */
     PSPEXP_OP_RESOURCE_UPLOAD_MESH    = 0x0209,  /* host -> PSP, PspExpMeshUpload + data (PSPEXP_FEATURE_3D) */
+    PSPEXP_OP_RESOURCE_CREATE_TARGET  = 0x020A,  /* host -> PSP, PspExpTargetCreate (PSPEXP_FEATURE_3D) */
 
     /* AUDIO (0x03xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_SOUND = 0x0301,  /* host -> PSP, PspExpSoundUpload + s16 PCM */

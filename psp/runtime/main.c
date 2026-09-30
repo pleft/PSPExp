@@ -160,7 +160,7 @@ static void op_screenshot(void *u, uint16_t index)
         sceIoWrite(fd, row, pspexp_bmp_stride(PSPEXP_DISPLAY_WIDTH));
     }
     sceIoClose(fd);
-    trace("screenshot written");
+    trace(g_ge.in_frame ? "screenshot written (in a frame: read by the CPU)" : "screenshot written");
 }
 /* the clock (CLOCK_SET): read here, set through the USB driver (kernel mode) */
 #include <psprtc.h>
@@ -203,7 +203,7 @@ static void op_log(void *u, const char *msg)
     strncpy(g_log[g_log_n % 4], msg, sizeof(g_log[0]) - 1);
     g_log[g_log_n % 4][sizeof(g_log[0]) - 1] = 0;
     g_log_n++;
-    if (!strncmp(msg, "connected", 9) || !strncmp(msg, "maintenance", 11)) trace(msg);   /* once per connection: kept in the log file too */
+    if (!strncmp(msg, "connected", 9) || !strncmp(msg, "maintenance", 11) || !strncmp(msg, "3D:", 3)) trace(msg);   /* once per connection: kept in the log file too */
 }
 
 static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)

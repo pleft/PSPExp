@@ -173,6 +173,11 @@ void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type
  * steps: begin returns where to write `count` of them, commit sends it. */
 void *pspexp_upload_mesh_begin(PspExpContext *ctx, uint16_t id, uint8_t kind, uint32_t vertex_type, uint32_t count);
 int   pspexp_upload_mesh_commit(PspExpContext *ctx);
+/* Render targets (resources): a texture in VRAM the GE draws into, and
+ * (in a frame) where the draws that follow go: a target, or
+ * PSPEXP_TARGET_SCREEN. */
+int  pspexp_create_target(PspExpContext *ctx, uint16_t id, uint16_t width, uint16_t height, uint8_t format);
+void pspexp_3d_target(PspExpContext *ctx, uint16_t id);
 /* Draw from meshes (in a frame): `indices` a mesh handle, PSPEXP_MESH_NONE,
  * or PSPEXP_MESH_INLINE, which returns where to write the `count` indices
  * (else a non-NULL pointer that is not to be written; NULL on error). */

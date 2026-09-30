@@ -84,6 +84,8 @@ static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal
     if (tex) x->stats.textured3d++;
 }
 
+static void op_target3d(void *u, PspExpCacheEntry *t) { if (t) ((PspExpNullExecutor *)u)->stats.targets3d++; }
+
 static void op_log(void *u, const char *msg) { (void)u; fprintf(stderr, "null-executor: %s\n", msg); }
 static int  op_audio_start(void *u, PspExpMixer *m, uint32_t rate) { (void)rate; ((PspExpNullExecutor *)u)->mixer = m; return 0; }
 static void op_audio_stop(void *u) { ((PspExpNullExecutor *)u)->mixer = NULL; }
@@ -148,6 +150,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.draw3d = op_draw3d;
     ops.clear3d = op_clear3d;
     ops.draw3d_mesh = op_draw3d_mesh;
+    ops.target3d = op_target3d;
     ops.log = op_log;
     pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick */
     pspexp_clock_posix_install(&ops);      /* a clock CLOCK_SET can move (in this process only) */

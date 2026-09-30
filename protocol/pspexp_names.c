@@ -41,6 +41,8 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_3D_DRAW: return "3D_DRAW";
     case PSPEXP_OP_3D_CLEAR: return "3D_CLEAR";
     case PSPEXP_OP_3D_DRAW_MESH: return "3D_DRAW_MESH";
+    case PSPEXP_OP_3D_TARGET: return "3D_TARGET";
+    case PSPEXP_OP_RESOURCE_CREATE_TARGET: return "RESOURCE_CREATE_TARGET";
     case PSPEXP_OP_RESOURCE_UPLOAD_MESH: return "RESOURCE_UPLOAD_MESH";
     case PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE: return "RESOURCE_UPLOAD_TEXTURE";
     case PSPEXP_OP_RESOURCE_RELEASE: return "RESOURCE_RELEASE";

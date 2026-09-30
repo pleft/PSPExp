@@ -91,7 +91,7 @@ endif()
 
 # --- sdl-pspexp: interposition library for unmodified SDL2 programs (v0.4) ---
 if(SDL2_FOUND)
-  add_library(sdl-pspexp SHARED compatibility/sdl-pspexp/sdl_pspexp.c compatibility/sdl-pspexp/gl_pspexp.c)
+  add_library(sdl-pspexp SHARED compatibility/sdl-pspexp/sdl_pspexp.c compatibility/sdl-pspexp/gl_pspexp.c compatibility/sdl-pspexp/glsl_pspexp.c)
   target_link_libraries(sdl-pspexp PRIVATE pspexp pspexp_null pspexp_sdl pspexp_tcp ${SDL2_LINK_LIBRARIES})
   target_include_directories(sdl-pspexp PRIVATE ${SDL2_INCLUDE_DIRS})
   target_compile_options(sdl-pspexp PRIVATE ${SDL2_CFLAGS_OTHER})
@@ -114,6 +114,12 @@ if(SDL2_FOUND)
   endif()
   target_include_directories(sdl-game PRIVATE ${SDL2_INCLUDE_DIRS})
   target_compile_options(sdl-game PRIVATE ${SDL2_CFLAGS_OTHER})
+
+  # the GLSL reader on its own (tests/glsl_plan.c)
+  add_executable(glsl_plan tests/glsl_plan.c compatibility/sdl-pspexp/glsl_pspexp.c)
+  if(NOT APPLE)
+    target_link_libraries(glsl_plan PRIVATE m)
+  endif()
 
   # an SDL2 + OpenGL 1.x program, for the SDL layer's OpenGL part
   find_package(OpenGL QUIET)
@@ -209,5 +215,6 @@ if(PSPEXP_BUILD_TESTS)
   add_test(NAME sprite_demo_null COMMAND pspexp-sprite-demo --null --frames 30 --field 2000)
   if(SDL2_FOUND)
     add_test(NAME sdl_pspexp COMMAND ${CMAKE_SOURCE_DIR}/tests/run_sdl_pspexp.sh ${CMAKE_BINARY_DIR})
+    add_test(NAME glsl_plan COMMAND ${CMAKE_SOURCE_DIR}/tests/run_glsl_plan.sh ${CMAKE_BINARY_DIR})
   endif()
 endif()

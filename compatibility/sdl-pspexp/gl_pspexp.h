@@ -15,6 +15,7 @@ void shim_gl_log(const char *fmt, ...);
 
 /* The OpenGL part's side. */
 void  pspexp_gl_init(void);           /* a context was made current */
+void  pspexp_gl_refused(void);        /* a context was refused: glGetError says so once (programs check that way) */
 void  pspexp_gl_frame_done(void);     /* SDL_GL_SwapWindow: before the frame goes */
 void *pspexp_gl_proc(const char *name);   /* our function by name, or NULL */
 int   pspexp_gl_extension(const char *name);

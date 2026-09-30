@@ -143,9 +143,19 @@ static void link_lost(PspExpContext *ctx)
     ctx->batch_len = 0;   /* half a batch is worth nothing to a new link */
 }
 
+/* PSPEXP_RECORD=FILE: every byte sent, in order (debugging: tools replay it) */
+static void record(const void *data, size_t len)
+{
+    static FILE *f;
+    static int opened;
+    if (!opened) { const char *p = getenv("PSPEXP_RECORD"); opened = 1; if (p && *p) f = fopen(p, "wb"); }
+    if (f) { fwrite(data, 1, len, f); fflush(f); }
+}
+
 static int send_now(PspExpContext *ctx, const void *data, size_t len)
 {
     if (!ctx->t) return -1;
+    record(data, len);
     if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
     return 0;
 }
@@ -184,6 +194,7 @@ static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
             return 0;
         }
     }
+    record(data, len);
     if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
     ctx->stats.bytes_sent += len;
     return 0;
@@ -1108,6 +1119,32 @@ int pspexp_upload_mesh_commit(PspExpContext *ctx)
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
 }
 
+int pspexp_create_target(PspExpContext *ctx, uint16_t id, uint16_t width, uint16_t height, uint8_t format)
+{
+    PspExpTargetCreate c;
+    Resource *r;
+    memset(&c, 0, sizeof(c));
+    c.id = id; c.width = width; c.height = height; c.format = format;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_message(&ctx->msg, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_CREATE_TARGET, 0, &c, sizeof(c)) < 0) return -1;
+    if (!(r = add_res(ctx, id))) return -1;
+    if (r->retained) { free(r->retained); r->retained = NULL; }
+    r->kind = PSPEXP_KIND_TEXTURE;
+    r->opcode = PSPEXP_OP_RESOURCE_CREATE_TARGET;
+    if ((r->retained = (uint8_t *)malloc(sizeof(c)))) { memcpy(r->retained, &c, sizeof(c)); r->retained_len = sizeof(c); }
+    r->state = PSPEXP_RES_PENDING;
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return 0;
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
+void pspexp_3d_target(PspExpContext *ctx, uint16_t id)
+{
+    PspExp3DTarget t;
+    memset(&t, 0, sizeof(t));
+    t.id = id;
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_TARGET, 0, &t, sizeof(t));
+}
+
 uint16_t *pspexp_3d_draw_mesh(PspExpContext *ctx, uint16_t vertices, uint16_t indices, uint8_t primitive,
                               uint32_t first, uint32_t count)
 {
@@ -1133,6 +1170,21 @@ long pspexp_present(PspExpContext *ctx)
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_PRESENT, 0, NULL, 0);
     ctx->in_frame = 0;
     if (ctx->frame.error) { ctx_log(ctx, "frame %u too large", seq); return -1; }
+    {   /* PSPEXP_TRACE_FRAMES=N: the messages of the first N frames, in the log */
+        static long trace = -1;
+        if (trace < 0) trace = getenv("PSPEXP_TRACE_FRAMES") ? atol(getenv("PSPEXP_TRACE_FRAMES")) : 0;
+        if (trace > 0 && (long)seq <= trace) {
+            size_t off = 0;
+            char line[1024];
+            int n = snprintf(line, sizeof(line), "frame %u:", seq);
+            while (off + PSPEXP_HEADER_SIZE <= ctx->frame.len && n < (int)sizeof(line) - 40) {
+                const PspExpMessageHeader *h = (const PspExpMessageHeader *)(const void *)(ctx->frame.buf + off);
+                n += snprintf(line + n, sizeof(line) - (size_t)n, " %s", pspexp_opcode_name(h->opcode));
+                off += PSPEXP_HEADER_SIZE + h->length;
+            }
+            ctx_log(ctx, "%s", line);
+        }
+    }
     rec = &ctx->ring[seq % SEND_RING];
     rec->sent_us = pspexp_time_us();
     ctx->stats.last_frame_bytes = (uint32_t)ctx->frame.len;

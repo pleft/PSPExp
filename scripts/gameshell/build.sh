@@ -168,13 +168,14 @@ C="$GNU/cmake"
 "$GNU/zcc" -O2 -fPIC -c -D_GNU_SOURCE -DPSPEXP_HAVE_USB -DPSPEXP_NO_SDL_EXECUTOR -D_REENTRANT \
 	-I"$SDLINC" -I"$GNU/prefix/include" "$ROOT/compatibility/sdl-pspexp/sdl_pspexp.c" -o "$GNU/sdl_pspexp.o"
 "$GNU/zcc" -O2 -fPIC -c -D_GNU_SOURCE "$ROOT/compatibility/sdl-pspexp/gl_pspexp.c" -o "$GNU/gl_pspexp.o"
+"$GNU/zcc" -O2 -fPIC -c -D_GNU_SOURCE "$ROOT/compatibility/sdl-pspexp/glsl_pspexp.c" -o "$GNU/glsl_pspexp.o"
 # linked against a stand-in libSDL2-2.0.so.0 naming the SDL functions the shim
 # calls, so it lists SDL2 as needed (as on the Pi): preloaded into a program
 # without SDL (a game's start-up shell script) it still loads, and its SDL
 # calls resolve from the board's own SDL2
 nm -u "$GNU/sdl_pspexp.o" | awk '{print $NF}' | grep '^SDL_' | sort -u | sed 's/.*/void &(void) {}/' > "$GNU/sdl-stub.c"
 "$GNU/zcc" -shared -fPIC -Wl,-soname,libSDL2-2.0.so.0 "$GNU/sdl-stub.c" -o "$GNU/libSDL2.so"
-"$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp.so "$GNU/sdl_pspexp.o" "$GNU/gl_pspexp.o" \
+"$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp.so "$GNU/sdl_pspexp.o" "$GNU/gl_pspexp.o" "$GNU/glsl_pspexp.o" \
 	"$C/libpspexp_usb.a" "$C/libpspexp_tcp.a" "$C/libpspexp_null.a" "$C/libpspexp.a" "$C/libpspexp_runtime.a" "$C/libpspexp_protocol.a" \
 	"$GNU/prefix/lib/libusb-1.0.a" -L"$GNU" -lSDL2 -ldl -lm -lpthread -o "$OUT/lib/libsdl-pspexp.so"
 cp "$ROOT/scripts/board/pspexp-run" "$OUT/lib/"

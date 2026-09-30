@@ -179,8 +179,9 @@ triangle Enter, start pause, select Escape (quits at the main menu).
 The game sees a game controller named "PSP (PSPExp)" if it initialised
 joysticks, and keyboard events otherwise (defaults: cross=z, circle=x,
 square=a, triangle=s, L=q, R=w, start=return, select=escape, d-pad =
-arrows). Rotation and OpenGL shaders are not mirrored, render targets only
-partly; OpenGL 1.x is drawn by the GE. See the README in
+arrows). Rotation is not mirrored, SDL render targets only partly; OpenGL
+1.x is drawn by the GE, and GLSL shaders are read and drawn as near as it
+can. See the README in
 `compatibility/sdl-pspexp/`.
 
 ## Sprite demo controls (PSP)

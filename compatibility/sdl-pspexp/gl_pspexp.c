@@ -31,6 +31,7 @@
 #define _GNU_SOURCE
 #endif
 #include "gl_pspexp.h"
+#include "glsl_pspexp.h"
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -171,7 +172,15 @@ enum {
     /* texture coordinate generation */
     GL_S = 0x2000, GL_T = 0x2001, GL_R = 0x2002, GL_Q = 0x2003, GL_TEXTURE_GEN_MODE = 0x2500,
     GL_OBJECT_PLANE = 0x2501, GL_EYE_PLANE = 0x2502, GL_EYE_LINEAR = 0x2400, GL_OBJECT_LINEAR = 0x2401,
-    GL_SPHERE_MAP = 0x2402
+    GL_SPHERE_MAP = 0x2402,
+    /* GL 2 and later */
+    GL_FRAGMENT_SHADER = 0x8B30, GL_VERTEX_SHADER = 0x8B31, GL_DELETE_STATUS = 0x8B80, GL_COMPILE_STATUS = 0x8B81,
+    GL_LINK_STATUS = 0x8B82, GL_VALIDATE_STATUS = 0x8B83, GL_INFO_LOG_LENGTH = 0x8B84, GL_ATTACHED_SHADERS = 0x8B85,
+    GL_ACTIVE_UNIFORMS = 0x8B86, GL_ACTIVE_UNIFORM_MAX_LENGTH = 0x8B87, GL_SHADER_SOURCE_LENGTH = 0x8B88,
+    GL_ACTIVE_ATTRIBUTES = 0x8B89, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH = 0x8B8A, GL_SHADER_TYPE = 0x8B4F,
+    GL_CURRENT_PROGRAM = 0x8B8D, GL_MAX_VERTEX_ATTRIBS = 0x8869, GL_FRAMEBUFFER = 0x8D40, GL_READ_FRAMEBUFFER = 0x8CA8,
+    GL_DRAW_FRAMEBUFFER = 0x8CA9, GL_FRAMEBUFFER_BINDING = 0x8CA6, GL_VERTEX_ARRAY_BINDING = 0x85B5,
+    GL_VERTEX_ATTRIB_ARRAY_ENABLED = 0x8622, GL_VERTEX_ATTRIB_ARRAY_SIZE = 0x8623, GL_CURRENT_VERTEX_ATTRIB = 0x8626
 };
 
 /* The GE's values (pspgu.h), for the state we send. */
@@ -222,6 +231,7 @@ typedef struct GlTex {
     uint32_t *rgba;           /* level 0, RGBA8 (for sub-image updates and re-sending) */
     int dirty;                /* to be sent before the next draw with it */
     GLenum min_filter, mag_filter, wrap_s, wrap_t;
+    int rt, rt_w, rt_h, rt_fmt;  /* a framebuffer object's colour: a render target on the PSP, drawn there */
     struct GlTex *next;
 } GlTex;
 
@@ -286,7 +296,7 @@ static struct {
     int unpack_alignment, unpack_row_length, unpack_skip_rows, unpack_skip_pixels;
     float point_size, line_width;
     /* textures */
-    GlTex *textures; GLuint bound; GLuint next_texture;
+    GlTex *textures; GLuint units[8]; GLuint next_texture;   /* the texture bound on each unit */
     int proxy_w, proxy_h;
     /* display lists */
     List *lists; GLuint next_list; List *compiling; GLenum list_mode; GLuint list_base; int list_depth;
@@ -299,9 +309,19 @@ static struct {
     PspExp3DLights sent_lights; int lights_sent;
     int lights_dirty;
     int lights_const;   /* the lights sent carry a draw's constant colour */
+    /* a draw by a shader program (shader_draw): what its plan says, over GL's fixed state */
+    int sh_active, sh_tex_alpha, sh_alpha_test;
+    GLenum sh_alpha_func; float sh_alpha_ref;
+    float sh_proj[16];
+    GlTex *sh_tex;
+    /* GL 2: the generic vertex attributes (of the vertex array object bound), the program in use */
+    Array gattr[16]; int gnorm[16]; float gcur[16][4];
+    GLuint program, vao, fbo, next_object;
+    GlTex *target;              /* the render target the PSP draws into now (NULL: the screen) */
     int reconnects;
     /* per frame */
     unsigned draws, vertices, clears;
+    int frame_cleared;          /* the screen was cleared (by the program or here) this frame */
     Vtx *scratch; int cscratch;
 } G;
 
@@ -428,6 +448,8 @@ static void init_state(void)
     G.next_texture = 1; G.next_list = 1; G.next_buffer = 1;
     G.lights_dirty = 1;
     G.reconnects = -1;
+    { int a; for (a = 0; a < 16; a++) G.gcur[a][3] = 1.0f; }
+    G.next_object = 1;
     G.texgen_mode[0] = G.texgen_mode[1] = GL_EYE_LINEAR;
     G.texgen_obj[0][0] = G.texgen_eye[0][0] = 1.0f;
     G.texgen_obj[1][1] = G.texgen_eye[1][1] = 1.0f;
@@ -447,6 +469,8 @@ void pspexp_gl_init(void)
 }
 
 static void ensure_init(void) { if (!G.inited) init_state(); }
+
+void pspexp_gl_refused(void) { ensure_init(); G.error = GL_INVALID_OPERATION; }
 
 /* ---- to the PSP: state ---------------------------------------------------------- */
 
@@ -521,6 +545,16 @@ static void to_psp_rect(const int *r, int16_t *x, int16_t *y, int16_t *w, int16_
 {
     int ww, wh, ox, oy;
     float s, x0, y0, x1, y1;
+    if (G.target) {   /* a render target: its texture's pixels scaled to the target's, row 0 first (no flip) */
+        float sx = (float)G.target->rt_w / (float)G.target->w, sy = (float)G.target->rt_h / (float)G.target->h;
+        x0 = r[0] * sx; x1 = (r[0] + r[2]) * sx;
+        y0 = r[1] * sy; y1 = (r[1] + r[3]) * sy;
+        if (centre) { *x = (int16_t)lroundf((x0 + x1) / 2); *y = (int16_t)lroundf((y0 + y1) / 2); }
+        else { *x = (int16_t)lroundf(x0); *y = (int16_t)lroundf(y0); }
+        *w = (int16_t)lroundf(x1 - x0); *h = (int16_t)lroundf(y1 - y0);
+        if (centre) *h = (int16_t)-*h;   /* the viewport: GL's y upwards along the rows */
+        return;
+    }
     shim_gl_geometry(&ww, &wh, &s, &ox, &oy);
     x0 = ox + r[0] * s; x1 = ox + (r[0] + r[2]) * s;
     y0 = oy + (wh - (r[1] + r[3])) * s; y1 = oy + (wh - r[1]) * s;
@@ -599,6 +633,7 @@ static void build_state(PspExp3DState *s, GlTex *tex)
     {
         int front_ccw = G.front_face == GL_CCW;
         if (G.cull_mode == GL_FRONT) front_ccw = !front_ccw;
+        if (G.target) front_ccw = !front_ccw;   /* its viewport does not flip y: the winding turns round */
         s->front_face = front_ccw ? GU_CCW : GU_CW;
     }
     s->blend_op = blend_op(G.blend_eq);
@@ -646,10 +681,34 @@ static void build_state(PspExp3DState *s, GlTex *tex)
         int all[4];
         int ww, wh, ox, oy; float sc;
         shim_gl_geometry(&ww, &wh, &sc, &ox, &oy);
+        if (G.target) { ww = G.target->w; wh = G.target->h; }
         all[0] = all[1] = 0; all[2] = ww; all[3] = wh;
         to_psp_rect(all, &s->scissor_x, &s->scissor_y, &s->scissor_w, &s->scissor_h, 0);
     }
     s->pixel_mask = (G.color_mask[0] ? 0 : 0xFFu) | (G.color_mask[1] ? 0 : 0xFF00u) | (G.color_mask[2] ? 0 : 0xFF0000u);
+    {   /* PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex: parts left out (bisecting a difference) */
+        static const char *dbg;
+        static int read;
+        if (!read) { read = 1; dbg = getenv("PSPEXP_GL_DEBUG"); }
+        if (dbg) {
+            if (strstr(dbg, "nocull")) s->enable &= ~(uint32_t)PSPEXP_3D_CULL;
+            if (strstr(dbg, "nodepth")) s->enable &= ~(uint32_t)PSPEXP_3D_DEPTH_TEST;
+            if (strstr(dbg, "noblend")) s->enable &= ~(uint32_t)PSPEXP_3D_BLEND;
+            if (strstr(dbg, "noalpha")) s->enable &= ~(uint32_t)PSPEXP_3D_ALPHA_TEST;
+            if (strstr(dbg, "notex")) s->enable &= ~(uint32_t)PSPEXP_3D_TEXTURE;
+        }
+    }
+    if (G.sh_active) {   /* a shader's draw: its plan, not the fixed functions */
+        s->enable &= ~(uint32_t)(PSPEXP_3D_LIGHTING | PSPEXP_3D_FOG);
+        if (G.sh_alpha_test) {
+            s->enable |= PSPEXP_3D_ALPHA_TEST;
+            s->alpha_func = alpha_func(G.sh_alpha_func);
+            s->alpha_ref = clamp8(G.sh_alpha_ref);
+        }
+        s->tex_func = GU_TFX_MODULATE;
+        s->tex_alpha = tex && G.sh_tex_alpha && tex->has_alpha ? GU_TCC_RGBA : GU_TCC_RGB;
+        s->tex_map = GU_TEXTURE_COORDS;
+    }
 }
 
 /* `color`: vertices without a colour of their own (meshes): the current
@@ -720,6 +779,39 @@ static int pow2_at_least(int v, int max)
 
 /* Level 0 resampled (box filter when shrinking, nearest when growing) to a
  * power of two, 4444 when it has alpha, else 5650, swizzled for the GE. */
+static uint16_t mesh_handle(void);
+static void mesh_release(uint16_t h, uint32_t bytes);
+static GlTex *fbo_texture(GLuint fb);
+
+/* Where the draws go: the render target of the framebuffer object bound
+ * (made on the PSP the first time), or the screen. 0: nowhere (a
+ * framebuffer object without a texture). */
+static int select_target(PspExpContext *ctx)
+{
+    GlTex *want = NULL;
+    if (G.fbo && !(want = fbo_texture(G.fbo))) return 0;
+    if (want && !want->rt) {
+        int bytes;
+        want->rt = 1;
+        want->rt_w = 8; while (want->rt_w < want->w && want->rt_w < PSPEXP_TEXTURE_MAX) want->rt_w *= 2;
+        want->rt_h = 8; while (want->rt_h < want->h && want->rt_h < PSPEXP_TEXTURE_MAX) want->rt_h *= 2;
+        want->rt_fmt = want->has_alpha ? PSPEXP_TEX_8888 : PSPEXP_TEX_5650;
+        bytes = want->rt_w * want->rt_h * (want->rt_fmt == PSPEXP_TEX_8888 ? 4 : 2);
+        if (bytes > 512 * 1024) want->rt_fmt = want->has_alpha ? PSPEXP_TEX_4444 : PSPEXP_TEX_5650;
+        if (want->handle) mesh_release(want->handle, 0);
+        want->handle = mesh_handle();
+        want->dirty = 0;
+        pspexp_create_target(ctx, want->handle, (uint16_t)want->rt_w, (uint16_t)want->rt_h, (uint8_t)want->rt_fmt);
+        if (G.log) gl_logf("render target %u: texture %u (%dx%d) as %dx%d", want->handle, want->name, want->w, want->h, want->rt_w, want->rt_h);
+    }
+    if (want != G.target) {
+        pspexp_3d_target(ctx, want ? want->handle : PSPEXP_TARGET_SCREEN);
+        G.target = want;
+        G.state_sent = 0;   /* viewport and scissor are the target's now */
+    }
+    return 1;
+}
+
 static void send_texture(PspExpContext *ctx, GlTex *t)
 {
     PspExpTextureDesc d;
@@ -728,9 +820,9 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     uint8_t *dst;
     uint32_t bytes = (uint32_t)pw * (uint32_t)ph * 2u;
     t->dirty = 0;
-    if (!t->rgba || t->w <= 0 || t->h <= 0) return;
+    if (t->rt || !t->rgba || t->w <= 0 || t->h <= 0) return;   /* a render target: drawn on the PSP */
     if (t->handle) pspexp_release(ctx, t->handle);
-    else t->handle = shim_gl_handle();
+    else t->handle = mesh_handle();
     lin = (uint16_t *)malloc(bytes);
     if (!lin) return;
     for (y = 0; y < ph; y++) {
@@ -794,29 +886,46 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         GlTex *t;
         G.reconnects = shim_gl_reconnects();
         G.state_sent = G.matrices_sent = G.lights_sent = 0;
-        for (t = G.textures; t; t = t->next) if (t->handle) t->dirty = 1;
+        for (t = G.textures; t; t = t->next) if (t->handle && !t->rt) t->dirty = 1;
     }
-    if (G.texture_2d && G.active_unit == 0 && (tex = find_texture(G.bound)) && tex->rgba) {
+    if (!select_target(ctx)) return NULL;
+    if (!G.frame_cleared && !G.target) {
+        /* a frame that draws without clearing first: black under it. After a
+         * swap GL leaves the buffer undefined, so nothing is lost; PPSSPP,
+         * which loses track of a framebuffer that is never cleared, then
+         * copies the right frame to screenshots */
+        G.frame_cleared = 1;
+        pspexp_3d_clear(ctx, PSPEXP_3D_CLEAR_COLOR | PSPEXP_3D_CLEAR_DEPTH, 0xFF000000u, 0);
+    }
+    if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : G.texture_2d && (tex = find_texture(G.units[0])) && (tex->rgba || tex->rt)) {
         if (tex->dirty || !tex->handle) send_texture(ctx, tex);
         if (!tex->handle) tex = NULL;
     } else tex = NULL;
-    G.tc = tex ? texcoord_mode(G.ge_texmat) : TC_PLAIN;
+    G.tc = tex && !G.sh_active ? texcoord_mode(G.ge_texmat) : TC_PLAIN;
     if (G.tc != TC_GE) mat_identity(G.ge_texmat);
     build_state(&st, tex);
+    if (G.log >= 3 && (!G.state_sent || memcmp(&st, &G.sent_state, sizeof(st))))
+        gl_logf("state: enable %x viewport %d,%d %dx%d depth %u..%u scissor %d,%d %dx%d mask %x blend %d/%d tex %u",
+                st.enable, st.viewport_x, st.viewport_y, st.viewport_w, st.viewport_h, st.depth_near, st.depth_far,
+                st.scissor_x, st.scissor_y, st.scissor_w, st.scissor_h, st.pixel_mask, st.blend_src, st.blend_dst, st.texture);
     if (!G.state_sent || memcmp(&st, &G.sent_state, sizeof(st))) {
         pspexp_3d_state(ctx, &st);
         G.sent_state = st;
         G.state_sent = 1;
     }
-    if (!G.matrices_sent || memcmp(G.sent_proj, G.proj[G.proj_top], sizeof(G.sent_proj)) ||
-        memcmp(G.sent_mv, G.mv[G.mv_top], sizeof(G.sent_mv)) || memcmp(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex))) {
-        memcpy(G.sent_proj, G.proj[G.proj_top], sizeof(G.sent_proj));
-        memcpy(G.sent_mv, G.mv[G.mv_top], sizeof(G.sent_mv));
+    {
+    static float identity[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+    const float *proj = G.sh_active ? G.sh_proj : G.proj[G.proj_top], *mv = G.sh_active ? identity : G.mv[G.mv_top];
+    if (!G.matrices_sent || memcmp(G.sent_proj, proj, sizeof(G.sent_proj)) ||
+        memcmp(G.sent_mv, mv, sizeof(G.sent_mv)) || memcmp(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex))) {
+        memcpy(G.sent_proj, proj, sizeof(G.sent_proj));
+        memcpy(G.sent_mv, mv, sizeof(G.sent_mv));
         memcpy(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex));
         pspexp_3d_matrices(ctx, G.sent_proj, G.sent_mv, G.sent_tex);
         G.matrices_sent = 1;
     }
-    if (G.lighting || color || G.lights_const || G.tc == TC_ENV) {
+    }
+    if ((G.lighting && !G.sh_active) || color || G.lights_const || G.tc == TC_ENV) {
         PspExp3DLights l;
         build_lights(&l, color);
         G.lights_const = color != NULL;
@@ -841,8 +950,14 @@ static int texture_matrix_identity(void)
 /* Send n vertices as one GE primitive (already split to fit). */
 static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *v, int n)
 {
-    uint8_t *out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n);
+    uint8_t *out;
     int i;
+    {   /* PSPEXP_GL_MAXDRAWS=N: only a frame's first N draws (bisecting) */
+        static long max = -2;
+        if (max == -2) max = getenv("PSPEXP_GL_MAXDRAWS") ? atol(getenv("PSPEXP_GL_MAXDRAWS")) : -1;
+        if (max >= 0 && (long)G.draws >= max) { G.draws++; return; }
+    }
+    out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n);
     if (!out) return;
     for (i = 0; i < n; i++) {
         if (vt & PSPEXP_3D_VT_TEXTURE) { memcpy(out, v[i].t, 8); out += 8; }
@@ -889,11 +1004,11 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
     if (G.log >= 2)
         gl_logf("draw %s mode %u n %d tex %u(%s %dx%d) colour %08x blend %d %x/%x depth %d cull %d light %d alpha %d fog %d env %x uv %.3f,%.3f %.3f,%.3f pos %.2f,%.2f,%.2f",
                 G.in_begin || G.nimm ? "imm" : G.array_buffer || G.va.buffer ? "vbo" : "arrays",
-                mode, n, G.bound, tex ? "on" : G.texture_2d ? "missing" : "off", tex ? tex->w : 0, tex ? tex->h : 0,
+                mode, n, G.units[0], tex ? "on" : G.texture_2d ? "missing" : "off", tex ? tex->w : 0, tex ? tex->h : 0,
                 v[0].c, G.blend, G.blend_src, G.blend_dst, G.depth_test, G.cull, G.lighting, G.alpha_test, G.fog,
                 G.tex_env_mode, v[0].t[0], v[0].t[1], v[n > 2 ? 2 : 0].t[0], v[n > 2 ? 2 : 0].t[1], v[0].p[0], v[0].p[1], v[0].p[2]);
     if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV) vt |= PSPEXP_3D_VT_TEXTURE;
-    if (G.lighting || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
+    if ((G.lighting && !G.sh_active) || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (tex && G.tc == TC_HOST && (G.texgen[0] || G.texgen[1])) {   /* generated coordinates, per vertex, here */
         const float *m = G.mv[G.mv_top];
         for (i = 0; i < n; i++) {
@@ -996,6 +1111,8 @@ void pspexp_gl_frame_done(void)
     if (G.log && G.inited) gl_logf("frame: %u draws, %u vertices, %u clears", G.draws, G.vertices, G.clears);
     G.draws = G.vertices = G.clears = 0;
     G.state_sent = G.matrices_sent = G.lights_sent = 0;   /* each frame says it all again: small, and nothing gets stale */
+    G.target = NULL;   /* every frame starts on the screen */
+    G.frame_cleared = 0;
 }
 
 /* ---- display lists: recording ------------------------------------------------------ */
@@ -1271,13 +1388,13 @@ GLAPI(void, glTexCoord2s, (GLshort s, GLshort t)) { GLFN(glTexCoord4f)((float)s,
 GLAPI(void, glTexCoord2fv, (const GLfloat *v)) { GLFN(glTexCoord4f)(v[0], v[1], 0, 1); }
 GLAPI(void, glTexCoord2dv, (const GLdouble *v)) { GLFN(glTexCoord4f)((float)v[0], (float)v[1], 0, 1); }
 GLAPI(void, glTexCoord4fv, (const GLfloat *v)) { GLFN(glTexCoord4f)(v[0], v[1], v[2], v[3]); }
-GLEXT(void, glMultiTexCoord2f, (GLenum unit, GLfloat s, GLfloat t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, 0, 1); }
-GLEXT(void, glMultiTexCoord2fv, (GLenum unit, const GLfloat *v)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(v[0], v[1], 0, 1); }
-GLEXT(void, glMultiTexCoord2d, (GLenum unit, GLdouble s, GLdouble t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)((float)s, (float)t, 0, 1); }
-GLEXT(void, glMultiTexCoord2i, (GLenum unit, GLint s, GLint t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)((float)s, (float)t, 0, 1); }
-GLEXT(void, glMultiTexCoord4f, (GLenum unit, GLfloat s, GLfloat t, GLfloat r, GLfloat q)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, r, q); }
-GLEXT(void, glPointParameterf, (GLenum p, GLfloat v)) { (void)p; (void)v; }
-GLEXT(void, glPointParameterfv, (GLenum p, const GLfloat *v)) { (void)p; (void)v; }
+GLAPI(void, glMultiTexCoord2f, (GLenum unit, GLfloat s, GLfloat t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, 0, 1); }
+GLAPI(void, glMultiTexCoord2fv, (GLenum unit, const GLfloat *v)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(v[0], v[1], 0, 1); }
+GLAPI(void, glMultiTexCoord2d, (GLenum unit, GLdouble s, GLdouble t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)((float)s, (float)t, 0, 1); }
+GLAPI(void, glMultiTexCoord2i, (GLenum unit, GLint s, GLint t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)((float)s, (float)t, 0, 1); }
+GLAPI(void, glMultiTexCoord4f, (GLenum unit, GLfloat s, GLfloat t, GLfloat r, GLfloat q)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, r, q); }
+GLAPI(void, glPointParameterf, (GLenum p, GLfloat v)) { (void)p; (void)v; }
+GLAPI(void, glPointParameterfv, (GLenum p, const GLfloat *v)) { (void)p; (void)v; }
 
 GLAPI(void, glRectf, (GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2))
 {
@@ -1435,7 +1552,7 @@ static Array *client_array(GLenum cap)
 }
 GLAPI(void, glEnableClientState, (GLenum cap)) { Array *a; ensure_init(); if ((a = client_array(cap))) a->enabled = 1; }
 GLAPI(void, glDisableClientState, (GLenum cap)) { Array *a; ensure_init(); if ((a = client_array(cap))) a->enabled = 0; }
-GLEXT(void, glClientActiveTexture, (GLenum unit)) { ensure_init(); G.client_unit = (int)(unit - GL_TEXTURE0); }
+GLAPI(void, glClientActiveTexture, (GLenum unit)) { ensure_init(); G.client_unit = (int)(unit - GL_TEXTURE0); }
 
 GLAPI(void, glArrayElement, (GLint i))
 {
@@ -1446,6 +1563,517 @@ GLAPI(void, glArrayElement, (GLint i))
     imm_add(&v);
 }
 
+
+/* ---- GL 2: shaders (glsl_pspexp.c reads them), programs, generic attributes -------------------- */
+
+typedef struct GlShader { GLuint name; GLenum type; char *src; GlslShader *sh; char log[256]; struct GlShader *next; } GlShader;
+typedef struct GlProgram {
+    GLuint name;
+    GLuint att[4]; int natt;
+    GlslProgram *p;
+    char log[256];
+    char *bnames[16]; int blocs[16]; int nb;   /* glBindAttribLocation, for the next link */
+    unsigned uver, planned_ver; int planned, builtins, reported;
+    GlslPlan plan;
+    struct GlProgram *next;
+} GlProgram;
+typedef struct Vao { GLuint name; Array gattr[16]; int gnorm[16]; GLuint element_buffer; struct Vao *next; } Vao;
+
+static GlShader *shaders;
+static GlProgram *programs;
+static Vao *vaos;
+
+static GlShader *find_shader(GLuint n) { GlShader *s; for (s = shaders; s; s = s->next) if (s->name == n) return s; return NULL; }
+static GlProgram *find_program(GLuint n) { GlProgram *p; for (p = programs; p; p = p->next) if (p->name == n) return p; return NULL; }
+
+static void builtin_matrix(const char *name, float out[16])   /* old shaders' gl_ModelViewMatrix and the like */
+{
+    if (!strcmp(name, "gl_ModelViewProjectionMatrix")) mat_mul(out, G.proj[G.proj_top], G.mv[G.mv_top]);
+    else if (!strcmp(name, "gl_ModelViewMatrix")) memcpy(out, G.mv[G.mv_top], 64);
+    else if (!strcmp(name, "gl_ProjectionMatrix")) memcpy(out, G.proj[G.proj_top], 64);
+    else if (!strcmp(name, "gl_TextureMatrix0")) memcpy(out, G.texm[G.tex_top], 64);
+}
+
+GLAPI(GLuint, glCreateShader, (GLenum type))
+{
+    GlShader *s;
+    ensure_init();
+    if (type != GL_VERTEX_SHADER && type != GL_FRAGMENT_SHADER) { set_error(GL_INVALID_ENUM); return 0; }
+    if (!(s = (GlShader *)calloc(1, sizeof(*s)))) { set_error(GL_OUT_OF_MEMORY); return 0; }
+    s->name = G.next_object++; s->type = type;
+    s->next = shaders; shaders = s;
+    return s->name;
+}
+
+GLAPI(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths))
+{
+    GlShader *s = find_shader(shader);
+    size_t total = 0, off = 0;
+    int i;
+    if (!s) { set_error(GL_INVALID_VALUE); return; }
+    for (i = 0; i < count; i++) total += lengths && lengths[i] >= 0 ? (size_t)lengths[i] : strlen(strings[i]);
+    free(s->src);
+    if (!(s->src = (char *)malloc(total + 1))) { set_error(GL_OUT_OF_MEMORY); return; }
+    for (i = 0; i < count; i++) {
+        size_t n = lengths && lengths[i] >= 0 ? (size_t)lengths[i] : strlen(strings[i]);
+        memcpy(s->src + off, strings[i], n);
+        off += n;
+    }
+    s->src[off] = 0;
+}
+
+GLAPI(void, glCompileShader, (GLuint shader))
+{
+    GlShader *s = find_shader(shader);
+    if (!s || !s->src) { set_error(GL_INVALID_VALUE); return; }
+    glsl_shader_free(s->sh);
+    s->log[0] = 0;
+    s->sh = glsl_compile(s->type == GL_VERTEX_SHADER ? GLSL_VERTEX : GLSL_FRAGMENT, s->src, s->log, sizeof(s->log));
+    if (s->log[0]) gl_logf("shader %u: %s (drawn as near as the GE can)", shader, s->log);
+    s->log[0] = 0;   /* the program runs all the same: no errors for it */
+}
+
+GLAPI(void, glDeleteShader, (GLuint shader))
+{
+    GlShader **pp = &shaders;
+    while (*pp && (*pp)->name != shader) pp = &(*pp)->next;
+    if (*pp) { GlShader *s = *pp; *pp = s->next; free(s->src); glsl_shader_free(s->sh); free(s); }
+}
+
+GLAPI(void, glGetShaderiv, (GLuint shader, GLenum p, GLint *out))
+{
+    GlShader *s = find_shader(shader);
+    if (!s) { set_error(GL_INVALID_VALUE); return; }
+    switch (p) {
+    case GL_COMPILE_STATUS: *out = GL_TRUE; break;
+    case GL_INFO_LOG_LENGTH: *out = 0; break;
+    case GL_SHADER_TYPE: *out = (GLint)s->type; break;
+    case GL_SHADER_SOURCE_LENGTH: *out = s->src ? (GLint)strlen(s->src) + 1 : 0; break;
+    case GL_DELETE_STATUS: *out = GL_FALSE; break;
+    default: *out = 0; break;
+    }
+}
+
+GLAPI(void, glGetShaderInfoLog, (GLuint shader, GLsizei max, GLsizei *len, GLchar *log))
+{
+    (void)shader;
+    if (len) *len = 0;
+    if (log && max > 0) log[0] = 0;
+}
+
+GLAPI(void, glGetShaderSource, (GLuint shader, GLsizei max, GLsizei *len, GLchar *out))
+{
+    GlShader *s = find_shader(shader);
+    size_t n = s && s->src ? strlen(s->src) : 0;
+    if (max <= 0) return;
+    if (n >= (size_t)max) n = (size_t)max - 1;
+    if (s && s->src) memcpy(out, s->src, n);
+    out[n] = 0;
+    if (len) *len = (GLsizei)n;
+}
+
+GLAPI(GLboolean, glIsShader, (GLuint shader)) { return find_shader(shader) != NULL; }
+
+GLAPI(GLuint, glCreateProgram, (void))
+{
+    GlProgram *p;
+    ensure_init();
+    if (!(p = (GlProgram *)calloc(1, sizeof(*p)))) { set_error(GL_OUT_OF_MEMORY); return 0; }
+    p->name = G.next_object++;
+    p->next = programs; programs = p;
+    return p->name;
+}
+
+GLAPI(void, glDeleteProgram, (GLuint program))
+{
+    GlProgram **pp = &programs;
+    int i;
+    if (!program) return;
+    while (*pp && (*pp)->name != program) pp = &(*pp)->next;
+    if (!*pp) return;
+    if (G.program == program) G.program = 0;
+    {
+        GlProgram *p = *pp;
+        *pp = p->next;
+        glsl_program_free(p->p);
+        for (i = 0; i < p->nb; i++) free(p->bnames[i]);
+        free(p);
+    }
+}
+
+GLAPI(void, glAttachShader, (GLuint program, GLuint shader))
+{
+    GlProgram *p = find_program(program);
+    if (!p || !find_shader(shader)) { set_error(GL_INVALID_VALUE); return; }
+    if (p->natt < 4) p->att[p->natt++] = shader;
+}
+
+GLAPI(void, glDetachShader, (GLuint program, GLuint shader))
+{
+    GlProgram *p = find_program(program);
+    int i;
+    if (!p) return;
+    for (i = 0; i < p->natt; i++) if (p->att[i] == shader) { p->att[i] = p->att[--p->natt]; break; }
+}
+
+GLAPI(void, glBindAttribLocation, (GLuint program, GLuint index, const GLchar *name))
+{
+    GlProgram *p = find_program(program);
+    int i;
+    if (!p || index >= 16) { set_error(GL_INVALID_VALUE); return; }
+    for (i = 0; i < p->nb; i++) if (!strcmp(p->bnames[i], name)) { p->blocs[i] = (int)index; return; }
+    if (p->nb < 16) { p->bnames[p->nb] = strdup(name); p->blocs[p->nb++] = (int)index; }
+}
+
+GLAPI(void, glLinkProgram, (GLuint program))
+{
+    GlProgram *p = find_program(program);
+    GlShader *vs = NULL, *fs = NULL;
+    int i;
+    if (!p) { set_error(GL_INVALID_VALUE); return; }
+    for (i = 0; i < p->natt; i++) {
+        GlShader *s = find_shader(p->att[i]);
+        if (s && s->type == GL_VERTEX_SHADER) vs = s;
+        if (s && s->type == GL_FRAGMENT_SHADER) fs = s;
+    }
+    glsl_program_free(p->p);
+    p->p = vs && fs ? glsl_link(vs->sh, fs->sh, (const char *const *)p->bnames, p->blocs, p->nb, p->log, sizeof(p->log)) : NULL;
+    if (!p->p) gl_logf("program %u: not linked (%s)", program, p->log[0] ? p->log : "a shader missing");
+    p->builtins = (vs && vs->src && (strstr(vs->src, "gl_ModelView") || strstr(vs->src, "gl_Projection") ||
+                  strstr(vs->src, "ftransform") || strstr(vs->src, "gl_TextureMatrix") || strstr(vs->src, "gl_NormalMatrix")));
+    p->planned = 0; p->reported = 0;
+    p->uver++;
+    glsl_set_builtins(builtin_matrix);
+}
+
+GLAPI(void, glUseProgram, (GLuint program)) { ensure_init(); G.program = program; }
+GLAPI(void, glValidateProgram, (GLuint program)) { (void)program; }
+GLAPI(GLboolean, glIsProgram, (GLuint program)) { return find_program(program) != NULL; }
+
+GLAPI(void, glGetProgramiv, (GLuint program, GLenum pn, GLint *out))
+{
+    GlProgram *p = find_program(program);
+    int i, m = 0;
+    if (!p) { set_error(GL_INVALID_VALUE); return; }
+    switch (pn) {
+    case GL_LINK_STATUS: case GL_VALIDATE_STATUS: *out = p->p != NULL; break;
+    case GL_INFO_LOG_LENGTH: *out = p->p ? 0 : (GLint)strlen(p->log) + 1; break;
+    case GL_ATTACHED_SHADERS: *out = p->natt; break;
+    case GL_ACTIVE_UNIFORMS: *out = p->p ? glsl_uniform_count(p->p) : 0; break;
+    case GL_ACTIVE_ATTRIBUTES: *out = p->p ? glsl_attrib_count(p->p) : 0; break;
+    case GL_ACTIVE_UNIFORM_MAX_LENGTH:
+        if (p->p) for (i = 0; i < glsl_uniform_count(p->p); i++) { int l = (int)strlen(glsl_uniform(p->p, i)->name) + 4; if (l > m) m = l; }
+        *out = m; break;
+    case GL_ACTIVE_ATTRIBUTE_MAX_LENGTH:
+        if (p->p) for (i = 0; i < glsl_attrib_count(p->p); i++) { int l = (int)strlen(glsl_attrib(p->p, i)->name) + 1; if (l > m) m = l; }
+        *out = m; break;
+    case GL_DELETE_STATUS: *out = GL_FALSE; break;
+    default: *out = 0; break;
+    }
+}
+
+GLAPI(void, glGetProgramInfoLog, (GLuint program, GLsizei max, GLsizei *len, GLchar *log))
+{
+    GlProgram *p = find_program(program);
+    size_t n = p && !p->p ? strlen(p->log) : 0;
+    if (max <= 0) return;
+    if (n >= (size_t)max) n = (size_t)max - 1;
+    if (n) memcpy(log, p->log, n);
+    log[n] = 0;
+    if (len) *len = (GLsizei)n;
+}
+
+GLAPI(void, glGetAttachedShaders, (GLuint program, GLsizei max, GLsizei *count, GLuint *out))
+{
+    GlProgram *p = find_program(program);
+    int i, n = 0;
+    if (p) for (i = 0; i < p->natt && i < max; i++) out[n++] = p->att[i];
+    if (count) *count = n;
+}
+
+GLAPI(GLint, glGetAttribLocation, (GLuint program, const GLchar *name))
+{
+    GlProgram *p = find_program(program);
+    int i;
+    if (!p || !p->p) return -1;
+    for (i = 0; i < glsl_attrib_count(p->p); i++) if (!strcmp(glsl_attrib(p->p, i)->name, name)) return glsl_attrib(p->p, i)->location;
+    return -1;
+}
+
+GLAPI(GLint, glGetUniformLocation, (GLuint program, const GLchar *name))
+{
+    GlProgram *p = find_program(program);
+    return p && p->p ? glsl_uniform_location(p->p, name) : -1;
+}
+
+GLAPI(void, glGetActiveUniform, (GLuint program, GLuint index, GLsizei max, GLsizei *len, GLint *size, GLenum *type, GLchar *name))
+{
+    GlProgram *p = find_program(program);
+    GlslVar *u;
+    if (!p || !p->p || (int)index >= glsl_uniform_count(p->p)) { set_error(GL_INVALID_VALUE); return; }
+    u = glsl_uniform(p->p, (int)index);
+    if (size) *size = u->count;
+    if (type) *type = u->gltype;
+    if (max > 0) { int n = snprintf(name, (size_t)max, u->count > 1 ? "%s[0]" : "%s", u->name); if (len) *len = n < max ? n : max - 1; }
+}
+
+GLAPI(void, glGetActiveAttrib, (GLuint program, GLuint index, GLsizei max, GLsizei *len, GLint *size, GLenum *type, GLchar *name))
+{
+    GlProgram *p = find_program(program);
+    const GlslVar *a;
+    if (!p || !p->p || (int)index >= glsl_attrib_count(p->p)) { set_error(GL_INVALID_VALUE); return; }
+    a = glsl_attrib(p->p, (int)index);
+    if (size) *size = 1;
+    if (type) *type = a->gltype;
+    if (max > 0) { int n = snprintf(name, (size_t)max, "%s", a->name); if (len) *len = n < max ? n : max - 1; }
+}
+
+/* glUniform*: into the program in use (its plan is made again) */
+static void set_uniform(GLint loc, int comps, GLsizei count, const float *f, const GLint *iv, int transpose)
+{
+    GlProgram *p = find_program(G.program);
+    float *slot;
+    int uc, rem, isint, e, k;
+    if (loc < 0) return;
+    if (!p || !p->p || !(slot = glsl_uniform_slot(p->p, loc, &uc, &rem, &isint))) { set_error(GL_INVALID_OPERATION); return; }
+    if (count > rem) count = rem;
+    for (e = 0; e < count; e++)
+        for (k = 0; k < comps && k < uc; k++) {
+            int src = k;
+            if (transpose) { int d = comps == 16 ? 4 : comps == 9 ? 3 : 2; src = (k % d) * d + k / d; }
+            slot[e * uc + k] = f ? f[e * comps + src] : (float)iv[e * comps + src];
+        }
+    p->uver++;
+}
+
+GLAPI(void, glUniform1f, (GLint l, GLfloat a)) { float v[1] = { a }; set_uniform(l, 1, 1, v, NULL, 0); }
+GLAPI(void, glUniform2f, (GLint l, GLfloat a, GLfloat b)) { float v[2] = { a, b }; set_uniform(l, 2, 1, v, NULL, 0); }
+GLAPI(void, glUniform3f, (GLint l, GLfloat a, GLfloat b, GLfloat c)) { float v[3] = { a, b, c }; set_uniform(l, 3, 1, v, NULL, 0); }
+GLAPI(void, glUniform4f, (GLint l, GLfloat a, GLfloat b, GLfloat c, GLfloat d)) { float v[4] = { a, b, c, d }; set_uniform(l, 4, 1, v, NULL, 0); }
+GLAPI(void, glUniform1i, (GLint l, GLint a)) { GLint v[1] = { a }; set_uniform(l, 1, 1, NULL, v, 0); }
+GLAPI(void, glUniform2i, (GLint l, GLint a, GLint b)) { GLint v[2] = { a, b }; set_uniform(l, 2, 1, NULL, v, 0); }
+GLAPI(void, glUniform3i, (GLint l, GLint a, GLint b, GLint c)) { GLint v[3] = { a, b, c }; set_uniform(l, 3, 1, NULL, v, 0); }
+GLAPI(void, glUniform4i, (GLint l, GLint a, GLint b, GLint c, GLint d)) { GLint v[4] = { a, b, c, d }; set_uniform(l, 4, 1, NULL, v, 0); }
+GLAPI(void, glUniform1fv, (GLint l, GLsizei n, const GLfloat *v)) { set_uniform(l, 1, n, v, NULL, 0); }
+GLAPI(void, glUniform2fv, (GLint l, GLsizei n, const GLfloat *v)) { set_uniform(l, 2, n, v, NULL, 0); }
+GLAPI(void, glUniform3fv, (GLint l, GLsizei n, const GLfloat *v)) { set_uniform(l, 3, n, v, NULL, 0); }
+GLAPI(void, glUniform4fv, (GLint l, GLsizei n, const GLfloat *v)) { set_uniform(l, 4, n, v, NULL, 0); }
+GLAPI(void, glUniform1iv, (GLint l, GLsizei n, const GLint *v)) { set_uniform(l, 1, n, NULL, v, 0); }
+GLAPI(void, glUniform2iv, (GLint l, GLsizei n, const GLint *v)) { set_uniform(l, 2, n, NULL, v, 0); }
+GLAPI(void, glUniform3iv, (GLint l, GLsizei n, const GLint *v)) { set_uniform(l, 3, n, NULL, v, 0); }
+GLAPI(void, glUniform4iv, (GLint l, GLsizei n, const GLint *v)) { set_uniform(l, 4, n, NULL, v, 0); }
+GLAPI(void, glUniformMatrix2fv, (GLint l, GLsizei n, GLboolean t, const GLfloat *v)) { set_uniform(l, 4, n, v, NULL, t); }
+GLAPI(void, glUniformMatrix3fv, (GLint l, GLsizei n, GLboolean t, const GLfloat *v)) { set_uniform(l, 9, n, v, NULL, t); }
+GLAPI(void, glUniformMatrix4fv, (GLint l, GLsizei n, GLboolean t, const GLfloat *v)) { set_uniform(l, 16, n, v, NULL, t); }
+
+GLAPI(void, glGetUniformfv, (GLuint program, GLint loc, GLfloat *out))
+{
+    GlProgram *p = find_program(program);
+    float *slot;
+    int uc, rem, isint;
+    if (p && p->p && (slot = glsl_uniform_slot(p->p, loc, &uc, &rem, &isint))) memcpy(out, slot, (size_t)uc * sizeof(float));
+}
+GLAPI(void, glGetUniformiv, (GLuint program, GLint loc, GLint *out))
+{
+    float f[16];
+    GlProgram *p = find_program(program);
+    float *slot;
+    int uc, rem, isint, i;
+    if (p && p->p && (slot = glsl_uniform_slot(p->p, loc, &uc, &rem, &isint))) { memcpy(f, slot, (size_t)uc * sizeof(float)); for (i = 0; i < uc; i++) out[i] = (GLint)f[i]; }
+}
+
+/* generic vertex attributes */
+GLAPI(void, glVertexAttribPointer, (GLuint i, GLint size, GLenum type, GLboolean norm, GLsizei stride, const GLvoid *ptr))
+{
+    ensure_init();
+    if (i >= 16) { set_error(GL_INVALID_VALUE); return; }
+    set_array(&G.gattr[i], size == GL_BGRA ? 4 : size, type, stride, ptr);
+    G.gattr[i].bgra = size == GL_BGRA;
+    G.gnorm[i] = norm != 0;
+}
+GLAPI(void, glEnableVertexAttribArray, (GLuint i)) { ensure_init(); if (i < 16) G.gattr[i].enabled = 1; }
+GLAPI(void, glDisableVertexAttribArray, (GLuint i)) { ensure_init(); if (i < 16) G.gattr[i].enabled = 0; }
+GLAPI(void, glVertexAttrib4f, (GLuint i, GLfloat x, GLfloat y, GLfloat z, GLfloat w)) { ensure_init(); if (i < 16) { G.gcur[i][0] = x; G.gcur[i][1] = y; G.gcur[i][2] = z; G.gcur[i][3] = w; } }
+GLAPI(void, glVertexAttrib1f, (GLuint i, GLfloat x)) { GLFN(glVertexAttrib4f)(i, x, 0, 0, 1); }
+GLAPI(void, glVertexAttrib2f, (GLuint i, GLfloat x, GLfloat y)) { GLFN(glVertexAttrib4f)(i, x, y, 0, 1); }
+GLAPI(void, glVertexAttrib3f, (GLuint i, GLfloat x, GLfloat y, GLfloat z)) { GLFN(glVertexAttrib4f)(i, x, y, z, 1); }
+GLAPI(void, glVertexAttrib1fv, (GLuint i, const GLfloat *v)) { GLFN(glVertexAttrib4f)(i, v[0], 0, 0, 1); }
+GLAPI(void, glVertexAttrib2fv, (GLuint i, const GLfloat *v)) { GLFN(glVertexAttrib4f)(i, v[0], v[1], 0, 1); }
+GLAPI(void, glVertexAttrib3fv, (GLuint i, const GLfloat *v)) { GLFN(glVertexAttrib4f)(i, v[0], v[1], v[2], 1); }
+GLAPI(void, glVertexAttrib4fv, (GLuint i, const GLfloat *v)) { GLFN(glVertexAttrib4f)(i, v[0], v[1], v[2], v[3]); }
+GLAPI(void, glGetVertexAttribiv, (GLuint i, GLenum p, GLint *out))
+{
+    *out = 0;
+    if (i >= 16) return;
+    if (p == GL_VERTEX_ATTRIB_ARRAY_ENABLED) *out = G.gattr[i].enabled;
+    else if (p == GL_VERTEX_ATTRIB_ARRAY_SIZE) *out = G.gattr[i].size;
+}
+GLAPI(void, glGetVertexAttribfv, (GLuint i, GLenum p, GLfloat *out)) { if (i < 16 && p == GL_CURRENT_VERTEX_ATTRIB) memcpy(out, G.gcur[i], 16); }
+
+/* vertex array objects: the generic arrays and the element buffer, swapped in and out */
+static Vao *find_vao(GLuint n) { Vao *v; for (v = vaos; v; v = v->next) if (v->name == n) return v; return NULL; }
+static Vao *vao_slot(GLuint n)
+{
+    Vao *v = find_vao(n);
+    if (!v && (v = (Vao *)calloc(1, sizeof(*v)))) { v->name = n; v->next = vaos; vaos = v; }
+    return v;
+}
+GLAPI(void, glGenVertexArrays, (GLsizei n, GLuint *out)) { int i; ensure_init(); for (i = 0; i < n; i++) { out[i] = G.next_object++; vao_slot(out[i]); } }
+GLAPI(void, glBindVertexArray, (GLuint name))
+{
+    Vao *old, *nw;
+    ensure_init();
+    if (name == G.vao) return;
+    if (!(old = vao_slot(G.vao)) || !(nw = vao_slot(name))) { set_error(GL_OUT_OF_MEMORY); return; }
+    memcpy(old->gattr, G.gattr, sizeof(G.gattr)); memcpy(old->gnorm, G.gnorm, sizeof(G.gnorm)); old->element_buffer = G.element_buffer;
+    memcpy(G.gattr, nw->gattr, sizeof(G.gattr)); memcpy(G.gnorm, nw->gnorm, sizeof(G.gnorm)); G.element_buffer = nw->element_buffer;
+    G.vao = name;
+}
+GLAPI(void, glDeleteVertexArrays, (GLsizei n, const GLuint *names))
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        Vao **pp = &vaos;
+        if (names[i] == G.vao) GLFN(glBindVertexArray)(0);
+        while (*pp && (*pp)->name != names[i]) pp = &(*pp)->next;
+        if (*pp && names[i]) { Vao *v = *pp; *pp = v->next; free(v); }
+    }
+}
+GLAPI(GLboolean, glIsVertexArray, (GLuint name)) { return name && find_vao(name) != NULL; }
+
+/* framebuffer objects: a colour texture becomes a render target on the PSP
+ * (select_target); depth and stencil attachments are not kept (the screen's
+ * depth buffer serves) */
+typedef struct Fbo { GLuint name, tex; struct Fbo *next; } Fbo;
+static Fbo *fbos;
+static Fbo *find_fbo(GLuint n) { Fbo *f; for (f = fbos; f; f = f->next) if (f->name == n) return f; return NULL; }
+static GlTex *fbo_texture(GLuint fb) { Fbo *f = find_fbo(fb); return f && f->tex ? find_texture(f->tex) : NULL; }
+
+GLAPI(void, glGenFramebuffers, (GLsizei n, GLuint *out))
+{
+    int i;
+    ensure_init();
+    for (i = 0; i < n; i++) {
+        Fbo *f = (Fbo *)calloc(1, sizeof(*f));
+        out[i] = G.next_object++;
+        if (f) { f->name = out[i]; f->next = fbos; fbos = f; }
+    }
+}
+GLAPI(void, glBindFramebuffer, (GLenum target, GLuint fb))
+{
+    ensure_init();
+    if (target == GL_READ_FRAMEBUFFER) return;
+    if (fb && !find_fbo(fb)) { Fbo *f = (Fbo *)calloc(1, sizeof(*f)); if (f) { f->name = fb; f->next = fbos; fbos = f; } }
+    G.fbo = fb;
+}
+GLAPI(void, glDeleteFramebuffers, (GLsizei n, const GLuint *fbs))
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        Fbo **pp = &fbos;
+        if (fbs[i] == G.fbo) G.fbo = 0;
+        while (*pp && (*pp)->name != fbs[i]) pp = &(*pp)->next;
+        if (*pp) { Fbo *f = *pp; *pp = f->next; free(f); }
+    }
+}
+GLAPI(void, glFramebufferTexture2D, (GLenum t, GLenum a, GLenum tt, GLuint tex, GLint l))
+{
+    Fbo *f = find_fbo(G.fbo);
+    (void)t; (void)tt; (void)l;
+    if (f && a == 0x8CE0 /* GL_COLOR_ATTACHMENT0 */) f->tex = tex;
+}
+GLAPI(GLenum, glCheckFramebufferStatus, (GLenum t)) { (void)t; return GL_FRAMEBUFFER_COMPLETE; }
+GLAPI(GLboolean, glIsFramebuffer, (GLuint fb)) { return fb != 0; }
+GLAPI(void, glGenRenderbuffers, (GLsizei n, GLuint *out)) { int i; ensure_init(); for (i = 0; i < n; i++) out[i] = G.next_object++; }
+GLAPI(void, glBindRenderbuffer, (GLenum t, GLuint rb)) { (void)t; (void)rb; }
+GLAPI(void, glDeleteRenderbuffers, (GLsizei n, const GLuint *rb)) { (void)n; (void)rb; }
+GLAPI(void, glRenderbufferStorage, (GLenum t, GLenum f, GLsizei w, GLsizei h)) { (void)t; (void)f; (void)w; (void)h; }
+GLAPI(void, glFramebufferRenderbuffer, (GLenum t, GLenum a, GLenum rt, GLuint rb)) { (void)t; (void)a; (void)rt; (void)rb; }
+GLAPI(void, glBlitFramebuffer, (GLint a, GLint b, GLint c, GLint d, GLint e, GLint f, GLint g, GLint h, GLbitfield m, GLenum fl))
+{ (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h; (void)m; (void)fl; }
+GLAPI(void, glDrawBuffers, (GLsizei n, const GLenum *b)) { (void)n; (void)b; }
+GLAPI(void, glSampleCoverage, (GLclampf v, GLboolean inv)) { (void)v; (void)inv; }
+GLEXT(void, glReleaseShaderCompiler, (void)) { }
+GLEXT(void, glGetShaderPrecisionFormat, (GLenum s, GLenum p, GLint *range, GLint *precision))
+{ (void)s; (void)p; range[0] = 127; range[1] = 127; *precision = 23; }
+
+/* One vertex's generic attribute i (vec4). */
+static void fetch_generic(int i, int k, float out[4])
+{
+    const Array *a = &G.gattr[i];
+    const uint8_t *b;
+    int c;
+    if (!a->enabled || !(b = array_base(a))) { memcpy(out, G.gcur[i], 16); return; }
+    {
+        int ts = type_size(a->type), st = a->stride ? a->stride : a->size * ts;
+        b += (size_t)k * (size_t)st;
+        for (c = 0; c < 4; c++) out[c] = c < a->size ? read_comp(b + c * ts, a->type, G.gnorm[i]) : c == 3 ? 1.0f : 0.0f;
+        if (a->bgra) { float t = out[0]; out[0] = out[2]; out[2] = t; }
+    }
+}
+
+/* A draw by a shader program: its plan for the uniforms of now, each
+ * vertex's attributes through it, the GE drawing what the plan says. */
+static void shader_draw(GLenum mode, const int *idx, int first, int count)
+{
+    GlProgram *p = find_program(G.program);
+    GlslPlan *pl;
+    Vtx *v;
+    float attrs[GLSL_ATTR_ALL][4];
+    int i, a, fixed = G.va.enabled || G.ca.enabled || G.na.enabled || G.ta.enabled;
+    if (!p || !p->p || count <= 0) return;
+    if (!p->planned || p->planned_ver != p->uver || p->builtins) {
+        glsl_plan(p->p, &p->plan);
+        p->planned = 1; p->planned_ver = p->uver;
+        if (!p->plan.exact && !p->reported) { p->reported = 1; gl_logf("program %u: drawn as near as the GE can (%s)", G.program, p->plan.why); }
+    }
+    pl = &p->plan;
+    if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
+    for (i = 0; i < count; i++) {
+        int k = idx ? idx[i] : first + i;
+        float pos[4], uv[2], c[4];
+        for (a = 0; a < 16; a++) if (G.gattr[a].enabled) fetch_generic(a, k, attrs[a]); else memcpy(attrs[a], G.gcur[a], 16);
+        if (fixed) {   /* old shaders' gl_Vertex, gl_Color...: the fixed-function arrays */
+            Vtx f;
+            fetch(k, &f);
+            attrs[GLSL_ATTR_VERTEX][0] = f.p[0]; attrs[GLSL_ATTR_VERTEX][1] = f.p[1]; attrs[GLSL_ATTR_VERTEX][2] = f.p[2]; attrs[GLSL_ATTR_VERTEX][3] = 1;
+            attrs[GLSL_ATTR_COLOR][0] = (f.c & 0xFF) / 255.0f; attrs[GLSL_ATTR_COLOR][1] = ((f.c >> 8) & 0xFF) / 255.0f;
+            attrs[GLSL_ATTR_COLOR][2] = ((f.c >> 16) & 0xFF) / 255.0f; attrs[GLSL_ATTR_COLOR][3] = (f.c >> 24) / 255.0f;
+            memcpy(attrs[GLSL_ATTR_NORMAL], f.n, 12); attrs[GLSL_ATTR_NORMAL][3] = 0;
+            attrs[GLSL_ATTR_TEXCOORD0][0] = f.t[0]; attrs[GLSL_ATTR_TEXCOORD0][1] = f.t[1];
+            attrs[GLSL_ATTR_TEXCOORD0][2] = 0; attrs[GLSL_ATTR_TEXCOORD0][3] = 1;
+        }
+        glsl_plan_vertex(pl, (const float (*)[4])attrs, pos, uv, c);
+        if (!pl->matrix_ok && pos[3] != 0.0f && pos[3] != 1.0f) { pos[0] /= pos[3]; pos[1] /= pos[3]; pos[2] /= pos[3]; }
+        v[i].p[0] = pos[0]; v[i].p[1] = pos[1]; v[i].p[2] = pos[2];
+        v[i].t[0] = uv[0]; v[i].t[1] = uv[1];
+        v[i].c = abgr(c);
+        v[i].n[0] = v[i].n[1] = 0; v[i].n[2] = 1;
+    }
+    if (G.log >= 3) {
+        const float *m = pl->matrix;
+        float x = v[0].p[0], y = v[0].p[1], z = v[0].p[2];
+        gl_logf("program %u: %s attr %d  clip of vertex 0: %.2f %.2f %.2f %.2f  viewport %d %d %d %d", G.program,
+                pl->matrix_ok ? "matrix" : "per vertex", pl->pos_attr,
+                m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13],
+                m[2] * x + m[6] * y + m[10] * z + m[14], m[3] * x + m[7] * y + m[11] * z + m[15],
+                G.viewport[0], G.viewport[1], G.viewport[2], G.viewport[3]);
+        if (G.log >= 4) {
+            int r;
+            for (r = 0; r < 4; r++) gl_logf("  matrix row %d: %g %g %g %g", r, m[r], m[4 + r], m[8 + r], m[12 + r]);
+            for (r = 0; r < count && r < 4; r++) gl_logf("  vertex %d: %g %g %g", r, v[r].p[0], v[r].p[1], v[r].p[2]);
+        }
+    }
+    G.sh_active = 1;
+    if (pl->matrix_ok) memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
+    else mat_identity(G.sh_proj);
+    G.sh_tex = pl->textured ? find_texture(G.units[pl->sampler_unit & 7]) : NULL;
+    G.sh_tex_alpha = pl->tex_alpha;
+    G.sh_alpha_test = pl->alpha_test;
+    G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
+    draw_vertices(mode, v, count);
+    G.sh_active = 0;
+}
 
 /* ---- meshes: buffer objects kept on the PSP ------------------------------------------
  *
@@ -1751,6 +2379,7 @@ GLAPI(void, glDrawArrays, (GLenum mode, GLint first, GLsizei count))
     int i;
     ensure_init();
     if (count <= 0) return;
+    if (G.program) { shader_draw(mode, NULL, first, count); return; }
     if (G.compiling && !replaying) { compile_arrays(mode, NULL, first, count); return; }
     if (draw_mesh(mode, NULL, first, count, 0, 0, 0)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
@@ -1779,6 +2408,7 @@ GLAPI(void, glDrawElements, (GLenum mode, GLsizei count, GLenum type, const GLvo
     ensure_init();
     if (count <= 0) return;
     if (!(idx = read_indices(count, type, indices))) { set_error(GL_INVALID_OPERATION); return; }
+    if (G.program) { shader_draw(mode, idx, 0, count); return; }
     if (G.compiling && !replaying) { compile_arrays(mode, idx, 0, count); return; }
     if (draw_mesh(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
@@ -2096,7 +2726,7 @@ GLAPI(void, glClear, (GLbitfield mask))
     {
         int ww, wh, ox, oy; float s;
         shim_gl_geometry(&ww, &wh, &s, &ox, &oy);
-        if ((flags & PSPEXP_3D_CLEAR_COLOR) && !G.scissor_test && (ox > 0 || oy > 0) && (ctx = shim_gl_frame())) {
+        if ((flags & PSPEXP_3D_CLEAR_COLOR) && !G.scissor_test && !G.fbo && (ox > 0 || oy > 0) && (ctx = shim_gl_frame())) {
             PspExp3DState st;
             G.state_sent = 0;
             if (!(ctx = prepare(&tex))) return;
@@ -2108,6 +2738,7 @@ GLAPI(void, glClear, (GLbitfield mask))
             G.state_sent = 0;
         }
     }
+    G.frame_cleared |= !G.fbo;   /* the program's own: no black one first */
     if (!(ctx = prepare(&tex))) return;
     {
         float c[4];
@@ -2230,9 +2861,9 @@ GLAPI(void, glBindTexture, (GLenum target, GLuint name))
 {
     RECORD(OP_BIND_TEXTURE, target, name, 0, 0, NULL);
     ensure_init();
-    if (target != GL_TEXTURE_2D || G.active_unit != 0) return;
+    if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     texture_object(name);
-    G.bound = name;
+    G.units[G.active_unit] = name;
 }
 
 GLAPI(void, glDeleteTextures, (GLsizei n, const GLuint *names))
@@ -2243,17 +2874,18 @@ GLAPI(void, glDeleteTextures, (GLsizei n, const GLuint *names))
         while (*pp && (*pp)->name != names[i]) pp = &(*pp)->next;
         if (*pp) {
             GlTex *t = *pp;
-            PspExpContext *ctx = shim_gl_frame();
             *pp = t->next;
-            if (t->handle && ctx) pspexp_release(ctx, t->handle);
+            /* released after this frame: releases go out ahead of its draws, which may use it */
+            if (t->handle) mesh_release(t->handle, 0);
+            if (G.target == t) G.target = NULL;
             free(t->rgba);
             free(t);
         }
-        if (G.bound == names[i]) G.bound = 0;
+        { int u; for (u = 0; u < 8; u++) if (G.units[u] == names[i]) G.units[u] = 0; }
     }
 }
 GLAPI(GLboolean, glIsTexture, (GLuint name)) { return find_texture(name) != NULL; }
-GLEXT(void, glActiveTexture, (GLenum unit)) { ensure_init(); G.active_unit = (int)(unit - GL_TEXTURE0); }
+GLAPI(void, glActiveTexture, (GLenum unit)) { ensure_init(); G.active_unit = (int)(unit - GL_TEXTURE0); }
 
 /* One pixel of client memory as RGBA8. */
 static uint32_t read_pixel(const uint8_t *p, GLenum format, GLenum type)
@@ -2348,13 +2980,13 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
     (void)border;
     ensure_init();
     if (target == GL_PROXY_TEXTURE_2D) {
-        int ok = w <= PSPEXP_TEXTURE_MAX && h <= PSPEXP_TEXTURE_MAX && w >= 0 && h >= 0;
+        int ok = w <= 4096 && h <= 4096 && w >= 0 && h >= 0;
         G.proxy_w = ok ? w : 0; G.proxy_h = ok ? h : 0;
         return;
     }
-    if (target != GL_TEXTURE_2D || G.active_unit != 0) return;
+    if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     if (level != 0) return;   /* mipmaps: the GE is given level 0 only */
-    if (!(t = texture_object(G.bound))) { set_error(GL_INVALID_OPERATION); return; }
+    if (!(t = texture_object(G.units[G.active_unit]))) { set_error(GL_INVALID_OPERATION); return; }
     if (w <= 0 || h <= 0 || w > 4096 || h > 4096) { set_error(GL_INVALID_VALUE); return; }
     if (t->w != w || t->h != h || !t->rgba) {
         uint32_t *p = (uint32_t *)realloc(t->rgba, (size_t)w * (size_t)h * 4);
@@ -2362,6 +2994,10 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
         t->rgba = p; t->w = w; t->h = h;
     }
     t->has_alpha = format_has_alpha(internal, format);
+    if (t->rt && (pixels || t->rt_w < w || t->rt_h < h)) {   /* no longer that render target */
+        if (t->handle) mesh_release(t->handle, 0);
+        t->handle = 0; t->rt = 0;
+    }
     if (pixels) store_pixels(t, 0, 0, w, h, format, type, pixels);
     else memset(t->rgba, 0, (size_t)w * (size_t)h * 4);
     t->dirty = 1;
@@ -2377,8 +3013,8 @@ GLAPI(void, glTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsi
 {
     GlTex *t;
     ensure_init();
-    if (target != GL_TEXTURE_2D || level != 0 || G.active_unit != 0) return;
-    if (!(t = find_texture(G.bound)) || !t->rgba) { set_error(GL_INVALID_OPERATION); return; }
+    if (target != GL_TEXTURE_2D || level != 0 || G.active_unit < 0 || G.active_unit >= 8) return;
+    if (!(t = find_texture(G.units[G.active_unit])) || !t->rgba) { set_error(GL_INVALID_OPERATION); return; }
     if (x < 0 || y < 0 || x + w > t->w || y + h > t->h) { set_error(GL_INVALID_VALUE); return; }
     store_pixels(t, x, y, w, h, format, type, pixels);
     t->dirty = 1;
@@ -2388,9 +3024,9 @@ GLAPI(void, glCopyTexImage2D, (GLenum target, GLint level, GLenum internal, GLin
 { (void)target; (void)level; (void)internal; (void)x; (void)y; (void)w; (void)h; (void)border; unsupported("glCopyTexImage2D"); }
 GLAPI(void, glCopyTexSubImage2D, (GLenum target, GLint level, GLint xo, GLint yo, GLint x, GLint y, GLsizei w, GLsizei h))
 { (void)target; (void)level; (void)xo; (void)yo; (void)x; (void)y; (void)w; (void)h; unsupported("glCopyTexSubImage2D"); }
-GLEXT(void, glCompressedTexImage2D, (GLenum target, GLint level, GLenum internal, GLsizei w, GLsizei h, GLint border, GLsizei size, const GLvoid *data))
+GLAPI(void, glCompressedTexImage2D, (GLenum target, GLint level, GLenum internal, GLsizei w, GLsizei h, GLint border, GLsizei size, const GLvoid *data))
 { (void)target; (void)level; (void)internal; (void)w; (void)h; (void)border; (void)size; (void)data; unsupported("compressed textures"); }
-GLEXT(void, glGenerateMipmap, (GLenum target)) { (void)target; }
+GLAPI(void, glGenerateMipmap, (GLenum target)) { (void)target; }
 
 GLAPI(void, glTexParameteri, (GLenum target, GLenum p, GLint v))
 {
@@ -2398,7 +3034,7 @@ GLAPI(void, glTexParameteri, (GLenum target, GLenum p, GLint v))
     float f = (float)v;
     RECORD(OP_TEX_PARAMETER, target, p, 0, 1, &f);
     ensure_init();
-    if (target != GL_TEXTURE_2D || G.active_unit != 0 || !(t = texture_object(G.bound))) return;
+    if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8 || !(t = texture_object(G.units[G.active_unit]))) return;
     switch (p) {
     case GL_TEXTURE_MIN_FILTER: t->min_filter = (GLenum)v; break;
     case GL_TEXTURE_MAG_FILTER: t->mag_filter = (GLenum)v; break;
@@ -2412,7 +3048,7 @@ GLAPI(void, glTexParameteriv, (GLenum target, GLenum p, const GLint *v)) { GLFN(
 GLAPI(void, glTexParameterfv, (GLenum target, GLenum p, const GLfloat *v)) { GLFN(glTexParameteri)(target, p, (GLint)v[0]); }
 GLAPI(void, glGetTexParameteriv, (GLenum target, GLenum p, GLint *v))
 {
-    GlTex *t = find_texture(G.bound);
+    GlTex *t = find_texture(G.units[G.active_unit & 7]);
     (void)target;
     *v = 0;
     if (!t) return;
@@ -2426,7 +3062,7 @@ GLAPI(void, glGetTexParameteriv, (GLenum target, GLenum p, GLint *v))
 }
 GLAPI(void, glGetTexLevelParameteriv, (GLenum target, GLint level, GLenum p, GLint *v))
 {
-    GlTex *t = target == GL_PROXY_TEXTURE_2D ? NULL : find_texture(G.bound);
+    GlTex *t = target == GL_PROXY_TEXTURE_2D ? NULL : find_texture(G.units[G.active_unit & 7]);
     int w = target == GL_PROXY_TEXTURE_2D ? G.proxy_w : t ? t->w : 0, h = target == GL_PROXY_TEXTURE_2D ? G.proxy_h : t ? t->h : 0;
     if (level > 0) { w >>= level; h >>= level; }
     switch (p) {
@@ -2572,7 +3208,7 @@ typedef struct Attrib {
     GLenum fog_mode; float fog_start, fog_end, fog_density, fog_color[4];
     GLenum tex_env_mode; float tex_env_color[4];
     Light light[MAX_LIGHTS]; Material mat; float scene_ambient[4]; GLenum cm_face, cm_mode;
-    GLuint bound; GLenum matrix_mode; float point_size, line_width;
+    GLuint units[8]; GLenum matrix_mode; float point_size, line_width;
 } Attrib;
 static Attrib attrib_stack[16];
 static int attrib_top;
@@ -2596,7 +3232,7 @@ static int attrib_top;
     (dst).tex_env_mode = (src).tex_env_mode; memcpy((dst).tex_env_color, (src).tex_env_color, sizeof((dst).tex_env_color)); \
     memcpy((dst).light, (src).light, sizeof((dst).light)); (dst).mat = (src).mat; \
     memcpy((dst).scene_ambient, (src).scene_ambient, sizeof((dst).scene_ambient)); \
-    (dst).cm_face = (src).cm_face; (dst).cm_mode = (src).cm_mode; (dst).bound = (src).bound; \
+    (dst).cm_face = (src).cm_face; (dst).cm_mode = (src).cm_mode; memcpy((dst).units, (src).units, sizeof((dst).units)); \
     (dst).matrix_mode = (src).matrix_mode; (dst).point_size = (src).point_size; (dst).line_width = (src).line_width; \
 } while (0)
 
@@ -2732,7 +3368,8 @@ GLAPI(const GLubyte *, glGetString, (GLenum name))
     switch (name) {
     case GL_VENDOR: return (const GLubyte *)"PSPExp";
     case GL_RENDERER: return (const GLubyte *)"PSP GE (PSPExp)";
-    case GL_VERSION: return (const GLubyte *)"1.3 PSPExp";
+    case GL_VERSION: return (const GLubyte *)(getenv("PSPEXP_GL_VERSION") ? getenv("PSPEXP_GL_VERSION") : "2.1 PSPExp");
+    case GL_SHADING_LANGUAGE_VERSION: return (const GLubyte *)"1.20";
     case GL_EXTENSIONS: return (const GLubyte *)EXTENSIONS;
     default: set_error(GL_INVALID_ENUM); return NULL;
     }
@@ -2746,13 +3383,25 @@ static int get_values(GLenum p, float *f)
     int ww, wh, ox, oy; float s;
     ensure_init();
     switch (p) {
-    case GL_MAX_TEXTURE_SIZE: f[0] = PSPEXP_TEXTURE_MAX; return 1;
+    case GL_MAX_TEXTURE_SIZE: f[0] = 4096; return 1;   /* taken, and scaled to the PSP's 512 at most on the way */
     case GL_MAX_LIGHTS: f[0] = MAX_LIGHTS; return 1;
     case GL_MAX_CLIP_PLANES: f[0] = 6; return 1;
     case GL_MAX_MODELVIEW_STACK_DEPTH: f[0] = MV_DEPTH; return 1;
     case GL_MAX_PROJECTION_STACK_DEPTH: f[0] = PROJ_DEPTH; return 1;
     case GL_MAX_TEXTURE_STACK_DEPTH: f[0] = TEX_DEPTH; return 1;
-    case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_IMAGE_UNITS: case GL_MAX_TEXTURE_COORDS: f[0] = 1; return 1;
+    case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_COORDS: f[0] = 1; return 1;
+    case GL_MAX_TEXTURE_IMAGE_UNITS: case 0x8B4D /* GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS */: f[0] = 8; return 1;
+    case 0x8B4C /* GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS */: f[0] = 0; return 1;
+    case GL_MAX_VERTEX_ATTRIBS: f[0] = 16; return 1;
+    case 0x8DFB /* GL_MAX_VERTEX_UNIFORM_VECTORS */: f[0] = 256; return 1;
+    case 0x8DFD /* GL_MAX_FRAGMENT_UNIFORM_VECTORS */: f[0] = 64; return 1;
+    case 0x8DFC /* GL_MAX_VARYING_VECTORS */: f[0] = 8; return 1;
+    case 0x8B4A /* GL_MAX_VERTEX_UNIFORM_COMPONENTS */: f[0] = 1024; return 1;
+    case 0x8B49 /* GL_MAX_FRAGMENT_UNIFORM_COMPONENTS */: f[0] = 256; return 1;
+    case 0x8B4B /* GL_MAX_VARYING_FLOATS */: f[0] = 32; return 1;
+    case GL_CURRENT_PROGRAM: f[0] = (float)G.program; return 1;
+    case GL_FRAMEBUFFER_BINDING: f[0] = (float)G.fbo; return 1;
+    case GL_VERTEX_ARRAY_BINDING: f[0] = (float)G.vao; return 1;
     case GL_MAX_ELEMENTS_VERTICES: case GL_MAX_ELEMENTS_INDICES: f[0] = 65536; return 1;
     case GL_MAX_LIST_NESTING: f[0] = 64; return 1;
     case GL_MAX_VIEWPORT_DIMS: f[0] = f[1] = 4096; return 2;
@@ -2763,8 +3412,8 @@ static int get_values(GLenum p, float *f)
     case GL_ALPHA_BITS: case GL_STENCIL_BITS: case GL_SAMPLE_BUFFERS: case GL_SAMPLES: f[0] = 0; return 1;
     case GL_DEPTH_BITS: f[0] = 16; return 1;
     case GL_DOUBLEBUFFER: f[0] = 1; return 1;
-    case GL_MAJOR_VERSION: f[0] = 1; return 1;
-    case GL_MINOR_VERSION: f[0] = 3; return 1;
+    case GL_MAJOR_VERSION: f[0] = 2; return 1;
+    case GL_MINOR_VERSION: f[0] = 1; return 1;
     case GL_NUM_EXTENSIONS: f[0] = 0; return 1;
     case GL_VIEWPORT: f[0] = (float)G.viewport[0]; f[1] = (float)G.viewport[1]; f[2] = (float)G.viewport[2]; f[3] = (float)G.viewport[3]; return 4;
     case GL_SCISSOR_BOX: f[0] = (float)G.scissor[0]; f[1] = (float)G.scissor[1]; f[2] = (float)G.scissor[2]; f[3] = (float)G.scissor[3]; return 4;
@@ -2792,7 +3441,7 @@ static int get_values(GLenum p, float *f)
     case GL_CULL_FACE_MODE: f[0] = (float)G.cull_mode; return 1;
     case GL_FRONT_FACE: f[0] = (float)G.front_face; return 1;
     case GL_SHADE_MODEL: f[0] = (float)G.shade_model; return 1;
-    case GL_TEXTURE_BINDING_2D: f[0] = (float)G.bound; return 1;
+    case GL_TEXTURE_BINDING_2D: f[0] = (float)G.units[G.active_unit & 7]; return 1;
     case GL_ACTIVE_TEXTURE: f[0] = (float)(GL_TEXTURE0 + G.active_unit); return 1;
     case GL_CLIENT_ACTIVE_TEXTURE: f[0] = (float)(GL_TEXTURE0 + G.client_unit); return 1;
     case GL_ARRAY_BUFFER_BINDING: f[0] = (float)G.array_buffer; return 1;
@@ -2905,12 +3554,78 @@ static void *real_proc(const char *sym, const char *name)
     void *(*fn)(const char *) = (void *(*)(const char *))(uintptr_t)dlsym(RTLD_NEXT, sym);
     return fn ? fn(name) : NULL;
 }
+static void *own_glx(const char *name);
+
 __attribute__((visibility("default"))) void *glXGetProcAddress(const GLubyte *name)
 {
     void *p = pspexp_gl_proc((const char *)name);
+    if (!p) p = own_glx((const char *)name);
     return p ? p : strncmp((const char *)name, "gl", 2) || !strncmp((const char *)name, "glX", 3) ? real_proc("glXGetProcAddress", (const char *)name) : NULL;
 }
 __attribute__((visibility("default"))) void *glXGetProcAddressARB(const GLubyte *name) { return glXGetProcAddress(name); }
+
+/* GLEW asks GLX for the current display and its version before it hands
+ * out anything: a headless board has no X display, so ours answers with a
+ * stand-in (zeroed: DefaultScreen() of it is 0) once our context exists. */
+static char fake_display[4096] __attribute__((aligned(16)));
+#define REAL_GLX(ret, name, ...) ((ret (*)(__VA_ARGS__))(uintptr_t)dlsym(RTLD_NEXT, name))
+__attribute__((visibility("default"))) void *glXGetCurrentDisplay(void)
+{
+    void *(*real)(void) = REAL_GLX(void *, "glXGetCurrentDisplay", void);
+    void *d = real ? real() : NULL;
+    return d ? d : G.inited ? (void *)fake_display : NULL;
+}
+__attribute__((visibility("default"))) void *glXGetCurrentContext(void)
+{
+    void *(*real)(void) = REAL_GLX(void *, "glXGetCurrentContext", void);
+    void *c = real ? real() : NULL;
+    return c ? c : G.inited ? (void *)fake_display : NULL;
+}
+__attribute__((visibility("default"))) unsigned long glXGetCurrentDrawable(void)
+{
+    unsigned long (*real)(void) = REAL_GLX(unsigned long, "glXGetCurrentDrawable", void);
+    unsigned long d = real ? real() : 0;
+    return d ? d : G.inited ? 1 : 0;
+}
+__attribute__((visibility("default"))) int glXQueryVersion(void *dpy, int *major, int *minor)
+{
+    int (*real)(void *, int *, int *) = REAL_GLX(int, "glXQueryVersion", void *, int *, int *);
+    if (dpy == (void *)fake_display) { if (major) *major = 1; if (minor) *minor = 4; return 1; }
+    return real ? real(dpy, major, minor) : 0;
+}
+__attribute__((visibility("default"))) const char *glXQueryExtensionsString(void *dpy, int screen)
+{
+    const char *(*real)(void *, int) = REAL_GLX(const char *, "glXQueryExtensionsString", void *, int);
+    if (dpy == (void *)fake_display) return "";
+    return real ? real(dpy, screen) : "";
+}
+__attribute__((visibility("default"))) const char *glXGetClientString(void *dpy, int name)
+{
+    const char *(*real)(void *, int) = REAL_GLX(const char *, "glXGetClientString", void *, int);
+    if (dpy == (void *)fake_display) return name == 2 /* GLX_VERSION */ ? "1.4" : "";
+    return real ? real(dpy, name) : "";
+}
+__attribute__((visibility("default"))) const char *glXQueryServerString(void *dpy, int screen, int name)
+{
+    const char *(*real)(void *, int, int) = REAL_GLX(const char *, "glXQueryServerString", void *, int, int);
+    if (dpy == (void *)fake_display) return name == 2 ? "1.4" : "";
+    return real ? real(dpy, screen, name) : "";
+}
+
+static void *own_glx(const char *name)
+{
+    static const struct { const char *n; void *f; } T[] = {
+        { "glXGetCurrentDisplay", (void *)(uintptr_t)&glXGetCurrentDisplay },
+        { "glXGetCurrentContext", (void *)(uintptr_t)&glXGetCurrentContext },
+        { "glXGetCurrentDrawable", (void *)(uintptr_t)&glXGetCurrentDrawable },
+        { "glXQueryVersion", (void *)(uintptr_t)&glXQueryVersion },
+        { "glXQueryExtensionsString", (void *)(uintptr_t)&glXQueryExtensionsString },
+        { "glXGetClientString", (void *)(uintptr_t)&glXGetClientString },
+        { "glXQueryServerString", (void *)(uintptr_t)&glXQueryServerString } };
+    size_t i;
+    for (i = 0; i < sizeof(T) / sizeof(T[0]); i++) if (!strcmp(T[i].n, name)) return T[i].f;
+    return NULL;
+}
 __attribute__((visibility("default"))) void *eglGetProcAddress(const char *name)
 {
     void *p = pspexp_gl_proc(name);

@@ -85,7 +85,7 @@ PSP transforms, lights, clips and draws. Needs a runtime with 3D (from
 | depth, alpha test, blending (5650 framebuffer: no destination alpha), culling, scissor, `glColorMask`, `glClear` | the GE's own; a 16-bit depth buffer (VRAM for textures shrinks by 272 KB) |
 | queries (`glGet*`, `glGetString`: "1.3 PSPExp"), `glGetError`, `glPushAttrib` | answered here |
 
-Not there: shaders, a second texture unit (`GL_ARB_multitexture` is
+Not there: a second texture unit (`GL_ARB_multitexture` is
 advertised with one unit: what goes in the others is left out), stencil,
 reading pixels back (`glReadPixels` gives black), copying from the
 framebuffer, clip planes, polygon modes other than fill, line width,
@@ -96,6 +96,41 @@ Measured 2026-09-30 on the PSP-1000 over USB from the Pi 400:
 arrays, a display list, blending, 2D on top) 59.9 fps, 84 KB a frame, PSP
 CPU 1.9 ms, GE 0.12 ms. Chromium B.S.U. (menu) 36 fps, 230 KB a frame (all
 immediate mode). Neverball (title) 30 fps, 85 KB a frame, GE 20 ms.
+
+### OpenGL 2: shaders
+
+The GE runs no programs, so shaders are **read**, not run (`glsl_pspexp.c`).
+A shader is parsed (GLSL 1.10-1.30 and ES 1.00: the preprocessor's
+object-like macros and conditionals, functions, loops, uniform branches)
+and, at a draw, evaluated symbolically with the uniforms of the moment:
+`gl_Position` and the fragment colour come out as expressions of the
+vertex attributes and the texture samples. The plan for the GE:
+
+| shader | on the PSP |
+|---|---|
+| `gl_Position = matrix * attribute` (any product of uniforms folding to one) | the GE's projection matrix, the attribute as the position |
+| another position | worked out per vertex here, sent divided by w |
+| a texture sample times the rest, per channel | the GE's texture, modulated by the rest worked out per vertex |
+| the colour alone | per-vertex colour |
+| `if (alpha < k) discard;` | the GE's alpha test |
+| uniforms in `if`s and loops | the branch taken, the loop unrolled |
+| anything else (two textures, a texture channel used for another, per-pixel maths, framebuffer reads) | the nearest of the above; the program is logged once with what was left out |
+
+`glGetString(GL_VERSION)` is "2.1 PSPExp" (`PSPEXP_GL_VERSION` to change it:
+"1.3" makes such games take a fixed-function path they have); contexts of
+3.x or a core profile are refused, as a driver without them would (with a
+GL error pending: programs that check that way fall back). Framebuffer
+objects with a colour texture are **render targets** on the PSP: the GE draws
+into the texture in VRAM (at most 512 x 512, 16 or 32 bits), and it is then
+sampled like any other. GLEW, which asks GLX for a display first, is answered
+by a stand-in on headless boards.
+
+Seen working in PPSSPP on 2026-09-30, from Debian on the Pi 400: Numptyphysics
+(its scene through a render target), openMrac (vertex array objects, alpha
+discard), SuperTux (its GL 2.0 path; it asks for 3.3 first), Widelands (its
+image shader drawn as near as the GE can). A program that draws without
+clearing gets a black clear first (GL leaves the buffer undefined after a
+swap; PPSSPP loses track of a buffer that is never cleared).
 
 The functions are found by name through `pspexp_gl_proc`; its table,
 `gl_pspexp_procs.h`, is made by `gen-gl-procs.py` (run it after adding a
@@ -118,6 +153,11 @@ function; the tests check it is current).
 | `PSPEXP_GL_LOG=1` | OpenGL: each frame's draws, meshes made, unknown queries; `2`: every draw, and why a draw was not a mesh |
 | `PSPEXP_GL_DUMP=DIR` | OpenGL: every texture as sent, `DIR/tex-<name>-<w>x<h>.rgba` |
 | `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |
+| `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
+| `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference) |
+| `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
+| `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |
+| `PSPEXP_RECORD=FILE` | every byte sent to the PSP, in order (a stream to replay) |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
 | `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/dev/bench-shim.sh` |
 
