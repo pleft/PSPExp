@@ -23,6 +23,14 @@ if [ "${PSPEXP_X:-0}" = 1 ]; then
 	export DISPLAY="${DISPLAY:-:0}"
 else
 	export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}" SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
+	# games that play through OpenAL (SuperTux): OpenAL Soft's "wave" output
+	# into a pipe the SDL layer streams to the PSP (Debian's OpenAL has no SDL
+	# output); nothing for the others
+	if [ -z "$ALSOFT_CONF" ]; then
+		T="${XDG_RUNTIME_DIR:-/tmp}/pspexp-openal-$$"
+		printf '[general]\ndrivers=wave\nfrequency=44100\nchannels=stereo\nsample-type=int16\n[wave]\nfile=%s.fifo\n' "$T" > "$T.conf" &&
+			export ALSOFT_CONF="$T.conf" ALSOFT_DRIVERS=wave PSPEXP_AUDIO_FIFO="$T.fifo"
+	fi
 fi
 # a setuid or setgid program (Debian's games that keep a shared high-score file:
 # LTris, LBreakoutHD) runs in secure mode, where the loader ignores LD_PRELOAD:

@@ -233,6 +233,7 @@ typedef struct GlTex {
     GLenum min_filter, mag_filter, wrap_s, wrap_t;
     int rt, rt_w, rt_h, rt_fmt;  /* a framebuffer object's colour: a render target on the PSP, drawn there */
     uint32_t psp_bytes;          /* what it takes on the PSP now (0: not there) */
+    struct GlTex *hnext;         /* in the name table */
     unsigned used;               /* the frame it was last drawn with */
     struct GlTex *next;
 } GlTex;
@@ -480,11 +481,23 @@ static uint8_t clamp8(float v) { return v <= 0.0f ? 0 : v >= 1.0f ? 255 : (uint8
 static uint32_t abgr(const float *c) { return clamp8(c[0]) | (uint32_t)clamp8(c[1]) << 8 | (uint32_t)clamp8(c[2]) << 16 | (uint32_t)clamp8(c[3]) << 24; }
 static uint32_t bgr(const float *c) { return abgr(c) & 0xFFFFFFu; }
 
+/* Textures by name: a table (programs bind one for nearly every draw, and
+ * some have thousands: SuperTux spent 95 % of its time in a list walk). */
+#define TEX_HASH 4096
+static GlTex *tex_hash[TEX_HASH];
+
 static GlTex *find_texture(GLuint name)
 {
     GlTex *t;
-    for (t = G.textures; t; t = t->next) if (t->name == name) return t;
+    for (t = tex_hash[name & (TEX_HASH - 1)]; t; t = t->hnext) if (t->name == name) return t;
     return NULL;
+}
+
+static void texture_unhash(GlTex *t)
+{
+    GlTex **pp = &tex_hash[t->name & (TEX_HASH - 1)];
+    while (*pp && *pp != t) pp = &(*pp)->hnext;
+    if (*pp) *pp = t->hnext;
 }
 
 /* GL's depth runs 0 near .. 1 far; the GE's, as the PSP samples set it up,
@@ -3213,6 +3226,7 @@ static GlTex *texture_object(GLuint name)
     t->min_filter = GL_NEAREST_MIPMAP_LINEAR; t->mag_filter = GL_LINEAR;
     t->wrap_s = t->wrap_t = GL_REPEAT;
     t->next = G.textures; G.textures = t;
+    t->hnext = tex_hash[name & (TEX_HASH - 1)]; tex_hash[name & (TEX_HASH - 1)] = t;
     if (name >= G.next_texture) G.next_texture = name + 1;
     return t;
 }
@@ -3235,6 +3249,7 @@ GLAPI(void, glDeleteTextures, (GLsizei n, const GLuint *names))
         if (*pp) {
             GlTex *t = *pp;
             *pp = t->next;
+            texture_unhash(t);
             /* released after this frame: releases go out ahead of its draws, which may use it */
             if (t->handle) mesh_release(t->handle, 0);
             tex_bytes -= t->psp_bytes;

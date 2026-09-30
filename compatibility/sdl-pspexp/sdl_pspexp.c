@@ -27,6 +27,7 @@
  *          PSPExp SDL executor in a second window, for checking the stream)
  *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons ("return+y": both)
  *   (holding START + SELECT leaves any game: SDL_QUIT after 1 s, exit after 2 s)
+ *   PSPEXP_JOYSTICK=0                         no virtual game controller: the keys only
  *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows; mouse: the nub moves
  *                                             a pointer drawn on the PSP, cross/circle click)
  *   PSPEXP_WINDOW=hide                        hide the program's own window
@@ -282,6 +283,10 @@ static void parse_keys(void)
     }
 }
 
+#ifndef PSPEXP_STATIC_RENAME
+static void start_audio_fifo(void);
+#endif
+
 static void connect_once(void)
 {
     const char *env = getenv("PSPEXP");
@@ -368,6 +373,9 @@ static void connect_once(void)
     S.amu = SDL_CreateMutex();
     S.acap = 44100 * 2;
     S.aring = (int16_t *)calloc(S.acap * 2, sizeof(int16_t));
+#ifndef PSPEXP_STATIC_RENAME
+    start_audio_fifo();
+#endif
     S.px = 240; S.py = 136;
     S.last_report = SDL_GetTicks();
     logf_("active (%s)", env);
@@ -1170,6 +1178,67 @@ static void audio_tap(int slot, const Uint8 *data, int len)
     while ((got = SDL_AudioStreamGet(st, tmp, (int)sizeof(tmp))) > 0) audio_push(tmp, (size_t)got / 4);
 }
 
+#ifndef PSPEXP_STATIC_RENAME
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+/* PSPEXP_AUDIO_FIFO=PATH: sound from a named pipe to the PSP, as a WAV
+ * stream (s16, stereo, 44.1 kHz; mono doubled). For games that play through
+ * OpenAL, not SDL: OpenAL Soft's "wave" output writes into the pipe
+ * (scripts/board/pspexp-run sets that up). */
+static int audio_fifo_thread(void *arg)
+{
+    const char *path = (const char *)arg;
+    int fd, channels = 2;
+    unsigned char hdr[8];
+    static int16_t buf[4096 * 2];
+    for (;;) {   /* each opening of the pipe: a new stream (the game may reopen its device) */
+        if ((fd = open(path, O_RDONLY)) < 0) return 0;
+        if (read(fd, hdr, 4) == 4 && !memcmp(hdr, "RIFF", 4) && read(fd, hdr, 8) == 8) {   /* RIFF size WAVE */
+            for (;;) {   /* the chunks up to data */
+                uint32_t len;
+                if (read(fd, hdr, 8) != 8) break;
+                len = (uint32_t)hdr[4] | (uint32_t)hdr[5] << 8 | (uint32_t)hdr[6] << 16 | (uint32_t)hdr[7] << 24;
+                if (!memcmp(hdr, "data", 4)) break;
+                {
+                    unsigned char fmt[64];
+                    uint32_t k = len < sizeof(fmt) ? len : (uint32_t)sizeof(fmt), rest = len - k;
+                    if (read(fd, fmt, k) != (ssize_t)k) break;
+                    if (!memcmp(hdr, "fmt ", 4) && k >= 16) {
+                        unsigned rate = (unsigned)fmt[4] | (unsigned)fmt[5] << 8 | (unsigned)fmt[6] << 16;
+                        channels = fmt[2];
+                        if (rate != 44100 || (fmt[14] | fmt[15] << 8) != 16 || channels < 1 || channels > 2)
+                            logf_("audio pipe: %u Hz, %d channels, %d bits: 44100 Hz 16-bit stereo or mono wanted", rate, channels, fmt[14] | fmt[15] << 8);
+                    }
+                    while (rest > 0) { unsigned char skip[256]; ssize_t r = read(fd, skip, rest < 256 ? rest : 256); if (r <= 0) break; rest -= (uint32_t)r; }
+                }
+            }
+            logf_("audio pipe %s: streaming to the PSP", path);
+            for (;;) {
+                ssize_t r = read(fd, buf, channels == 2 ? sizeof(buf) : sizeof(buf) / 2);
+                size_t frames, f;
+                if (r <= 0) break;
+                if (channels == 2) frames = (size_t)r / 4;
+                else { frames = (size_t)r / 2; for (f = frames; f-- > 0; ) { buf[f * 2 + 1] = buf[f]; buf[f * 2] = buf[f]; } }
+                audio_push(buf, frames);
+            }
+        }
+        close(fd);
+    }
+}
+
+static void start_audio_fifo(void)
+{
+    static char path[512];
+    const char *p = getenv("PSPEXP_AUDIO_FIFO");
+    if (!p || !*p || path[0]) return;
+    snprintf(path, sizeof(path), "%s", p);
+    unlink(path);
+    if (mkfifo(path, 0600) < 0) { logf_("audio pipe %s: cannot make it", path); return; }
+    SDL_DetachThread(SDL_CreateThread(audio_fifo_thread, "pspexp-audio-fifo", path));
+}
+#endif
+
 static void audio_callback_wrapper(void *userdata, Uint8 *stream, int len)
 {
     int slot = (int)(intptr_t)userdata;
@@ -1298,6 +1367,7 @@ static void setup_vjoy(void)
     static int failed;   /* once: an SDL built without virtual joysticks (the Omega's) stays so */
     if (S.vjoy >= 0 || failed) return;
     if (!SDL_WasInit(SDL_INIT_JOYSTICK)) return;   /* the game did not ask for joysticks */
+    if (getenv("PSPEXP_JOYSTICK") && !strcmp(getenv("PSPEXP_JOYSTICK"), "0")) { failed = 1; return; }   /* keys only: games that take both would get each press twice */
     S.vjoy = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 2, 12, 1);
     if (S.vjoy < 0) { failed = 1; logf_("virtual joystick: %s (PSPEXP_KEYS still works)", SDL_GetError()); return; }
     SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(S.vjoy), guid, sizeof(guid));
@@ -1839,6 +1909,46 @@ static void draw_pointer(void)
     }
 }
 
+/* PSPEXP_SHOT_TRIGGER=FILE: when FILE appears, the PSP's screen is saved and
+ * copied back over this link to FILE-N.bmp (N counting from 1): looking at a
+ * game while someone plays it */
+static void shot_trigger(void)
+{
+    static Uint32 last, pending_at;
+    static int pending = -1, n;
+    const char *trig = getenv("PSPEXP_SHOT_TRIGGER");
+    Uint32 now = SDL_GetTicks();
+    if (!trig || !link_up() || !pspexp_fs_supported(S.ctx)) return;
+    if (pending >= 0 && now - pending_at > 1500) {   /* written by now: fetched */
+        char src[80], dst[512];
+        PspExpFsEntry st;
+        snprintf(src, sizeof(src), "ms0:/PSP/GAME/PSPExp/pspexp-shot-%d.bmp", pending);
+        snprintf(dst, sizeof(dst), "%s-%d.bmp", trig, pending - 900);
+        if (pspexp_fs_stat(S.ctx, src, &st) >= 0) {
+            FILE *f = fopen(dst, "wb");
+            static unsigned char buf[PSPEXP_FS_CHUNK];
+            uint64_t off = 0;
+            int got;
+            while (f && off < ((uint64_t)st.size_hi << 32 | st.size_lo) && (got = pspexp_fs_read(S.ctx, src, off, buf, sizeof(buf))) > 0) { fwrite(buf, 1, (size_t)got, f); off += (uint64_t)got; }
+            if (f) fclose(f);
+            pspexp_fs_remove(S.ctx, src);
+            logf_("screenshot: %s", dst);
+        }
+        pending = -1;
+    }
+    if (pending >= 0 || now - last < 300) return;
+    last = now;
+    {
+        FILE *f = fopen(trig, "rb");
+        if (!f) return;
+        fclose(f);
+        remove(trig);
+        pending = 900 + ++n;   /* its own numbers on the stick */
+        pending_at = now;
+        pspexp_request_screenshot(S.ctx, (uint16_t)pending);
+    }
+}
+
 static void end_frame(void)
 {
     if (!S.active) return;
@@ -1869,6 +1979,7 @@ static void end_frame(void)
     S.frame_open = 0;
     pspexp_pump(S.ctx, 0);
     feed_input();
+    shot_trigger();
     S.frames++;
     if (!S.total_frames) S.first_frame = SDL_GetPerformanceCounter();
     S.total_frames++;
