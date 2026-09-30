@@ -58,6 +58,9 @@ int main(int argc, char **argv)
     printf("  position: %s attribute %d\n", plan.matrix_ok ? "matrix x" : "per vertex from", plan.pos_attr);
     printf("  texture: %s unit %d, alpha %s\n", plan.textured ? "yes" : "no", plan.sampler_unit, plan.tex_alpha ? "yes" : "no");
     if (plan.alpha_test) printf("  alpha test: 0x%x %.3f\n", plan.alpha_func, plan.alpha_ref);
+    if (plan.lit) printf("  lit: normal attribute %d, light %.2f %.2f %.2f, diffuse %.2f %.2f %.2f, ambient %.2f %.2f %.2f\n", plan.lit_attr,
+                         plan.light_dir[0], plan.light_dir[1], plan.light_dir[2], plan.light_diffuse[0], plan.light_diffuse[1],
+                         plan.light_diffuse[2], plan.light_ambient[0], plan.light_ambient[1], plan.light_ambient[2]);
     for (i = 0; i < GLSL_ATTR_ALL; i++) { attrs[i][0] = 0.1f * (float)i; attrs[i][1] = 0.2f; attrs[i][2] = 0.3f; attrs[i][3] = 0.5f; }
     glsl_plan_vertex(&plan, (const float (*)[4])attrs, pos, uv, rgba);
     printf("  a vertex: pos %.2f %.2f %.2f %.2f  uv %.2f %.2f  rgba %.2f %.2f %.2f %.2f\n", pos[0], pos[1], pos[2], pos[3], uv[0], uv[1], rgba[0], rgba[1], rgba[2], rgba[3]);

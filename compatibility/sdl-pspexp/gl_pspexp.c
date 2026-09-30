@@ -315,6 +315,7 @@ static struct {
     int lights_const;   /* the lights sent carry a draw's constant colour */
     /* a draw by a shader program (shader_draw): what its plan says, over GL's fixed state */
     int sh_active, sh_tex_alpha, sh_alpha_test;
+    const GlslPlan *sh_lit;     /* the plan's lighting, done by the GE (NULL: none) */
     GLenum sh_alpha_func; float sh_alpha_ref;
     float sh_proj[16];
     GlTex *sh_tex;
@@ -725,6 +726,7 @@ static void build_state(PspExp3DState *s, GlTex *tex)
     }
     if (G.sh_active) {   /* a shader's draw: its plan, not the fixed functions */
         s->enable &= ~(uint32_t)(PSPEXP_3D_LIGHTING | PSPEXP_3D_FOG);
+        if (G.sh_lit) s->enable |= PSPEXP_3D_LIGHTING | PSPEXP_3D_SMOOTH;
         if (G.sh_alpha_test) {
             s->enable |= PSPEXP_3D_ALPHA_TEST;
             s->alpha_func = alpha_func(G.sh_alpha_func);
@@ -743,6 +745,24 @@ static void build_lights(PspExp3DLights *l, const float *color)
 {
     int i, n = 0;
     memset(l, 0, sizeof(*l));
+    if (G.sh_lit) {   /* a shader's lighting: one directional light, white material, its ambient as the scene's */
+        const GlslPlan *pl = G.sh_lit;
+        float amb[4] = { pl->light_ambient[0], pl->light_ambient[1], pl->light_ambient[2], 1 };
+        float dif[4] = { pl->light_diffuse[0], pl->light_diffuse[1], pl->light_diffuse[2], 1 };
+        static const float white[4] = { 1, 1, 1, 1 }, black[4] = { 0, 0, 0, 1 };
+        l->scene_ambient = abgr(amb);
+        l->emissive = abgr(black) & 0xFFFFFF;
+        l->ambient = abgr(white);
+        l->diffuse = abgr(white);
+        l->specular = 0;
+        l->light[0].enabled = 1;
+        l->light[0].type = GU_DIRECTIONAL;
+        l->light[0].components = GU_AMBIENT_AND_DIFFUSE;
+        l->light[0].diffuse = bgr(dif);
+        memcpy(l->light[0].position, pl->light_dir, sizeof(l->light[0].position));
+        l->light[0].attenuation[0] = 1;
+        return;
+    }
     l->scene_ambient = abgr(G.scene_ambient);
     l->emissive = abgr(G.mat.emission);
     l->ambient = abgr(G.mat.ambient);
@@ -1024,7 +1044,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         G.matrices_sent = 1;
     }
     }
-    if ((G.lighting && !G.sh_active) || color || G.lights_const || G.tc == TC_ENV) {
+    if ((G.lighting && !G.sh_active) || G.sh_lit || color || G.lights_const || G.tc == TC_ENV) {
         PspExp3DLights l;
         build_lights(&l, color);
         G.lights_const = color != NULL;
@@ -1267,7 +1287,8 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
                 v[0].c, G.blend, G.blend_src, G.blend_dst, G.depth_test, G.cull, G.lighting, G.alpha_test, G.fog,
                 G.tex_env_mode, v[0].t[0], v[0].t[1], v[n > 2 ? 2 : 0].t[0], v[n > 2 ? 2 : 0].t[1], v[0].p[0], v[0].p[1], v[0].p[2]);
     if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV) vt |= PSPEXP_3D_VT_TEXTURE;
-    if ((G.lighting && !G.sh_active) || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
+    if ((G.lighting && !G.sh_active) || G.sh_lit || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
+    if (G.sh_lit) vt &= ~(uint32_t)PSPEXP_3D_VT_COLOR;   /* lit: the material's colour */
     if (tex && G.tc == TC_HOST && (G.texgen[0] || G.texgen[1])) {   /* generated coordinates, per vertex, here */
         const float *m = G.mv[G.mv_top];
         for (i = 0; i < n; i++) {
@@ -2333,7 +2354,8 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
         v[i].p[0] = pos[0]; v[i].p[1] = pos[1]; v[i].p[2] = pos[2];
         v[i].t[0] = uv[0]; v[i].t[1] = uv[1];
         v[i].c = abgr(c);
-        v[i].n[0] = v[i].n[1] = 0; v[i].n[2] = 1;
+        if (pl->lit) memcpy(v[i].n, attrs[pl->lit_attr], 12);
+        else { v[i].n[0] = v[i].n[1] = 0; v[i].n[2] = 1; }
     }
     }
     if (G.log >= 3) {
@@ -2357,8 +2379,10 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
     G.sh_tex_alpha = pl->tex_alpha;
     G.sh_alpha_test = pl->alpha_test;
     G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
+    G.sh_lit = pl->lit ? pl : NULL;
     draw_vertices(mode, v, count);
     G.sh_active = 0;
+    G.sh_lit = NULL;
 }
 
 /* ---- meshes: buffer objects kept on the PSP ------------------------------------------
@@ -2794,8 +2818,10 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     G.sh_tex_alpha = pl->tex_alpha;
     G.sh_alpha_test = pl->alpha_test;
     G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
-    if (!(ctx = prepare_colour(&tex, NULL))) { G.sh_active = 0; return 1; }
+    G.sh_lit = pl->lit ? pl : NULL;
+    if (!(ctx = prepare_colour(&tex, NULL))) { G.sh_active = 0; G.sh_lit = NULL; return 1; }
     if (tex) vt |= PSPEXP_3D_VT_TEXTURE;
+    if (pl->lit) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_COLOR) | PSPEXP_3D_VT_NORMAL;
     h ^= (uint64_t)vt << 20;
     if (!h) h = 1;
     for (m = meshes; m; m = m->next) if (m->shkey == h && m->vt == vt && m->count >= hi + 1) break;
@@ -2806,6 +2832,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
             ch->until = mesh_frame + 300;
             ch->streak = 0;
             G.sh_active = 0;
+            G.sh_lit = NULL;
             if (G.log) gl_logf("program %u: a draw that changes every frame: streamed", pr->name);
             return 0;
         }
@@ -2814,7 +2841,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
         uint8_t *out;
         float attrs[GLSL_ATTR_ALL][4];
         int i, nb = 0;
-        if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) { G.sh_active = 0; return 0; }
+        if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) { G.sh_active = 0; G.sh_lit = NULL; return 0; }
         m->shkey = h; m->vt = vt; m->count = n;
         m->handle = mesh_handle();
         m->bytes = pspexp_3d_vertex_size(vt) * (uint32_t)n;
@@ -2827,6 +2854,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
             free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle;
             mesh_free(m);
             G.sh_active = 0;
+            G.sh_lit = NULL;
             return 0;
         }
         for (a = 0; a < 16; a++) memcpy(attrs[a], G.gcur[a], 16);
@@ -2847,7 +2875,8 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
             v->p[0] = pos[0]; v->p[1] = pos[1]; v->p[2] = pos[2];
             v->t[0] = uv[0]; v->t[1] = uv[1];
             v->c = abgr(c);
-            v->n[0] = v->n[1] = 0; v->n[2] = 1;
+            if (pl->lit) memcpy(v->n, attrs[pl->lit_attr], 12);
+            else { v->n[0] = v->n[1] = 0; v->n[2] = 1; }
             memcpy(m->pos + i * 3, v->p, 12);
             pack_vertex(&out, vt, v);
         }
@@ -2866,6 +2895,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     }
     k = mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
     G.sh_active = 0;
+    G.sh_lit = NULL;
     return k;
 }
 

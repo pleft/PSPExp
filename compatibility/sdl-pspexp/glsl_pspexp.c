@@ -1793,6 +1793,40 @@ static const Sym *find_texc(const Sym *s, int depth)
     return find_texc(s->c, depth + 1);
 }
 
+/* clamp(ambient + max(0, dot) x diffuse, 0, 1) (the clamp, the ambient and the diffuse optional),
+ * dot linear in one attribute's first three components: the GE's directional light */
+static int match_light(const Sym *f, float coef[3], int *attr, float *kd, float *ka)
+{
+    static float co[GLSL_ATTR_ALL * 4];
+    float c = 0;
+    int a, k, found = -1;
+    *kd = 1; *ka = 0;
+    if (f && f->kind == Y_OP && f->op == O_CLAMP && isk(f->b, 0) && f->c && f->c->kind == Y_K && f->c->k >= 1) f = f->a;
+    if (f && f->kind == Y_OP && f->op == O_ADD) {
+        if (f->a->kind == Y_K) { *ka = f->a->k; f = f->b; }
+        else if (f->b->kind == Y_K) { *ka = f->b->k; f = f->a; }
+    }
+    if (f && f->kind == Y_OP && f->op == O_MUL) {
+        if (f->a->kind == Y_K) { *kd = f->a->k; f = f->b; }
+        else if (f->b->kind == Y_K) { *kd = f->b->k; f = f->a; }
+    }
+    if (!f || f->kind != Y_OP || f->op != O_MAX) return 0;
+    if (isk(f->a, 0)) f = f->b;
+    else if (isk(f->b, 0)) f = f->a;
+    else return 0;
+    memset(co, 0, sizeof(co));
+    if (linear(f, 1.0f, co, &c) < 0 || fabsf(c) > 1e-5f) return 0;
+    for (a = 0; a < GLSL_ATTR_ALL; a++)
+        for (k = 0; k < 4; k++) if (co[a * 4 + k] != 0) {
+            if (k == 3 || (found >= 0 && found != a)) return 0;
+            found = a;
+        }
+    if (found < 0) return 0;
+    for (k = 0; k < 3; k++) coef[k] = co[found * 4 + k];
+    *attr = found;
+    return 1;
+}
+
 /* discard when X op K: the GE's alpha test keeps the other side */
 static int alpha_test(const Sym *d, unsigned *func, float *ref)
 {
@@ -1908,6 +1942,25 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
             } else if (ch < 3) plain_rgb++;
         }
         plan->textured = tex != NULL;
+        {   /* the rest of each colour channel the GE's lighting? */
+            float coef[3][3], kd[3], ka[3];
+            int attr[3], ok = 1;
+            for (ch = 0; ch < 3 && ok; ch++) {
+                const Sym *f[16], *rest = NULL;
+                int nf = 0, k, nrest = 0;
+                factors(fc[ch], f, &nf);
+                for (k = 0; k < nf; k++) if (f[k]->kind != Y_TEXC) { rest = f[k]; nrest++; }
+                ok = nrest == 1 && match_light(rest, coef[ch], &attr[ch], &kd[ch], &ka[ch]);
+            }
+            for (ch = 1; ch < 3 && ok; ch++)
+                ok = attr[ch] == attr[0] && !memcmp(coef[ch], coef[0], sizeof(coef[0]));
+            if (ok) {
+                plan->lit = 1;
+                plan->lit_attr = attr[0];
+                memcpy(plan->light_dir, coef[0], sizeof(plan->light_dir));
+                for (ch = 0; ch < 3; ch++) { plan->light_diffuse[ch] = kd[ch]; plan->light_ambient[ch] = ka[ch]; }
+            }
+        }
         if (tex && plain_rgb) approx(e, "a texture on some colour channels only");
         if (tex && !textured_rgb) approx(e, "a texture's alpha only");
         if (tex) plan->sampler_unit = tex->idx;
@@ -1932,7 +1985,11 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         else for (i = 0; i < 4; i++) sym_scan(pos[i], &used, &h, &budget);
         sym_scan(p->uv[0], &used, &h, &budget);
         sym_scan(p->uv[1], &used, &h, &budget);
-        for (i = 0; i < 4; i++) sym_scan(fc[i], &used, &h, &budget);
+        if (plan->lit) {   /* the colour is the GE's lighting: the normals are what the vertices carry */
+            used |= 1u << plan->lit_attr;
+            h ^= 0x9e3779b97f4a7c15ull ^ (uint64_t)plan->lit_attr;
+            sym_scan(fc[3], &used, &h, &budget);
+        } else for (i = 0; i < 4; i++) sym_scan(fc[i], &used, &h, &budget);
         h ^= (uint64_t)plan->matrix_ok << 1 ^ (uint64_t)(loc + 1) << 3;
         plan->attribs_used = used;
         plan->vertex_hash = budget < 0 ? 0 : h;   /* 0: too large to be sure of */

@@ -65,6 +65,10 @@ typedef struct GlslPlan {
     int tex_alpha;              /* the texture's alpha counts (else only its colour) */
     int alpha_test;             /* the fragment is dropped when alpha fails: a GL comparison (GL_LESS...) */
     unsigned alpha_func; float alpha_ref;
+    /* lighting the GE does itself: colour = clamp(ambient + max(0, normal . light) x diffuse), normal an
+     * attribute times a matrix: the light's direction in the attribute's own space, the colours per channel */
+    int lit, lit_attr;
+    float light_dir[3], light_diffuse[3], light_ambient[3];
     unsigned attribs_used;      /* bit per attribute location read (the position's, colour's and coordinates') */
     unsigned long long vertex_hash;   /* what the per-vertex values are worked out from: the same hash, the same
                                          vertices for the same attributes (meshes) */
