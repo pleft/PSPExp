@@ -2239,19 +2239,20 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
  * loss from them (PSPEXP_FOCUS=host keeps SDL's real focus events). */
 static int hide_focus_loss(void)
 {
-    static int checked, hide;
-    if (!checked) { checked = 1; hide = S.active && !(getenv("PSPEXP_FOCUS") && !strcmp(getenv("PSPEXP_FOCUS"), "host")); }
-    return hide;
+    static int checked, host;
+    if (!checked) { checked = 1; host = getenv("PSPEXP_FOCUS") && !strcmp(getenv("PSPEXP_FOCUS"), "host"); }
+    return S.active && !host;   /* (asked again each time: a game may ask before the link is up) */
 }
 
 /* the same for games that ask the window rather than watch events (NXEngine
- * pauses while its window lacks input focus, which a headless one never has) */
+ * pauses while its window lacks input focus, which a headless one never has;
+ * Quakespasm stops swapping while its window is hidden, which pspexp-run's is) */
 HOOK(Uint32, SDL_GetWindowFlags, (SDL_Window *win))
 {
     Uint32 f = REAL(SDL_GetWindowFlags)(win);
     if (win && win == S.gl_window) f |= SDL_WINDOW_OPENGL;   /* as asked, though SDL made it without */
-    if (hide_focus_loss() && win && win == S.win)
-        f = (f | SDL_WINDOW_SHOWN | SDL_WINDOW_INPUT_FOCUS) & ~(Uint32)(SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN);
+    if (hide_focus_loss() && win && (win == S.win || win == S.gl_window))
+        f = (f | SDL_WINDOW_SHOWN | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MOUSE_FOCUS) & ~(Uint32)(SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN);
     return f;
 }
 
