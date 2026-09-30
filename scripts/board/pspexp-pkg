@@ -16,6 +16,9 @@
 #   pspexp-pkg list                        installed
 #   pspexp-pkg available                   the catalogue: id|recipe version|state|category|title|description
 #   pspexp-pkg update                      the catalogue and apt's lists
+#   pspexp-pkg check                       update, then "updates=N new=M": installed recipes that
+#                                          changed, and recipes new since the last check (the
+#                                          console runs it at start and daily, and says so)
 #   pspexp-pkg recover                     finish or clean up an interrupted operation (the console
 #                                          runs it at every start)
 #
@@ -408,6 +411,18 @@ state_of() {   # installed | update | new | broken
 	[ "$m" = "$(rget "$CAT/$1/recipe" package version)" ] && echo installed || echo update
 }
 
+# the catalogue for this board: id|recipe version|state|category|title|description
+available() {
+	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
+	for r in "$CAT"/*/recipe; do
+		[ -f "$r" ] || continue
+		id=$(basename "$(dirname "$r")")
+		[ -n "$(rget "$r" "$FAMILY" apt)$(rget "$r" "$FAMILY" build)" ] || continue   # nothing for this board
+		w=$(rget "$r" "$FAMILY" warn)   # e.g. too heavy for this board: said first
+		printf '%s|%s|%s|%s|%s|%s%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)"
+	done
+}
+
 cmd="$1"; [ $# -gt 0 ] && shift
 case "$cmd" in
 install)
@@ -441,14 +456,16 @@ list)
 		d=${d%/}
 		printf '%-14s %-10s %s\n' "$(basename "$d")" "$(field "$d" version)" "$(field "$d" title)"
 	done ;;
-available)
-	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
-	for r in "$CAT"/*/recipe; do
-		[ -f "$r" ] || continue
-		id=$(basename "$(dirname "$r")")
-		[ -n "$(rget "$r" "$FAMILY" apt)$(rget "$r" "$FAMILY" build)" ] || continue   # nothing for this board
-		w=$(rget "$r" "$FAMILY" warn)   # e.g. too heavy for this board: said first
-		printf '%s|%s|%s|%s|%s|%s%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)"
-	done ;;
-*) echo "usage: pspexp-pkg install ID|FILE.tar.gz... | remove ID... | upgrade | list | available | update | recover" >&2; exit 2 ;;
+available) available ;;
+check)
+	# the recipes this board is offered, before the update: the first check's baseline
+	seen="$STATE/seen-recipes"
+	[ -f "$seen" ] || { available | cut -d'|' -f1 | sort > "$seen"; }
+	if [ "$FAMILY" = debian ]; then ( lock; $APT_HELPER update >/dev/null 2>&1 ) || { echo "updates=0 new=0 error=update"; exit 1; }; fi
+	list=$(available)
+	new=$(printf '%s\n' "$list" | cut -d'|' -f1 | sort | comm -23 - "$seen" | grep -c . || true)
+	updates=$(printf '%s\n' "$list" | awk -F'|' '$3 == "update"' | grep -c . || true)
+	printf '%s\n' "$list" | cut -d'|' -f1 | grep . | sort > "$seen.new" && mv "$seen.new" "$seen"
+	echo "updates=$updates new=$new" ;;
+*) echo "usage: pspexp-pkg install ID|FILE.tar.gz... | remove ID... | upgrade | list | available | update | check | recover" >&2; exit 2 ;;
 esac

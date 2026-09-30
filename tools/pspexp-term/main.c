@@ -2649,6 +2649,64 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
     return st.result;
 }
 
+/* ---- the catalogue, checked by itself (docs/Package_Manager.md §7) -------------------
+ * Two minutes after start, then daily, when the board has a route out and no test
+ * run holds the console: `pspexp-pkg check` in the background (it updates the
+ * catalogue and apt's lists), then a notice when recipes are new or installed ones
+ * changed. Without it a board only learns of new games when Packages is refreshed. */
+static pid_t g_pkgchk_pid;
+static uint64_t g_pkgchk_next;
+static int g_pkgchk_quiet;
+
+static int board_online(void)
+{
+    FILE *f = fopen("/proc/net/route", "r");
+    char line[256];
+    int yes = 0;
+    if (!f) return 0;
+    while (fgets(line, sizeof(line), f)) { char ifc[32], dst[16]; if (sscanf(line, "%31s %15s", ifc, dst) == 2 && !strcmp(dst, "00000000")) yes = 1; }
+    fclose(f);
+    return yes;
+}
+
+static void pkg_check_tick(uint64_t now)
+{
+    char out[64];
+    snprintf(out, sizeof(out), "/tmp/pspexp-pkgcheck-%d.txt", (int)getuid());
+    if (g_pkgchk_pid > 0) {
+        int st, upd = 0, nw = 0;
+        FILE *f;
+        char msg[160];
+        if (waitpid(g_pkgchk_pid, &st, WNOHANG) != g_pkgchk_pid) return;
+        g_pkgchk_pid = 0;
+        if (!(f = fopen(out, "r"))) return;
+        if (fscanf(f, "updates=%d new=%d", &upd, &nw) == 2 && (upd > 0 || nw > 0)) {
+            if (nw > 0 && upd > 0) snprintf(msg, sizeof(msg), "%d new and %d update%s in Apps > Packages", nw, upd, upd == 1 ? "" : "s");
+            else if (nw > 0) snprintf(msg, sizeof(msg), "%d new in Apps > Packages", nw);
+            else snprintf(msg, sizeof(msg), "%d update%s in Apps > Packages", upd, upd == 1 ? "" : "s");
+            fprintf(stderr, "[pspexp-term] %s\n", msg);
+            if (g_launcher_on) launcher_notice("package-plus", msg);
+        }
+        fclose(f);
+        return;
+    }
+    if (!g_pkgchk_next) g_pkgchk_next = now + 120000000u;
+    if (now < g_pkgchk_next || g_pkgchk_quiet || !g_launcher_on) return;
+    if (!board_online()) { g_pkgchk_next = now + 600000000u; return; }   /* no network: again in 10 minutes */
+    g_pkgchk_next = now + 86400000000ull;
+    if ((g_pkgchk_pid = fork()) == 0) {
+        int fd = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0644), i;
+        if (fd >= 0) { dup2(fd, 1); close(fd); }
+        fd = open("/dev/null", O_WRONLY);
+        if (fd >= 0) { dup2(fd, 2); close(fd); }
+        for (i = 3; i < 1024; i++) close(i);   /* not the PSP link */
+        setsid();
+        execl("/bin/sh", "sh", "-c", "exec pspexp-pkg check", (char *)NULL);
+        _exit(127);
+    }
+    if (g_pkgchk_pid < 0) g_pkgchk_pid = 0;
+}
+
 /* ---- the test-control port (control.c; tests/psp) ------------------------------------ */
 
 static uint64_t g_ctl_frame_us;        /* when the last frame went to the PSP */
@@ -2857,7 +2915,7 @@ static void ctl_step(uint64_t now, int connected)
         return;
     }
     if (!(cmd = ctl_take())) return;
-    if (strcmp(cmd, "end")) launcher_set_test_mode(1);   /* from the first command on: no Restart, Power off or Wi-Fi switch */
+    if (strcmp(cmd, "end")) { launcher_set_test_mode(1); g_pkgchk_quiet = 1; }   /* from the first command on: no Restart, Power off, Wi-Fi switch or catalogue check */
     if (!strncmp(cmd, "press ", 6) || !strncmp(cmd, "hold ", 5)) {
         char what[128] = "";
         int ms = 0;
@@ -2936,6 +2994,7 @@ static void ctl_step(uint64_t now, int connected)
         ctl_reply("ok pong");
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
         launcher_set_test_mode(0);
+        g_pkgchk_quiet = 0;
         ctl_reply("ok");
     } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], ping, end");
 }
@@ -3215,6 +3274,7 @@ int main(int argc, char **argv)
                 if (stat(self, &st) == 0 && (st.st_ino != self_st.st_ino || st.st_mtime != self_st.st_mtime)) { launcher_set_core_updated(); have_self = 0; }
             }
             if (launcher_take_console_restart()) { fprintf(stderr, "[pspexp-term] restarting for the new version\n"); g_quit = 1; }
+            pkg_check_tick(now);
         }
         monitor_set_program(g_launch_pid);
         if (g_view_files) {

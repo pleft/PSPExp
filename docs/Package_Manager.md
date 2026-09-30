@@ -598,7 +598,14 @@ It stays as built, with these changes:
 - **Progress:** a bar while downloading, fed by apt.
 - **Notices:**
   - "Updates available" on the launcher, after a daily `pspexp-pkg update`
-    when the board is online;
+    when the board is online. *Built 2026-09-30:* the console runs
+    `pspexp-pkg check` two minutes after it starts and then daily, when the
+    board has a route out and no test run holds it; `check` updates the
+    catalogue and apt's lists and reports installed recipes that changed
+    and recipes new since the last check (it keeps the ids it has seen in
+    `<root>/state/seen-recipes`); the launcher says "1 new in Apps >
+    Packages", "2 updates in Apps > Packages", or both. Tried on the
+    GameShell: the notice came 2 min 15 s after a restart;
   - "Needs a network: join Wi-Fi in System" when offline.
 
 ## 8. The minimal GameShell image
