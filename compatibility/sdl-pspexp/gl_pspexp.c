@@ -281,6 +281,7 @@ static struct {
     /* enables */
     int depth_test, cull, blend, alpha_test, texture_2d, fog, lighting, color_material, scissor_test, dither;
     int polygon_offset, normalize;
+    float po_factor, po_units;
     int texgen[2]; GLenum texgen_mode[2]; float texgen_obj[2][4], texgen_eye[2][4];   /* s, t */
     int active_unit;
     /* state values */
@@ -689,8 +690,17 @@ static void build_state(PspExp3DState *s, GlTex *tex)
         s->tex_env_lights = (PSPEXP_3D_LIGHTS - 2) | (PSPEXP_3D_LIGHTS - 1) << 4;
     }
     to_psp_rect(G.viewport, &s->viewport_x, &s->viewport_y, &s->viewport_w, &s->viewport_h, 1);
-    s->depth_near = (uint16_t)lroundf(65535.0f * (1.0f - G.depth_near));
-    s->depth_far = (uint16_t)lroundf(65535.0f * (1.0f - G.depth_far));
+    {   /* GL's 0..1 onto the GE's 65535 (near) .. 0, a little short of 65535: glPolygonOffset has no GE
+         * counterpart, so an offset draw is moved into that headroom instead (a decal on a floor, a car's
+         * shadow on the road: with the 16-bit depth buffer, they flicker against it without) */
+        const float room = 1024.0f, scale = (65535.0f - room) / 65535.0f;
+        float n = 65535.0f * (1.0f - G.depth_near) * scale, f = 65535.0f * (1.0f - G.depth_far) * scale, bias = 0;
+        if (G.polygon_offset) bias = -(G.po_factor * 128.0f + G.po_units * 16.0f);   /* negative factor, units: nearer */
+        if (bias > room) bias = room;
+        n += bias; f += bias;
+        s->depth_near = (uint16_t)lroundf(n < 0 ? 0 : n > 65535 ? 65535 : n);
+        s->depth_far = (uint16_t)lroundf(f < 0 ? 0 : f > 65535 ? 65535 : f);
+    }
     if (G.scissor_test) to_psp_rect(G.scissor, &s->scissor_x, &s->scissor_y, &s->scissor_w, &s->scissor_h, 0);
     else {
         int all[4];
@@ -3195,7 +3205,7 @@ GLAPI(void, glScissor, (GLint x, GLint y, GLsizei w, GLsizei h))
     ensure_init();
     G.scissor[0] = x; G.scissor[1] = y; G.scissor[2] = w; G.scissor[3] = h;
 }
-GLAPI(void, glPolygonOffset, (GLfloat f, GLfloat u)) { (void)f; (void)u; }
+GLAPI(void, glPolygonOffset, (GLfloat f, GLfloat u)) { ensure_init(); G.po_factor = f; G.po_units = u; }
 GLAPI(void, glLineWidth, (GLfloat w)) { ensure_init(); G.line_width = w; }
 GLAPI(void, glPointSize, (GLfloat s)) { ensure_init(); G.point_size = s; }
 GLAPI(void, glPolygonMode, (GLenum face, GLenum mode)) { (void)face; if (mode != GL_FILL) unsupported("polygon modes other than fill"); }
