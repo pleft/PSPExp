@@ -756,6 +756,18 @@ The board sends the state, matrices and lights only when they change (and once p
 
 **Polygon offset.** The GE has none, and with its 16-bit depth buffer a decal on a surface flickers (openMrac's car shadow on the road). Draws use GL's depth range a little short of the GE's near end, and an offset draw is moved into that headroom by its factor and units.
 
+**Played on the PSP** (PSP-1000 over USB from the Pi 400, Debian's packages unmodified; status on 2026-09-30):
+
+| Game | GL | fps | Notes |
+|---|---|---|---|
+| gl-demo (ours) | 1.x, 2 | 59.9 | every path: immediate mode, arrays, display lists, fog, shaders, `GLDEMO_CUBE` reflections |
+| Chromium B.S.U. | 1.x | 36–43 | `-w -v 0`, `PSPEXP_NUB=mouse`; its controls needed the input fixes (SDL layer README) |
+| Neverball | 1.x | 30 | nothing vanishes since triangles are cut on the board; 20 ms of GE time (fill) is the limit |
+| SuperTux | 2 | 52–58 | `--window --geometry 480x272` (else its text is tiny), `PSPEXP_JOYSTICK=0`; sound through OpenAL's pipe |
+| Numptyphysics | 2 | 59.9 | its scene through a render target; pen strokes as meshes by content |
+| Widelands | 2 | 30 | loads (hundreds of images into a render target), its image shader as near as the GE can |
+| openMrac | 2 | 59.9 | `--skip-settings`, keys; lighting on the GE, reflections as sphere maps, shadow without flicker; the first seconds of a race slower |
+
 **Next.** Fewer bytes per vertex (16-bit positions and texture coordinates, 8-bit normals and colours: about half); display lists as meshes (Chromium B.S.U. and older engines draw through them or immediate mode); Neverball's 20 ms of GE time (fill: large blended or filtered polygons); more games (Quakespasm, ioquake3, Pinball, Trigger Rally); shaders that combine two textures; cube maps whose direction is not a reflection about a normal (a skybox drawn through one); a shorter warm-up before a churning shader draw is streamed (the first seconds of a race are slower); per-vertex branches (Widelands' image flavours) resolved per draw; the SDL layer's render targets onto `3D_TARGET`; the SDL executor has no 3D, so the Mac stand-in shows nothing of these programs (PPSSPP and the PSP do).
 
 ---

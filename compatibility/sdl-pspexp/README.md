@@ -49,11 +49,14 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 | `SDL_UpdateWindowSurface(Rects)` (programs without a renderer) | the window surface is shrunk to the PSP size and streamed as a texture every present (≈270 KB per frame at 480x272) |
 | `SDL_OpenAudio`, `SDL_OpenAudioDevice` (callback or `SDL_QueueAudio`) | the mixed output is converted to 44.1 kHz stereo and streamed (`AUDIO_STREAM`); the host device keeps playing unless `PSPEXP_LOCAL_AUDIO=0` |
 | PSP controls | a virtual game controller ("PSP (PSPExp)": a/b/x/y = cross/circle/square/triangle, shoulders, start/back, d-pad, left stick = nub) when the program initialised joysticks, plus keyboard events per `PSPEXP_KEYS` |
+| `SDL_GetKeyboardState`, `SDL_GetMouseState`, `SDL_GetRelativeMouseState` | answered by the layer with what the PSP's buttons and nub hold (events pushed from the PSP never reach SDL's own state: games that poll it saw a held button as one press) |
+| `SDL_WarpMouseInWindow` | the nub's pointer moves there (games that recentre the mouse every frame and read the distance); mouse motion events carry `xrel` / `yrel` |
+| held buttons, as keys | repeat as a keyboard does: after 400 ms, every 40 ms |
 
 Not mirrored: rotation, `SDL_RenderGeometry`, lines drawn into a render
-target, reading a render target back (`SDL_RenderReadPixels`), OpenGL
-beyond 1.x (shaders), Vulkan, and SDL 1.2 programs. OpenGL 1.x is drawn:
-see below.
+target, reading a render target back (`SDL_RenderReadPixels`), OpenGL 3
+and later (core profiles), Vulkan, and SDL 1.2 programs. OpenGL 1.x and 2
+(shaders, read rather than run) are drawn: see below.
 
 The PSP is double-buffered: a program that never clears and redraws only
 the parts that changed (relying on the previous frame staying put) shows

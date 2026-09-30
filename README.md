@@ -115,7 +115,8 @@ replayed, so pixel-art ports that upscale through one work too. OpenGL 1.x
 programs are drawn by the PSP's GE (`build/host/gl-demo` to try it;
 Chromium B.S.U. and Neverball from Debian run), and GL 2 shaders are read
 and turned into what the GE can do (SuperTux, Widelands, openMrac,
-Numptyphysics).
+Numptyphysics). What has been played on the PSP, how fast and with which
+options: `docs/PSPExp_Technical_Architecture.md` §12a.
 
 Doom is the showcase: `brew install chocolate-doom`, unzip a Freedoom
 release into `../doom/`, and
