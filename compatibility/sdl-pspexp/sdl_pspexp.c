@@ -190,6 +190,10 @@ static struct {
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
     int nub_mouse, nub_keys, hide_window, cursor_hidden; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
+    /* what injected input holds: SDL's own keyboard and mouse state never sees
+     * pushed events, and games that poll it (Chromium B.S.U.) would not */
+    Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y;
+    Uint32 held_since[16], last_repeat[16];
     SDL_Keycode keys[16][3];           /* up to three keys per PSP button ("return+y") */
     Uint32 quit_hold; int quit_sent;   /* START + SELECT held: leave the game */
     int vjoy;                          /* virtual joystick device index, -1 none */
@@ -1344,6 +1348,22 @@ static void push_key(SDL_Keycode sym, int down)
     ev.key.keysym.sym = sym;
     ev.key.keysym.scancode = SDL_GetScancodeFromKey(sym);
     ev.key.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
+    if (ev.key.keysym.scancode < SDL_NUM_SCANCODES) S.kheld[ev.key.keysym.scancode] = (Uint8)(down != 0);
+    SDL_PushEvent(&ev);
+}
+
+/* a held key's repeats, as a keyboard sends them (games that move a step per KEYDOWN) */
+static void push_key_repeat(SDL_Keycode sym)
+{
+    SDL_Event ev;
+    if (sym == SDLK_UNKNOWN) return;
+    SDL_zero(ev);
+    ev.type = SDL_KEYDOWN;
+    ev.key.state = SDL_PRESSED;
+    ev.key.repeat = 1;
+    ev.key.keysym.sym = sym;
+    ev.key.keysym.scancode = SDL_GetScancodeFromKey(sym);
+    ev.key.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
     SDL_PushEvent(&ev);
 }
 
@@ -1356,6 +1376,7 @@ static void push_mouse_button(Uint8 button, int down)
     ev.button.button = button;
     ev.button.clicks = 1;
     ev.button.x = (int)S.px; ev.button.y = (int)S.py;
+    if (down) S.mbuttons |= SDL_BUTTON(button); else S.mbuttons &= ~(Uint32)SDL_BUTTON(button);
     ev.button.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
     SDL_PushEvent(&ev);
 }
@@ -1404,11 +1425,19 @@ static void feed_input(void)
     }
     for (i = 0; i < B_COUNT; i++) {
         int k;
+        Uint32 now = SDL_GetTicks();
         if (S.nub_mouse && (i == B_CROSS || i == B_CIRCLE)) continue;
+        if (pressed & BUTTON_BITS[i]) { S.held_since[i] = now ? now : 1; S.last_repeat[i] = now; }
+        if (released & BUTTON_BITS[i]) S.held_since[i] = 0;
         for (k = 0; k < 3; k++) {
             if (S.keys[i][k] == SDLK_UNKNOWN) continue;
             if (pressed & BUTTON_BITS[i]) push_key(S.keys[i][k], 1);
             if (released & BUTTON_BITS[i]) push_key(S.keys[i][k], 0);
+        }
+        /* held: repeats after 400 ms, every 40 ms (a keyboard's) */
+        if (S.held_since[i] && (in->buttons & BUTTON_BITS[i]) && now - S.held_since[i] >= 400 && now - S.last_repeat[i] >= 40) {
+            S.last_repeat[i] = now;
+            for (k = 0; k < 3; k++) push_key_repeat(S.keys[i][k]);
         }
     }
     /* START + SELECT held: the way out of any game. After 1 s the game is
@@ -1451,12 +1480,15 @@ static void feed_input(void)
         int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
         S.ptick = now;
         if (abs(ax) > 35 || abs(ay) > 35) {
-            float fx = ax / 127.0f, fy = ay / 127.0f, speed = 300.0f * dt;
+            float fx = ax / 127.0f, fy = ay / 127.0f, speed = 300.0f * dt, ox = S.px, oy = S.py;
             SDL_Event ev;
             S.px = fminf(fmaxf(S.px + fx * fabsf(fx) * speed, 0), (float)(S.win_w - 1));
             S.py = fminf(fmaxf(S.py + fy * fabsf(fy) * speed, 0), (float)(S.win_h - 1));
+            S.rel_x += S.px - ox; S.rel_y += S.py - oy;
             SDL_zero(ev);
             ev.type = SDL_MOUSEMOTION; ev.motion.x = (int)S.px; ev.motion.y = (int)S.py;
+            ev.motion.xrel = (int)lroundf(S.px - ox); ev.motion.yrel = (int)lroundf(S.py - oy);
+            ev.motion.state = S.mbuttons;
             ev.motion.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
             SDL_PushEvent(&ev);
         }
@@ -1465,6 +1497,46 @@ static void feed_input(void)
         if (pressed & PSPEXP_BUTTON_CIRCLE) push_mouse_button(SDL_BUTTON_RIGHT, 1);
         if (released & PSPEXP_BUTTON_CIRCLE) push_mouse_button(SDL_BUTTON_RIGHT, 0);
     }
+}
+
+/* ---- hooks: the input state games poll ------------------------------------------ */
+
+HOOK(const Uint8 *, SDL_GetKeyboardState, (int *numkeys))
+{
+    static Uint8 merged[SDL_NUM_SCANCODES];
+    int n = 0, i;
+    const Uint8 *real = REAL(SDL_GetKeyboardState)(&n);
+    if (numkeys) *numkeys = n;
+    if (!S.active) return real;
+    for (i = 0; i < n && i < SDL_NUM_SCANCODES; i++) merged[i] = (Uint8)(real[i] | S.kheld[i]);
+    return merged;
+}
+
+HOOK(Uint32, SDL_GetMouseState, (int *x, int *y))
+{
+    if (!S.nub_mouse || !S.active) return REAL(SDL_GetMouseState)(x, y);
+    if (x) *x = (int)S.px;
+    if (y) *y = (int)S.py;
+    return S.mbuttons;
+}
+
+HOOK(Uint32, SDL_GetRelativeMouseState, (int *x, int *y))
+{
+    int rx, ry;
+    if (!S.nub_mouse || !S.active) return REAL(SDL_GetRelativeMouseState)(x, y);
+    rx = (int)lroundf(S.rel_x); ry = (int)lroundf(S.rel_y);
+    S.rel_x -= (float)rx; S.rel_y -= (float)ry;
+    if (x) *x = rx;
+    if (y) *y = ry;
+    return S.mbuttons;
+}
+
+/* A game that recentres the mouse each frame and reads how far it moved:
+ * the nub's pointer is put where the game puts the mouse. */
+HOOK(void, SDL_WarpMouseInWindow, (SDL_Window *win, int x, int y))
+{
+    if (S.nub_mouse && S.active) { S.px = (float)x; S.py = (float)y; }
+    REAL(SDL_WarpMouseInWindow)(win, x, y);
 }
 
 /* ---- hooks: window / renderer ------------------------------------------------ */
