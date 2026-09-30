@@ -239,7 +239,7 @@ typedef struct GlTex {
     uint32_t *face[6];           /* a cube map's faces, RGBA8 (only here: shaders' reflections are made from them) */
     float prescale;              /* rgba holds its colours times this, clamped (10-bit uploads: 4, keeping their bits) */
     float scale;                 /* what the draws want them times (a lightmap multiplied in more than twice over) */
-    int part, part_y0, part_y1;  /* dirty only in these rows (glTexSubImage2D): sent as a patch when the PSP can */
+    int part, part_x0, part_x1, part_y0, part_y1;  /* dirty only in this rectangle (glTexSubImage2D): sent as a patch when the PSP can */
     int sent_alpha, sent_mul;    /* how it was sent last: 4444 or 5650, its colours' factor */
     int face_w, face_h; uint32_t face_ver;
     struct GlTex *next;
@@ -328,7 +328,9 @@ static struct {
     float sh_proj[16];
     GlTex *sh_tex;
     int sh_env, sh_env_alpha;   /* ...a pass drawing a cube map as a sphere map (the GE's environment map) */
-    int sh_uvset, sh_replace;   /* ...a pass with another set of texture coordinates (glsl_plan_uv), its texture as is */
+    int sh_uvset, sh_replace;
+    float pk_scale;             /* a draw with 16-bit positions: they are sent times this, the modelview sent over it (0: floats) */
+    float pk_next;              /* ...chosen by draw_vertices for the prepare that follows (which takes it) */   /* ...a pass with another set of texture coordinates (glsl_plan_uv), its texture as is */
     float sh_env_axes[2][3];    /* ...its axes: the eye's x and y on the normals */
     /* GL 2: the generic vertex attributes (of the vertex array object bound), the program in use */
     Array gattr[16]; int gnorm[16]; float gcur[16][4];
@@ -948,34 +950,40 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     t->part = 0;
     if (t->rt || !t->rgba || t->w <= 0 || t->h <= 0) return;   /* a render target: drawn on the PSP */
     if (part && t->handle && t->psp_bytes == bytes && pw == t->w && ph == t->h && mul == t->sent_mul && pspexp_patch_supported(ctx)) {
-        /* only some rows changed: their 8-row strips, which the swizzled layout keeps as whole runs of bytes */
-        int y0 = t->part_y0 & ~7, y1 = (t->part_y1 + 7) & ~7, ok = 1;
-        uint32_t off, len;
-        uint16_t *band;
+        /* only a rectangle changed: its 8 x 8 blocks (16-bit texels: 16 bytes by 8 rows each), which the
+         * swizzled layout keeps left to right in each 8-row strip: one run of bytes per strip */
+        int x0 = t->part_x0 & ~7, x1 = (t->part_x1 + 7) & ~7, y0 = t->part_y0 & ~7, y1 = (t->part_y1 + 7) & ~7, ok = 1, by;
+        uint32_t sent = 0;
+        if (x0 < 0) x0 = 0;
         if (y0 < 0) y0 = 0;
+        if (x1 > pw) x1 = pw;
         if (y1 > ph) y1 = ph;
-        off = (uint32_t)y0 * (uint32_t)pw * 2u; len = (uint32_t)(y1 - y0) * (uint32_t)pw * 2u;
-        if (y1 > y0 && (band = (uint16_t *)malloc(len))) {
-            for (y = y0; y < y1 && ok; y++)
-                for (x = 0; x < pw; x++) {
-                    uint32_t px = t->rgba[(size_t)y * (size_t)t->w + (size_t)x], r = px & 0xFF, g = (px >> 8) & 0xFF, b = (px >> 16) & 0xFF, a = px >> 24;
-                    if (!t->sent_alpha && a != 255) { ok = 0; break; }   /* sent without alpha, which it has now */
-                    if (mul != 256) {
-                        r = r * (uint32_t)mul >> 8; g = g * (uint32_t)mul >> 8; b = b * (uint32_t)mul >> 8;
-                        r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
+        if (!t->sent_alpha)   /* sent without alpha, which it has now: whole again */
+            for (y = y0; y < y1 && ok; y++) for (x = x0; x < x1; x++) if ((t->rgba[(size_t)y * (size_t)t->w + (size_t)x] >> 24) != 255) { ok = 0; break; }
+        for (by = y0; ok && by < y1; by += 8) {
+            uint32_t off = (uint32_t)by * (uint32_t)pw * 2u + (uint32_t)(x0 / 8) * 128u, len = (uint32_t)((x1 - x0) / 8) * 128u;
+            uint16_t *o;
+            int bx, r, c;
+            if (!(dst = pspexp_patch_texture_begin(ctx, t->handle, off, len))) { ok = 0; break; }
+            o = (uint16_t *)(void *)dst;
+            for (bx = x0; bx < x1; bx += 8)
+                for (r = 0; r < 8; r++)
+                    for (c = 0; c < 8; c++) {
+                        uint32_t px = t->rgba[(size_t)(by + r) * (size_t)t->w + (size_t)(bx + c)], rr = px & 0xFF, g = (px >> 8) & 0xFF, b = (px >> 16) & 0xFF, a = px >> 24;
+                        if (mul != 256) {
+                            rr = rr * (uint32_t)mul >> 8; g = g * (uint32_t)mul >> 8; b = b * (uint32_t)mul >> 8;
+                            rr = rr > 255 ? 255 : rr; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
+                        }
+                        *o++ = t->sent_alpha ? pspexp_color_4444((uint8_t)rr, (uint8_t)g, (uint8_t)b, (uint8_t)a) : pspexp_color_5650((uint8_t)rr, (uint8_t)g, (uint8_t)b);
                     }
-                    band[(size_t)(y - y0) * (size_t)pw + (size_t)x] = t->sent_alpha ? pspexp_color_4444((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a)
-                                                                                 : pspexp_color_5650((uint8_t)r, (uint8_t)g, (uint8_t)b);
-                }
-            if (ok && (dst = pspexp_patch_texture_begin(ctx, t->handle, off, len))) {
-                pspexp_swizzle(dst, band, (uint32_t)pw * 2u, (uint32_t)(y1 - y0));
-                pspexp_patch_texture_commit(ctx);
-                free(band);
-                if (G.log >= 2) gl_logf("texture %u patched: rows %d..%d (%u bytes)", t->name, y0, y1, len);
-                return;
-            }
-            free(band);
+            pspexp_patch_texture_commit(ctx);
+            sent += len;
         }
+        if (ok && y1 > y0 && x1 > x0) {
+            if (G.log >= 2) gl_logf("texture %u patched: %d,%d .. %d,%d (%u bytes)", t->name, x0, y0, x1, y1, sent);
+            return;
+        }
+        /* (a strip could not go: the whole texture, below) */
     }
     if (alpha) {   /* all opaque after all (lightmaps are RGBA): 5650, more bits of colour */
         size_t i, n = (size_t)t->w * (size_t)t->h;
@@ -1053,6 +1061,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     PspExpContext *ctx = shim_gl_frame();
     GlTex *tex = NULL;
     PspExp3DState st;
+    G.pk_scale = G.pk_next; G.pk_next = 0;   /* this draw's, or none */
     if (!ctx) return NULL;
     if (shim_gl_reconnects() != G.reconnects) {   /* the PSP has none of it */
         GlTex *t;
@@ -1100,6 +1109,14 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     {
     static float identity[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
     const float *proj = G.sh_active ? G.sh_proj : G.proj[G.proj_top], *mv = G.sh_active ? identity : G.mv[G.mv_top];
+    float mvs[16];
+    if (G.pk_scale > 0) {   /* positions sent scaled: the modelview undoes it */
+        int q;
+        float inv = 1.0f / G.pk_scale;
+        memcpy(mvs, mv, sizeof(mvs));
+        for (q = 0; q < 12; q++) mvs[q] *= inv;
+        mv = mvs;
+    }
     if (!G.matrices_sent || memcmp(G.sent_proj, proj, sizeof(G.sent_proj)) ||
         memcmp(G.sent_mv, mv, sizeof(G.sent_mv)) || memcmp(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex))) {
         memcpy(G.sent_proj, proj, sizeof(G.sent_proj));
@@ -1134,14 +1151,27 @@ static int texture_matrix_identity(void)
 /* Send n vertices as one GE primitive (already split to fit). */
 static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uint8_t *data, int n);
 
+static int16_t s16(float f) { f *= 32768.0f; return (int16_t)(f >= 32767.0f ? 32767 : f <= -32768.0f ? -32768 : lroundf(f)); }
+static uint16_t u16(float f) { f *= 32768.0f; return (uint16_t)(f >= 65535.0f ? 65535 : f <= 0 ? 0 : lroundf(f)); }
+
+/* n vertices in the layout of `vt`: floats, or (PSPEXP_FEATURE_3D16) 16-bit coordinates and positions,
+ * the positions times G.pk_scale (the matrices sent undo it) */
 static void pack(uint8_t *out, uint32_t vt, const Vtx *v, int n)
 {
+    uint32_t size = pspexp_3d_vertex_size(vt);
     int i;
-    for (i = 0; i < n; i++) {
-        if (vt & PSPEXP_3D_VT_TEXTURE) { memcpy(out, v[i].t, 8); out += 8; }
-        if (vt & PSPEXP_3D_VT_COLOR) { memcpy(out, &v[i].c, 4); out += 4; }
-        if (vt & PSPEXP_3D_VT_NORMAL) { memcpy(out, v[i].n, 12); out += 12; }
-        memcpy(out, v[i].p, 12); out += 12;
+    for (i = 0; i < n; i++, out += size) {
+        uint8_t *o = out;
+        if ((vt & 3u) == 3u) { memcpy(o, v[i].t, 8); o += 8; }
+        else if (vt & 3u) { uint16_t t[2] = { u16(v[i].t[0]), u16(v[i].t[1]) }; memcpy(o, t, 4); o += 4; }
+        if (vt & PSPEXP_3D_VT_COLOR) { memcpy(o, &v[i].c, 4); o += 4; }
+        if (vt & PSPEXP_3D_VT_NORMAL) { memcpy(o, v[i].n, 12); o += 12; }
+        if ((vt & PSPEXP_3D_VT_POSITION) == PSPEXP_3D_VT_POSITION) memcpy(o, v[i].p, 12);
+        else {
+            int16_t q[3] = { s16(v[i].p[0] * G.pk_scale), s16(v[i].p[1] * G.pk_scale), s16(v[i].p[2] * G.pk_scale) };
+            memcpy(o, q, 6);
+            if (o + 6 < out + size) memset(o + 6, 0, (size_t)(out + size - (o + 6)));
+        }
     }
 }
 
@@ -1169,12 +1199,8 @@ static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *
     }
     out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n);
     if (!out) return;
-    for (i = 0; i < n; i++) {
-        if (vt & PSPEXP_3D_VT_TEXTURE) { memcpy(out, v[i].t, 8); out += 8; }
-        if (vt & PSPEXP_3D_VT_COLOR) { memcpy(out, &v[i].c, 4); out += 4; }
-        if (vt & PSPEXP_3D_VT_NORMAL) { memcpy(out, v[i].n, 12); out += 12; }
-        memcpy(out, v[i].p, 12); out += 12;
-    }
+    pack(out, vt, v, n);
+    (void)i;
     G.draws++;
     G.vertices += (unsigned)n;
 }
@@ -1344,6 +1370,23 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
     uint8_t prim;
     int per, i;
     if (n <= 0 || (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES)) return;
+    G.pk_next = 0;
+    if (n >= 16 && !((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || (G.texgen[0] && G.texture_2d && !G.sh_active)) &&
+        (ctx = shim_gl_frame()) && pspexp_3d16_supported(ctx) && !getenv("PSPEXP_GL_FLOATS")) {
+        /* unlit (the GE does not renormalise normals): 16-bit positions, over a power of two that fits them */
+        float mx = 0;
+        for (i = 0; i < n; i++) {
+            float a = fabsf(v[i].p[0]), b = fabsf(v[i].p[1]), c = fabsf(v[i].p[2]);
+            if (a > mx) mx = a;
+            if (b > mx) mx = b;
+            if (c > mx) mx = c;
+        }
+        if (mx > 0 && mx < 1e6f && mx > 1e-6f) {
+            int e;
+            frexpf(mx, &e);   /* mx < 2^e */
+            G.pk_next = ldexpf(1.0f, -e);
+        }
+    }
     if (!(ctx = prepare(&tex))) return;
     if (G.log >= 2)
         gl_logf("draw %s mode %u n %d tex %u(%s %dx%d) colour %08x blend %d %x/%x depth %d cull %d light %d alpha %d fog %d env %x uv %.3f,%.3f %.3f,%.3f pos %.2f,%.2f,%.2f",
@@ -1354,6 +1397,7 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
     if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV && !G.sh_env) vt |= PSPEXP_3D_VT_TEXTURE;
     if ((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (G.sh_lit) vt &= ~(uint32_t)PSPEXP_3D_VT_COLOR;   /* lit: the material's colour */
+    if (G.pk_scale > 0) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_POSITION) | PSPEXP_3D_VT_POSITION16;
     if (tex && G.tc == TC_HOST && (G.texgen[0] || G.texgen[1])) {   /* generated coordinates, per vertex, here */
         const float *m = G.mv[G.mv_top];
         for (i = 0; i < n; i++) {
@@ -1396,6 +1440,10 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
             v[i].t[1] = m[1] * s + m[5] * t + m[13];
             if (q != 0.0f && q != 1.0f) { v[i].t[0] /= q; v[i].t[1] /= q; }
         }
+    }
+    if (G.pk_scale > 0 && (vt & 3u) == 3u) {   /* the coordinates too, when all lie in 0 .. 2 (the GE's unsigned 16 bits) */
+        for (i = 0; i < n; i++) if (!(v[i].t[0] >= 0 && v[i].t[0] < 1.999f && v[i].t[1] >= 0 && v[i].t[1] < 1.999f)) break;
+        if (i == n) vt = (vt & ~3u) | PSPEXP_3D_VT_TEXTURE16;
     }
     switch (mode) {
     case GL_POINTS: prim = GU_POINTS; per = 1; break;
@@ -3887,7 +3935,14 @@ static int format_has_alpha(GLint internal, GLenum format)
 }
 
 /* Copy a client rectangle into the texture's RGBA8 level 0. */
+/* The texels written; `changed` (x0, y0, x1, y1), when given, the rectangle that differs from before
+ * (x1 <= x0: nothing did). */
+static void store_pixels_changed(GlTex *t, int x0, int y0, int w, int h, GLenum format, GLenum type, const void *pixels, int *changed);
 static void store_pixels(GlTex *t, int x0, int y0, int w, int h, GLenum format, GLenum type, const void *pixels)
+{
+    store_pixels_changed(t, x0, y0, w, h, format, type, pixels, NULL);
+}
+static void store_pixels_changed(GlTex *t, int x0, int y0, int w, int h, GLenum format, GLenum type, const void *pixels, int *changed)
 {
     const uint8_t *base = (const uint8_t *)pixels;
     int bpp = pixel_bytes(format, type), rowlen = G.unpack_row_length > 0 ? G.unpack_row_length : w, x, y;
@@ -3896,9 +3951,19 @@ static void store_pixels(GlTex *t, int x0, int y0, int w, int h, GLenum format, 
     if (!base) return;
     row = (row + (size_t)al - 1) / (size_t)al * (size_t)al;
     base += (size_t)G.unpack_skip_rows * row + (size_t)G.unpack_skip_pixels * (size_t)bpp;
+    if (changed) { changed[0] = x0 + w; changed[1] = y0 + h; changed[2] = x0; changed[3] = y0; }
     for (y = 0; y < h; y++)
-        for (x = 0; x < w; x++)
-            t->rgba[(size_t)(y0 + y) * (size_t)t->w + (size_t)(x0 + x)] = read_pixel(base + (size_t)y * row + (size_t)x * (size_t)bpp, format, type);
+        for (x = 0; x < w; x++) {
+            uint32_t *d = &t->rgba[(size_t)(y0 + y) * (size_t)t->w + (size_t)(x0 + x)];
+            uint32_t px = read_pixel(base + (size_t)y * row + (size_t)x * (size_t)bpp, format, type);
+            if (changed && px != *d) {
+                if (x0 + x < changed[0]) changed[0] = x0 + x;
+                if (y0 + y < changed[1]) changed[1] = y0 + y;
+                if (x0 + x + 1 > changed[2]) changed[2] = x0 + x + 1;
+                if (y0 + y + 1 > changed[3]) changed[3] = y0 + y + 1;
+            }
+            *d = px;
+        }
 }
 
 /* A cube map's face (GL_TEXTURE_CUBE_MAP_POSITIVE_X + f), level 0: kept here only. The GE has
@@ -3974,10 +4039,19 @@ GLAPI(void, glTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsi
     if (target != GL_TEXTURE_2D || level != 0 || G.active_unit < 0 || G.active_unit >= 8) return;
     if (!(t = find_texture(G.units[G.active_unit])) || !t->rgba) { set_error(GL_INVALID_OPERATION); return; }
     if (x < 0 || y < 0 || x + w > t->w || y + h > t->h) { set_error(GL_INVALID_VALUE); return; }
-    store_pixels(t, x, y, w, h, format, type, pixels);
-    if (!t->dirty || t->part) {   /* only these rows changed since it was sent (so far) */
-        if (!t->part) { t->part = 1; t->part_y0 = y; t->part_y1 = y + h; }
-        else { if (y < t->part_y0) t->part_y0 = y; if (y + h > t->part_y1) t->part_y1 = y + h; }
+    {
+        int ch[4];   /* what really changed: Quake uploads whole rows of a lightmap for a few texels */
+        store_pixels_changed(t, x, y, w, h, format, type, pixels, ch);
+        if (ch[2] <= ch[0]) return;   /* the same texels again */
+        if (!t->dirty || t->part) {   /* only this rectangle changed since it was sent (so far) */
+            if (!t->part) { t->part = 1; t->part_x0 = ch[0]; t->part_y0 = ch[1]; t->part_x1 = ch[2]; t->part_y1 = ch[3]; }
+            else {
+                if (ch[0] < t->part_x0) t->part_x0 = ch[0];
+                if (ch[1] < t->part_y0) t->part_y0 = ch[1];
+                if (ch[2] > t->part_x1) t->part_x1 = ch[2];
+                if (ch[3] > t->part_y1) t->part_y1 = ch[3];
+            }
+        }
     }
     t->dirty = 1;
 }

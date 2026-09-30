@@ -200,6 +200,8 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_CLOCK      0x00000008u  /* answers CLOCK_SET: the host may set the PSP's clock */
 #define PSPEXP_FEATURE_3D         0x00000010u  /* draws the 3D messages (GRAPHICS 0x0110..0x0114): OpenGL
                                                   programs. A host must not send them otherwise */
+#define PSPEXP_FEATURE_3D16       0x00000040u  /* 3D vertices with 16-bit coordinates and positions
+                                                  (PSPEXP_3D_VT_TEXTURE16, _POSITION16) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
@@ -467,20 +469,25 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDraw) == 16, draw3d_size);
 #define PSPEXP_3D_VT_COLOR     (7u << 2)    /* GU_COLOR_8888 */
 #define PSPEXP_3D_VT_NORMAL    (3u << 5)    /* GU_NORMAL_32BITF */
 #define PSPEXP_3D_VT_POSITION  (3u << 7)    /* GU_VERTEX_32BITF */
+/* With PSPEXP_FEATURE_3D16: 16-bit texture coordinates and positions, as the GE reads them when it
+ * transforms: coordinates unsigned, over 32768 (0 .. 2), positions signed, over 32768 (-1 .. 1); the
+ * host scales the positions and the matrices undo it. A third less than floats. */
+#define PSPEXP_3D_VT_TEXTURE16  (2u << 0)   /* GU_TEXTURE_16BIT */
+#define PSPEXP_3D_VT_POSITION16 (2u << 7)   /* GU_VERTEX_16BIT */
 #define PSPEXP_3D_PRIM_MAX     5u           /* GU_TRIANGLE_FAN */
-/* A vertex's size for a vertex type; 0 when the type is not accepted. */
+/* A vertex's size for a vertex type (the GE's layout: each part aligned to its own size, the whole to the
+ * largest); 0 when the type is not accepted. */
 static inline uint32_t pspexp_3d_vertex_size(uint32_t vt)
 {
-    uint32_t n = 12;
-    if ((vt & PSPEXP_3D_VT_POSITION) != PSPEXP_3D_VT_POSITION) return 0;
+    uint32_t t = vt & 3u, c = (vt >> 2) & 7u, nm = (vt >> 5) & 3u, p = (vt >> 7) & 3u, n = 0, al = 1;
     if (vt & ~(PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_COLOR | PSPEXP_3D_VT_NORMAL | PSPEXP_3D_VT_POSITION)) return 0;
-    if ((vt & PSPEXP_3D_VT_TEXTURE) && (vt & PSPEXP_3D_VT_TEXTURE) != PSPEXP_3D_VT_TEXTURE) return 0;
-    if ((vt & PSPEXP_3D_VT_COLOR) && (vt & PSPEXP_3D_VT_COLOR) != PSPEXP_3D_VT_COLOR) return 0;
-    if ((vt & PSPEXP_3D_VT_NORMAL) && (vt & PSPEXP_3D_VT_NORMAL) != PSPEXP_3D_VT_NORMAL) return 0;
-    if (vt & PSPEXP_3D_VT_TEXTURE) n += 8;
-    if (vt & PSPEXP_3D_VT_COLOR) n += 4;
-    if (vt & PSPEXP_3D_VT_NORMAL) n += 12;
-    return n;
+    if ((p != 3 && p != 2) || (t != 0 && t != 3 && t != 2) || (c != 0 && c != 7) || (nm != 0 && nm != 3)) return 0;
+    if (t) { al = t == 3 ? 4 : 2; n = t == 3 ? 8 : 4; }
+    if (c) { n = (n + 3u) & ~3u; n += 4; al = 4; }
+    if (nm) { n = (n + 3u) & ~3u; n += 12; al = 4; }
+    if (p == 3) { n = (n + 3u) & ~3u; n += 12; al = 4; }
+    else { n = (n + 1u) & ~1u; n += 6; if (al < 2) al = 2; }
+    return (n + al - 1u) & ~(al - 1u);
 }
 #define PSPEXP_3D_MAX_VERTICES 65535u       /* the GE's count field */
 

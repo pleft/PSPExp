@@ -173,6 +173,8 @@ function; the tests check it is current).
 | `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference) |
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |
+| `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, in the log every 300 frames |
+| `PSPEXP_GL_FLOATS=1` | OpenGL: streamed vertices always as floats (by default unlit draws of 16 or more vertices go with 16-bit positions and coordinates, when the PSP takes them) |
 | `PSPEXP_RECORD=FILE` | every byte sent to the PSP, in order (a stream to replay) |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
 | `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/dev/bench-shim.sh` |

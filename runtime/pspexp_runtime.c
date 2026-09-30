@@ -142,7 +142,7 @@ static void send_hello(PspExpRuntime *rt)
     h.ram_budget = rt->cache.ram_budget;
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
-                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0);
+                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;

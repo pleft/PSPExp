@@ -102,6 +102,7 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
 /* Part of a resident texture replaced (PSPEXP_FEATURE_PATCH): `length` bytes at `offset` in its data
  * as uploaded, written into the returned space, then _commit. NULL: the PSP cannot (upload it whole). */
 int pspexp_patch_supported(const PspExpContext *ctx);
+int pspexp_3d16_supported(const PspExpContext *ctx);   /* PSPEXP_FEATURE_3D16: 16-bit vertex parts */
 uint8_t *pspexp_patch_texture_begin(PspExpContext *ctx, uint16_t id, uint32_t offset, uint32_t length);
 int pspexp_patch_texture_commit(PspExpContext *ctx);
 uint8_t *pspexp_upload_texture_begin(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,

@@ -180,9 +180,42 @@ void pspexp_batch_begin(PspExpContext *ctx)
     ctx->batching = 1;
 }
 
+/* PSPEXP_TRACE_BYTES=1: what the bytes sent were, by message, in the log every 300 frames */
+static int trace_bytes = -1;
+static uint64_t trace_op_bytes[64][2];   /* [opcode hash] -> opcode, bytes */
+
+static void trace_tally(const void *data, size_t len)
+{
+    size_t off = 0;
+    while (off + PSPEXP_HEADER_SIZE <= len) {
+        const PspExpMessageHeader *h = (const PspExpMessageHeader *)(const void *)((const uint8_t *)data + off);
+        unsigned k = (h->opcode * 2654435761u) >> 26, i;
+        for (i = 0; i < 64; i++, k = (k + 1) & 63)
+            if (!trace_op_bytes[k][1] || trace_op_bytes[k][0] == h->opcode) {
+                trace_op_bytes[k][0] = h->opcode; trace_op_bytes[k][1] += PSPEXP_HEADER_SIZE + h->length; break;
+            }
+        off += PSPEXP_HEADER_SIZE + h->length;
+    }
+}
+
+static void trace_report(PspExpContext *ctx, uint32_t frames)
+{
+    char line[1024];
+    int n = snprintf(line, sizeof(line), "bytes a frame over %u frames:", frames), i;
+    uint64_t total = 0;
+    for (i = 0; i < 64; i++) total += trace_op_bytes[i][1];
+    for (i = 0; i < 64 && n < (int)sizeof(line) - 48; i++)
+        if (trace_op_bytes[i][1]) n += snprintf(line + n, sizeof(line) - (size_t)n, " %s %llu", pspexp_opcode_name((uint16_t)trace_op_bytes[i][0]),
+                                                (unsigned long long)(trace_op_bytes[i][1] / frames));
+    ctx_log(ctx, "%s (total %llu)", line, (unsigned long long)(total / frames));
+    memset(trace_op_bytes, 0, sizeof(trace_op_bytes));
+}
+
 static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
 {
     if (!ctx->t) return -1;
+    if (trace_bytes < 0) trace_bytes = getenv("PSPEXP_TRACE_BYTES") && atoi(getenv("PSPEXP_TRACE_BYTES")) > 0;
+    if (trace_bytes) trace_tally(data, len);
     if (ctx->batching) {
         if (ctx->batch_len + len > ctx->batch_cap) {   /* full: out with what is there */
             if (ctx->batch_len && send_now(ctx, ctx->batch, ctx->batch_len) < 0) { ctx->batch_len = 0; return -1; }
@@ -1024,6 +1057,11 @@ int pspexp_3d_supported(const PspExpContext *ctx)
     return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && (ctx->hello.features & PSPEXP_FEATURE_3D) != 0;
 }
 
+int pspexp_3d16_supported(const PspExpContext *ctx)
+{
+    return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D16) != 0;
+}
+
 int pspexp_patch_supported(const PspExpContext *ctx)
 {
     return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && (ctx->hello.features & PSPEXP_FEATURE_PATCH) != 0;
@@ -1214,6 +1252,7 @@ long pspexp_present(PspExpContext *ctx)
             ctx_log(ctx, "%s", line);
         }
     }
+    if (trace_bytes > 0 && seq % 300 == 0) trace_report(ctx, 300);
     rec = &ctx->ring[seq % SEND_RING];
     rec->sent_us = pspexp_time_us();
     ctx->stats.last_frame_bytes = (uint32_t)ctx->frame.len;
