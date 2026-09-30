@@ -73,6 +73,13 @@ static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal, uin
     if (tex) x->stats.textured3d++;
 }
 
+static void op_draw3d_indexed(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal, uint8_t prim, uint32_t vt, uint32_t count,
+                              const void *v, uint32_t nidx, const uint16_t *ix)
+{
+    op_draw3d(u, tex, pal, prim, vt, nidx, v);
+    (void)count; (void)ix;
+}
+
 static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal, uint8_t prim, uint32_t vt, uint32_t count,
                            const void *v, const uint16_t *ix, int inl)
 {
@@ -150,6 +157,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.draw3d = op_draw3d;
     ops.clear3d = op_clear3d;
     ops.draw3d_mesh = op_draw3d_mesh;
+    ops.draw3d_indexed = op_draw3d_indexed;
     ops.target3d = op_target3d;
     ops.log = op_log;
     pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick */

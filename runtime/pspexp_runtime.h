@@ -62,6 +62,9 @@ typedef struct PspExpRuntimeOps {
     void (*lights3d)(void *user, const PspExp3DLights *l);
     void (*draw3d)(void *user, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t primitive,
                    uint32_t vertex_type, uint32_t count, const void *vertices);
+    /* Optional: the same over checked 16-bit indices (PSPEXP_FEATURE_3D_INDEXED); both only valid during the call */
+    void (*draw3d_indexed)(void *user, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t primitive,
+                           uint32_t vertex_type, uint32_t count, const void *vertices, uint32_t index_count, const uint16_t *indices);
     void (*clear3d)(void *user, const PspExp3DClear *c);
     /* A mesh draw: `vertices` is a vertex mesh's data (kept until released);
      * `indices` NULL, an index mesh's data, or (indices_inline) data only

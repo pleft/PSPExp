@@ -424,6 +424,13 @@ selects, circle jumps, square changes weapon, L / R strafe, start is the
 menu, select the scores. Started from the launcher on the Pi 400: 48-59 fps
 in its demos.
 
+OpenArena (recipe `openarena`, 2026-10-01): Debian's, data included, on the
+Quake 3 engine's OpenGL 1.x renderer at the PSP's size with the engine's
+low-end settings (all on its command line in the recipe). The nub aims (as a
+mouse), cross fires, the d-pad moves and strafes (WASD), square jumps,
+triangle changes weapon, L crouches, R fires too, start is the menu, select
+the scores. Not yet played on the PSP itself.
+
 On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272

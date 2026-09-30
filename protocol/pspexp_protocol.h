@@ -32,6 +32,7 @@ extern "C" {
 #define PSPEXP_HEADER_SIZE       16
 #define PSPEXP_ALIGN             16
 #define PSPEXP_ALIGN_UP(n)       (((uint32_t)(n) + (PSPEXP_ALIGN - 1u)) & ~(uint32_t)(PSPEXP_ALIGN - 1u))
+#define PSPEXP_ALIGN4(n)         (((uint32_t)(n) + 3u) & ~3u)
 /* Largest payload any executor must accept: a 512x512 RGBA8888 texture plus
  * its frame table, or a 4 MiB audio stream block later. */
 #define PSPEXP_MAX_PAYLOAD       (4u * 1024u * 1024u)
@@ -200,6 +201,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_CLOCK      0x00000008u  /* answers CLOCK_SET: the host may set the PSP's clock */
 #define PSPEXP_FEATURE_3D         0x00000010u  /* draws the 3D messages (GRAPHICS 0x0110..0x0114): OpenGL
                                                   programs. A host must not send them otherwise */
+#define PSPEXP_FEATURE_3D_INDEXED 0x00000080u  /* 3D_DRAW with indices after its vertices */
 #define PSPEXP_FEATURE_3D16       0x00000040u  /* 3D vertices with 16-bit coordinates and positions
                                                   (PSPEXP_3D_VT_TEXTURE16, _POSITION16) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
@@ -455,13 +457,15 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExp3DLights) == 288, lights3d_size);
  *   colour   none or GU_COLOR_8888
  *   normal   none or GU_NORMAL_32BITF
  *   position GU_VERTEX_32BITF
- * Nothing else is accepted (no weights, morphs or indices). */
+ * Nothing else is accepted (no weights or morphs). With PSPEXP_FEATURE_3D_INDEXED, index_count > 0:
+ * the vertices (padded to 4 bytes) are followed by that many 16-bit indices, each below `count`, and
+ * the primitive is drawn over the indices (a mesh of shared vertices sent once each). */
 typedef struct PspExp3DDraw {
     uint8_t  primitive;         /* GU_POINTS .. GU_TRIANGLE_FAN (not GU_SPRITES) */
     uint8_t  reserved0[3];
     uint32_t vertex_type;
     uint32_t count;
-    uint32_t reserved;
+    uint32_t index_count;       /* 0: the vertices in order */
 } PspExp3DDraw;
 PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDraw) == 16, draw3d_size);
 

@@ -1150,6 +1150,30 @@ void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type
     return v;
 }
 
+int pspexp_3d_indexed_supported(const PspExpContext *ctx)
+{
+    return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D_INDEXED) != 0;
+}
+
+void *pspexp_3d_draw_indexed(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count, uint32_t index_count,
+                             uint16_t **indices)
+{
+    PspExp3DDraw d;
+    uint32_t size = pspexp_3d_vertex_size(vertex_type), vbytes;
+    uint8_t *v;
+    if (!pspexp_3d_indexed_supported(ctx) || !size || !count || !index_count || count > PSPEXP_3D_MAX_VERTICES ||
+        index_count > PSPEXP_3D_MAX_VERTICES || primitive > PSPEXP_3D_PRIM_MAX) return NULL;
+    vbytes = PSPEXP_ALIGN4(size * count);
+    memset(&d, 0, sizeof(d));
+    d.primitive = primitive; d.vertex_type = vertex_type; d.count = count; d.index_count = index_count;
+    if (pspexp_writer_begin(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_DRAW, 0) < 0 ||
+        pspexp_writer_append(&ctx->frame, &d, sizeof(d)) < 0 ||
+        !(v = (uint8_t *)pspexp_writer_reserve(&ctx->frame, PSPEXP_ALIGN_UP((size_t)vbytes + (size_t)index_count * 2u)))) return NULL;
+    pspexp_writer_end(&ctx->frame);
+    *indices = (uint16_t *)(void *)(v + vbytes);
+    return v;
+}
+
 void *pspexp_upload_mesh_begin(PspExpContext *ctx, uint16_t id, uint8_t kind, uint32_t vertex_type, uint32_t count)
 {
     PspExpMeshUpload u;

@@ -20,3 +20,4 @@
 | `recipes/neverball/cover.png` | Debian's neverball package, its 128x128 icon | GPL-2.0+ (Neverball) |
 | `recipes/openmrac/cover.png` | a screenshot of openMrac on the PSP (a race), cropped and scaled | BSD-2-Clause (openMrac) |
 | `recipes/quake/cover.png` | a screenshot of Quake's shareware episode on the PSP (E1M1), cropped and scaled | id Software's (shareware) |
+| `recipes/openarena/cover.png` | Debian's openarena package, its 128x128 icon | GPL-2.0 (OpenArena) |

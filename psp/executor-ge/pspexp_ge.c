@@ -345,6 +345,30 @@ static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette,
     ge->stats.last_vertex_bytes = ge->ring_used;
 }
 
+static void op_draw3d_indexed(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t prim, uint32_t vtype,
+                              uint32_t count, const void *vertices, uint32_t nidx, const uint16_t *indices)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    uint32_t bytes = count * pspexp_3d_vertex_size(vtype), rounded = (bytes + 15u) & ~15u, ib = (nidx * 2u + 15u) & ~15u;
+    unsigned char *v, *ix;
+    int textured = tex && tex->user;
+    if (ge->ring_used + rounded + ib > PSPEXP_GE_RING_HALF) { ge->stats.dropped3d++; return; }
+    v = ge->ring[ge->ring_cur] + ge->ring_used;
+    ix = v + rounded;
+    ge->ring_used += rounded + ib;
+    memcpy(v, vertices, bytes);
+    memcpy(ix, indices, nidx * 2u);
+    sceKernelDcacheWritebackRange(v, rounded + ib);
+    if (!ge->mode3d || ge->state_dirty) apply_3d(ge);
+    if (textured) {
+        bind_texture(ge, tex, palette);
+        if (ge->tex_enabled != 1) { sceGuEnable(GU_TEXTURE_2D); ge->tex_enabled = 1; }
+    } else if (ge->tex_enabled != 0) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
+    sceGuDrawArray(prim, (int)vtype | GU_TRANSFORM_3D | GU_INDEX_16BIT, (int)nidx, ix, v);
+    ge->stats.draws3d++;
+    ge->stats.last_vertex_bytes = ge->ring_used;
+}
+
 static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t prim, uint32_t vtype,
                            uint32_t count, const void *vertices, const uint16_t *indices, int indices_inline)
 {
@@ -589,6 +613,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->user = ge;
     ops->texture_create = op_texture_create;
     ops->texture_patch = op_texture_patch;
+    ops->draw3d_indexed = op_draw3d_indexed;
     ops->texture_destroy = op_texture_destroy;
     ops->palette_create = op_palette_create;
     ops->palette_destroy = op_palette_destroy;

@@ -49,6 +49,7 @@ static const struct { const char *name; void *fn; } GL_PROCS[] = {
     { "glColorPointer", (void *)(uintptr_t)&GLFN(glColorPointer) },
     { "glCompileShader", (void *)(uintptr_t)&GLFN(glCompileShader) },
     { "glCompressedTexImage2D", (void *)(uintptr_t)&GLFN(glCompressedTexImage2D) },
+    { "glCompressedTexSubImage2D", (void *)(uintptr_t)&GLFN(glCompressedTexSubImage2D) },
     { "glCopyTexImage2D", (void *)(uintptr_t)&GLFN(glCopyTexImage2D) },
     { "glCopyTexSubImage2D", (void *)(uintptr_t)&GLFN(glCopyTexSubImage2D) },
     { "glCreateProgram", (void *)(uintptr_t)&GLFN(glCreateProgram) },

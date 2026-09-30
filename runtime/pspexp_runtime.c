@@ -142,7 +142,8 @@ static void send_hello(PspExpRuntime *rt)
     h.ram_budget = rt->cache.ram_budget;
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
-                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0);
+                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
+                 (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -443,6 +444,24 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
         if (d->count > PSPEXP_3D_MAX_VERTICES) { send_error(rt, PSPEXP_ERR_BATCH_TOO_LARGE, m, d->count); return; }
         if ((uint64_t)d->count * size > m->length - sizeof(*d)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, d->count); return; }
         if (!d->count) return;
+        if (d->index_count) {   /* indexed: every index checked here, once */
+            uint32_t vbytes = PSPEXP_ALIGN4(d->count * size), k;
+            const uint16_t *ix = (const uint16_t *)(const void *)(m->payload + sizeof(*d) + vbytes);
+            if (!rt->ops.draw3d_indexed) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+            if (d->index_count > PSPEXP_3D_MAX_VERTICES || (uint64_t)vbytes + (uint64_t)d->index_count * 2u > m->length - sizeof(*d)) {
+                send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, d->index_count); return;
+            }
+            for (k = 0; k < d->index_count; k++) if (ix[k] >= d->count) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, ix[k]); return; }
+            if (rt->tex3d_on && !rt->tex3d) {
+                rt->tex3d = batch_atlas(rt, rt->tex3d_id, PSPEXP_PALETTE_DEFAULT, &rt->pal3d);
+                if (!rt->tex3d) rt->tex3d_on = 0;
+            }
+            rt->ops.draw3d_indexed(rt->ops.user, rt->tex3d_on ? rt->tex3d : NULL, rt->tex3d_on ? rt->pal3d : NULL,
+                                   d->primitive, d->vertex_type, d->count, m->payload + sizeof(*d), d->index_count, ix);
+            rt->stats.draws3d++;
+            rt->stats.vertices3d += d->index_count;
+            return;
+        }
         if (rt->tex3d_on && !rt->tex3d) {
             rt->tex3d = batch_atlas(rt, rt->tex3d_id, PSPEXP_PALETTE_DEFAULT, &rt->pal3d);
             if (!rt->tex3d) rt->tex3d_on = 0;   /* reported once; drawn untextured until the next state */

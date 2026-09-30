@@ -1361,8 +1361,12 @@ static int clip_and_send(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vt
     return 1;
 }
 
-/* Draw n finished vertices as the GL primitive `mode`. */
-static void draw_vertices(GLenum mode, Vtx *v, int n)
+/* Draw n finished vertices as the GL primitive `mode`; with `ix`, they are the ones a list of nix
+ * triangle indices (GL_TRIANGLES) reads, each once: sent so when the PSP takes indices and nothing
+ * needs cutting, else made into the triangles here. */
+static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix);
+static void draw_vertices(GLenum mode, Vtx *v, int n) { draw_vertices_ix(mode, v, n, NULL, 0); }
+static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
 {
     PspExpContext *ctx;
     GlTex *tex;
@@ -1444,6 +1448,52 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
     if (G.pk_scale > 0 && (vt & 3u) == 3u) {   /* the coordinates too, when all lie in 0 .. 2 (the GE's unsigned 16 bits) */
         for (i = 0; i < n; i++) if (!(v[i].t[0] >= 0 && v[i].t[0] < 1.999f && v[i].t[1] >= 0 && v[i].t[1] < 1.999f)) break;
         if (i == n) vt = (vt & ~3u) | PSPEXP_3D_VT_TEXTURE16;
+    }
+    if (ix) {
+        int can = mode == GL_TRIANGLES && pspexp_3d_indexed_supported(ctx) && nix <= (int)PSPEXP_3D_MAX_VERTICES;
+        if (can) {   /* the triangles that need no cutting by index, the others cut and sent as triangles */
+            static unsigned *code;
+            static uint16_t *safe;
+            static int ccap, scap;
+            Clip c;
+            int ns = 0, k = 0, t;
+            Vtx *cut = NULL;
+            uint16_t *out16;
+            uint8_t *vb;
+            if (n > ccap) { unsigned *q = (unsigned *)realloc(code, (size_t)n * sizeof(unsigned)); if (!q) return; code = q; ccap = n; }
+            if (nix > scap) { uint16_t *q = (uint16_t *)realloc(safe, (size_t)nix * 2u); if (!q) return; safe = q; scap = nix; }
+            clip_setup(&c);
+            for (i = 0; i < n; i++) { float o[4]; clip_xform(&c, v[i].p, o); code[i] = getenv("PSPEXP_GL_NOCLIP") ? 0 : outcode(&c, o); }
+            for (t = 0; t + 2 < nix; t += 3) {
+                unsigned ca = code[ix[t]], cb = code[ix[t + 1]], cd = code[ix[t + 2]];
+                if (!(ca | cb | cd)) { safe[ns++] = (uint16_t)ix[t]; safe[ns++] = (uint16_t)ix[t + 1]; safe[ns++] = (uint16_t)ix[t + 2]; }
+                else if (!(ca & cb & cd)) {
+                    if (!cut && !(cut = (Vtx *)malloc((size_t)(nix / 3) * 21 * sizeof(Vtx) + 1))) return;
+                    k += clip_triangle(&c, &v[ix[t]], &v[ix[t + 1]], &v[ix[t + 2]], cut + k);
+                }
+            }
+            if (ns && (vb = (uint8_t *)pspexp_3d_draw_indexed(ctx, GU_TRIANGLES, vt, (uint32_t)n, (uint32_t)ns, &out16))) {
+                pack(vb, vt, v, n);
+                memcpy(out16, safe, (size_t)ns * 2u);
+                G.draws++; G.vertices += (unsigned)ns;
+            } else if (ns) {   /* (no room: as triangles) */
+                Vtx *tv = scratch(ns);
+                if (tv) {
+                    for (i = 0; i < ns; i++) tv[i] = v[safe[i]];
+                    for (i = 0; i < ns; i += CHUNK_VERTICES / 3 * 3) send_prim(ctx, GU_TRIANGLES, vt, tv + i, ns - i < CHUNK_VERTICES / 3 * 3 ? ns - i : CHUNK_VERTICES / 3 * 3);
+                }
+            }
+            for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
+                send_prim(ctx, GU_TRIANGLES, vt, cut + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+            free(cut);
+            return;
+        }
+        {   /* the triangles, here */
+            Vtx *t = scratch(nix);
+            if (!t) return;
+            for (i = 0; i < nix; i++) t[i] = v[ix[i]];
+            v = t; n = nix;
+        }
     }
     switch (mode) {
     case GL_POINTS: prim = GU_POINTS; per = 1; break;
@@ -3375,6 +3425,21 @@ GLAPI(void, glDrawElements, (GLenum mode, GLsizei count, GLenum type, const GLvo
     if (G.program) { shader_draw(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type); return; }
     if (G.compiling && !replaying) { compile_arrays(mode, idx, 0, count); return; }
     if (draw_mesh(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type)) return;
+    if (mode == GL_TRIANGLES && count >= 24 && !getenv("PSPEXP_GL_NOINDEX")) {   /* shared vertices (Quake 3's surfaces): each fetched and sent once */
+        int lo = idx[0], hi = idx[0];
+        for (i = 1; i < count; i++) { if (idx[i] < lo) lo = idx[i]; if (idx[i] > hi) hi = idx[i]; }
+        if (lo >= 0 && hi - lo + 1 < count && hi - lo < (int)PSPEXP_3D_MAX_VERTICES) {
+            static int *rel;
+            static int cap;
+            int nv = hi - lo + 1;
+            if (count > cap) { int *r = (int *)realloc(rel, (size_t)count * sizeof(int)); if (!r) { set_error(GL_OUT_OF_MEMORY); return; } rel = r; cap = count; }
+            if (!(v = gather(nv))) { set_error(GL_OUT_OF_MEMORY); return; }
+            for (i = 0; i < nv; i++) fetch(lo + i, &v[i]);
+            for (i = 0; i < count; i++) rel[i] = idx[i] - lo;
+            draw_vertices_ix(mode, v, nv, rel, count);
+            return;
+        }
+    }
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
     for (i = 0; i < count; i++) fetch(idx[i], &v[i]);
     draw_vertices(mode, v, count);
@@ -4062,6 +4127,8 @@ GLAPI(void, glCopyTexSubImage2D, (GLenum target, GLint level, GLint xo, GLint yo
 { (void)target; (void)level; (void)xo; (void)yo; (void)x; (void)y; (void)w; (void)h; unsupported("glCopyTexSubImage2D"); }
 GLAPI(void, glCompressedTexImage2D, (GLenum target, GLint level, GLenum internal, GLsizei w, GLsizei h, GLint border, GLsizei size, const GLvoid *data))
 { (void)target; (void)level; (void)internal; (void)w; (void)h; (void)border; (void)size; (void)data; unsupported("compressed textures"); }
+GLAPI(void, glCompressedTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsizei w, GLsizei h, GLenum format, GLsizei size, const GLvoid *data))
+{ (void)target; (void)level; (void)x; (void)y; (void)w; (void)h; (void)format; (void)size; (void)data; unsupported("compressed textures"); }
 GLAPI(void, glGenerateMipmap, (GLenum target)) { (void)target; }
 
 GLAPI(void, glTexParameteri, (GLenum target, GLenum p, GLint v))

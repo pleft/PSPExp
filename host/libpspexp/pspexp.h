@@ -174,6 +174,10 @@ void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_
 /* Space for `count` vertices of `vertex_type` (pspexp_3d_vertex_size each)
  * in the frame, valid until the next call on ctx; NULL on error. */
 void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count);
+/* PSPEXP_FEATURE_3D_INDEXED: `count` vertices (returned) and `index_count` 16-bit indices (*indices) */
+int pspexp_3d_indexed_supported(const PspExpContext *ctx);
+void *pspexp_3d_draw_indexed(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count, uint32_t index_count,
+                             uint16_t **indices);
 /* Meshes (resources, like textures): `kind` PSPEXP_MESH_VERTICES (count
  * vertices of vertex_type) or PSPEXP_MESH_INDICES16 (count indices). Two
  * steps: begin returns where to write `count` of them, commit sends it. */

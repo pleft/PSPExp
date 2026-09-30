@@ -174,6 +174,7 @@ function; the tests check it is current).
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |
 | `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, in the log every 300 frames |
+| `PSPEXP_GL_NOINDEX=1` | OpenGL: indexed triangle lists always sent as triangles (by default, when the PSP takes indices and nothing needs cutting, each shared vertex goes once, with 16-bit indices) |
 | `PSPEXP_GL_FLOATS=1` | OpenGL: streamed vertices always as floats (by default unlit draws of 16 or more vertices go with 16-bit positions and coordinates, when the PSP takes them) |
 | `PSPEXP_RECORD=FILE` | every byte sent to the PSP, in order (a stream to replay) |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
