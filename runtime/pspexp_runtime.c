@@ -142,7 +142,7 @@ static void send_hello(PspExpRuntime *rt)
     h.ram_budget = rt->cache.ram_budget;
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
-                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D : 0);
+                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -463,6 +463,19 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
     default:
         return;
     }
+}
+
+static void handle_patch(PspExpRuntime *rt, const PspExpMessage *m)
+{
+    const PspExpResourcePatch *p;
+    PspExpCacheEntry *e;
+    if (pspexp_message_expect(m, sizeof(*p)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+    p = (const PspExpResourcePatch *)m->payload;
+    if (p->length > m->length - sizeof(*p)) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, p->id, PSPEXP_RERR_BAD_LENGTH, 0); return; }
+    if (!(e = pspexp_cache_find(&rt->cache, p->id))) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, p->id, PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); return; }
+    if (e->kind != PSPEXP_KIND_TEXTURE || e->target || !e->user) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, p->id, PSPEXP_RERR_WRONG_KIND, 0); return; }
+    if ((uint64_t)p->offset + p->length > e->bytes) { send_resource_error(rt, PSPEXP_OP_RESOURCE_ERROR, p->id, PSPEXP_RERR_BAD_LENGTH, 0); return; }
+    rt->ops.texture_patch(rt->ops.user, e, p->offset, m->payload + sizeof(*p), p->length);
 }
 
 static void handle_target_create(PspExpRuntime *rt, const PspExpMessage *m)
@@ -941,6 +954,10 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
     case PSPEXP_OP_RESOURCE_UPLOAD_MESH:
         if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         handle_mesh_upload(rt, m);
+        break;
+    case PSPEXP_OP_RESOURCE_PATCH:
+        if (!rt->ops.texture_patch) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        handle_patch(rt, m);
         break;
     case PSPEXP_OP_RESOURCE_CREATE_TARGET:
         if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }

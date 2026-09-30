@@ -120,6 +120,7 @@ vertex attributes and the texture samples. The plan for the GE:
 | `clamp(ambient + max(0, dot(normal, light)) * diffuse)`, the normal a matrix times an attribute | the GE's directional light |
 | `colour + textureCube(reflected eye vector)`, or the cube map alone | a second pass, added: a sphere map made here from the cube map, as the GE's environment map |
 | a discard on a texture the colour does not use | a pass before with its alpha test, the depth only |
+| `texture × texture2 × K (+ texture3)` (lightmaps, glows) | passes after the colour's, each with its own coordinates: texture2 multiplied in by blending (K up to 2; more: the texture sent brighter), texture3 added |
 | uniforms in `if`s and loops | the branch taken, the loop unrolled |
 | anything else (two 2D textures, a texture channel used for another, per-pixel maths, a screen-door pattern on `gl_FragCoord`, framebuffer reads) | the nearest of the above; the program is logged once with what was left out |
 
@@ -166,6 +167,7 @@ function; the tests check it is current).
 | `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |
 | `PSPEXP_GL_NOCLIP=1` | OpenGL: no cutting of triangles that reach outside the GE's range (they then vanish whole) |
 | `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
+| `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 1: fixed-function multitexturing is not drawn; shader programs' textures are, in passes). Quakespasm takes its shader path only with 3 |
 | `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference) |
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |

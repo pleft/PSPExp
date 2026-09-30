@@ -32,6 +32,7 @@ struct PspExpContext {
     uint8_t *batch; size_t batch_len, batch_cap;   /* sends gathered into one transfer */
     int batching;
     uint32_t pending_upload_len;
+    int pending_patch;           /* a RESOURCE_PATCH begun */
     uint16_t pending_id;                /* between pspexp_upload_mesh_begin and _commit */
     PspExpStream in;
     PspExpWriter frame;
@@ -1021,6 +1022,34 @@ void pspexp_draw_line(PspExpContext *ctx, int16_t x0, int16_t y0, int16_t x1, in
 int pspexp_3d_supported(const PspExpContext *ctx)
 {
     return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && (ctx->hello.features & PSPEXP_FEATURE_3D) != 0;
+}
+
+int pspexp_patch_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && (ctx->hello.features & PSPEXP_FEATURE_PATCH) != 0;
+}
+
+uint8_t *pspexp_patch_texture_begin(PspExpContext *ctx, uint16_t id, uint32_t offset, uint32_t length)
+{
+    PspExpResourcePatch p;
+    uint8_t *out;
+    if (!pspexp_patch_supported(ctx) || !length || pspexp_resource_state(ctx, id, NULL) == PSPEXP_RES_NONE) return NULL;
+    memset(&p, 0, sizeof(p));
+    p.id = id; p.offset = offset; p.length = length;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_RESOURCE, PSPEXP_OP_RESOURCE_PATCH, 0) < 0) return NULL;
+    if (!(out = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(p) + length))) return NULL;
+    memcpy(out, &p, sizeof(p));
+    ctx->pending_patch = 1;
+    return out + sizeof(p);
+}
+
+int pspexp_patch_texture_commit(PspExpContext *ctx)
+{
+    if (!ctx->pending_patch) return -1;
+    ctx->pending_patch = 0;
+    if (pspexp_writer_end(&ctx->msg) < 0) return -1;
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
 }
 
 /* Connected already: the answer to HELLO again, now asking for it (the

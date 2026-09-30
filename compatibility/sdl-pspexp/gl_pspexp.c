@@ -237,6 +237,10 @@ typedef struct GlTex {
     struct GlTex *hnext;         /* in the name table */
     unsigned used;               /* the frame it was last drawn with */
     uint32_t *face[6];           /* a cube map's faces, RGBA8 (only here: shaders' reflections are made from them) */
+    float prescale;              /* rgba holds its colours times this, clamped (10-bit uploads: 4, keeping their bits) */
+    float scale;                 /* what the draws want them times (a lightmap multiplied in more than twice over) */
+    int part, part_y0, part_y1;  /* dirty only in these rows (glTexSubImage2D): sent as a patch when the PSP can */
+    int sent_alpha, sent_mul;    /* how it was sent last: 4444 or 5650, its colours' factor */
     int face_w, face_h; uint32_t face_ver;
     struct GlTex *next;
 } GlTex;
@@ -324,6 +328,7 @@ static struct {
     float sh_proj[16];
     GlTex *sh_tex;
     int sh_env, sh_env_alpha;   /* ...a pass drawing a cube map as a sphere map (the GE's environment map) */
+    int sh_uvset, sh_replace;   /* ...a pass with another set of texture coordinates (glsl_plan_uv), its texture as is */
     float sh_env_axes[2][3];    /* ...its axes: the eye's x and y on the normals */
     /* GL 2: the generic vertex attributes (of the vertex array object bound), the program in use */
     Array gattr[16]; int gnorm[16]; float gcur[16][4];
@@ -741,6 +746,7 @@ static void build_state(PspExp3DState *s, GlTex *tex)
         s->tex_func = GU_TFX_MODULATE;
         s->tex_alpha = tex && G.sh_tex_alpha && tex->has_alpha ? GU_TCC_RGBA : GU_TCC_RGB;
         s->tex_map = GU_TEXTURE_COORDS;
+        if (G.sh_replace && tex) { s->tex_func = GU_TFX_REPLACE; s->tex_alpha = GU_TCC_RGB; }   /* blended in by the pass */
         if (G.sh_env && tex) {   /* the sphere map, from the normals: its colour as it is */
             s->tex_map = GU_ENVIRONMENT_MAP;
             s->tex_env_lights = (PSPEXP_3D_LIGHTS - 1) | (PSPEXP_3D_LIGHTS - 2) << 4;
@@ -937,8 +943,45 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     uint16_t *lin;
     uint8_t *dst;
     uint32_t bytes = (uint32_t)pw * (uint32_t)ph * 2u;
+    int mul = (int)lroundf(256.0f * t->scale / (t->prescale > 0 ? t->prescale : 1)), alpha = t->has_alpha, part = t->part;
     t->dirty = 0;
+    t->part = 0;
     if (t->rt || !t->rgba || t->w <= 0 || t->h <= 0) return;   /* a render target: drawn on the PSP */
+    if (part && t->handle && t->psp_bytes == bytes && pw == t->w && ph == t->h && mul == t->sent_mul && pspexp_patch_supported(ctx)) {
+        /* only some rows changed: their 8-row strips, which the swizzled layout keeps as whole runs of bytes */
+        int y0 = t->part_y0 & ~7, y1 = (t->part_y1 + 7) & ~7, ok = 1;
+        uint32_t off, len;
+        uint16_t *band;
+        if (y0 < 0) y0 = 0;
+        if (y1 > ph) y1 = ph;
+        off = (uint32_t)y0 * (uint32_t)pw * 2u; len = (uint32_t)(y1 - y0) * (uint32_t)pw * 2u;
+        if (y1 > y0 && (band = (uint16_t *)malloc(len))) {
+            for (y = y0; y < y1 && ok; y++)
+                for (x = 0; x < pw; x++) {
+                    uint32_t px = t->rgba[(size_t)y * (size_t)t->w + (size_t)x], r = px & 0xFF, g = (px >> 8) & 0xFF, b = (px >> 16) & 0xFF, a = px >> 24;
+                    if (!t->sent_alpha && a != 255) { ok = 0; break; }   /* sent without alpha, which it has now */
+                    if (mul != 256) {
+                        r = r * (uint32_t)mul >> 8; g = g * (uint32_t)mul >> 8; b = b * (uint32_t)mul >> 8;
+                        r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
+                    }
+                    band[(size_t)(y - y0) * (size_t)pw + (size_t)x] = t->sent_alpha ? pspexp_color_4444((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a)
+                                                                                 : pspexp_color_5650((uint8_t)r, (uint8_t)g, (uint8_t)b);
+                }
+            if (ok && (dst = pspexp_patch_texture_begin(ctx, t->handle, off, len))) {
+                pspexp_swizzle(dst, band, (uint32_t)pw * 2u, (uint32_t)(y1 - y0));
+                pspexp_patch_texture_commit(ctx);
+                free(band);
+                if (G.log >= 2) gl_logf("texture %u patched: rows %d..%d (%u bytes)", t->name, y0, y1, len);
+                return;
+            }
+            free(band);
+        }
+    }
+    if (alpha) {   /* all opaque after all (lightmaps are RGBA): 5650, more bits of colour */
+        size_t i, n = (size_t)t->w * (size_t)t->h;
+        for (i = 0; i < n && (t->rgba[i] >> 24) == 255; i++) { }
+        if (i == n) alpha = 0;
+    }
     tex_bytes -= t->psp_bytes;
     t->psp_bytes = 0;
     texture_room(ctx, t, bytes);
@@ -962,8 +1005,12 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
                     r += p & 0xFF; g += (p >> 8) & 0xFF; b += (p >> 16) & 0xFF; a += p >> 24; n++;
                 }
             r /= n; g /= n; b /= n; a /= n;
-            lin[y * pw + x] = t->has_alpha ? pspexp_color_4444((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a)
-                                           : pspexp_color_5650((uint8_t)r, (uint8_t)g, (uint8_t)b);
+            if (mul != 256) {   /* its colours as the draws want them, from what is kept */
+                r = r * (uint32_t)mul >> 8; g = g * (uint32_t)mul >> 8; b = b * (uint32_t)mul >> 8;
+                r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
+            }
+            lin[y * pw + x] = alpha ? pspexp_color_4444((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a)
+                                    : pspexp_color_5650((uint8_t)r, (uint8_t)g, (uint8_t)b);
         }
     }
     if (getenv("PSPEXP_GL_DUMP")) {
@@ -973,7 +1020,7 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
         if ((f = fopen(path, "wb"))) {
             for (y = 0; y < pw * ph; y++) {
                 uint8_t r, g, b, a = 255, px[4];
-                if (t->has_alpha) { uint16_t c = lin[y]; r = (uint8_t)((c & 15) * 17); g = (uint8_t)(((c >> 4) & 15) * 17); b = (uint8_t)(((c >> 8) & 15) * 17); a = (uint8_t)((c >> 12) * 17); }
+                if (alpha) { uint16_t c = lin[y]; r = (uint8_t)((c & 15) * 17); g = (uint8_t)(((c >> 4) & 15) * 17); b = (uint8_t)(((c >> 8) & 15) * 17); a = (uint8_t)((c >> 12) * 17); }
                 else pspexp_color_unpack_5650(lin[y], &r, &g, &b);
                 px[0] = r; px[1] = g; px[2] = b; px[3] = a;
                 fwrite(px, 1, 4, f);
@@ -983,7 +1030,8 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     }
     memset(&d, 0, sizeof(d));
     d.width = (uint16_t)pw; d.height = (uint16_t)ph;
-    d.format = t->has_alpha ? PSPEXP_TEX_4444 : PSPEXP_TEX_5650;
+    d.format = alpha ? PSPEXP_TEX_4444 : PSPEXP_TEX_5650;
+    t->sent_alpha = alpha; t->sent_mul = mul;
     d.layout = PSPEXP_LAYOUT_SWIZZLED;
     d.priority = PSPEXP_PRIORITY_NORMAL;
     dst = pspexp_upload_texture_begin(ctx, t->handle, &d, bytes, NULL, 0);
@@ -1876,7 +1924,7 @@ GLAPI(void, glArrayElement, (GLint i))
 
 /* ---- GL 2: shaders (glsl_pspexp.c reads them), programs, generic attributes -------------------- */
 
-typedef struct GlShader { GLuint name; GLenum type; char *src; GlslShader *sh; char log[256]; struct GlShader *next; } GlShader;
+typedef struct GlShader { GLuint name; GLenum type; char *src; GlslShader *sh; char log[256]; int deleted; struct GlShader *next; } GlShader;
 typedef struct GlProgram {
     GLuint name;
     GLuint att[4]; int natt;
@@ -1902,6 +1950,11 @@ static void builtin_matrix(const char *name, float out[16])   /* old shaders' gl
     else if (!strcmp(name, "gl_ModelViewMatrix")) memcpy(out, G.mv[G.mv_top], 64);
     else if (!strcmp(name, "gl_ProjectionMatrix")) memcpy(out, G.proj[G.proj_top], 64);
     else if (!strcmp(name, "gl_TextureMatrix0")) memcpy(out, G.texm[G.tex_top], 64);
+    else if (!strcmp(name, "gl_Fog.color")) memcpy(out, G.fog_color, 16);
+    else if (!strcmp(name, "gl_Fog.density")) out[0] = G.fog_density;
+    else if (!strcmp(name, "gl_Fog.start")) out[0] = G.fog_start;
+    else if (!strcmp(name, "gl_Fog.end")) out[0] = G.fog_end;
+    else if (!strcmp(name, "gl_Fog.scale")) out[0] = G.fog_end != G.fog_start ? 1.0f / (G.fog_end - G.fog_start) : 0.0f;
 }
 
 GLAPI(GLuint, glCreateShader, (GLenum type))
@@ -1943,11 +1996,26 @@ GLAPI(void, glCompileShader, (GLuint shader))
     s->log[0] = 0;   /* the program runs all the same: no errors for it */
 }
 
-GLAPI(void, glDeleteShader, (GLuint shader))
+/* A deleted shader still attached to a program lives on until it is not (as GL has it: Quakespasm
+ * deletes its shaders between attaching and linking) */
+static void shaders_sweep(void)
 {
     GlShader **pp = &shaders;
-    while (*pp && (*pp)->name != shader) pp = &(*pp)->next;
-    if (*pp) { GlShader *s = *pp; *pp = s->next; free(s->src); glsl_shader_free(s->sh); free(s); }
+    while (*pp) {
+        GlShader *s = *pp;
+        GlProgram *p;
+        int i, attached = 0;
+        for (p = programs; p && !attached; p = p->next)
+            for (i = 0; i < p->natt; i++) if (p->att[i] == s->name) attached = 1;
+        if (s->deleted && !attached) { *pp = s->next; free(s->src); glsl_shader_free(s->sh); free(s); }
+        else pp = &s->next;
+    }
+}
+
+GLAPI(void, glDeleteShader, (GLuint shader))
+{
+    GlShader *s = find_shader(shader);
+    if (s) { s->deleted = 1; shaders_sweep(); }
 }
 
 GLAPI(void, glGetShaderiv, (GLuint shader, GLenum p, GLint *out))
@@ -2009,6 +2077,7 @@ GLAPI(void, glDeleteProgram, (GLuint program))
         for (i = 0; i < p->nb; i++) free(p->bnames[i]);
         free(p);
     }
+    shaders_sweep();
 }
 
 GLAPI(void, glAttachShader, (GLuint program, GLuint shader))
@@ -2024,6 +2093,7 @@ GLAPI(void, glDetachShader, (GLuint program, GLuint shader))
     int i;
     if (!p) return;
     for (i = 0; i < p->natt; i++) if (p->att[i] == shader) { p->att[i] = p->att[--p->natt]; break; }
+    shaders_sweep();
 }
 
 GLAPI(void, glBindAttribLocation, (GLuint program, GLuint index, const GLchar *name))
@@ -2420,10 +2490,13 @@ static GlTex *env_map(const GlslPlan *pl)
     return t;
 }
 
-/* A shader's draw in passes. 0: before, when the discard is on a texture the colour does not use:
- * that texture's alpha test, only the depth written; 1: its colour; 2: a cube map added (or the
- * colour itself), as a sphere map, where pass 1 drew. sh_pass sets up pass k over GL's state
- * (0: not needed), sh_pass_end puts that back. */
+/* A shader's draw in passes. SH_PRE: before, when the discard is on a texture the colour does not
+ * use: that texture's alpha test, only the depth written; SH_MAIN: its colour; SH_MOD: a second
+ * texture multiplied in (once or twice over: blended with the colour drawn); SH_ADD: a third one
+ * added; SH_ENV: a cube map added (or the colour itself), as a sphere map. The passes after the
+ * colour's land only where it drew (depth EQUAL). sh_pass sets up a pass over GL's state (0: not
+ * needed), sh_pass_end puts that back. */
+enum { SH_PRE, SH_MAIN, SH_MOD, SH_ADD, SH_ENV, SH_PASSES };
 static struct { int blend, depth_mask, cm[4]; GLenum bsrc, bdst, beq, dfunc; } sh_gl;
 
 static int sh_pass(const GlslPlan *pl, int k)
@@ -2436,11 +2509,11 @@ static int sh_pass(const GlslPlan *pl, int k)
         G.blend_src = sh_gl.bsrc; G.blend_dst = sh_gl.bdst; G.blend_eq = sh_gl.beq; G.depth_func = sh_gl.dfunc;
     }
     G.sh_active = 1;
-    G.sh_env = 0; G.sh_lit = NULL; G.sh_tex = NULL; G.sh_alpha_test = 0;
+    G.sh_env = 0; G.sh_lit = NULL; G.sh_tex = NULL; G.sh_alpha_test = 0; G.sh_uvset = 0; G.sh_replace = 0;
     G.sh_tex_alpha = pl->tex_alpha;
     G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
     switch (k) {
-    case 0:
+    case SH_PRE:
         if (!pl->pre_test) return 0;
         G.sh_tex = find_texture(G.units[pl->pre_unit & 7]);
         G.sh_tex_alpha = 1;
@@ -2451,14 +2524,29 @@ static int sh_pass(const GlslPlan *pl, int k)
         if (G.depth_func == GL_LESS) G.depth_func = GL_LEQUAL;
         else if (G.depth_func == GL_GREATER) G.depth_func = GL_GEQUAL;
         return 1;
-    case 1:
+    case SH_MAIN:
         if (pl->env_only) return 0;
         G.sh_tex = pl->textured ? find_texture(G.units[pl->sampler_unit & 7]) : NULL;
         G.sh_alpha_test = pl->alpha_test;
         G.sh_lit = pl->lit ? pl : NULL;
         if (pl->pre_test) G.depth_func = GL_EQUAL;
         return 1;
-    case 2:
+    case SH_MOD: case SH_ADD:
+        if (pl->env_only || !(k == SH_MOD ? pl->mod_tex : pl->add_tex)) return 0;
+        if (!(G.sh_tex = find_texture(G.units[(k == SH_MOD ? pl->mod_unit : pl->add_unit) & 7])) || (!G.sh_tex->rgba && !G.sh_tex->rt)) return 0;
+        G.sh_uvset = k == SH_MOD ? 1 : 2;
+        G.sh_replace = 1;
+        G.blend = 1; G.blend_eq = GL_FUNC_ADD;
+        if (k == SH_MOD) {   /* x1 or x2 by the blend; more: the texture sent brighter (clamped) */
+            float want = pl->mod_scale >= 2 ? pl->mod_scale / 2 : pl->mod_scale;
+            G.blend_src = GL_DST_COLOR; G.blend_dst = pl->mod_scale >= 2 ? GL_SRC_COLOR : GL_ZERO;
+            if (G.sh_tex->scale != want) { G.sh_tex->scale = want; G.sh_tex->dirty = 1; }
+        }
+        else G.blend_src = G.blend_dst = GL_ONE;
+        if (G.depth_mask) G.depth_func = GL_EQUAL;
+        G.depth_mask = 0;
+        return 1;
+    case SH_ENV:
         if (!pl->env || !(G.sh_tex = env_map(pl))) return 0;
         G.sh_env = 1;
         G.sh_env_alpha = pl->env_alpha;
@@ -2481,7 +2569,7 @@ static void sh_pass_end(void)
 {
     G.blend = sh_gl.blend; G.depth_mask = sh_gl.depth_mask; memcpy(G.color_mask, sh_gl.cm, sizeof(sh_gl.cm));
     G.blend_src = sh_gl.bsrc; G.blend_dst = sh_gl.bdst; G.blend_eq = sh_gl.beq; G.depth_func = sh_gl.dfunc;
-    G.sh_active = 0; G.sh_lit = NULL; G.sh_env = 0;
+    G.sh_active = 0; G.sh_lit = NULL; G.sh_env = 0; G.sh_uvset = 0; G.sh_replace = 0;
 }
 
 /* A draw by a shader program: its plan for the uniforms of now, each
@@ -2493,8 +2581,8 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
     GlProgram *p = find_program(G.program);
     GlslPlan *pl;
     Vtx *v;
-    float attrs[GLSL_ATTR_ALL][4];
-    int i, a, fixed = G.va.enabled || G.ca.enabled || G.na.enabled || G.ta.enabled;
+    float attrs[GLSL_ATTR_ALL][4], *uvs = NULL;
+    int i, a, fixed = G.va.enabled || G.ca.enabled || G.na.enabled || G.ta.enabled, set = 0;
     if (!p || !p->p || count <= 0) return;
     if (!p->planned || p->planned_ver != p->uver || p->builtins) {
         glsl_plan(p->p, &p->plan);
@@ -2510,6 +2598,12 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
     }
     if (shader_mesh(p, mode, idx, first, count, ibo, ioffset, itype)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
+    if (pl->mod_tex || pl->add_tex) {
+        static float *keep;
+        static int cap;
+        if (count > cap) { float *n2 = (float *)realloc(keep, (size_t)count * 6 * sizeof(float)); if (!n2) return; keep = n2; cap = count; }
+        uvs = keep;
+    }
     {   /* the arrays, found once for the draw: base, stride, element size (-1: the current value) */
         static const uint8_t *base[16];
         static int stride[16], ts[16], live[16], nlive;
@@ -2553,6 +2647,11 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
         if (!pl->matrix_ok && pos[3] != 0.0f && pos[3] != 1.0f) { pos[0] /= pos[3]; pos[1] /= pos[3]; pos[2] /= pos[3]; }
         v[i].p[0] = pos[0]; v[i].p[1] = pos[1]; v[i].p[2] = pos[2];
         v[i].t[0] = uv[0]; v[i].t[1] = uv[1];
+        if (uvs) {   /* the other passes' coordinates */
+            uvs[(size_t)i * 6] = uv[0]; uvs[(size_t)i * 6 + 1] = uv[1];
+            if (pl->mod_tex) glsl_plan_uv(pl, 1, (const float (*)[4])attrs, uvs + (size_t)i * 6 + 2);
+            if (pl->add_tex) glsl_plan_uv(pl, 2, (const float (*)[4])attrs, uvs + (size_t)i * 6 + 4);
+        }
         v[i].c = abgr(c);
         if (pl->lit) memcpy(v[i].n, attrs[pl->lit_attr], 12);
         else if (pl->env) memcpy(v[i].n, attrs[pl->env_attr], 12);
@@ -2575,7 +2674,15 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
     }
     if (pl->matrix_ok) memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
     else mat_identity(G.sh_proj);
-    for (i = 0; i < 3; i++) if (sh_pass(pl, i)) draw_vertices(mode, v, count);
+    for (i = 0; i < SH_PASSES; i++) {
+        if (!sh_pass(pl, i)) continue;
+        if (uvs && G.sh_uvset != set) {
+            int j;
+            set = G.sh_uvset;
+            for (j = 0; j < count; j++) { v[j].t[0] = uvs[(size_t)j * 6 + set * 2]; v[j].t[1] = uvs[(size_t)j * 6 + set * 2 + 1]; }
+        }
+        draw_vertices(mode, v, count);
+    }
     sh_pass_end();
 }
 
@@ -2959,6 +3066,67 @@ static Churn *churn_slot(uint64_t sig)
     return c;
 }
 
+/* A shader draw's vertices through the plan, the whole buffer, as a mesh on the PSP; the texture
+ * coordinates of the set `set` (glsl_plan_uv). NULL: no room or no link. */
+static Mesh *shader_mesh_make(GlProgram *pr, const GlslPlan *pl, int set, uint64_t key, uint32_t vt, int n, unsigned used, PspExpContext *ctx)
+{
+    uint8_t *out;
+    float attrs[GLSL_ATTR_ALL][4];
+    int i, a, nb = 0;
+    Mesh *m;
+    if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) return NULL;
+    m->shkey = key; m->vt = vt; m->count = n;
+    m->handle = mesh_handle();
+    m->bytes = pspexp_3d_vertex_size(vt) * (uint32_t)n;
+    m->pos = (float *)malloc((size_t)n * 3 * sizeof(float));
+    m->vx = (Vtx *)malloc((size_t)n * sizeof(Vtx));
+    for (a = 0; a < 16 && nb < 8; a++) if ((used & (1u << a)) && G.gattr[a].enabled) m->bufs[nb++] = G.gattr[a].buffer;
+    m->nbufs = nb;
+    if (!m->pos || !m->vx ||
+        !(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
+        free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle;
+        mesh_free(m);
+        return NULL;
+    }
+    for (a = 0; a < 16; a++) memcpy(attrs[a], G.gcur[a], 16);
+    for (i = 0; i < n; i++) {
+        float pos[4], uv[2], c[4];
+        Vtx *v = &m->vx[i];
+        for (a = 0; a < 16; a++) {
+            const Array *ar = &G.gattr[a];
+            const uint8_t *b;
+            int cmp, ts;
+            if (!(used & (1u << a)) || !ar->enabled || !(b = array_base(ar))) continue;
+            ts = type_size(ar->type);
+            b += (size_t)i * (size_t)(ar->stride ? ar->stride : ar->size * ts);
+            for (cmp = 0; cmp < 4; cmp++) attrs[a][cmp] = cmp < ar->size ? read_comp(b + cmp * ts, ar->type, G.gnorm[a]) : cmp == 3 ? 1.0f : 0.0f;
+            if (ar->bgra) { float t = attrs[a][0]; attrs[a][0] = attrs[a][2]; attrs[a][2] = t; }
+        }
+        glsl_plan_vertex(pl, (const float (*)[4])attrs, pos, uv, c);
+        if (set) glsl_plan_uv(pl, set, (const float (*)[4])attrs, uv);
+        v->p[0] = pos[0]; v->p[1] = pos[1]; v->p[2] = pos[2];
+        v->t[0] = uv[0]; v->t[1] = uv[1];
+        v->c = abgr(c);
+        if (pl->lit) memcpy(v->n, attrs[pl->lit_attr], 12);
+        else if (pl->env) memcpy(v->n, attrs[pl->env_attr], 12);
+        else { v->n[0] = v->n[1] = 0; v->n[2] = 1; }
+        memcpy(m->pos + i * 3, v->p, 12);
+        pack_vertex(&out, vt, v);
+    }
+    pspexp_upload_mesh_commit(ctx);
+    mesh_bytes += m->bytes;
+    m->next = meshes; meshes = m;
+    if (G.log) gl_logf("mesh %u: program %u, %d vertices, coordinates %d (%u KB, %u KB kept)", m->handle, pr->name, n, set, m->bytes / 1024, mesh_bytes / 1024);
+    if (G.log >= 3) {
+        int q, off = 0;
+        char vers[160];
+        for (q = 0; q < 16 && off < 150; q++)
+            if ((used & (1u << q)) && G.gattr[q].enabled) off += snprintf(vers + off, sizeof(vers) - (size_t)off, " a%d:b%u v%u", q, G.gattr[q].buffer, buffer_version(G.gattr[q].buffer));
+        gl_logf("  key: plan %016llx%s", (unsigned long long)pl->vertex_hash, vers);
+    }
+    return m;
+}
+
 static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
     GlslPlan *pl = &pr->plan;
@@ -3005,89 +3173,46 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     else hi = first + count - 1;
     if (hi >= n) return 0;
     if (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES) return 1;
-    /* the draw's state: the plan's, its first pass */
-    memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
-    for (pass = 0; pass < 3 && !sh_pass(pl, pass); pass++) { }
-    if (pass == 3) { sh_pass_end(); return 1; }
-    if (!(ctx = prepare_colour(&tex, NULL))) { sh_pass_end(); return 1; }
-    if ((pl->textured && G.units[pl->sampler_unit & 7]) || pl->pre_test) vt |= PSPEXP_3D_VT_TEXTURE;
+    if ((pl->textured && G.units[pl->sampler_unit & 7]) || pl->pre_test || pl->mod_tex || pl->add_tex) vt |= PSPEXP_3D_VT_TEXTURE;
     if (pl->lit) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_COLOR) | PSPEXP_3D_VT_NORMAL;
     if (pl->env) vt |= PSPEXP_3D_VT_NORMAL;
     h ^= (uint64_t)vt << 20;
     if (!h) h = 1;
-    for (m = meshes; m; m = m->next) if (m->shkey == h && m->vt == vt && m->count >= hi + 1) break;
-    if (!m) {   /* one more made for this draw: a third frame running, and it is streamed for 5 s */
-        ch->streak = ch->last + 2 >= mesh_frame && ch->last ? ch->streak + 1 : 1;
-        ch->last = mesh_frame;
-        if (ch->streak >= 2) {
-            ch->until = mesh_frame + 300;
-            ch->streak = 0;
-            sh_pass_end();
-            if (G.log) gl_logf("program %u: a draw that changes every frame: streamed", pr->name);
-            return 0;
+    {   /* a mesh for each set of texture coordinates the passes use: found or made first, so a draw
+         * that would make them frame after frame is still streamed whole */
+        Mesh *mm[3] = { NULL, NULL, NULL };
+        int set, need[3] = { 1, pl->mod_tex, pl->add_tex }, missing = 0;
+        uint64_t hs[3];
+        for (set = 0; set < 3; set++) {
+            if (!need[set]) continue;
+            hs[set] = set ? (h ^ pl->uv_hash[set] * 0x9E3779B97F4A7C15ull ^ (uint64_t)set) : h;
+            if (!hs[set]) hs[set] = 1;
+            for (m = meshes; m; m = m->next) if (m->shkey == hs[set] && m->vt == vt && m->count >= hi + 1) break;
+            if (!(mm[set] = m)) missing = 1;
         }
-    }
-    if (!m) {
-        uint8_t *out;
-        float attrs[GLSL_ATTR_ALL][4];
-        int i, nb = 0;
-        if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) { sh_pass_end(); return 0; }
-        m->shkey = h; m->vt = vt; m->count = n;
-        m->handle = mesh_handle();
-        m->bytes = pspexp_3d_vertex_size(vt) * (uint32_t)n;
-        m->pos = (float *)malloc((size_t)n * 3 * sizeof(float));
-        m->vx = (Vtx *)malloc((size_t)n * sizeof(Vtx));
-        for (a = 0; a < 16 && nb < 8; a++) if ((used & (1u << a)) && G.gattr[a].enabled) m->bufs[nb++] = G.gattr[a].buffer;
-        m->nbufs = nb;
-        if (!m->pos || !m->vx ||
-            !(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
-            free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle;
-            mesh_free(m);
-            sh_pass_end();
-            return 0;
-        }
-        for (a = 0; a < 16; a++) memcpy(attrs[a], G.gcur[a], 16);
-        for (i = 0; i < n; i++) {
-            float pos[4], uv[2], c[4];
-            Vtx *v = &m->vx[i];
-            for (a = 0; a < 16; a++) {
-                const Array *ar = &G.gattr[a];
-                const uint8_t *b;
-                int cmp, ts;
-                if (!(used & (1u << a)) || !ar->enabled || !(b = array_base(ar))) continue;
-                ts = type_size(ar->type);
-                b += (size_t)i * (size_t)(ar->stride ? ar->stride : ar->size * ts);
-                for (cmp = 0; cmp < 4; cmp++) attrs[a][cmp] = cmp < ar->size ? read_comp(b + cmp * ts, ar->type, G.gnorm[a]) : cmp == 3 ? 1.0f : 0.0f;
-                if (ar->bgra) { float t = attrs[a][0]; attrs[a][0] = attrs[a][2]; attrs[a][2] = t; }
+        if (missing) {   /* made for this draw: a third frame running, and it is streamed for 5 s */
+            ch->streak = ch->last + 2 >= mesh_frame && ch->last ? ch->streak + 1 : 1;
+            ch->last = mesh_frame;
+            if (ch->streak >= 2) {
+                ch->until = mesh_frame + 300;
+                ch->streak = 0;
+                if (G.log) gl_logf("program %u: a draw that changes every frame: streamed", pr->name);
+                return 0;
             }
-            glsl_plan_vertex(pl, (const float (*)[4])attrs, pos, uv, c);
-            v->p[0] = pos[0]; v->p[1] = pos[1]; v->p[2] = pos[2];
-            v->t[0] = uv[0]; v->t[1] = uv[1];
-            v->c = abgr(c);
-            if (pl->lit) memcpy(v->n, attrs[pl->lit_attr], 12);
-            else if (pl->env) memcpy(v->n, attrs[pl->env_attr], 12);
-            else { v->n[0] = v->n[1] = 0; v->n[2] = 1; }
-            memcpy(m->pos + i * 3, v->p, 12);
-            pack_vertex(&out, vt, v);
+            if (!(ctx = shim_gl_frame())) return 1;
+            for (set = 0; set < 3; set++)
+                if (need[set] && !mm[set] && !(mm[set] = shader_mesh_make(pr, pl, set, hs[set], vt, n, used, ctx))) return 0;
         }
-        pspexp_upload_mesh_commit(ctx);
-        mesh_bytes += m->bytes;
-        m->next = meshes; meshes = m;
-        if (G.log) gl_logf("mesh %u: program %u, %d vertices (%u KB, %u KB kept)", m->handle, pr->name, n, m->bytes / 1024, mesh_bytes / 1024);
-        if (G.log >= 3) {
-            int q;
-            char vers[160];
-            int off = 0;
-            for (q = 0; q < 16 && off < 150; q++)
-                if ((used & (1u << q)) && G.gattr[q].enabled) off += snprintf(vers + off, sizeof(vers) - (size_t)off, " a%d:b%u v%u", q, G.gattr[q].buffer, buffer_version(G.gattr[q].buffer));
-            gl_logf("  key: plan %016llx%s", (unsigned long long)pl->vertex_hash, vers);
+        memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
+        k = 0;
+        for (pass = 0; pass < SH_PASSES; pass++) {
+            if (!sh_pass(pl, pass) || !(ctx = prepare_colour(&tex, NULL))) continue;
+            if (mesh_emit(ctx, mm[G.sh_uvset], mode, idx, first, count, ibo, ioffset, itype, vt)) k = 1;
+            else if (!k) break;   /* (not drawn from the mesh: streamed instead, all of it) */
         }
+        sh_pass_end();
     }
-    k = mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
-    for (pass++; pass < 3 && k; pass++)   /* the passes after: the same mesh */
-        if (sh_pass(pl, pass) && (ctx = prepare_colour(&tex, NULL))) mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
-    sh_pass_end();
-    return k;
+    return k || pass == SH_PASSES;
 }
 
 /* At the end of a frame: the meshes dropped during the one before (whose
@@ -3642,6 +3767,7 @@ static GlTex *texture_object(GLuint name)
     t->name = name;
     t->min_filter = GL_NEAREST_MIPMAP_LINEAR; t->mag_filter = GL_LINEAR;
     t->wrap_s = t->wrap_t = GL_REPEAT;
+    t->prescale = t->scale = 1;
     t->next = G.textures; G.textures = t;
     t->hnext = tex_hash[name & (TEX_HASH - 1)]; tex_hash[name & (TEX_HASH - 1)] = t;
     if (name >= G.next_texture) G.next_texture = name + 1;
@@ -3713,6 +3839,12 @@ static uint32_t read_pixel(const uint8_t *p, GLenum format, GLenum type)
     } else if (type == GL_UNSIGNED_INT_8_8_8_8 && format == GL_RGBA) {
         uint32_t v; memcpy(&v, p, 4);
         a = v & 0xFF; b = (v >> 8) & 0xFF; g = (v >> 16) & 0xFF; r = v >> 24;
+    } else if (type == 0x8036 || type == 0x8368) {   /* GL_UNSIGNED_INT_10_10_10_2, _2_10_10_10_REV: stored x4 */
+        uint32_t v; memcpy(&v, p, 4);
+        if (type == 0x8036) { r = v >> 22; g = (v >> 12) & 0x3FF; b = (v >> 2) & 0x3FF; a = (v & 3) * 85; }
+        else { r = v & 0x3FF; g = (v >> 10) & 0x3FF; b = (v >> 20) & 0x3FF; a = (v >> 30) * 85; }
+        if (format == GL_BGRA) { uint32_t t = r; r = b; b = t; }
+        r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
     } else if (type == GL_FLOAT) {
         float f[4] = { 0, 0, 0, 1 };
         int n = format == GL_RGBA || format == GL_BGRA ? 4 : format == GL_RGB || format == GL_BGR ? 3 : format == GL_LUMINANCE_ALPHA ? 2 : 1;
@@ -3731,7 +3863,7 @@ static int pixel_bytes(GLenum format, GLenum type)
     int comps;
     switch (type) {
     case GL_UNSIGNED_SHORT_5_6_5: case GL_UNSIGNED_SHORT_4_4_4_4: case GL_UNSIGNED_SHORT_5_5_5_1: return 2;
-    case GL_UNSIGNED_INT_8_8_8_8: case GL_UNSIGNED_INT_8_8_8_8_REV: return 4;
+    case GL_UNSIGNED_INT_8_8_8_8: case GL_UNSIGNED_INT_8_8_8_8_REV: case 0x8036: case 0x8368: return 4;
     default: break;
     }
     switch (format) {
@@ -3824,6 +3956,7 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
     }
     if (pixels) store_pixels(t, 0, 0, w, h, format, type, pixels);
     else memset(t->rgba, 0, (size_t)w * (size_t)h * 4);
+    t->prescale = type == 0x8036 || type == 0x8368 ? 4.0f : 1.0f;
     t->dirty = 1;
 }
 GLAPI(void, glTexImage1D, (GLenum target, GLint level, GLint internal, GLsizei w, GLint border, GLenum format, GLenum type, const GLvoid *pixels))
@@ -3841,6 +3974,10 @@ GLAPI(void, glTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsi
     if (!(t = find_texture(G.units[G.active_unit])) || !t->rgba) { set_error(GL_INVALID_OPERATION); return; }
     if (x < 0 || y < 0 || x + w > t->w || y + h > t->h) { set_error(GL_INVALID_VALUE); return; }
     store_pixels(t, x, y, w, h, format, type, pixels);
+    if (!t->dirty || t->part) {   /* only these rows changed since it was sent (so far) */
+        if (!t->part) { t->part = 1; t->part_y0 = y; t->part_y1 = y + h; }
+        else { if (y < t->part_y0) t->part_y0 = y; if (y + h > t->part_y1) t->part_y1 = y + h; }
+    }
     t->dirty = 1;
 }
 
@@ -4213,7 +4350,10 @@ static int get_values(GLenum p, float *f)
     case GL_MAX_MODELVIEW_STACK_DEPTH: f[0] = MV_DEPTH; return 1;
     case GL_MAX_PROJECTION_STACK_DEPTH: f[0] = PROJ_DEPTH; return 1;
     case GL_MAX_TEXTURE_STACK_DEPTH: f[0] = TEX_DEPTH; return 1;
-    case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_COORDS: f[0] = 1; return 1;
+    case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_COORDS:   /* (PSPEXP_GL_UNITS: more, for shader games that ask) */
+        f[0] = getenv("PSPEXP_GL_UNITS") && atoi(getenv("PSPEXP_GL_UNITS")) > 1 ? (float)atoi(getenv("PSPEXP_GL_UNITS")) : 1;
+        if (f[0] > 8) f[0] = 8;
+        return 1;
     case GL_MAX_TEXTURE_IMAGE_UNITS: case 0x8B4D /* GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS */: f[0] = 8; return 1;
     case 0x8B4C /* GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS */: f[0] = 0; return 1;
     case GL_MAX_VERTEX_ATTRIBS: f[0] = 16; return 1;

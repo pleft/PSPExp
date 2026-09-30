@@ -61,6 +61,8 @@ int main(int argc, char **argv)
     if (plan.lit) printf("  lit: normal attribute %d, light %.2f %.2f %.2f, diffuse %.2f %.2f %.2f, ambient %.2f %.2f %.2f\n", plan.lit_attr,
                          plan.light_dir[0], plan.light_dir[1], plan.light_dir[2], plan.light_diffuse[0], plan.light_diffuse[1],
                          plan.light_diffuse[2], plan.light_ambient[0], plan.light_ambient[1], plan.light_ambient[2]);
+    if (plan.mod_tex) printf("  multiplied in: unit %d, %g times over\n", plan.mod_unit, plan.mod_scale);
+    if (plan.add_tex) printf("  added: unit %d\n", plan.add_unit);
     if (plan.pre_test) printf("  pre-pass: unit %d, alpha test 0x%x %.3f\n", plan.pre_unit, plan.alpha_func, plan.alpha_ref);
     if (plan.env) {
         float n[3] = { 0, 0, 1 }, d[3];

@@ -200,6 +200,8 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_CLOCK      0x00000008u  /* answers CLOCK_SET: the host may set the PSP's clock */
 #define PSPEXP_FEATURE_3D         0x00000010u  /* draws the 3D messages (GRAPHICS 0x0110..0x0114): OpenGL
                                                   programs. A host must not send them otherwise */
+#define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
+                                                  A host must not send it otherwise (older runtimes drop it) */
 
 /* Host -> PSP (CLOCK_SET): the board's clock, for a PSP whose own one is
  * wrong (a flat clock battery puts it back years). The PSP keeps UTC; what
@@ -542,6 +544,20 @@ typedef struct PspExpTargetCreate {
 PSPEXP_STATIC_ASSERT(sizeof(PspExpTargetCreate) == 16, target_create_size);
 
 #define PSPEXP_TARGET_SCREEN 0xFFFFu
+
+/* RESOURCE_PATCH (PSPEXP_FEATURE_PATCH): bytes of a resident texture (not a
+ * render target) replaced, at `offset` in its data as uploaded (its layout:
+ * a swizzled texture's 8-row strips are whole runs of bytes). The draws of
+ * the frame see the new bytes; `length` bytes of data follow. An OpenGL
+ * program's glTexSubImage2D (Quake's lightmaps, a few rows a frame) instead
+ * of the whole texture again. */
+typedef struct PspExpResourcePatch {
+    uint16_t id;
+    uint16_t reserved;
+    uint32_t offset;
+    uint32_t length;
+} PspExpResourcePatch;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpResourcePatch) == 12, resource_patch_size);
 typedef struct PspExp3DTarget {
     uint16_t id;                /* a render target, or PSPEXP_TARGET_SCREEN */
     uint8_t  reserved[14];

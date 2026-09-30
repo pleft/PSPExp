@@ -76,6 +76,11 @@ typedef struct GlslPlan {
     /* a discard on a texture the colour does not use (alpha_func, alpha_ref): a pass before with it, for
      * the depth; the texture coordinates are its */
     int pre_test, pre_unit;
+    /* more 2D textures, each with coordinates of its own (glsl_plan_uv): one multiplied in (mod_scale times
+     * over: a lightmap), one added (a glow); passes after the colour's */
+    int mod_tex, mod_unit, add_tex, add_unit;
+    float mod_scale;
+    unsigned long long uv_hash[3];   /* the per-vertex work with each set of coordinates (0: the colour's) */
     unsigned attribs_used;      /* bit per attribute location read (the position's, colour's and coordinates') */
     unsigned long long vertex_hash;   /* what the per-vertex values are worked out from: the same hash, the same
                                          vertices for the same attributes (meshes) */
@@ -91,6 +96,9 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan);
  * position (with matrix_ok: the position attribute as is; else clip
  * coordinates x, y, z, w), texture coordinates, colour (rgba, 0..1). */
 void glsl_plan_vertex(const GlslPlan *plan, const float (*attrs)[4], float pos[4], float uv[2], float rgba[4]);
+
+/* One vertex's texture coordinates of a set: 0 the colour's texture, 1 the multiplied, 2 the added. */
+void glsl_plan_uv(const GlslPlan *plan, int set, const float (*attrs)[4], float uv[2]);
 
 /* A cube map's direction for an eye-space normal (plan->env), the view straight ahead. */
 void glsl_plan_env_dir(const GlslPlan *plan, const float n[3], float dir[3]);

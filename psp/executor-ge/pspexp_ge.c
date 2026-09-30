@@ -94,6 +94,19 @@ static int op_texture_create(void *u, PspExpCacheEntry *e, const void *pixels)
     return PSPEXP_RERR_NONE;
 }
 
+static void op_texture_patch(void *u, PspExpCacheEntry *e, uint32_t offset, const void *data, uint32_t length)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    GeTexture *t = (GeTexture *)e->user;
+    if (!t) return;
+    if (t->tier == PSPEXP_TIER_VRAM) memcpy((unsigned char *)UNCACHED(t->ptr) + offset, data, length);
+    else {
+        memcpy((unsigned char *)t->ptr + offset, data, length);
+        sceKernelDcacheWritebackRange((unsigned char *)t->ptr + offset, length);
+    }
+    if (ge->cur_atlas == e) ge->cur_atlas = NULL;   /* bound again at its next draw: the GE's texture cache flushed */
+}
+
 static void screen_target(PspExpGeExecutor *ge);
 
 static void op_texture_destroy(void *u, PspExpCacheEntry *e)
@@ -575,6 +588,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
 {
     ops->user = ge;
     ops->texture_create = op_texture_create;
+    ops->texture_patch = op_texture_patch;
     ops->texture_destroy = op_texture_destroy;
     ops->palette_create = op_palette_create;
     ops->palette_destroy = op_palette_destroy;

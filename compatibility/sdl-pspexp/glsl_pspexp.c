@@ -982,6 +982,7 @@ struct GlslProgram {
     int next_location;
     Arena plan_arena;           /* the last plan's expressions */
     Sym *pos[4], *uv[2], *col[4], *env[3];   /* env: a cube map's direction */
+    Sym *uvm[2], *uva[2];                    /* the multiplied and the added textures' coordinates */
     struct EnvIns *envp; int envn, envcap, env_out[3];   /* ...as a list, each shared part once */
     int planned_ok;
 };
@@ -1466,8 +1467,23 @@ static Val eval(Ev *e, Node *n)
     }
     case N_CALL: return call(e, n);
     case N_FIELD: {
-        Val a = eval(e, n->a);
+        Val a;
         int len = (int)strlen(n->name);
+        if (n->a && n->a->kind == N_IDENT && !strcmp(n->a->name, "gl_Fog") && !lookup(e, "gl_Fog")) {
+            /* old shaders' fog parameters (a struct): asked of the GL layer, as the matrices are */
+            float f[16];
+            char name[64];
+            memset(f, 0, sizeof(f));
+            snprintf(name, sizeof(name), "gl_Fog.%s", n->name);
+            if (g_builtins) g_builtins(name, f);
+            if (!strcmp(n->name, "color")) {
+                r = val_new(e, vec_type(T_FLOAT, 4));
+                for (i = 0; i < 4; i++) r.c[i] = K(e, f[i]);
+                return r;
+            }
+            return scalar(e, K(e, f[0]), T_FLOAT);
+        }
+        a = eval(e, n->a);
         if (!strcmp(n->name, "length")) return scalar(e, K(e, (float)(a.t.array > 0 ? a.t.array : a.t.cols > 1 ? a.t.cols : a.n)), T_INT);
         r = val_new(e, vec_type(a.t.base, len));
         for (i = 0; i < len; i++) {
@@ -1894,8 +1910,8 @@ static void sym_scan(const Sym *s, unsigned *used, uint64_t *h, int *budget)
 
 /* ---- cube maps: a reflection added to the colour --------------------------------------------- */
 
-/* K x a cube map's channel ch (the constants multiplied in) */
-static int cube_term(const Sym *s, int ch, const Sym **t, float *k)
+/* K x a texture's channel ch (the constants multiplied in); cube: a cube map's, else a 2D one's */
+static int tex_term(const Sym *s, int ch, int cube, const Sym **t, float *k)
 {
     const Sym *f[16], *c = NULL;
     int nf = 0, i;
@@ -1903,7 +1919,7 @@ static int cube_term(const Sym *s, int ch, const Sym **t, float *k)
     factors(s, f, &nf);
     for (i = 0; i < nf; i++) {
         if (f[i]->kind == Y_K) kk *= f[i]->k;
-        else if (f[i]->kind == Y_TEXC && f[i]->a && f[i]->a->comp == 1 && f[i]->comp == ch && !c) c = f[i];
+        else if (f[i]->kind == Y_TEXC && f[i]->a && f[i]->a->comp == cube && f[i]->comp == ch && !c) c = f[i];
         else return 0;
     }
     if (!c) return 0;
@@ -1911,16 +1927,28 @@ static int cube_term(const Sym *s, int ch, const Sym **t, float *k)
     return 1;
 }
 
-/* colour = cube term (rest NULL), or rest + cube term */
-static int split_env(const Sym *s, int ch, const Sym **t, float *k, const Sym **rest)
+/* colour = the texture term (rest NULL), or rest + the texture term */
+static int split_tex(const Sym *s, int ch, int cube, const Sym **t, float *k, const Sym **rest)
 {
     if (!s) return 0;
-    if (cube_term(s, ch, t, k)) { *rest = NULL; return 1; }
+    if (tex_term(s, ch, cube, t, k)) { *rest = NULL; return 1; }
     if (s->kind == Y_OP && s->op == O_ADD) {
-        if (cube_term(s->a, ch, t, k)) { *rest = s->b; return 1; }
-        if (cube_term(s->b, ch, t, k)) { *rest = s->a; return 1; }
+        if (tex_term(s->a, ch, cube, t, k)) { *rest = s->b; return 1; }
+        if (tex_term(s->b, ch, cube, t, k)) { *rest = s->a; return 1; }
     }
     return 0;
+}
+static int split_env(const Sym *s, int ch, const Sym **t, float *k, const Sym **rest) { return split_tex(s, ch, 1, t, k, rest); }
+
+static int same_tex(const Sym *a, const Sym *b)
+{
+    return a == b || (a && b && a->idx == b->idx && a->comp == b->comp && a->a == b->a && a->b == b->b && a->c == b->c);
+}
+
+static const Sym *strip_clamp(const Sym *s)
+{
+    while (s && s->kind == Y_OP && s->op == O_CLAMP && isk(s->b, 0) && s->c && s->c->kind == Y_K && s->c->k >= 1) s = s->a;
+    return s;
 }
 
 static int contains(const Sym *s, const Sym *x, int *budget)
@@ -2090,6 +2118,8 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         plan->matrix_ok = ok && loc >= 0;
         plan->pos_attr = loc;
     }
+    /* the colour saturates in the framebuffer anyway: a clamp to 0..1 around it is the GE's own */
+    for (ch = 0; ch < 4; ch++) fc[ch] = strip_clamp(fc[ch]);
     /* a cube map added to the colour (a reflection), or the colour itself: drawn in a pass
      * of its own (a sphere map made from it); the rest is the colour of the draw's pass */
     {
@@ -2097,6 +2127,7 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         int n_env = 0, n_rest = 0;
         float k;
         p->env[0] = p->env[1] = p->env[2] = NULL;
+        p->uvm[0] = p->uvm[1] = p->uva[0] = p->uva[1] = NULL;
         for (ch = 0; ch < 4; ch++) {
             if (!split_env(fc[ch], ch, &t, &k, &rest)) { if (ch < 3) n_rest++; continue; }
             if (ct && t != ct && (t->idx != ct->idx || t->a != ct->a || t->b != ct->b || t->c != ct->c)) { approx(e, "two cube maps"); continue; }
@@ -2110,6 +2141,60 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
             plan_env(e, p, plan, ct, vout, nvout);
             plan->env_only = plan->env && n_rest == 0;
         }
+    }
+    /* more 2D textures: one added (a glow), one multiplied in, once or twice over (a lightmap): passes
+     * of their own after the colour's, blended in where it drew */
+    {
+        const Sym *t, *rest, *at = NULL;
+        float k;
+        int n_add = 0;
+        for (ch = 0; ch < 3; ch++) {
+            if (!split_tex(fc[ch], ch, 0, &t, &k, &rest) || !rest || k != 1) continue;
+            if (!find_texc(rest, 0)) continue;   /* the only texture: the colour's own */
+            if (at && !same_tex(t, at)) break;
+            at = t; n_add++;
+            fc[ch] = rest;
+        }
+        if (at && n_add == 3) { plan->add_tex = 1; plan->add_unit = at->idx; p->uva[0] = at->a; p->uva[1] = at->b; }
+        else if (at) approx(e, "a texture added on some channels only");
+    }
+    {
+        const Sym *mt = NULL, *keep = NULL;
+        float mk = 0;
+        int n_mod = 0;
+        for (ch = 0; ch < 3; ch++) {
+            const Sym *f[16], *tx[16];
+            int nf = 0, ntx = 0, i2;
+            float kk = 1;
+            factors(fc[ch], f, &nf);
+            for (i2 = 0; i2 < nf; i2++) if (f[i2]->kind == Y_TEXC && f[i2]->a && f[i2]->a->comp == 0) tx[ntx++] = f[i2];
+            if (ntx != 2 || same_tex(tx[0]->a, tx[1]->a)) continue;
+            {   /* the colour's texture: the one the discard or the alpha reads, else the first */
+                const Sym *main = tx[0]->a, *other = tx[1]->a, *d = e->discard;
+                if ((d && find_texc(d, 0) && same_tex(find_texc(d, 0)->a, other)) ||
+                    (find_texc(fc[3], 0) && same_tex(find_texc(fc[3], 0)->a, other))) { main = other; other = tx[0]->a; }
+                if (keep && !same_tex(main, keep)) break;
+                if (mt && !same_tex(other, mt)) break;
+                keep = main; mt = other;
+            }
+            {   /* the channel without the second texture and the constants: the colour's pass */
+                Sym *r = NULL;
+                for (i2 = 0; i2 < nf; i2++) {
+                    if (f[i2]->kind == Y_K) { kk *= f[i2]->k; continue; }
+                    if (f[i2]->kind == Y_TEXC && same_tex(f[i2]->a, mt)) continue;
+                    r = r ? op2(e, O_MUL, r, (Sym *)f[i2]) : (Sym *)f[i2];
+                }
+                fc[ch] = r ? r : K(e, 1);
+            }
+            if (n_mod && kk != mk) break;
+            mk = kk; n_mod++;
+        }
+        if (mt && n_mod == 3) {
+            plan->mod_tex = 1; plan->mod_unit = mt->idx;
+            plan->mod_scale = mk;
+            if (mk < 1 || mk > 16) approx(e, "a texture multiplied in %g times over", mk);
+            p->uvm[0] = mt->a; p->uvm[1] = mt->b;
+        } else if (mt) approx(e, "a texture multiplied in on some channels only");
     }
     /* the colour: per channel, one texture sample times the rest */
     {
@@ -2167,7 +2252,10 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
                 plan->pre_unit = pre->idx;
             } else if (x && x->kind == Y_TEXC && tex && x->a != tex &&
                        (x->a->idx != tex->idx || x->a->a != tex->a || x->a->b != tex->b)) approx(e, "a discard on another texture than the colour's");
-            else plan->alpha_test = 1;
+            else {
+                plan->alpha_test = 1;
+                if (x && x->kind == Y_TEXC && x->comp == 3 && tex && same_tex(x->a, tex)) plan->tex_alpha = 1;   /* the GE tests it */
+            }
         }
         for (i = 0; i < 4; i++) p->pos[i] = (Sym *)pos[i];
         for (i = 0; i < 4; i++) p->col[i] = (Sym *)fc[i];
@@ -2195,6 +2283,16 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
             h ^= 0x7f4a7c159e3779b9ull ^ (uint64_t)plan->env_attr << 8;
         }
         h ^= (uint64_t)plan->pre_test << 2;
+        {   /* each pass's coordinates, for its own mesh */
+            int b2 = 200000;
+            unsigned u2 = 0;
+            uint64_t hm = 1469598103934665603ull, ha = hm;
+            sym_scan(p->uvm[0], &u2, &hm, &b2); sym_scan(p->uvm[1], &u2, &hm, &b2);
+            sym_scan(p->uva[0], &u2, &ha, &b2); sym_scan(p->uva[1], &u2, &ha, &b2);
+            plan->uv_hash[0] = h; plan->uv_hash[1] = hm; plan->uv_hash[2] = ha;
+            used |= u2;
+            if (b2 < 0) budget = -1;
+        }
         h ^= (uint64_t)plan->matrix_ok << 1 ^ (uint64_t)(loc + 1) << 3;
         plan->attribs_used = used;
         plan->vertex_hash = budget < 0 ? 0 : h;   /* 0: too large to be sure of */
@@ -2255,4 +2353,12 @@ void glsl_plan_env_dir(const GlslPlan *plan, const float n[3], float dir[3])
         return;
     }
     for (i = 0; i < 3; i++) dir[i] = nev(p->env[i], (const float (*)[4])attrs, 0);
+}
+
+void glsl_plan_uv(const GlslPlan *plan, int set, const float (*attrs)[4], float uv[2])
+{
+    const GlslProgram *p = (const GlslProgram *)plan->priv;
+    Sym *const *c = set == 1 ? p->uvm : set == 2 ? p->uva : p->uv;
+    uv[0] = c[0] ? nev(c[0], attrs, 0) : 0;
+    uv[1] = c[1] ? nev(c[1], attrs, 0) : 0;
 }

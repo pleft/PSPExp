@@ -22,4 +22,11 @@ OUT="$("$BUILD/glsl_plan" "$R" "$ROOT/tests/glsl/glass.frag" uSky=2 "$P" uEnvRot
 check "plan: exact"; check "pre-pass: unit 0, alpha test 0x201 0.500"; check "cube map: unit 2, the colour, its alpha"; check "facing: 1.00 0.00 -0.00"
 OUT="$("$BUILD/glsl_plan" "$R" "$ROOT/tests/glsl/glass.frag" uSky=2 "$P" uPattern=1)"
 check "nearest: a pattern on the pixels' places"; check "pre-pass: unit 0, alpha test 0x201 0.500"
+# a lightmapped wall: the lightmap multiplied in (twice over, 8 times: a brighter texture), a glow added
+L="$ROOT/tests/glsl/lightmap.vert" LF="$ROOT/tests/glsl/lightmap.frag"
+OUT="$("$BUILD/glsl_plan" "$L" "$LF" uWall=0 uLight=1 uGlow=2 uBright=2 uUseGlow=1)"
+check "plan: exact"; check "texture: yes unit 0"; check "multiplied in: unit 1, 2 times over"; check "added: unit 2"; check "alpha test: 0x206 0.500"
+OUT="$("$BUILD/glsl_plan" "$L" "$LF" uWall=0 uLight=1 uGlow=2 uBright=8 uUseGlow=0)"
+check "plan: exact"; check "multiplied in: unit 1, 8 times over"
+if echo "$OUT" | grep -q "added:"; then echo "$OUT"; echo "no added texture expected"; exit 1; fi
 echo "glsl_plan: ok"

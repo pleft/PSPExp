@@ -32,6 +32,9 @@ typedef struct PspExpRuntimeOps {
      * the upload payload in the layout `e->layout` and is only valid during
      * the call. Return 0 or a PSPEXP_RERR_* reason. */
     int  (*texture_create)(void *user, PspExpCacheEntry *e, const void *pixels);
+    /* Optional: `length` bytes of a resident texture replaced at `offset` (checked); with it, HELLO
+     * advertises PSPEXP_FEATURE_PATCH. */
+    void (*texture_patch)(void *user, PspExpCacheEntry *e, uint32_t offset, const void *data, uint32_t length);
     void (*texture_destroy)(void *user, PspExpCacheEntry *e);
     /* Optional: palette entries in e->format, e->width entries. */
     int  (*palette_create)(void *user, PspExpCacheEntry *e, const void *entries);

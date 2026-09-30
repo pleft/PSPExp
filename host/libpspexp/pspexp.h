@@ -99,6 +99,11 @@ int pspexp_upload_texture(PspExpContext *ctx, uint16_t id, const PspExpTextureDe
  * returns where to write pixel_bytes (inside the outgoing message, so no
  * copy), commit sends it. retain = 0: no replay copy kept for a reconnect
  * (for textures re-uploaded every frame anyway). NULL / < 0 on error. */
+/* Part of a resident texture replaced (PSPEXP_FEATURE_PATCH): `length` bytes at `offset` in its data
+ * as uploaded, written into the returned space, then _commit. NULL: the PSP cannot (upload it whole). */
+int pspexp_patch_supported(const PspExpContext *ctx);
+uint8_t *pspexp_patch_texture_begin(PspExpContext *ctx, uint16_t id, uint32_t offset, uint32_t length);
+int pspexp_patch_texture_commit(PspExpContext *ctx);
 uint8_t *pspexp_upload_texture_begin(PspExpContext *ctx, uint16_t id, const PspExpTextureDesc *desc,
                                      uint32_t pixel_bytes, const PspExpFrame *frames, uint16_t frame_count);
 int pspexp_upload_texture_commit(PspExpContext *ctx, int retain);

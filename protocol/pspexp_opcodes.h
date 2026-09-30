@@ -46,6 +46,7 @@ enum PspExpOpcode {
     PSPEXP_OP_RESOURCE_UPLOAD_PALETTE = 0x0208,  /* host -> PSP, PspExpPaletteUpload + entries */
     PSPEXP_OP_RESOURCE_UPLOAD_MESH    = 0x0209,  /* host -> PSP, PspExpMeshUpload + data (PSPEXP_FEATURE_3D) */
     PSPEXP_OP_RESOURCE_CREATE_TARGET  = 0x020A,  /* host -> PSP, PspExpTargetCreate (PSPEXP_FEATURE_3D) */
+    PSPEXP_OP_RESOURCE_PATCH          = 0x020B,  /* host -> PSP, PspExpResourcePatch + data (PSPEXP_FEATURE_PATCH) */
 
     /* AUDIO (0x03xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_SOUND = 0x0301,  /* host -> PSP, PspExpSoundUpload + s16 PCM */
