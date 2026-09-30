@@ -1093,6 +1093,140 @@ static int to_triangles(GLenum mode, const Vtx *v, int n, Vtx *out)
     return k;
 }
 
+
+/* ---- clipping: the GE's range ---------------------------------------------------------
+ *
+ * The GE draws in a 4096 x 4096 space around the screen and drops a whole
+ * triangle that reaches outside it (it does not cut it): large polygons
+ * near the camera then vanish as the view turns (Neverball's floors). So
+ * triangles are cut here, in clip space as GPUs do, against the near plane
+ * and a band a little inside that space; the pieces go with the frame, the
+ * rest as they were (meshes stay meshes). */
+
+typedef struct Clip { float m[16]; float gx, gy; } Clip;
+
+static void clip_setup(Clip *c)
+{
+    const PspExp3DState *s = &G.sent_state;
+    float hw = fabsf((float)s->viewport_w) / 2.0f, hh = fabsf((float)s->viewport_h) / 2.0f;
+    float left = 2048.0f - PSPEXP_DISPLAY_WIDTH / 2 + s->viewport_x, top = 2048.0f - PSPEXP_DISPLAY_HEIGHT / 2 + s->viewport_y;
+    if (G.sh_active) memcpy(c->m, G.sh_proj, sizeof(c->m));
+    else mat_mul(c->m, G.proj[G.proj_top], G.mv[G.mv_top]);
+    c->gx = 0.9f * fminf(left, 4095.0f - left) / (hw > 1 ? hw : 1);
+    c->gy = 0.9f * fminf(top, 4095.0f - top) / (hh > 1 ? hh : 1);
+}
+
+static void clip_xform(const Clip *c, const float *p, float *o)
+{
+    int i;
+    for (i = 0; i < 4; i++) o[i] = c->m[i] * p[0] + c->m[4 + i] * p[1] + c->m[8 + i] * p[2] + c->m[12 + i];
+}
+
+static float clip_dist(const Clip *c, int k, const float *o)
+{
+    switch (k) {
+    case 0: return o[2] + o[3];            /* near */
+    case 1: return o[0] + c->gx * o[3];
+    case 2: return -o[0] + c->gx * o[3];
+    case 3: return o[1] + c->gy * o[3];
+    default: return -o[1] + c->gy * o[3];
+    }
+}
+
+static unsigned outcode(const Clip *c, const float *o)
+{
+    unsigned code = 0;
+    int k;
+    for (k = 0; k < 5; k++) if (clip_dist(c, k, o) < 0) code |= 1u << k;
+    return code;
+}
+
+typedef struct CV { float o[4]; Vtx v; float col[4]; } CV;
+
+static CV cv_lerp(const CV *a, const CV *b, float t)
+{
+    CV r;
+    int i;
+    for (i = 0; i < 4; i++) { r.o[i] = a->o[i] + (b->o[i] - a->o[i]) * t; r.col[i] = a->col[i] + (b->col[i] - a->col[i]) * t; }
+    for (i = 0; i < 3; i++) { r.v.p[i] = a->v.p[i] + (b->v.p[i] - a->v.p[i]) * t; r.v.n[i] = a->v.n[i] + (b->v.n[i] - a->v.n[i]) * t; }
+    for (i = 0; i < 2; i++) r.v.t[i] = a->v.t[i] + (b->v.t[i] - a->v.t[i]) * t;
+    r.v.c = abgr(r.col);
+    return r;
+}
+
+static void cv_make(CV *cv, const Clip *c, const Vtx *v)
+{
+    cv->v = *v;
+    clip_xform(c, v->p, cv->o);
+    cv->col[0] = (v->c & 0xFF) / 255.0f; cv->col[1] = ((v->c >> 8) & 0xFF) / 255.0f;
+    cv->col[2] = ((v->c >> 16) & 0xFF) / 255.0f; cv->col[3] = (v->c >> 24) / 255.0f;
+}
+
+/* One triangle cut against the planes: appended to out as triangles; how many vertices. */
+static int clip_triangle(const Clip *c, const Vtx *a, const Vtx *b, const Vtx *d, Vtx *out)
+{
+    CV poly[2][12];
+    int n = 3, k, i, cur = 0, m;
+    cv_make(&poly[0][0], c, a); cv_make(&poly[0][1], c, b); cv_make(&poly[0][2], c, d);
+    for (k = 0; k < 5 && n >= 3; k++) {
+        CV *in = poly[cur], *o = poly[cur ^ 1];
+        m = 0;
+        for (i = 0; i < n; i++) {
+            const CV *p = &in[i], *q = &in[(i + 1) % n];
+            float dp = clip_dist(c, k, p->o), dq = clip_dist(c, k, q->o);
+            if (dp >= 0 && m < 12) o[m++] = *p;
+            if ((dp >= 0) != (dq >= 0) && m < 12) o[m++] = cv_lerp(p, q, dp / (dp - dq));
+        }
+        n = m;
+        cur ^= 1;
+    }
+    if (n < 3) return 0;
+    for (i = 2, m = 0; i < n; i++) { out[m++] = poly[cur][0].v; out[m++] = poly[cur][i - 1].v; out[m++] = poly[cur][i].v; }
+    return m;
+}
+
+/* The triangles of a GE primitive, as vertex numbers (strip windings kept). */
+static int triangle_at(uint8_t prim, int t, int *i0, int *i1, int *i2)
+{
+    if (prim == GU_TRIANGLES) { *i0 = 3 * t; *i1 = 3 * t + 1; *i2 = 3 * t + 2; }
+    else if (prim == GU_TRIANGLE_FAN) { *i0 = 0; *i1 = t + 1; *i2 = t + 2; }
+    else if (prim == GU_TRIANGLE_STRIP) {
+        if (t & 1) { *i0 = t + 1; *i1 = t; *i2 = t + 2; } else { *i0 = t; *i1 = t + 1; *i2 = t + 2; }
+    } else return 0;
+    return 1;
+}
+
+static int triangle_count(uint8_t prim, int n) { return prim == GU_TRIANGLES ? n / 3 : n >= 3 ? n - 2 : 0; }
+
+/* A streamed primitive: as it is when inside, else as triangles with the
+ * ones that reach out cut. 1: done here. */
+static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *v, int n);
+static int clip_and_send(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *v, int n)
+{
+    Clip c;
+    Vtx *out;
+    unsigned *code;
+    int i, nt, k = 0, any = 0;
+    if (prim < GU_TRIANGLES || getenv("PSPEXP_GL_NOCLIP")) return 0;
+    clip_setup(&c);
+    if (!(code = (unsigned *)malloc((size_t)n * sizeof(unsigned)))) return 0;
+    for (i = 0; i < n; i++) { float o[4]; clip_xform(&c, v[i].p, o); code[i] = outcode(&c, o); any |= code[i] != 0; }
+    if (!any) { free(code); return 0; }
+    nt = triangle_count(prim, n);
+    if (!(out = (Vtx *)malloc((size_t)nt * 21 * sizeof(Vtx) + 1))) { free(code); return 0; }
+    for (i = 0; i < nt; i++) {
+        int a, b, d;
+        triangle_at(prim, i, &a, &b, &d);
+        if (!(code[a] | code[b] | code[d])) { out[k++] = v[a]; out[k++] = v[b]; out[k++] = v[d]; }
+        else if (!(code[a] & code[b] & code[d])) k += clip_triangle(&c, &v[a], &v[b], &v[d], out + k);   /* else: all beyond one plane, unseen */
+    }
+    for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
+        send_prim(ctx, GU_TRIANGLES, vt, out + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+    free(out);
+    free(code);
+    return 1;
+}
+
 /* Draw n finished vertices as the GL primitive `mode`. */
 static void draw_vertices(GLenum mode, Vtx *v, int n)
 {
@@ -1182,6 +1316,7 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
         t[n] = v[0];
         v = t; n++;
     }
+    if (prim >= GU_TRIANGLES && clip_and_send(ctx, prim, vt, v, n)) return;
     if (per == 0) {
         if (n <= CHUNK_VERTICES) { send_prim(ctx, prim, vt, v, n); return; }
         if (prim == GU_LINE_STRIP) {   /* strips of lines overlap by one vertex */
@@ -2210,8 +2345,13 @@ typedef struct Mesh {
     uint16_t handle;
     uint32_t bytes;
     unsigned used;              /* the frame it was last drawn in */
+    float *pos;                 /* the positions, here too: where they fall is worked out each frame (clipping) */
+    unsigned *code, code_frame; int code_any; float code_m[16];
     struct Mesh *next;
 } Mesh;
+
+static void mesh_free(Mesh *m) { free(m->pos); free(m->code); free(m); }
+static int mesh_clipped(PspExpContext *ctx, Mesh *m, const Clip *c, GLenum mode, const int *idx, int first, int count, uint32_t vt);
 
 typedef struct IndexMesh {
     GLuint buffer; uint32_t version; uintptr_t offset; GLenum type; int count; GLenum mode;
@@ -2248,7 +2388,7 @@ static void meshes_forget_buffer(GLuint name)
         Mesh *m = *pp;
         int k, hit = 0;
         for (k = 0; k < 4; k++) if (!m->hash && m->a[k].enabled && m->a[k].buffer == name) hit = 1;
-        if (hit) { *pp = m->next; mesh_release(m->handle, m->bytes); free(m); } else pp = &m->next;
+        if (hit) { *pp = m->next; mesh_release(m->handle, m->bytes); mesh_free(m); } else pp = &m->next;
     }
     while (*ip) {
         IndexMesh *m = *ip;
@@ -2265,7 +2405,7 @@ static int mesh_room(uint32_t bytes)
         for (pp = &meshes; *pp; pp = &(*pp)->next) if ((*pp)->used != mesh_frame && (!oldest || (*pp)->used < (*oldest)->used)) oldest = pp;
         for (ip = &index_meshes; *ip; ip = &(*ip)->next) if ((*ip)->used != mesh_frame && (!ioldest || (*ip)->used < (*ioldest)->used)) ioldest = ip;
         if (oldest && (!ioldest || (*oldest)->used <= (*ioldest)->used)) {
-            Mesh *m = *oldest; *oldest = m->next; if (m->handle) mesh_release(m->handle, m->bytes); free(m);
+            Mesh *m = *oldest; *oldest = m->next; if (m->handle) mesh_release(m->handle, m->bytes); mesh_free(m);
         } else if (ioldest) {
             IndexMesh *m = *ioldest; *ioldest = m->next; mesh_release(m->handle, m->bytes); free(m);
         } else return 0;
@@ -2339,7 +2479,8 @@ static Mesh *vertex_mesh(PspExpContext *ctx, uint32_t vt, int need)
     if (!(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
         free_handles[nfree_handles++] = m->handle; free(m); return NULL;
     }
-    for (i = 0; i < n; i++) { Vtx v; fetch(i, &v); pack_vertex(&out, vt, &v); }
+    m->pos = (float *)malloc((size_t)n * 3 * sizeof(float));
+    for (i = 0; i < n; i++) { Vtx v; fetch(i, &v); pack_vertex(&out, vt, &v); if (m->pos) memcpy(m->pos + i * 3, v.p, 12); }
     pspexp_upload_mesh_commit(ctx);
     mesh_bytes += m->bytes;
     m->next = meshes; meshes = m;
@@ -2447,6 +2588,19 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
     if (G.lighting || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (!(m = vertex_mesh(ctx, vt, hi + 1))) NOT_MESH("no vertex mesh");
     m->used = mesh_frame;
+    if (m->pos && mode >= GL_TRIANGLES && !getenv("PSPEXP_GL_NOCLIP")) {   /* where its vertices fall, this frame */
+        Clip c;
+        clip_setup(&c);
+        if (!m->code) m->code = (unsigned *)malloc((size_t)m->count * sizeof(unsigned));
+        if (m->code && (m->code_frame != mesh_frame || memcmp(m->code_m, c.m, sizeof(c.m)))) {
+            int v;
+            m->code_any = 0;
+            for (v = 0; v < m->count; v++) { float o[4]; clip_xform(&c, m->pos + v * 3, o); m->code[v] = outcode(&c, o); m->code_any |= m->code[v] != 0; }
+            m->code_frame = mesh_frame;
+            memcpy(m->code_m, c.m, sizeof(c.m));
+        }
+        if (m->code && m->code_any && mesh_clipped(ctx, m, &c, mode, idx, first, count, vt)) return 1;
+    }
     if (ibo && idx) {   /* the indices from a buffer: an index mesh too */
         IndexMesh *im;
         for (im = index_meshes; im; im = im->next)
@@ -2510,6 +2664,55 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
 
 /* At the end of a frame: the meshes dropped during the one before (whose
  * list the GE has run) are released. */
+/* A mesh draw that reaches outside the GE's range: its safe triangles by
+ * index from the mesh, the others cut and sent with the frame. */
+static int convert_indices(GLenum mode, const int *idx, int n, uint16_t *out, uint8_t *prim);
+static int converted_max(GLenum mode, int n);
+
+static int mesh_clipped(PspExpContext *ctx, Mesh *m, const Clip *c, GLenum mode, const int *idx, int first, int count, uint32_t vt)
+{
+    uint16_t *list, *safe;
+    Vtx *out;
+    int *seq = NULL, n, nt, i, ns = 0, k = 0;
+    uint8_t prim;
+    if (!idx) {
+        if (!(seq = (int *)malloc((size_t)count * sizeof(int)))) return 0;
+        for (i = 0; i < count; i++) seq[i] = first + i;
+        idx = seq;
+    }
+    list = (uint16_t *)malloc((size_t)converted_max(mode, count) * 2u);
+    n = list ? convert_indices(mode, idx, count, list, &prim) : 0;
+    free(seq);
+    if (n <= 0 || prim < GU_TRIANGLES) { free(list); return 0; }
+    nt = triangle_count(prim, n);
+    safe = (uint16_t *)malloc((size_t)nt * 3 * 2u + 2);
+    out = (Vtx *)malloc((size_t)nt * 21 * sizeof(Vtx) + 1);
+    if (!safe || !out) { free(list); free(safe); free(out); return 0; }
+    for (i = 0; i < nt; i++) {
+        int a, b, d;
+        unsigned ca, cb, cd;
+        triangle_at(prim, i, &a, &b, &d);
+        a = list[a]; b = list[b]; d = list[d];
+        ca = m->code[a]; cb = m->code[b]; cd = m->code[d];
+        if (!(ca | cb | cd)) { safe[ns++] = (uint16_t)a; safe[ns++] = (uint16_t)b; safe[ns++] = (uint16_t)d; }
+        else if (!(ca & cb & cd)) {
+            Vtx va, vb, vd;
+            fetch(a, &va); fetch(b, &vb); fetch(d, &vd);
+            k += clip_triangle(c, &va, &vb, &vd, out + k);
+        }
+    }
+    for (i = 0; i < ns; i += 65535 / 3 * 3) {
+        int cnt = ns - i < 65535 / 3 * 3 ? ns - i : 65535 / 3 * 3;
+        uint16_t *dst = pspexp_3d_draw_mesh(ctx, m->handle, PSPEXP_MESH_INLINE, GU_TRIANGLES, 0, (uint32_t)cnt);
+        if (dst) memcpy(dst, safe + i, (size_t)cnt * 2u);
+    }
+    for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
+        send_prim(ctx, GU_TRIANGLES, vt, out + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+    G.draws++; G.vertices += (unsigned)(ns + k);
+    free(list); free(safe); free(out);
+    return 1;
+}
+
 static void meshes_frame_done(PspExpContext *ctx)
 {
     int i, old = rel_cur ^ 1;
@@ -2523,7 +2726,7 @@ static void meshes_frame_done(PspExpContext *ctx)
         Mesh **pp = &meshes;
         while (*pp) {
             Mesh *m = *pp;
-            if (m->hash && !m->handle && m->used + 3 < mesh_frame) { *pp = m->next; free(m); }
+            if (m->hash && !m->handle && m->used + 3 < mesh_frame) { *pp = m->next; mesh_free(m); }
             else pp = &m->next;
         }
     }
