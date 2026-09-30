@@ -399,7 +399,8 @@ typedef struct PspExp3DState {
                                    matrix (3D_MATRICES) times tex_source; GU_ENVIRONMENT_MAP: (1 + n.L) / 2 of
                                    the eye-space normal and two lights' directions (tex_env_lights) */
     uint8_t  tex_source;        /* GU_POSITION, GU_UV, GU_NORMALIZED_NORMAL, GU_NORMAL */
-    uint8_t  tex_env_lights;    /* the two lights for u and v: first | second << 4 */
+    uint8_t  tex_env_lights;    /* the two lights, as sceGuTexMapMode takes them: first | second << 4. The
+                                   GE makes v from the first and u from the second (PSP-1000 and PPSSPP alike) */
     uint8_t  reserved[9];
 } PspExp3DState;
 PSPEXP_STATIC_ASSERT(sizeof(PspExp3DState) == 96, state3d_size);

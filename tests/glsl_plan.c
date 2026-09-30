@@ -61,6 +61,14 @@ int main(int argc, char **argv)
     if (plan.lit) printf("  lit: normal attribute %d, light %.2f %.2f %.2f, diffuse %.2f %.2f %.2f, ambient %.2f %.2f %.2f\n", plan.lit_attr,
                          plan.light_dir[0], plan.light_dir[1], plan.light_dir[2], plan.light_diffuse[0], plan.light_diffuse[1],
                          plan.light_diffuse[2], plan.light_ambient[0], plan.light_ambient[1], plan.light_ambient[2]);
+    if (plan.pre_test) printf("  pre-pass: unit %d, alpha test 0x%x %.3f\n", plan.pre_unit, plan.alpha_func, plan.alpha_ref);
+    if (plan.env) {
+        float n[3] = { 0, 0, 1 }, d[3];
+        glsl_plan_env_dir(&plan, n, d);
+        printf("  cube map: unit %d%s%s, normal attribute %d, scale %.2f %.2f %.2f, facing: %.2f %.2f %.2f\n", plan.env_unit,
+               plan.env_only ? ", the colour" : ", added", plan.env_alpha ? ", its alpha" : "", plan.env_attr,
+               plan.env_scale[0], plan.env_scale[1], plan.env_scale[2], d[0], d[1], d[2]);
+    }
     for (i = 0; i < GLSL_ATTR_ALL; i++) { attrs[i][0] = 0.1f * (float)i; attrs[i][1] = 0.2f; attrs[i][2] = 0.3f; attrs[i][3] = 0.5f; }
     glsl_plan_vertex(&plan, (const float (*)[4])attrs, pos, uv, rgba);
     printf("  a vertex: pos %.2f %.2f %.2f %.2f  uv %.2f %.2f  rgba %.2f %.2f %.2f %.2f\n", pos[0], pos[1], pos[2], pos[3], uv[0], uv[1], rgba[0], rgba[1], rgba[2], rgba[3]);

@@ -113,8 +113,11 @@ vertex attributes and the texture samples. The plan for the GE:
 | a texture sample times the rest, per channel | the GE's texture, modulated by the rest worked out per vertex |
 | the colour alone | per-vertex colour |
 | `if (alpha < k) discard;` | the GE's alpha test |
+| `clamp(ambient + max(0, dot(normal, light)) * diffuse)`, the normal a matrix times an attribute | the GE's directional light |
+| `colour + textureCube(reflected eye vector)`, or the cube map alone | a second pass, added: a sphere map made here from the cube map, as the GE's environment map |
+| a discard on a texture the colour does not use | a pass before with its alpha test, the depth only |
 | uniforms in `if`s and loops | the branch taken, the loop unrolled |
-| anything else (two textures, a texture channel used for another, per-pixel maths, framebuffer reads) | the nearest of the above; the program is logged once with what was left out |
+| anything else (two 2D textures, a texture channel used for another, per-pixel maths, a screen-door pattern on `gl_FragCoord`, framebuffer reads) | the nearest of the above; the program is logged once with what was left out |
 
 `glGetString(GL_VERSION)` is "2.1 PSPExp" (`PSPEXP_GL_VERSION` to change it:
 "1.3" makes such games take a fixed-function path they have); contexts of

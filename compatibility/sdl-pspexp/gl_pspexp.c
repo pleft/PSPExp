@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #if !defined(__APPLE__)
 #include <dlfcn.h>
 #endif
@@ -235,6 +236,8 @@ typedef struct GlTex {
     uint32_t psp_bytes;          /* what it takes on the PSP now (0: not there) */
     struct GlTex *hnext;         /* in the name table */
     unsigned used;               /* the frame it was last drawn with */
+    uint32_t *face[6];           /* a cube map's faces, RGBA8 (only here: shaders' reflections are made from them) */
+    int face_w, face_h; uint32_t face_ver;
     struct GlTex *next;
 } GlTex;
 
@@ -287,6 +290,7 @@ static struct {
     /* state values */
     GLenum depth_func; int depth_mask; float depth_near, depth_far; float clear_depth;
     GLenum blend_src, blend_dst, blend_eq; float blend_color[4];
+    GLuint cube_units[8];         /* cube maps bound, per unit */
     GLenum alpha_func; float alpha_ref;
     GLenum cull_mode, front_face, shade_model;
     int color_mask[4]; float clear_color[4];
@@ -319,6 +323,8 @@ static struct {
     GLenum sh_alpha_func; float sh_alpha_ref;
     float sh_proj[16];
     GlTex *sh_tex;
+    int sh_env, sh_env_alpha;   /* ...a pass drawing a cube map as a sphere map (the GE's environment map) */
+    float sh_env_axes[2][3];    /* ...its axes: the eye's x and y on the normals */
     /* GL 2: the generic vertex attributes (of the vertex array object bound), the program in use */
     Array gattr[16]; int gnorm[16]; float gcur[16][4];
     GLuint program, vao, fbo, next_object;
@@ -686,9 +692,9 @@ static void build_state(PspExp3DState *s, GlTex *tex)
     if (tex && G.tc == TC_GE) {
         s->tex_map = GU_TEXTURE_MATRIX;
         s->tex_source = G.texgen[0] ? GU_POSITION : GU_UV;
-    } else if (tex && G.tc == TC_ENV) {
+    } else if (tex && G.tc == TC_ENV) {   /* (u from the second light given: see PspExp3DState) */
         s->tex_map = GU_ENVIRONMENT_MAP;
-        s->tex_env_lights = (PSPEXP_3D_LIGHTS - 2) | (PSPEXP_3D_LIGHTS - 1) << 4;
+        s->tex_env_lights = (PSPEXP_3D_LIGHTS - 1) | (PSPEXP_3D_LIGHTS - 2) << 4;
     }
     to_psp_rect(G.viewport, &s->viewport_x, &s->viewport_y, &s->viewport_w, &s->viewport_h, 1);
     {   /* GL's 0..1 onto the GE's 65535 (near) .. 0, a little short of 65535: glPolygonOffset has no GE
@@ -735,6 +741,12 @@ static void build_state(PspExp3DState *s, GlTex *tex)
         s->tex_func = GU_TFX_MODULATE;
         s->tex_alpha = tex && G.sh_tex_alpha && tex->has_alpha ? GU_TCC_RGBA : GU_TCC_RGB;
         s->tex_map = GU_TEXTURE_COORDS;
+        if (G.sh_env && tex) {   /* the sphere map, from the normals: its colour as it is */
+            s->tex_map = GU_ENVIRONMENT_MAP;
+            s->tex_env_lights = (PSPEXP_3D_LIGHTS - 1) | (PSPEXP_3D_LIGHTS - 2) << 4;
+            s->tex_func = GU_TFX_REPLACE;
+            s->tex_alpha = G.sh_env_alpha ? GU_TCC_RGBA : GU_TCC_RGB;
+        }
     }
 }
 
@@ -745,6 +757,11 @@ static void build_lights(PspExp3DLights *l, const float *color)
 {
     int i, n = 0;
     memset(l, 0, sizeof(*l));
+    if (G.sh_env) {   /* no lighting: the environment map's axes only */
+        memcpy(l->light[PSPEXP_3D_LIGHTS - 2].position, G.sh_env_axes[0], sizeof(G.sh_env_axes[0]));
+        memcpy(l->light[PSPEXP_3D_LIGHTS - 1].position, G.sh_env_axes[1], sizeof(G.sh_env_axes[1]));
+        return;
+    }
     if (G.sh_lit) {   /* a shader's lighting: one directional light, white material, its ambient as the scene's */
         const GlslPlan *pl = G.sh_lit;
         float amb[4] = { pl->light_ambient[0], pl->light_ambient[1], pl->light_ambient[2], 1 };
@@ -1044,7 +1061,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         G.matrices_sent = 1;
     }
     }
-    if ((G.lighting && !G.sh_active) || G.sh_lit || color || G.lights_const || G.tc == TC_ENV) {
+    if ((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || color || G.lights_const || G.tc == TC_ENV) {
         PspExp3DLights l;
         build_lights(&l, color);
         G.lights_const = color != NULL;
@@ -1286,8 +1303,8 @@ static void draw_vertices(GLenum mode, Vtx *v, int n)
                 mode, n, G.units[0], tex ? "on" : G.texture_2d ? "missing" : "off", tex ? tex->w : 0, tex ? tex->h : 0,
                 v[0].c, G.blend, G.blend_src, G.blend_dst, G.depth_test, G.cull, G.lighting, G.alpha_test, G.fog,
                 G.tex_env_mode, v[0].t[0], v[0].t[1], v[n > 2 ? 2 : 0].t[0], v[n > 2 ? 2 : 0].t[1], v[0].p[0], v[0].p[1], v[0].p[2]);
-    if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV) vt |= PSPEXP_3D_VT_TEXTURE;
-    if ((G.lighting && !G.sh_active) || G.sh_lit || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
+    if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV && !G.sh_env) vt |= PSPEXP_3D_VT_TEXTURE;
+    if ((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (G.sh_lit) vt &= ~(uint32_t)PSPEXP_3D_VT_COLOR;   /* lit: the material's colour */
     if (tex && G.tc == TC_HOST && (G.texgen[0] || G.texgen[1])) {   /* generated coordinates, per vertex, here */
         const float *m = G.mv[G.mv_top];
@@ -1866,7 +1883,7 @@ typedef struct GlProgram {
     GlslProgram *p;
     char log[256];
     char *bnames[16]; int blocs[16]; int nb;   /* glBindAttribLocation, for the next link */
-    unsigned uver, planned_ver; int planned, builtins, reported;
+    unsigned uver, planned_ver; int planned, builtins, reported, described;
     GlslPlan plan;
     struct GlProgram *next;
 } GlProgram;
@@ -2290,6 +2307,183 @@ GLEXT(void, glReleaseShaderCompiler, (void)) { }
 GLEXT(void, glGetShaderPrecisionFormat, (GLenum s, GLenum p, GLint *range, GLint *precision))
 { (void)s; (void)p; range[0] = 127; range[1] = 127; *precision = 23; }
 
+/* ---- a shader's cube map: a sphere map made from it ---------------------------------------
+ *
+ * The GE has no cube maps and one texture. A shader's reflection (a cube
+ * map along the eye vector reflected about the normal, added to the
+ * colour) is drawn in a pass of its own as the GE's environment map: a
+ * sphere map, indexed by the eye-space normal's x and y, made here from
+ * the cube map through the shader's own expression for the direction, the
+ * view straight ahead. It is made again when that changes (the camera
+ * turns), a few kept for the directions of the moment. */
+
+#define ENV_SIZE 64
+#define ENV_GRID 17        /* directions worked out on a grid this size */
+static double now_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (double)t.tv_sec * 1e3 + (double)t.tv_nsec / 1e6; }
+static GlTex *texture_object(GLuint name);
+#define ENV_MAPS 4
+
+typedef struct EnvMap { GLuint tex, cube; uint32_t cube_ver; float scale[3]; int alpha; float probe[5][3]; unsigned used; } EnvMap;
+static EnvMap envmaps[ENV_MAPS];
+static unsigned env_frame;
+
+static void cube_sample(const GlTex *c, const float d[3], float out[4])
+{
+    float ax = fabsf(d[0]), ay = fabsf(d[1]), az = fabsf(d[2]), sc, tc, ma;
+    int f, x, y;
+    uint32_t p;
+    if (ax >= ay && ax >= az) { ma = ax; f = d[0] >= 0 ? 0 : 1; sc = d[0] >= 0 ? -d[2] : d[2]; tc = -d[1]; }
+    else if (ay >= az) { ma = ay; f = d[1] >= 0 ? 2 : 3; sc = d[0]; tc = d[1] >= 0 ? d[2] : -d[2]; }
+    else { ma = az; f = d[2] >= 0 ? 4 : 5; sc = d[2] >= 0 ? d[0] : -d[0]; tc = -d[1]; }
+    if (ma < 1e-12f || !c->face[f]) { out[0] = out[1] = out[2] = out[3] = 0; return; }
+    x = (int)((sc / ma + 1.0f) * 0.5f * (float)c->face_w);
+    y = (int)((tc / ma + 1.0f) * 0.5f * (float)c->face_h);
+    x = x < 0 ? 0 : x >= c->face_w ? c->face_w - 1 : x;
+    y = y < 0 ? 0 : y >= c->face_h ? c->face_h - 1 : y;
+    p = c->face[f][(size_t)y * (size_t)c->face_w + (size_t)x];
+    out[0] = (float)(p & 0xFF); out[1] = (float)((p >> 8) & 0xFF); out[2] = (float)((p >> 16) & 0xFF); out[3] = (float)(p >> 24);
+}
+
+static GlTex *env_map(const GlslPlan *pl)
+{
+    static const float pn[5][3] = { { 0, 0, 1 }, { 0.8f, 0, 0.6f }, { -0.8f, 0, 0.6f }, { 0, 0.8f, 0.6f }, { 0, -0.8f, 0.6f } };
+    GlTex *cube = find_texture(G.cube_units[pl->env_unit & 7]), *t;
+    EnvMap *e, *slot = NULL;
+    float probe[5][3];
+    int i, j, k;
+    double t0 = now_ms();
+    if (!cube || !cube->face[0]) return NULL;
+    for (i = 0; i < 5; i++) glsl_plan_env_dir(pl, pn[i], probe[i]);
+    for (e = envmaps; e < envmaps + ENV_MAPS; e++) {
+        int same = e->tex && e->cube == cube->name && e->cube_ver == cube->face_ver && e->alpha == pl->env_alpha &&
+                   !memcmp(e->scale, pl->env_scale, sizeof(e->scale));
+        float d = 0;
+        if (!same) continue;
+        for (i = 0; i < 5; i++) for (k = 0; k < 3; k++) if (fabsf(e->probe[i][k] - probe[i][k]) > d) d = fabsf(e->probe[i][k] - probe[i][k]);
+        if (d < 0.01f && (t = find_texture(e->tex))) { e->used = env_frame; return t; }
+        if (e->used != env_frame) slot = e;   /* the same map, the view turned: made again in place */
+    }
+    if (!slot)
+        for (e = envmaps; e < envmaps + ENV_MAPS; e++)
+            if (e->used != env_frame && (!slot || e->used < slot->used || !e->tex)) slot = e;
+    if (!slot) slot = &envmaps[0];
+    if (!slot->tex || !(t = find_texture(slot->tex))) {
+        while (find_texture(G.next_texture)) G.next_texture++;
+        slot->tex = G.next_texture++;
+        if (!(t = texture_object(slot->tex))) return NULL;
+        t->min_filter = t->mag_filter = GL_LINEAR;
+        t->wrap_s = t->wrap_t = GL_CLAMP_TO_EDGE;
+    }
+    if (!t->rgba || t->w != ENV_SIZE || t->h != ENV_SIZE) {
+        uint32_t *p = (uint32_t *)realloc(t->rgba, ENV_SIZE * ENV_SIZE * 4);
+        if (!p) return NULL;
+        t->rgba = p; t->w = t->h = ENV_SIZE;
+    }
+    t->has_alpha = pl->env_alpha;
+    {   /* the directions on a coarser grid, worked out through the shader; between, interpolated */
+        static float grid[ENV_GRID][ENV_GRID][3];
+        for (j = 0; j < ENV_GRID; j++)
+            for (i = 0; i < ENV_GRID; i++) {
+                float n[3], r2;
+                n[0] = (float)i * (2.0f / (ENV_GRID - 1)) - 1.0f;
+                n[1] = (float)j * (2.0f / (ENV_GRID - 1)) - 1.0f;
+                r2 = n[0] * n[0] + n[1] * n[1];
+                if (r2 > 1.0f) { float f = 1.0f / sqrtf(r2); n[0] *= f; n[1] *= f; r2 = 1.0f; }
+                n[2] = sqrtf(1.0f - r2);
+                glsl_plan_env_dir(pl, n, grid[j][i]);
+            }
+    for (j = 0; j < ENV_SIZE; j++)
+        for (i = 0; i < ENV_SIZE; i++) {
+            float d[3], c[4];
+            float fx = ((float)i + 0.5f) * ((float)(ENV_GRID - 1) / ENV_SIZE), fy = ((float)j + 0.5f) * ((float)(ENV_GRID - 1) / ENV_SIZE);
+            int gx = (int)fx, gy = (int)fy;
+            uint32_t px = 0;
+            fx -= (float)gx; fy -= (float)gy;
+            for (k = 0; k < 3; k++)
+                d[k] = (grid[gy][gx][k] * (1 - fx) + grid[gy][gx + 1][k] * fx) * (1 - fy) +
+                       (grid[gy + 1][gx][k] * (1 - fx) + grid[gy + 1][gx + 1][k] * fx) * fy;
+            cube_sample(cube, d, c);
+            for (k = 0; k < 3; k++) {
+                float v = c[k] * pl->env_scale[k];
+                px |= (uint32_t)(v < 0 ? 0 : v > 255 ? 255 : v + 0.5f) << (k * 8);
+            }
+            px |= (uint32_t)c[3] << 24;
+            t->rgba[j * ENV_SIZE + i] = px;
+        }
+    }
+    t->dirty = 1;
+    slot->cube = cube->name; slot->cube_ver = cube->face_ver; slot->alpha = pl->env_alpha;
+    memcpy(slot->scale, pl->env_scale, sizeof(slot->scale));
+    memcpy(slot->probe, probe, sizeof(probe));
+    slot->used = env_frame;
+    if (G.log >= 2) gl_logf("sphere map %u made from cube map %u in %.1f ms", slot->tex, cube->name, now_ms() - t0);
+    return t;
+}
+
+/* A shader's draw in passes. 0: before, when the discard is on a texture the colour does not use:
+ * that texture's alpha test, only the depth written; 1: its colour; 2: a cube map added (or the
+ * colour itself), as a sphere map, where pass 1 drew. sh_pass sets up pass k over GL's state
+ * (0: not needed), sh_pass_end puts that back. */
+static struct { int blend, depth_mask, cm[4]; GLenum bsrc, bdst, beq, dfunc; } sh_gl;
+
+static int sh_pass(const GlslPlan *pl, int k)
+{
+    if (k == 0) {
+        sh_gl.blend = G.blend; sh_gl.depth_mask = G.depth_mask; memcpy(sh_gl.cm, G.color_mask, sizeof(sh_gl.cm));
+        sh_gl.bsrc = G.blend_src; sh_gl.bdst = G.blend_dst; sh_gl.beq = G.blend_eq; sh_gl.dfunc = G.depth_func;
+    } else {
+        G.blend = sh_gl.blend; G.depth_mask = sh_gl.depth_mask; memcpy(G.color_mask, sh_gl.cm, sizeof(sh_gl.cm));
+        G.blend_src = sh_gl.bsrc; G.blend_dst = sh_gl.bdst; G.blend_eq = sh_gl.beq; G.depth_func = sh_gl.dfunc;
+    }
+    G.sh_active = 1;
+    G.sh_env = 0; G.sh_lit = NULL; G.sh_tex = NULL; G.sh_alpha_test = 0;
+    G.sh_tex_alpha = pl->tex_alpha;
+    G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
+    switch (k) {
+    case 0:
+        if (!pl->pre_test) return 0;
+        G.sh_tex = find_texture(G.units[pl->pre_unit & 7]);
+        G.sh_tex_alpha = 1;
+        G.sh_alpha_test = 1;
+        memset(G.color_mask, 0, sizeof(G.color_mask));
+        G.blend = 0;
+        G.depth_mask = 1;
+        if (G.depth_func == GL_LESS) G.depth_func = GL_LEQUAL;
+        else if (G.depth_func == GL_GREATER) G.depth_func = GL_GEQUAL;
+        return 1;
+    case 1:
+        if (pl->env_only) return 0;
+        G.sh_tex = pl->textured ? find_texture(G.units[pl->sampler_unit & 7]) : NULL;
+        G.sh_alpha_test = pl->alpha_test;
+        G.sh_lit = pl->lit ? pl : NULL;
+        if (pl->pre_test) G.depth_func = GL_EQUAL;
+        return 1;
+    case 2:
+        if (!pl->env || !(G.sh_tex = env_map(pl))) return 0;
+        G.sh_env = 1;
+        G.sh_env_alpha = pl->env_alpha;
+        memcpy(G.sh_env_axes, pl->env_axes, sizeof(G.sh_env_axes));
+        if (pl->env_only) {
+            G.sh_alpha_test = pl->alpha_test;
+            if (pl->pre_test) G.depth_func = GL_EQUAL;
+        } else {   /* added to what pass 1 drew */
+            G.blend = 1; G.blend_src = G.blend_dst = GL_ONE; G.blend_eq = GL_FUNC_ADD;
+            if (G.depth_mask) G.depth_func = GL_EQUAL;
+            G.depth_mask = 0;
+        }
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static void sh_pass_end(void)
+{
+    G.blend = sh_gl.blend; G.depth_mask = sh_gl.depth_mask; memcpy(G.color_mask, sh_gl.cm, sizeof(sh_gl.cm));
+    G.blend_src = sh_gl.bsrc; G.blend_dst = sh_gl.bdst; G.blend_eq = sh_gl.beq; G.depth_func = sh_gl.dfunc;
+    G.sh_active = 0; G.sh_lit = NULL; G.sh_env = 0;
+}
+
 /* A draw by a shader program: its plan for the uniforms of now, each
  * vertex's attributes through it, the GE drawing what the plan says. */
 static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
@@ -2308,6 +2502,12 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
         if (!p->plan.exact && !p->reported) { p->reported = 1; gl_logf("program %u: drawn as near as the GE can (%s)", G.program, p->plan.why); }
     }
     pl = &p->plan;
+    if (G.log >= 2 && !p->described) {
+        p->described = 1;
+        gl_logf("program %u first drawn: blend %d %x %x, depth %d %x mask %d, cull %d, units %u %u %u cubes %u %u %u, textured %d unit %d, lit %d, alpha test %d",
+                G.program, G.blend, G.blend_src, G.blend_dst, G.depth_test, G.depth_func, G.depth_mask, G.cull,
+                G.units[0], G.units[1], G.units[2], G.cube_units[0], G.cube_units[1], G.cube_units[2], pl->textured, pl->sampler_unit, pl->lit, pl->alpha_test);
+    }
     if (shader_mesh(p, mode, idx, first, count, ibo, ioffset, itype)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
     {   /* the arrays, found once for the draw: base, stride, element size (-1: the current value) */
@@ -2355,6 +2555,7 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
         v[i].t[0] = uv[0]; v[i].t[1] = uv[1];
         v[i].c = abgr(c);
         if (pl->lit) memcpy(v[i].n, attrs[pl->lit_attr], 12);
+        else if (pl->env) memcpy(v[i].n, attrs[pl->env_attr], 12);
         else { v[i].n[0] = v[i].n[1] = 0; v[i].n[2] = 1; }
     }
     }
@@ -2372,17 +2573,10 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
             for (r = 0; r < count && r < 4; r++) gl_logf("  vertex %d: %g %g %g", r, v[r].p[0], v[r].p[1], v[r].p[2]);
         }
     }
-    G.sh_active = 1;
     if (pl->matrix_ok) memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
     else mat_identity(G.sh_proj);
-    G.sh_tex = pl->textured ? find_texture(G.units[pl->sampler_unit & 7]) : NULL;
-    G.sh_tex_alpha = pl->tex_alpha;
-    G.sh_alpha_test = pl->alpha_test;
-    G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
-    G.sh_lit = pl->lit ? pl : NULL;
-    draw_vertices(mode, v, count);
-    G.sh_active = 0;
-    G.sh_lit = NULL;
+    for (i = 0; i < 3; i++) if (sh_pass(pl, i)) draw_vertices(mode, v, count);
+    sh_pass_end();
 }
 
 /* ---- meshes: buffer objects kept on the PSP ------------------------------------------
@@ -2776,7 +2970,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     uint64_t h;
     unsigned used = pl->attribs_used;
     uint32_t vt = PSPEXP_3D_VT_POSITION | PSPEXP_3D_VT_COLOR;
-    int a, k, hi = 0, n = 1 << 30, any = 0;
+    int a, k, hi = 0, n = 1 << 30, any = 0, pass;
     if (G.compiling || getenv("PSPEXP_GL_NOMESH") || !pl->matrix_ok || !pl->vertex_hash || (used >> 16)) return 0;
     if (count < 192) return 0;   /* small draws (text, 2D: often from buffers made each frame) are cheaper streamed */
     h = pl->vertex_hash;
@@ -2811,17 +3005,14 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     else hi = first + count - 1;
     if (hi >= n) return 0;
     if (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES) return 1;
-    /* the draw's state: the plan's */
-    G.sh_active = 1;
+    /* the draw's state: the plan's, its first pass */
     memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
-    G.sh_tex = pl->textured ? find_texture(G.units[pl->sampler_unit & 7]) : NULL;
-    G.sh_tex_alpha = pl->tex_alpha;
-    G.sh_alpha_test = pl->alpha_test;
-    G.sh_alpha_func = pl->alpha_func; G.sh_alpha_ref = pl->alpha_ref;
-    G.sh_lit = pl->lit ? pl : NULL;
-    if (!(ctx = prepare_colour(&tex, NULL))) { G.sh_active = 0; G.sh_lit = NULL; return 1; }
-    if (tex) vt |= PSPEXP_3D_VT_TEXTURE;
+    for (pass = 0; pass < 3 && !sh_pass(pl, pass); pass++) { }
+    if (pass == 3) { sh_pass_end(); return 1; }
+    if (!(ctx = prepare_colour(&tex, NULL))) { sh_pass_end(); return 1; }
+    if ((pl->textured && G.units[pl->sampler_unit & 7]) || pl->pre_test) vt |= PSPEXP_3D_VT_TEXTURE;
     if (pl->lit) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_COLOR) | PSPEXP_3D_VT_NORMAL;
+    if (pl->env) vt |= PSPEXP_3D_VT_NORMAL;
     h ^= (uint64_t)vt << 20;
     if (!h) h = 1;
     for (m = meshes; m; m = m->next) if (m->shkey == h && m->vt == vt && m->count >= hi + 1) break;
@@ -2831,8 +3022,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
         if (ch->streak >= 2) {
             ch->until = mesh_frame + 300;
             ch->streak = 0;
-            G.sh_active = 0;
-            G.sh_lit = NULL;
+            sh_pass_end();
             if (G.log) gl_logf("program %u: a draw that changes every frame: streamed", pr->name);
             return 0;
         }
@@ -2841,7 +3031,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
         uint8_t *out;
         float attrs[GLSL_ATTR_ALL][4];
         int i, nb = 0;
-        if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) { G.sh_active = 0; G.sh_lit = NULL; return 0; }
+        if (!mesh_room(pspexp_3d_vertex_size(vt) * (uint32_t)n) || !(m = (Mesh *)calloc(1, sizeof(*m)))) { sh_pass_end(); return 0; }
         m->shkey = h; m->vt = vt; m->count = n;
         m->handle = mesh_handle();
         m->bytes = pspexp_3d_vertex_size(vt) * (uint32_t)n;
@@ -2853,8 +3043,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
             !(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
             free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle;
             mesh_free(m);
-            G.sh_active = 0;
-            G.sh_lit = NULL;
+            sh_pass_end();
             return 0;
         }
         for (a = 0; a < 16; a++) memcpy(attrs[a], G.gcur[a], 16);
@@ -2876,6 +3065,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
             v->t[0] = uv[0]; v->t[1] = uv[1];
             v->c = abgr(c);
             if (pl->lit) memcpy(v->n, attrs[pl->lit_attr], 12);
+            else if (pl->env) memcpy(v->n, attrs[pl->env_attr], 12);
             else { v->n[0] = v->n[1] = 0; v->n[2] = 1; }
             memcpy(m->pos + i * 3, v->p, 12);
             pack_vertex(&out, vt, v);
@@ -2894,8 +3084,9 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
         }
     }
     k = mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
-    G.sh_active = 0;
-    G.sh_lit = NULL;
+    for (pass++; pass < 3 && k; pass++)   /* the passes after: the same mesh */
+        if (sh_pass(pl, pass) && (ctx = prepare_colour(&tex, NULL))) mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
+    sh_pass_end();
     return k;
 }
 
@@ -2960,6 +3151,7 @@ static void meshes_frame_done(PspExpContext *ctx)
     }
     nreleases[old] = 0;
     rel_cur = old;
+    env_frame++;
     {   /* remembered contents not seen again for a few frames: forgotten */
         Mesh **pp = &meshes;
         while (*pp) {
@@ -3460,6 +3652,7 @@ GLAPI(void, glBindTexture, (GLenum target, GLuint name))
 {
     RECORD(OP_BIND_TEXTURE, target, name, 0, 0, NULL);
     ensure_init();
+    if (target == GL_TEXTURE_CUBE_MAP && G.active_unit >= 0 && G.active_unit < 8) { G.cube_units[G.active_unit] = name; texture_object(name); return; }
     if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     texture_object(name);
     G.units[G.active_unit] = name;
@@ -3480,9 +3673,10 @@ GLAPI(void, glDeleteTextures, (GLsizei n, const GLuint *names))
             tex_bytes -= t->psp_bytes;
             if (G.target == t) G.target = NULL;
             free(t->rgba);
+            { int f; for (f = 0; f < 6; f++) free(t->face[f]); }
             free(t);
         }
-        { int u; for (u = 0; u < 8; u++) if (G.units[u] == names[i]) G.units[u] = 0; }
+        { int u; for (u = 0; u < 8; u++) { if (G.units[u] == names[i]) G.units[u] = 0; if (G.cube_units[u] == names[i]) G.cube_units[u] = 0; } }
     }
 }
 GLAPI(GLboolean, glIsTexture, (GLuint name)) { return find_texture(name) != NULL; }
@@ -3574,6 +3768,32 @@ static void store_pixels(GlTex *t, int x0, int y0, int w, int h, GLenum format, 
             t->rgba[(size_t)(y0 + y) * (size_t)t->w + (size_t)(x0 + x)] = read_pixel(base + (size_t)y * row + (size_t)x * (size_t)bpp, format, type);
 }
 
+/* A cube map's face (GL_TEXTURE_CUBE_MAP_POSITIVE_X + f), level 0: kept here only. The GE has
+ * no cube maps; a shader's reflection is drawn from a sphere map made of them (env_map). */
+static void cube_face(int f, GLint level, GLsizei w, GLsizei h, GLenum format, GLenum type, const GLvoid *pixels)
+{
+    GlTex *t;
+    uint32_t *p, *keep;
+    int kw, kh;
+    if (level != 0 || G.active_unit < 0 || G.active_unit >= 8 || !(t = texture_object(G.cube_units[G.active_unit]))) return;
+    if (w <= 0 || h <= 0 || w > 2048 || h > 2048) { set_error(GL_INVALID_VALUE); return; }
+    if (!(p = (uint32_t *)realloc(t->face[f], (size_t)w * (size_t)h * 4))) { set_error(GL_OUT_OF_MEMORY); return; }
+    t->face[f] = p; t->face_w = w; t->face_h = h;
+    if (pixels) {   /* read as a 2D image would be */
+        keep = t->rgba; kw = t->w; kh = t->h;
+        t->rgba = p; t->w = w; t->h = h;
+        store_pixels(t, 0, 0, w, h, format, type, pixels);
+        t->rgba = keep; t->w = kw; t->h = kh;
+    } else memset(p, 0, (size_t)w * (size_t)h * 4);
+    t->face_ver++;
+    if (getenv("PSPEXP_GL_DUMP")) {
+        char path[512];
+        FILE *o;
+        snprintf(path, sizeof(path), "%s/cube-%u-%d-%dx%d.rgba", getenv("PSPEXP_GL_DUMP"), t->name, f, w, h);
+        if ((o = fopen(path, "wb"))) { fwrite(p, 4, (size_t)w * (size_t)h, o); fclose(o); }
+    }
+}
+
 GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h, GLint border,
                            GLenum format, GLenum type, const GLvoid *pixels))
 {
@@ -3585,6 +3805,7 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
         G.proxy_w = ok ? w : 0; G.proxy_h = ok ? h : 0;
         return;
     }
+    if (target >= 0x8515 && target <= 0x851A) { cube_face((int)(target - 0x8515), level, w, h, format, type, pixels); return; }
     if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     if (level != 0) return;   /* mipmaps: the GE is given level 0 only */
     if (!(t = texture_object(G.units[G.active_unit]))) { set_error(GL_INVALID_OPERATION); return; }

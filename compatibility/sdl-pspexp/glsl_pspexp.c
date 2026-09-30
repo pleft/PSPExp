@@ -981,7 +981,8 @@ struct GlslProgram {
     GlslVar uni[GLSL_MAX_UNIFORMS]; int nuni;
     int next_location;
     Arena plan_arena;           /* the last plan's expressions */
-    Sym *pos[4], *uv[2], *col[4];
+    Sym *pos[4], *uv[2], *col[4], *env[3];   /* env: a cube map's direction */
+    struct EnvIns *envp; int envn, envcap, env_out[3];   /* ...as a list, each shared part once */
     int planned_ok;
 };
 
@@ -1052,6 +1053,7 @@ void glsl_program_free(GlslProgram *p)
     if (!p) return;
     for (i = 0; i < p->nuni; i++) free(p->uni[i].value);
     afree(&p->plan_arena);
+    free(p->envp);
     free(p);
 }
 
@@ -1231,13 +1233,14 @@ static Sym *tex_sym(Ev *e, Val sampler, Sym *u, Sym *v)
     return t;
 }
 
-static Val texture_call(Ev *e, Val s, Val coord, int proj)
+static Val texture_call(Ev *e, Val s, Val coord, int proj, int cube)
 {
     Val r = val_new(e, vec_type(T_FLOAT, 4));
     Sym *u = at(coord, 0), *v = coord.n > 1 ? coord.c[1] : K(e, 0), *t;
     int i;
     if (proj) { Sym *q = coord.c[coord.n - 1]; u = op2(e, O_DIV, u, q); v = op2(e, O_DIV, v, q); }
     t = tex_sym(e, s, u, v);
+    if (cube) { t->comp = 1; t->c = coord.n > 2 ? coord.c[2] : K(e, 0); }   /* a cube map: a direction */
     for (i = 0; i < 4; i++) { Sym *c = sym(e, Y_TEXC); c->a = t; c->comp = (unsigned char)i; r.c[i] = c; }
     return r;
 }
@@ -1302,10 +1305,11 @@ static Val call(Ev *e, Node *n)
     for (i = 0; i < e->sh->nf; i++)
         if (!strcmp(e->sh->f[i].name, f) && e->sh->f[i].np == na) return call_user(e, &e->sh->f[i], a, n->list, na);
 #define IS(s) (!strcmp(f, s))
-    if (IS("texture2D") || IS("texture") || IS("texture2DLod") || IS("textureLod") || IS("textureCube") ||
+    if (IS("textureCube") || IS("textureCubeLod")) return na >= 2 ? texture_call(e, a[0], a[1], 0, 1) : val_new(e, vec_type(T_FLOAT, 4));
+    if (IS("texture2D") || IS("texture") || IS("texture2DLod") || IS("textureLod") ||
         IS("texture2DRect") || IS("texture2DBias") || IS("textureGrad") || IS("texelFetch"))
-        return na >= 2 ? texture_call(e, a[0], a[1], 0) : val_new(e, vec_type(T_FLOAT, 4));
-    if (IS("texture2DProj") || IS("textureProj")) return na >= 2 ? texture_call(e, a[0], a[1], 1) : val_new(e, vec_type(T_FLOAT, 4));
+        return na >= 2 ? texture_call(e, a[0], a[1], 0, 0) : val_new(e, vec_type(T_FLOAT, 4));
+    if (IS("texture2DProj") || IS("textureProj")) return na >= 2 ? texture_call(e, a[0], a[1], 1, 0) : val_new(e, vec_type(T_FLOAT, 4));
     if (IS("shadow2D") || IS("shadow2DProj")) { Val r = val_new(e, vec_type(T_FLOAT, 4)); approx(e, "shadow maps"); for (i = 0; i < 4; i++) r.c[i] = K(e, 1); return r; }
     if (na == 1) {
         static const struct { const char *n; int op; } one[] = {
@@ -1827,16 +1831,38 @@ static int match_light(const Sym *f, float coef[3], int *attr, float *kd, float 
     return 1;
 }
 
+static int reads_fragcoord(const Sym *s, int *budget)
+{
+    if (!s || --*budget < 0) return 0;
+    if (s->kind == Y_FRAGCOORD) return 1;
+    if (s->kind != Y_OP) return 0;
+    return reads_fragcoord(s->a, budget) || reads_fragcoord(s->b, budget) || reads_fragcoord(s->c, budget);
+}
+
+/* A discard's conditions (ORed) without those on the pixel's place (a screen-door pattern, for
+ * seeing through: the GE has nothing like it, drawn whole). NULL: none left. */
+static const Sym *without_fragcoord(Ev *e, const Sym *d)
+{
+    int budget = 20000;
+    if (!d) return NULL;
+    if (d->kind == Y_OP && d->op == O_OR) {
+        const Sym *a = without_fragcoord(e, d->a), *b = without_fragcoord(e, d->b);
+        return !a ? b : !b ? a : (a == d->a && b == d->b) ? d : op2(e, O_OR, (Sym *)a, (Sym *)b);
+    }
+    if (reads_fragcoord(d, &budget) || budget < 0) { approx(e, "a pattern on the pixels' places"); return NULL; }
+    return d;
+}
+
 /* discard when X op K: the GE's alpha test keeps the other side */
-static int alpha_test(const Sym *d, unsigned *func, float *ref)
+static int alpha_test(const Sym *d, unsigned *func, float *ref, const Sym **x)
 {
     int op;
     const Sym *k;
     if (!d || d->kind != Y_OP) return 0;
     op = d->op;
-    if (d->b && d->b->kind == Y_K && d->a->kind != Y_K) k = d->b;
+    if (d->b && d->b->kind == Y_K && d->a->kind != Y_K) { k = d->b; *x = d->a; }
     else if (d->a && d->a->kind == Y_K && d->b && d->b->kind != Y_K) {   /* K op X: turned round */
-        k = d->a;
+        k = d->a; *x = d->b;
         op = op == O_LT ? O_GT : op == O_GT ? O_LT : op == O_LE ? O_GE : op == O_GE ? O_LE : op;
     } else return 0;
     switch (op) {   /* GL comparison that passes (GL_LESS = 0x201 ...) */
@@ -1864,6 +1890,147 @@ static void sym_scan(const Sym *s, unsigned *used, uint64_t *h, int *budget)
     *h = (*h ^ v) * 1099511628211ull;
     if (s->kind == Y_OP || s->kind == Y_TEX || s->kind == Y_TEXC) { sym_scan(s->a, used, h, budget); sym_scan(s->b, used, h, budget); sym_scan(s->c, used, h, budget); }
     *h = (*h ^ 0x5bd1e995u) * 1099511628211ull;   /* the end of a node: shapes told apart */
+}
+
+/* ---- cube maps: a reflection added to the colour --------------------------------------------- */
+
+/* K x a cube map's channel ch (the constants multiplied in) */
+static int cube_term(const Sym *s, int ch, const Sym **t, float *k)
+{
+    const Sym *f[16], *c = NULL;
+    int nf = 0, i;
+    float kk = 1;
+    factors(s, f, &nf);
+    for (i = 0; i < nf; i++) {
+        if (f[i]->kind == Y_K) kk *= f[i]->k;
+        else if (f[i]->kind == Y_TEXC && f[i]->a && f[i]->a->comp == 1 && f[i]->comp == ch && !c) c = f[i];
+        else return 0;
+    }
+    if (!c) return 0;
+    *t = c->a; *k = kk;
+    return 1;
+}
+
+/* colour = cube term (rest NULL), or rest + cube term */
+static int split_env(const Sym *s, int ch, const Sym **t, float *k, const Sym **rest)
+{
+    if (!s) return 0;
+    if (cube_term(s, ch, t, k)) { *rest = NULL; return 1; }
+    if (s->kind == Y_OP && s->op == O_ADD) {
+        if (cube_term(s->a, ch, t, k)) { *rest = s->b; return 1; }
+        if (cube_term(s->b, ch, t, k)) { *rest = s->a; return 1; }
+    }
+    return 0;
+}
+
+static int contains(const Sym *s, const Sym *x, int *budget)
+{
+    if (!s || --*budget < 0) return 0;
+    if (s == x) return 1;
+    if (s->kind != Y_OP && s->kind != Y_TEX && s->kind != Y_TEXC) return 0;
+    return contains(s->a, x, budget) || contains(s->b, x, budget) || contains(s->c, x, budget);
+}
+
+/* x = m^-1 b, m 4x4 column-major: 0, or -1 when singular */
+static int solve4(const float *m, const float *b, float *x)
+{
+    float a[4][5];
+    int r, c, k;
+    for (r = 0; r < 4; r++) { for (c = 0; c < 4; c++) a[r][c] = m[c * 4 + r]; a[r][4] = b[r]; }
+    for (c = 0; c < 4; c++) {
+        int piv = c;
+        for (r = c + 1; r < 4; r++) if (fabsf(a[r][c]) > fabsf(a[piv][c])) piv = r;
+        if (fabsf(a[piv][c]) < 1e-12f) return -1;
+        if (piv != c) for (k = 0; k < 5; k++) { float t = a[c][k]; a[c][k] = a[piv][k]; a[piv][k] = t; }
+        for (r = 0; r < 4; r++) if (r != c) {
+            float f = a[r][c] / a[c][c];
+            for (k = c; k < 5; k++) a[r][k] -= f * a[c][k];
+        }
+    }
+    for (r = 0; r < 4; r++) x[r] = a[r][4] / a[r][r];
+    return 0;
+}
+
+/* A value as a list of steps, each shared part once (the expressions are
+ * graphs: a normalize reads its vector three times over): evaluated for
+ * thousands of normals when a sphere map is made. */
+typedef struct EnvIns { unsigned char kind, op, comp; short idx; float k; int a, b, c; const Sym *s; } EnvIns;
+
+static int env_emit(GlslProgram *p, const Sym *s, int depth)
+{
+    int i, a = -1, b = -1, c = -1;
+    EnvIns *in;
+    if (!s || depth > 200) return -2;
+    for (i = p->envn - 1; i >= 0; i--) if (p->envp[i].s == s) return i;   /* (a few hundred steps: a search will do) */
+    if (s->kind == Y_OP) {
+        if ((a = env_emit(p, s->a, depth + 1)) == -2 && s->a) return -2;
+        if (s->b && (b = env_emit(p, s->b, depth + 1)) == -2) return -2;
+        if (s->c && (c = env_emit(p, s->c, depth + 1)) == -2) return -2;
+    }
+    if (p->envn >= 2048) return -2;
+    if (p->envn == p->envcap) {
+        int cap = p->envcap ? p->envcap * 2 : 128;
+        EnvIns *n = (EnvIns *)realloc(p->envp, (size_t)cap * sizeof(EnvIns));
+        if (!n) return -2;
+        p->envp = n; p->envcap = cap;
+    }
+    in = &p->envp[p->envn];
+    in->kind = s->kind; in->op = s->op; in->comp = s->comp; in->idx = s->idx; in->k = s->k;
+    in->a = a; in->b = b; in->c = c; in->s = s;
+    return p->envn++;
+}
+
+/* The cube map's direction as the eye-space normal and the eye position
+ * make it: the normal a vertex output linear in one attribute (a normal
+ * matrix times it), the position the one at the middle of the screen (the
+ * view straight ahead, as sphere maps have it) */
+static void plan_env(Ev *e, GlslProgram *p, GlslPlan *plan, const Sym *ct, const VOut *vout, int nvout)
+{
+    static float co[GLSL_ATTR_ALL * 4];
+    const Sym *dir[3] = { ct->a, ct->b, ct->c };
+    unsigned used = 0;
+    uint64_t h = 0;
+    int budget = 100000, i, k, a, attr = -1;
+    float rows[3][3], det, c, clip[4] = { 0, 0, 0, 1 };
+    const float *m = &rows[0][0];
+    if (!plan->matrix_ok) { approx(e, "a cube map, the position not a matrix's"); return; }
+    for (i = 0; i < 3; i++) sym_scan(dir[i], &used, &h, &budget);
+    used &= ~(1u << plan->pos_attr);
+    for (a = 0; a < 32; a++) if (used & (1u << a)) { if (attr >= 0) { approx(e, "a cube map's direction from several attributes"); return; } attr = a; }
+    if (attr < 0 || attr >= GLSL_ATTR_ALL) { approx(e, "a cube map's direction not from a normal"); return; }
+    for (i = 0; i < nvout; i++) {
+        const Val *v = &vout[i].v;
+        int ok = v->n >= 3;
+        for (k = 0; k < 3 && ok; k++) {
+            int q;
+            memset(co, 0, sizeof(co)); c = 0;
+            if (linear(v->c[k], 1.0f, co, &c) < 0 || fabsf(c) > 1e-6f) { ok = 0; break; }
+            for (q = 0; q < GLSL_ATTR_ALL * 4; q++) if (co[q] != 0 && (q / 4 != attr || q % 4 == 3)) ok = 0;
+            memcpy(rows[k], co + attr * 4, sizeof(rows[k]));
+        }
+        if (!ok) continue;
+        budget = 200000;
+        for (k = 0; k < 3 && ok; k++) ok = contains(dir[0], v->c[k], &budget) || contains(dir[1], v->c[k], &budget) || contains(dir[2], v->c[k], &budget);
+        if (ok) break;
+    }
+    if (i == nvout) { approx(e, "a cube map's direction not from a normal"); return; }
+    det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+    if (fabsf(det) < 1e-12f) { approx(e, "a cube map's normal matrix singular"); return; }
+    {
+        float *o = plan->env_inv;
+        o[0] = (m[4] * m[8] - m[5] * m[7]) / det; o[1] = (m[2] * m[7] - m[1] * m[8]) / det; o[2] = (m[1] * m[5] - m[2] * m[4]) / det;
+        o[3] = (m[5] * m[6] - m[3] * m[8]) / det; o[4] = (m[0] * m[8] - m[2] * m[6]) / det; o[5] = (m[2] * m[3] - m[0] * m[5]) / det;
+        o[6] = (m[3] * m[7] - m[4] * m[6]) / det; o[7] = (m[1] * m[6] - m[0] * m[7]) / det; o[8] = (m[0] * m[4] - m[1] * m[3]) / det;
+    }
+    if (solve4(plan->matrix, clip, plan->env_pos) < 0 || fabsf(plan->env_pos[3]) < 1e-12f) { approx(e, "a cube map, the projection singular"); return; }
+    for (k = 0; k < 3; k++) plan->env_pos[k] /= plan->env_pos[3];
+    plan->env_pos[3] = 1;
+    memcpy(plan->env_axes, rows, sizeof(rows));
+    plan->env = 1;
+    plan->env_unit = ct->idx;
+    plan->env_attr = attr;
+    for (k = 0; k < 3; k++) p->env[k] = (Sym *)dir[k];
+    p->envn = -1;   /* the list: made when first asked for (glsl_plan_env_dir) */
 }
 
 int glsl_plan(GlslProgram *p, GlslPlan *plan)
@@ -1923,6 +2090,27 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         plan->matrix_ok = ok && loc >= 0;
         plan->pos_attr = loc;
     }
+    /* a cube map added to the colour (a reflection), or the colour itself: drawn in a pass
+     * of its own (a sphere map made from it); the rest is the colour of the draw's pass */
+    {
+        const Sym *ct = NULL, *t, *rest;
+        int n_env = 0, n_rest = 0;
+        float k;
+        p->env[0] = p->env[1] = p->env[2] = NULL;
+        for (ch = 0; ch < 4; ch++) {
+            if (!split_env(fc[ch], ch, &t, &k, &rest)) { if (ch < 3) n_rest++; continue; }
+            if (ct && t != ct && (t->idx != ct->idx || t->a != ct->a || t->b != ct->b || t->c != ct->c)) { approx(e, "two cube maps"); continue; }
+            ct = t;
+            if (ch < 3) { plan->env_scale[ch] = k; n_env++; if (rest) n_rest++; fc[ch] = rest ? rest : K(e, 0); }
+            else if (!rest) { plan->env_alpha = 1; fc[3] = K(e, 1); }
+            else { approx(e, "a cube map's alpha added"); fc[3] = rest; }
+        }
+        if (ct && n_env < 3) approx(e, "a cube map on some colour channels only");
+        else if (ct) {
+            plan_env(e, p, plan, ct, vout, nvout);
+            plan->env_only = plan->env && n_rest == 0;
+        }
+    }
     /* the colour: per channel, one texture sample times the rest */
     {
         int textured_rgb = 0, plain_rgb = 0;
@@ -1964,16 +2152,28 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
         if (tex && plain_rgb) approx(e, "a texture on some colour channels only");
         if (tex && !textured_rgb) approx(e, "a texture's alpha only");
         if (tex) plan->sampler_unit = tex->idx;
+        if (plan->env && plan->lit && plan->lit_attr != plan->env_attr) { approx(e, "a cube map's normal not the lighting's"); plan->env = 0; }
     }
     /* discard: the alpha test */
-    if (e->discard) {
-        if (!alpha_test(e->discard, &plan->alpha_func, &plan->alpha_ref)) approx(e, "a discard other than an alpha test");
-        else plan->alpha_test = 1;
+    {
+        const Sym *pre = NULL;   /* a discard on a texture the colour does not use: a pass before, for the depth */
+        e->discard = (Sym *)without_fragcoord(e, e->discard);
+        if (e->discard) {
+            const Sym *x = NULL;
+            if (!alpha_test(e->discard, &plan->alpha_func, &plan->alpha_ref, &x)) approx(e, "a discard other than an alpha test");
+            else if (x && x->kind == Y_TEXC && x->comp == 3 && x->a && x->a->comp == 0 && x->a->kind == Y_TEX && !tex) {
+                pre = x->a;
+                plan->pre_test = 1;
+                plan->pre_unit = pre->idx;
+            } else if (x && x->kind == Y_TEXC && tex && x->a != tex &&
+                       (x->a->idx != tex->idx || x->a->a != tex->a || x->a->b != tex->b)) approx(e, "a discard on another texture than the colour's");
+            else plan->alpha_test = 1;
+        }
+        for (i = 0; i < 4; i++) p->pos[i] = (Sym *)pos[i];
+        for (i = 0; i < 4; i++) p->col[i] = (Sym *)fc[i];
+        p->uv[0] = tex ? tex->a : pre ? pre->a : NULL;
+        p->uv[1] = tex ? tex->b : pre ? pre->b : NULL;
     }
-    for (i = 0; i < 4; i++) p->pos[i] = (Sym *)pos[i];
-    for (i = 0; i < 4; i++) p->col[i] = (Sym *)fc[i];
-    p->uv[0] = tex ? tex->a : NULL;
-    p->uv[1] = tex ? tex->b : NULL;
     plan->exact = !e->approx;
     snprintf(plan->why, sizeof(plan->why), "%s", e->why);
     plan->priv = p;
@@ -1990,6 +2190,11 @@ int glsl_plan(GlslProgram *p, GlslPlan *plan)
             h ^= 0x9e3779b97f4a7c15ull ^ (uint64_t)plan->lit_attr;
             sym_scan(fc[3], &used, &h, &budget);
         } else for (i = 0; i < 4; i++) sym_scan(fc[i], &used, &h, &budget);
+        if (plan->env) {   /* ...and the normals, for the sphere map */
+            used |= 1u << plan->env_attr;
+            h ^= 0x7f4a7c159e3779b9ull ^ (uint64_t)plan->env_attr << 8;
+        }
+        h ^= (uint64_t)plan->pre_test << 2;
         h ^= (uint64_t)plan->matrix_ok << 1 ^ (uint64_t)(loc + 1) << 3;
         plan->attribs_used = used;
         plan->vertex_hash = budget < 0 ? 0 : h;   /* 0: too large to be sure of */
@@ -2021,4 +2226,33 @@ void glsl_plan_vertex(const GlslPlan *plan, const float (*attrs)[4], float pos[4
     uv[0] = p->uv[0] ? nev(p->uv[0], attrs, 0) : 0;
     uv[1] = p->uv[1] ? nev(p->uv[1], attrs, 0) : 0;
     for (i = 0; i < 4; i++) rgba[i] = nev(p->col[i], attrs, 0);
+}
+
+void glsl_plan_env_dir(const GlslPlan *plan, const float n[3], float dir[3])
+{
+    GlslProgram *p = (GlslProgram *)plan->priv;
+    float attrs[GLSL_ATTR_ALL][4];
+    int i;
+    memset(attrs, 0, sizeof(attrs));
+    for (i = 0; i < 3; i++) attrs[plan->env_attr][i] = plan->env_inv[i * 3] * n[0] + plan->env_inv[i * 3 + 1] * n[1] + plan->env_inv[i * 3 + 2] * n[2];
+    memcpy(attrs[plan->pos_attr], plan->env_pos, sizeof(plan->env_pos));
+    if (p->envn < 0) {
+        p->envn = 0;
+        for (i = 0; i < 3; i++) if ((p->env_out[i] = env_emit(p, p->env[i], 0)) < 0) { p->envn = 0; break; }
+    }
+    if (p->envn > 0) {
+        float v[2048];
+        const EnvIns *in = p->envp;
+        for (i = 0; i < p->envn; i++, in++)
+            switch (in->kind) {
+            case Y_K: v[i] = in->k; break;
+            case Y_ATTR: v[i] = attrs[in->idx][in->comp]; break;
+            case Y_TEXC: v[i] = 1.0f; break;
+            case Y_OP: v[i] = fold(in->op, in->a >= 0 ? v[in->a] : 0, in->b >= 0 ? v[in->b] : 0, in->c >= 0 ? v[in->c] : 0); break;
+            default: v[i] = 0; break;
+            }
+        for (i = 0; i < 3; i++) dir[i] = v[p->env_out[i]];
+        return;
+    }
+    for (i = 0; i < 3; i++) dir[i] = nev(p->env[i], (const float (*)[4])attrs, 0);
 }

@@ -13,6 +13,12 @@
  *   GLDEMO_ONE=degrees [GLDEMO_TX=x]   a lighting check instead: one sphere turned
  *                              about y (then moved along x), lit from the camera:
  *                              it must look the same at any angle
+ *   GLDEMO_CUBE=1              a reflection instead: a torus from buffer objects, lit and
+ *                              textured, a cube map added along the reflected eye vector
+ *                              (each face its own colour, a white band along its first
+ *                              row, a dark one along its first column)
+ *   GLDEMO_READ=file.ppm       the last frame's pixels written out (a reference, with a
+ *                              real OpenGL)
  */
 #define GL_GLEXT_PROTOTYPES   /* GL 2's functions declared (GLDEMO_SHADER) */
 #include <SDL.h>
@@ -25,6 +31,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define TORUS_RINGS 24
 #define TORUS_SIDES 12
@@ -107,6 +114,9 @@ static void shader_frame(GLuint tex, int n, int w, int h)
     glUseProgram(0);
 }
 
+static float torus_v[(TORUS_RINGS + 1) * (TORUS_SIDES + 1)][6];   /* normal, position */
+static unsigned short torus_i[TORUS_RINGS * TORUS_SIDES * 6];
+
 static void cube(void)
 {
     static const float n[6][3] = { {0,0,1}, {0,0,-1}, {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0} };
@@ -126,9 +136,6 @@ static void cube(void)
     }
     glEnd();
 }
-
-static float torus_v[(TORUS_RINGS + 1) * (TORUS_SIDES + 1)][6];   /* normal, position */
-static unsigned short torus_i[TORUS_RINGS * TORUS_SIDES * 6];
 
 static void make_torus(void)
 {
@@ -174,6 +181,131 @@ static GLuint make_ring_list(void)
     }
     glEndList();
     return l;
+}
+
+/* GL 2: a torus reflecting a cube map, lit and textured (openMrac's car bodies are drawn so) */
+static void reflect_frame(GLuint tex, int n, int w, int h)
+{
+    static GLuint prog, cubemap, vbo, ibo;
+    static const char *vs =
+        "uniform mat4 uMvp;\n"
+        "uniform mat4 uMv;\n"
+        "uniform mat3 uNorm;\n"
+        "attribute vec3 aPos;\n"
+        "attribute vec3 aNormal;\n"
+        "varying vec2 vTex;\n"
+        "varying vec3 vN;\n"
+        "varying vec3 vRay;\n"
+        "void main() {\n"
+        "    vTex = aPos.xy * 0.5;\n"
+        "    vN = uNorm * aNormal;\n"
+        "    gl_Position = uMvp * vec4(aPos, 1.0);\n"
+        "    vec3 eye = vec3(uMv * vec4(aPos, 1.0));\n"
+        "    vRay = normalize(reflect(eye, vN));\n"
+        "}\n";
+    static const char *fs =
+        "uniform sampler2D uTex;\n"
+        "uniform samplerCube uCube;\n"
+        "uniform vec4 uLight;\n"
+        "varying vec2 vTex;\n"
+        "varying vec3 vN;\n"
+        "varying vec3 vRay;\n"
+        "void main() {\n"
+        "    vec4 shade = vec4(vec3(max(0.0, dot(vN, uLight.xyz))), 1.0) * vec4(0.35, 0.35, 0.35, 1.0) + vec4(0.08, 0.08, 0.08, 0.0);\n"
+        "    shade.rgb = clamp(shade.rgb, 0.0, 1.0);\n"
+        "    shade.a = 1.0;\n"
+        "    vec4 sky = textureCube(uCube, vRay);\n"
+        "    gl_FragColor = texture2D(uTex, vTex) * shade + vec4(sky.rgb * 0.7, 0.0);\n"
+        "}\n";
+    float asp = (float)w / (float)h, f = 2.4142f, zn = 0.5f, zf = 20.0f;
+    float proj[16] = { f / asp, 0, 0, 0,  0, f, 0, 0,  0, 0, (zf + zn) / (zn - zf), -1,  0, 0, 2 * zf * zn / (zn - zf), 0 };
+    float mv[16], mvp[16], nm[9], a = n * 0.02f, ca = cosf(a), sa = sinf(a), cb = 0.5f, sb = 0.866f;
+    float light[4] = { 0.3f, 0.5f, 0.81f, 0 };
+    int i, j, k;
+    if (!prog) {
+        static const unsigned char col[6][3] = { { 220, 40, 40 }, { 40, 200, 200 }, { 60, 220, 60 }, { 200, 40, 200 }, { 50, 70, 230 }, { 230, 220, 50 } };
+        static unsigned char px[32 * 32 * 3];
+        GLuint v = glCreateShader(GL_VERTEX_SHADER), fr = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(v, 1, &vs, NULL); glCompileShader(v);
+        glShaderSource(fr, 1, &fs, NULL); glCompileShader(fr);
+        prog = glCreateProgram();
+        glAttachShader(prog, v); glAttachShader(prog, fr);
+        glBindAttribLocation(prog, 0, "aPos");
+        glBindAttribLocation(prog, 1, "aNormal");
+        glLinkProgram(prog);
+        glGenTextures(1, &cubemap);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        for (k = 0; k < 6; k++) {
+            for (j = 0; j < 32; j++)
+                for (i = 0; i < 32; i++) {
+                    unsigned char *p = px + (j * 32 + i) * 3;
+                    int c;
+                    for (c = 0; c < 3; c++) p[c] = j < 5 ? 255 : i < 5 ? col[k][c] / 4 : col[k][c];
+                }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + k, 0, GL_RGB, 32, 32, 0, GL_RGB, GL_UNSIGNED_BYTE, px);
+        }
+        glGenBuffers(1, &vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(torus_v), torus_v, GL_STATIC_DRAW);
+        glGenBuffers(1, &ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(torus_i), torus_i, GL_STATIC_DRAW);
+    }
+    /* the modelview: turned about x by 60 degrees, then about y by a, 4 away */
+    {
+        float r[9] = { ca, 0, -sa,  sa * sb, cb, ca * sb,  sa * cb, -sb, ca * cb };   /* columns */
+        memset(mv, 0, sizeof(mv));
+        for (k = 0; k < 3; k++) for (j = 0; j < 3; j++) { mv[k * 4 + j] = r[k * 3 + j]; nm[k * 3 + j] = r[k * 3 + j]; }
+        mv[14] = -4.0f; mv[15] = 1.0f;
+    }
+    for (k = 0; k < 4; k++) for (j = 0; j < 4; j++) {
+        float t = 0;
+        for (i = 0; i < 4; i++) t += proj[i * 4 + j] * mv[k * 4 + i];
+        mvp[k * 4 + j] = t;
+    }
+    glViewport(0, 0, w, h);
+    glClearColor(0.1f, 0.12f, 0.2f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glUseProgram(prog);
+    glUniformMatrix4fv(glGetUniformLocation(prog, "uMvp"), 1, GL_FALSE, mvp);
+    glUniformMatrix4fv(glGetUniformLocation(prog, "uMv"), 1, GL_FALSE, mv);
+    glUniformMatrix3fv(glGetUniformLocation(prog, "uNorm"), 1, GL_FALSE, nm);
+    glUniform4fv(glGetUniformLocation(prog, "uLight"), 1, light);
+    glUniform1i(glGetUniformLocation(prog, "uTex"), 0);
+    glUniform1i(glGetUniformLocation(prog, "uCube"), 1);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (const void *)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (const void *)0);
+    glDrawElements(GL_TRIANGLES, TORUS_RINGS * TORUS_SIDES * 6, GL_UNSIGNED_SHORT, (const void *)0);
+    glDisableVertexAttribArray(0); glDisableVertexAttribArray(1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glUseProgram(0);
+}
+
+static void read_frame(const char *path, int w, int h)
+{
+    unsigned char *px = (unsigned char *)malloc((size_t)w * (size_t)h * 3);
+    FILE *f;
+    int y;
+    if (!px || !(f = fopen(path, "wb"))) { free(px); return; }
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, px);
+    fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (y = h - 1; y >= 0; y--) fwrite(px + (size_t)y * (size_t)w * 3, 3, (size_t)w, f);
+    fclose(f);
+    free(px);
 }
 
 int main(int argc, char **argv)
@@ -227,6 +359,13 @@ int main(int argc, char **argv)
         glFrustum(-0.1 * w / h, 0.1 * w / h, -0.1, 0.1, 0.2, 40.0);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        if (getenv("GLDEMO_CUBE")) {
+            reflect_frame(tex, n + first, w, h);
+            if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);
+            SDL_GL_SwapWindow(win);
+            if (++n == frames) running = 0;
+            continue;
+        }
         if (getenv("GLDEMO_SHADER")) {
             shader_frame(tex, n + first, w, h);
             SDL_GL_SwapWindow(win);
