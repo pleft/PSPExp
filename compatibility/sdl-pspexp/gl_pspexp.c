@@ -203,6 +203,22 @@ enum {
 
 /* GLAPI: a function every OpenGL library exports. GLEXT: one found only by
  * name (extension entry points), exported on Linux all the same. */
+/* An environment setting read once where it is used: getenv walks the whole environment, and some are
+ * asked on every draw (Emilia Pinball: 7,800 a frame; on the GameShell's Cortex-A7 that was a large
+ * part of its frame). The settings do not change while a program runs. */
+static const char *genv_cached(const char *name)
+{
+    /* by the literal's address (a call site's: the same each time), hashed into 128 places */
+    static const char *names[128], *values[128];
+    unsigned h = (unsigned)(((uintptr_t)name >> 2) * 2654435761u) >> 25, k;
+    for (k = 0; k < 128; k++, h = (h + 1) & 127) {
+        if (names[h] == name) return values[h];
+        if (!names[h]) { names[h] = name; return values[h] = getenv(name); }
+    }
+    return getenv(name);
+}
+#define GENV(name) genv_cached(name)
+
 #ifdef __APPLE__
 #define GLAPI(ret, fn, params) \
     extern ret fn params; \
@@ -384,6 +400,18 @@ static void set_error(GLenum e) { if (G.error == GL_NO_ERROR) G.error = e; }
 
 static void mat_identity(float *m) { memset(m, 0, 16 * sizeof(float)); m[0] = m[5] = m[10] = m[15] = 1.0f; }
 
+/* Whether two blocks of n bytes differ, a word at a time: what a draw sends is compared with what went
+ * before on every draw, and the toolchain's memcmp for the GameShell (zig's compiler_rt) goes a byte at
+ * a time (Emilia Pinball's 7,800 draws a frame) */
+static int differs(const void *a, const void *b, size_t n)
+{
+    const uint8_t *p = (const uint8_t *)a, *q = (const uint8_t *)b;
+    uint32_t x, y;
+    for (; n >= 4; n -= 4, p += 4, q += 4) { memcpy(&x, p, 4); memcpy(&y, q, 4); if (x != y) return 1; }
+    for (; n; n--) if (*p++ != *q++) return 1;
+    return 0;
+}
+
 static void mat_mul(float *out, const float *a, const float *b)   /* out = a * b, column-major */
 {
     float r[16];
@@ -445,9 +473,9 @@ static void init_state(void)
     const char *e;
     memset(&G, 0, sizeof(G));
     G.inited = 1;
-    G.log = getenv("PSPEXP_GL_LOG") ? atoi(getenv("PSPEXP_GL_LOG")) : 0;
+    G.log = GENV("PSPEXP_GL_LOG") ? atoi(GENV("PSPEXP_GL_LOG")) : 0;
     G.texmax = 256;
-    if ((e = getenv("PSPEXP_GL_TEXMAX")) && atoi(e) >= 8) {
+    if ((e = GENV("PSPEXP_GL_TEXMAX")) && atoi(e) >= 8) {
         G.texmax = 8;
         while (G.texmax * 2 <= atoi(e) && G.texmax < PSPEXP_TEXTURE_MAX) G.texmax *= 2;
     }
@@ -596,6 +624,9 @@ static uint8_t blend_op(GLenum e)
 }
 
 /* GL window coordinates (origin bottom left) to the PSP's screen. */
+/* lroundf without the call into libm (a draw's state is built on every draw: Emilia Pinball's 7,800) */
+static long iround(float x) { return x >= 0 ? (long)(x + 0.5f) : -(long)(0.5f - x); }
+
 static void to_psp_rect(const int *r, int16_t *x, int16_t *y, int16_t *w, int16_t *h, int centre)
 {
     int ww, wh, ox, oy;
@@ -604,18 +635,18 @@ static void to_psp_rect(const int *r, int16_t *x, int16_t *y, int16_t *w, int16_
         float sx = (float)G.target->rt_w / (float)G.target->w, sy = (float)G.target->rt_h / (float)G.target->h;
         x0 = r[0] * sx; x1 = (r[0] + r[2]) * sx;
         y0 = r[1] * sy; y1 = (r[1] + r[3]) * sy;
-        if (centre) { *x = (int16_t)lroundf((x0 + x1) / 2); *y = (int16_t)lroundf((y0 + y1) / 2); }
-        else { *x = (int16_t)lroundf(x0); *y = (int16_t)lroundf(y0); }
-        *w = (int16_t)lroundf(x1 - x0); *h = (int16_t)lroundf(y1 - y0);
+        if (centre) { *x = (int16_t)iround((x0 + x1) / 2); *y = (int16_t)iround((y0 + y1) / 2); }
+        else { *x = (int16_t)iround(x0); *y = (int16_t)iround(y0); }
+        *w = (int16_t)iround(x1 - x0); *h = (int16_t)iround(y1 - y0);
         if (centre) *h = (int16_t)-*h;   /* the viewport: GL's y upwards along the rows */
         return;
     }
     shim_gl_geometry(&ww, &wh, &s, &ox, &oy);
     x0 = ox + r[0] * s; x1 = ox + (r[0] + r[2]) * s;
     y0 = oy + (wh - (r[1] + r[3])) * s; y1 = oy + (wh - r[1]) * s;
-    if (centre) { *x = (int16_t)lroundf((x0 + x1) / 2); *y = (int16_t)lroundf((y0 + y1) / 2); }
-    else { *x = (int16_t)lroundf(x0); *y = (int16_t)lroundf(y0); }
-    *w = (int16_t)lroundf(x1 - x0); *h = (int16_t)lroundf(y1 - y0);
+    if (centre) { *x = (int16_t)iround((x0 + x1) / 2); *y = (int16_t)iround((y0 + y1) / 2); }
+    else { *x = (int16_t)iround(x0); *y = (int16_t)iround(y0); }
+    *w = (int16_t)iround(x1 - x0); *h = (int16_t)iround(y1 - y0);
 }
 
 static int texture_matrix_identity(void);
@@ -743,8 +774,8 @@ static void build_state(PspExp3DState *s, GlTex *tex)
         if (G.polygon_offset) bias = -(G.po_factor * 128.0f + G.po_units * 16.0f);   /* negative factor, units: nearer */
         if (bias > room) bias = room;
         n += bias; f += bias;
-        s->depth_near = (uint16_t)lroundf(n < 0 ? 0 : n > 65535 ? 65535 : n);
-        s->depth_far = (uint16_t)lroundf(f < 0 ? 0 : f > 65535 ? 65535 : f);
+        s->depth_near = (uint16_t)iround(n < 0 ? 0 : n > 65535 ? 65535 : n);
+        s->depth_far = (uint16_t)iround(f < 0 ? 0 : f > 65535 ? 65535 : f);
     }
     if (G.scissor_test) to_psp_rect(G.scissor, &s->scissor_x, &s->scissor_y, &s->scissor_w, &s->scissor_h, 0);
     else {
@@ -761,7 +792,7 @@ static void build_state(PspExp3DState *s, GlTex *tex)
          * (every texture in the PSP's main RAM), ids (each draw a flat colour of its texture's) */
         static const char *dbg;
         static int read;
-        if (!read) { read = 1; dbg = getenv("PSPEXP_GL_DEBUG"); }
+        if (!read) { read = 1; dbg = GENV("PSPEXP_GL_DEBUG"); }
         if (dbg) {
             if (strstr(dbg, "nocull")) s->enable &= ~(uint32_t)PSPEXP_3D_CULL;
             if (strstr(dbg, "nodepth")) s->enable &= ~(uint32_t)PSPEXP_3D_DEPTH_TEST;
@@ -918,7 +949,7 @@ static int select_target(PspExpContext *ctx)
          * One drawn into for seconds and never textured from (DreamChess's colour picking, read back
          * with glReadPixels, which reads black here) is let go: its VRAM, its draws and their bytes. */
         if (pspexp_resource_state(ctx, want->handle, NULL) == PSPEXP_RES_FAILED) return 0;
-        if (tex_frame - want->rt_made >= 120 && want->used < want->rt_made && !getenv("PSPEXP_GL_KEEP_TARGETS")) {
+        if (tex_frame - want->rt_made >= 120 && want->used < want->rt_made && !GENV("PSPEXP_GL_KEEP_TARGETS")) {
             mesh_release(want->handle, 0);
             tex_bytes -= want->psp_bytes;
             want->psp_bytes = 0; want->handle = 0; want->rt = 0;
@@ -1009,7 +1040,7 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     t->part = 0;
     if (t->rt || !t->rgba || t->w <= 0 || t->h <= 0) return;   /* a render target: drawn on the PSP */
     if (part && t->handle && t->psp_bytes == bytes && pw == t->w && ph == t->h && mul == t->sent_mul && pspexp_patch_supported(ctx) &&
-        !(getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), "nopatch"))) {
+        !(GENV("PSPEXP_GL_DEBUG") && strstr(GENV("PSPEXP_GL_DEBUG"), "nopatch"))) {
         /* only a rectangle changed: its 8 x 8 blocks (16-bit texels: 16 bytes by 8 rows each), which the
          * swizzled layout keeps left to right in each 8-row strip: one run of bytes per strip */
         int x0 = t->part_x0 & ~7, x1 = (t->part_x1 + 7) & ~7, y0 = t->part_y0 & ~7, y1 = (t->part_y1 + 7) & ~7, ok = 1, by;
@@ -1081,10 +1112,10 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
                                     : pspexp_color_5650((uint8_t)r, (uint8_t)g, (uint8_t)b);
         }
     }
-    if (getenv("PSPEXP_GL_DUMP")) {
+    if (GENV("PSPEXP_GL_DUMP")) {
         char path[512];
         FILE *f;
-        snprintf(path, sizeof(path), "%s/tex-%u-%dx%d.rgba", getenv("PSPEXP_GL_DUMP"), t->name, pw, ph);
+        snprintf(path, sizeof(path), "%s/tex-%u-%dx%d.rgba", GENV("PSPEXP_GL_DUMP"), t->name, pw, ph);
         if ((f = fopen(path, "wb"))) {
             for (y = 0; y < pw * ph; y++) {
                 uint8_t r, g, b, a = 255, px[4];
@@ -1101,7 +1132,7 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     d.format = alpha ? PSPEXP_TEX_4444 : PSPEXP_TEX_5650;
     t->sent_alpha = alpha; t->sent_mul = mul;
     d.layout = PSPEXP_LAYOUT_SWIZZLED;
-    d.priority = getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), "ramtex") ? PSPEXP_PRIORITY_LOW : PSPEXP_PRIORITY_NORMAL;
+    d.priority = GENV("PSPEXP_GL_DEBUG") && strstr(GENV("PSPEXP_GL_DEBUG"), "ramtex") ? PSPEXP_PRIORITY_LOW : PSPEXP_PRIORITY_NORMAL;
     dst = pspexp_upload_texture_begin(ctx, t->handle, &d, bytes, NULL, 0);
     if (dst) {
         pspexp_swizzle(dst, lin, (uint32_t)pw * 2u, (uint32_t)ph);
@@ -1181,12 +1212,12 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     } else tex = NULL;
     G.tc = tex && !G.sh_active ? texcoord_mode(G.ge_texmat) : TC_PLAIN;
     if (G.tc != TC_GE) { mat_identity(G.ge_texmat); G.tc_pos = 0; }
-    if (tex && getenv("PSPEXP_GL_HIDE_TEX") && (unsigned)atoi(getenv("PSPEXP_GL_HIDE_TEX")) == tex->name) return NULL;   /* (draws with one texture left out) */
+    if (tex && GENV("PSPEXP_GL_HIDE_TEX") && (unsigned)atoi(GENV("PSPEXP_GL_HIDE_TEX")) == tex->name) return NULL;   /* (draws with one texture left out) */
     build_state(&st, tex);
     {   /* PSPEXP_GL_DEBUG=ids: each draw a flat colour of its texture's (lit, no lights, the colour emissive):
          * which draw made a pixel; the colours named in the log */
         static int ids = -1;
-        if (ids < 0) ids = getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), "ids");
+        if (ids < 0) ids = GENV("PSPEXP_GL_DEBUG") && strstr(GENV("PSPEXP_GL_DEBUG"), "ids");
         if (ids) {
             PspExp3DLights l;
             uint32_t hsh = (tex ? tex->name : 0) * 2654435761u ^ (G.sh_active ? 0x55u : 0);
@@ -1201,11 +1232,11 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
             if (tex && tex->name < 4096 && !seen[tex->name]) { seen[tex->name] = 1; gl_logf("ids: texture %u (%dx%d) is %06x", tex->name, tex->w, tex->h, col & 0xFFFFFFu); }
         }
     }
-    if (G.log >= 3 && (!G.state_sent || memcmp(&st, &G.sent_state, sizeof(st))))
+    if (G.log >= 3 && (!G.state_sent || differs(&st, &G.sent_state, sizeof(st))))
         gl_logf("state: enable %x viewport %d,%d %dx%d depth %u..%u scissor %d,%d %dx%d mask %x blend %d/%d tex %u",
                 st.enable, st.viewport_x, st.viewport_y, st.viewport_w, st.viewport_h, st.depth_near, st.depth_far,
                 st.scissor_x, st.scissor_y, st.scissor_w, st.scissor_h, st.pixel_mask, st.blend_src, st.blend_dst, st.texture);
-    if (!G.state_sent || memcmp(&st, &G.sent_state, sizeof(st))) {
+    if (!G.state_sent || differs(&st, &G.sent_state, sizeof(st))) {
         pspexp_3d_state(ctx, &st);
         G.sent_state = st;
         G.state_sent = 1;
@@ -1221,8 +1252,8 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         for (q = 0; q < 12; q++) mvs[q] *= inv;
         mv = mvs;
     }
-    if (!G.matrices_sent || memcmp(G.sent_proj, proj, sizeof(G.sent_proj)) ||
-        memcmp(G.sent_mv, mv, sizeof(G.sent_mv)) || memcmp(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex))) {
+    if (!G.matrices_sent || differs(G.sent_proj, proj, sizeof(G.sent_proj)) ||
+        differs(G.sent_mv, mv, sizeof(G.sent_mv)) || differs(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex))) {
         memcpy(G.sent_proj, proj, sizeof(G.sent_proj));
         memcpy(G.sent_mv, mv, sizeof(G.sent_mv));
         memcpy(G.sent_tex, G.ge_texmat, sizeof(G.sent_tex));
@@ -1234,7 +1265,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         PspExp3DLights l;
         build_lights(&l, color);
         G.lights_const = color != NULL;
-        if (!G.lights_sent || memcmp(&l, &G.sent_lights, sizeof(l))) {
+        if (!G.lights_sent || differs(&l, &G.sent_lights, sizeof(l))) {
             pspexp_3d_lights(ctx, &l);
             G.sent_lights = l;
             G.lights_sent = 1;
@@ -1249,7 +1280,7 @@ static int texture_matrix_identity(void)
 {
     static float id[16];
     if (id[0] == 0.0f) mat_identity(id);
-    return !memcmp(G.texm[G.tex_top], id, sizeof(id));
+    return !differs(G.texm[G.tex_top], id, sizeof(id));
 }
 
 /* Send n vertices as one GE primitive (already split to fit). */
@@ -1303,14 +1334,14 @@ static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *
     }
     {   /* PSPEXP_GL_MAXDRAWS=N: only a frame's first N draws (bisecting) */
         static long max = -2;
-        if (max == -2) max = getenv("PSPEXP_GL_MAXDRAWS") ? atol(getenv("PSPEXP_GL_MAXDRAWS")) : -1;
+        if (max == -2) max = GENV("PSPEXP_GL_MAXDRAWS") ? atol(GENV("PSPEXP_GL_MAXDRAWS")) : -1;
         if (max >= 0 && (long)G.draws >= max) { G.draws++; return; }
     }
     /* One triangle as a strip or fan is a triangle list's; a list drawn right after another of the
      * same state and vertex type (nothing sent between) goes on as the same 3D_DRAW: Emilia Pinball
      * draws polygon by polygon, 7,800 draws a frame */
     if (n == 3 && (prim == GU_TRIANGLE_STRIP || prim == GU_TRIANGLE_FAN)) prim = GU_TRIANGLES;
-    if (getenv("PSPEXP_GL_NOJOIN") || !(out = (uint8_t *)pspexp_3d_draw_more(ctx, prim, vt, (uint32_t)n)))
+    if (GENV("PSPEXP_GL_NOJOIN") || !(out = (uint8_t *)pspexp_3d_draw_more(ctx, prim, vt, (uint32_t)n)))
         out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n);
     if (!out) return;
     pack(out, vt, v, n);
@@ -1369,8 +1400,15 @@ static void clip_setup(Clip *c)
     const PspExp3DState *s = &G.sent_state;
     float hw = fabsf((float)s->viewport_w) / 2.0f, hh = fabsf((float)s->viewport_h) / 2.0f;
     float left = 2048.0f - PSPEXP_DISPLAY_WIDTH / 2 + s->viewport_x, top = 2048.0f - PSPEXP_DISPLAY_HEIGHT / 2 + s->viewport_y;
+    static float last_p[16], last_mv[16], last_m[16];
+    static int have;
     if (G.sh_active) memcpy(c->m, G.sh_proj, sizeof(c->m));
-    else mat_mul(c->m, G.proj[G.proj_top], G.mv[G.mv_top]);
+    else if (have && !differs(last_p, G.proj[G.proj_top], 64) && !differs(last_mv, G.mv[G.mv_top], 64)) memcpy(c->m, last_m, 64);
+    else {   /* (the product kept: one draw after another under the same matrices) */
+        mat_mul(c->m, G.proj[G.proj_top], G.mv[G.mv_top]);
+        memcpy(last_p, G.proj[G.proj_top], 64); memcpy(last_mv, G.mv[G.mv_top], 64); memcpy(last_m, c->m, 64);
+        have = 1;
+    }
     c->gx = 0.9f * fminf(left, 4095.0f - left) / (hw > 1 ? hw : 1);
     c->gy = 0.9f * fminf(top, 4095.0f - top) / (hh > 1 ? hh : 1);
 }
@@ -1464,15 +1502,16 @@ static int clip_and_send(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vt
 {
     Clip c;
     Vtx *out;
-    unsigned *code;
+    static unsigned *code;   /* (kept: most draws need nothing cut, and are a few vertices) */
+    static int ccap;
     int i, nt, k = 0, any = 0;
-    if (prim < GU_TRIANGLES || getenv("PSPEXP_GL_NOCLIP")) return 0;
+    if (prim < GU_TRIANGLES || GENV("PSPEXP_GL_NOCLIP")) return 0;
     clip_setup(&c);
-    if (!(code = (unsigned *)malloc((size_t)n * sizeof(unsigned)))) return 0;
+    if (n > ccap) { unsigned *q = (unsigned *)realloc(code, (size_t)n * sizeof(unsigned)); if (!q) return 0; code = q; ccap = n; }
     for (i = 0; i < n; i++) { float o[4]; clip_xform(&c, v[i].p, o); code[i] = outcode(&c, o); any |= code[i] != 0; }
-    if (!any) { free(code); return 0; }
+    if (!any) return 0;
     nt = triangle_count(prim, n);
-    if (!(out = (Vtx *)malloc((size_t)nt * 21 * sizeof(Vtx) + 1))) { free(code); return 0; }
+    if (!(out = (Vtx *)malloc((size_t)nt * 21 * sizeof(Vtx) + 1))) return 0;
     for (i = 0; i < nt; i++) {
         int a, b, d;
         triangle_at(prim, i, &a, &b, &d);
@@ -1481,7 +1520,6 @@ static int clip_and_send(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vt
     }
     send_chunked(ctx, GU_TRIANGLES, vt, out, k, 3);
     free(out);
-    free(code);
     return 1;
 }
 
@@ -1581,7 +1619,7 @@ static int shadow_wanted(void)
 {
     GlTex *t;
     int on = !G.sh_active && !G.mt_pass && !shadow_pass && G.texture_2d && unit0_shadow() && G.units[0] &&
-           (t = find_texture(G.units[0])) && (t->rgba || t->rt) && getenv("PSPEXP_GL_SHADOW") != NULL;
+           (t = find_texture(G.units[0])) && (t->rgba || t->rt) && GENV("PSPEXP_GL_SHADOW") != NULL;
     /* (asked for only: on the PSP-1000 Neverball's shadow cost 30 to 28 fps, its every surface drawn twice,
      * the texture matrix and lights sent again around each) */
     return on;
@@ -1672,7 +1710,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
     if (n <= 0 || (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES)) return;
     G.pk_next = 0;
     if (n >= 3 && !((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || (G.texgen[0] && G.texture_2d && !G.sh_active)) &&
-        (ctx = shim_gl_frame()) && pspexp_3d16_supported(ctx) && !getenv("PSPEXP_GL_FLOATS")) {
+        (ctx = shim_gl_frame()) && pspexp_3d16_supported(ctx) && !GENV("PSPEXP_GL_FLOATS")) {
         /* unlit (the GE does not renormalise normals): 16-bit positions, over a power of two that fits them.
          * The scale of the draw before when they fit it losing two bits at most: the matrices then stay as
          * they were and the draws join (pspexp_3d_draw_more): Emilia Pinball's triangles, three vertices a
@@ -1784,7 +1822,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
             if (n > ccap) { unsigned *q = (unsigned *)realloc(code, (size_t)n * sizeof(unsigned)); if (!q) return; code = q; ccap = n; }
             if (nix > scap) { uint16_t *q = (uint16_t *)realloc(safe, (size_t)nix * 2u); if (!q) return; safe = q; scap = nix; }
             clip_setup(&c);
-            for (i = 0; i < n; i++) { float o[4]; clip_xform(&c, v[i].p, o); code[i] = getenv("PSPEXP_GL_NOCLIP") ? 0 : outcode(&c, o); }
+            for (i = 0; i < n; i++) { float o[4]; clip_xform(&c, v[i].p, o); code[i] = GENV("PSPEXP_GL_NOCLIP") ? 0 : outcode(&c, o); }
             for (t = 0; t + 2 < nix; t += 3) {
                 unsigned ca = code[ix[t]], cb = code[ix[t + 1]], cd = code[ix[t + 2]];
                 if (!(ca | cb | cd)) { safe[ns++] = (uint16_t)ix[t]; safe[ns++] = (uint16_t)ix[t + 1]; safe[ns++] = (uint16_t)ix[t + 2]; }
@@ -1835,7 +1873,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
         }
     }
     if (mode == GL_QUADS && n >= 8 && !G.lighting && !G.sh_active && (ctx = shim_gl_frame()) && pspexp_3d_sprites_supported(ctx) &&
-        !getenv("PSPEXP_GL_NOSPRITES")) {
+        !GENV("PSPEXP_GL_NOSPRITES")) {
         /* quads that face the camera, each an upright rectangle on the screen with its texture upright on it
          * and one colour (Quake's particles, thousands in an explosion): the GE's sprites, two vertices each,
          * its opposite corners, instead of two triangles' six */
@@ -2918,7 +2956,7 @@ static int fbo_is_screen(GLuint fb)
     int ww, wh, ox, oy;
     float sc;
     if (!fb) return 1;
-    if (!(f = find_fbo(fb)) || !f->rb || !(t = fbo_texture(fb)) || getenv("PSPEXP_GL_RB_TARGETS")) return 0;
+    if (!(f = find_fbo(fb)) || !f->rb || !(t = fbo_texture(fb)) || GENV("PSPEXP_GL_RB_TARGETS")) return 0;
     shim_gl_geometry(&ww, &wh, &sc, &ox, &oy);
     return t->w == ww && t->h == wh;
 }
@@ -3228,7 +3266,7 @@ static int sh_pass(const GlslPlan *pl, int k)
         return 1;
     case SH_MOD: case SH_ADD:
         if (pl->env_only || !(k == SH_MOD ? pl->mod_tex : pl->add_tex)) return 0;
-        if (getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), k == SH_MOD ? "nomod" : "noadd")) return 0;
+        if (GENV("PSPEXP_GL_DEBUG") && strstr(GENV("PSPEXP_GL_DEBUG"), k == SH_MOD ? "nomod" : "noadd")) return 0;
         if (!(G.sh_tex = find_texture(G.units[(k == SH_MOD ? pl->mod_unit : pl->add_unit) & 7])) || (!G.sh_tex->rgba && !G.sh_tex->rt)) return 0;
         G.sh_uvset = k == SH_MOD ? 1 : 2;
         G.sh_replace = 1;
@@ -3565,7 +3603,7 @@ static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uin
     size_t i, bytes = (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
     Mesh *m;
     uint8_t *out;
-    if (getenv("PSPEXP_GL_NOMESH")) return 0;
+    if (GENV("PSPEXP_GL_NOMESH")) return 0;
     for (i = 0; i < bytes; i += 8) { uint64_t w; memcpy(&w, data + i, bytes - i >= 8 ? 8 : bytes - i); h = (h ^ w) * 1099511628211ull; }
     h ^= (uint64_t)vt << 32 ^ (uint64_t)n;
     if (!h) h = 1;
@@ -3636,7 +3674,7 @@ static int draw_mesh1(GLenum mode, const int *idx, int first, int count, GLuint 
     const Array *arr[4] = { &G.va, &G.ca, &G.na, &G.ta };
     GlBuf *vb;
 #define NOT_MESH(why) do { if (G.log >= 2) gl_logf("streamed: %s", why); return 0; } while (0)
-    if (G.compiling || getenv("PSPEXP_GL_NOMESH")) return 0;
+    if (G.compiling || GENV("PSPEXP_GL_NOMESH")) return 0;
     if (G.texture_3d && G.units3d[0]) NOT_MESH("a 3D texture (its coordinates mapped into its atlas per vertex)");
     if (!G.va.enabled || !G.va.buffer || !(vb = find_buffer(G.va.buffer))) return 0;
     if (vb->usage == 0x88E0 /* GL_STREAM_DRAW */) NOT_MESH("a stream buffer");
@@ -3702,7 +3740,7 @@ static int draw_mesh2(GLenum mode, const int *idx, int first, int count, GLuint 
         return ok;
     }
     if (!mt_applies()) return draw_mesh1(mode, idx, first, count, ibo, ioffset, itype);
-    if (getenv("PSPEXP_GL_NOMESH1") || (G.ta1.enabled ? !G.ta1.buffer : !(G.u1[0].texgen[0] && G.u1[0].texgen[1])))
+    if (GENV("PSPEXP_GL_NOMESH1") || (G.ta1.enabled ? !G.ta1.buffer : !(G.u1[0].texgen[0] && G.u1[0].texgen[1])))
         NOT_MESH("texture unit 1's coordinates neither from a buffer nor generated");
     if (!draw_mesh1(mode, idx, first, count, ibo, ioffset, itype)) return 0;
     ta = G.ta; memcpy(tc, G.texcoord, sizeof(tc));
@@ -3727,7 +3765,7 @@ static int mesh_emit(PspExpContext *ctx, Mesh *m, GLenum mode, const int *idx, i
 {
     int k;
     m->used = mesh_frame;
-    if (m->pos && mode >= GL_TRIANGLES && !getenv("PSPEXP_GL_NOCLIP")) {   /* where its vertices fall, this frame */
+    if (m->pos && mode >= GL_TRIANGLES && !GENV("PSPEXP_GL_NOCLIP")) {   /* where its vertices fall, this frame */
         Clip c;
         clip_setup(&c);
         if (!m->code) m->code = (unsigned *)malloc((size_t)m->count * sizeof(unsigned));
@@ -3897,7 +3935,7 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     unsigned used = pl->attribs_used;
     uint32_t vt = PSPEXP_3D_VT_POSITION | PSPEXP_3D_VT_COLOR;
     int a, k, hi = 0, n = 1 << 30, any = 0, pass;
-    if (G.compiling || getenv("PSPEXP_GL_NOMESH") || !pl->matrix_ok || !pl->vertex_hash || (used >> 16)) return 0;
+    if (G.compiling || GENV("PSPEXP_GL_NOMESH") || !pl->matrix_ok || !pl->vertex_hash || (used >> 16)) return 0;
     if (pl->pos_n > 1) return 0;   /* poses blended: other weights every frame (the sum is made per vertex) */
     if (count < 192) {   /* small draws (text, 2D: often from buffers made each frame) are cheaper streamed; from
         buffers meant to stay (GL_STATIC_DRAW: Quake's brush entities, a few faces each from the world's) not */
@@ -4103,7 +4141,7 @@ static int morph_draw(GlProgram *pr, GLenum mode, const int *idx, int first, int
     int outside = 0;
     int a, i, k, hi = 0, n = 1 << 30, pass, uc, rem, isint, drew = 0;
 #define NOT_MORPH(why) do { if (G.log >= 2 && pr->morph_ok) gl_logf("not morphed: %s", why); return 0; } while (0)
-    if (G.compiling || getenv("PSPEXP_GL_NOMORPH") || !pl->matrix_ok || pl->lit || pl->env || pl->pre_test || pl->mod_tex) return 0;
+    if (G.compiling || GENV("PSPEXP_GL_NOMORPH") || !pl->matrix_ok || pl->lit || pl->env || pl->pre_test || pl->mod_tex) return 0;
     if (!pr->morph_checked) { pr->morph_checked = 1; pr->morph_ok = morph_names(pr); if (pr->morph_ok && G.log) gl_logf("program %u: a Quake model shader: poses morphed on the GE", pr->name); }
     if (!pr->morph_ok || !(ctx = shim_gl_frame()) || !pspexp_3d_morph_supported(ctx) || !pspexp_3d16_supported(ctx)) return 0;
     /* the weights: the plan's two poses, or one of them alone (Blend 0 or 1) */
@@ -4206,7 +4244,7 @@ static int morph_draw(GlProgram *pr, GLenum mode, const int *idx, int first, int
         }
         sh_lit_alpha = c3[1][3];
     }
-    if (getenv("PSPEXP_GL_MORPH_CHECK")) {   /* the GE's against the shader's, every vertex of the draw */
+    if (GENV("PSPEXP_GL_MORPH_CHECK")) {   /* the GE's against the shader's, every vertex of the draw */
         static double worst_c, worst_p, sum_c;
         static long nv;
         for (k = 0; k < count; k++) {
@@ -4373,7 +4411,7 @@ GLAPI(void, glDrawElements, (GLenum mode, GLsizei count, GLenum type, const GLvo
     if (G.program) { shader_draw(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type); return; }
     if (G.compiling && !replaying) { compile_arrays(mode, idx, 0, count); return; }
     if (draw_mesh(mode, idx, 0, count, G.element_buffer, (uintptr_t)indices, type)) return;
-    if (mode == GL_TRIANGLES && count >= 24 && !getenv("PSPEXP_GL_NOINDEX")) {   /* shared vertices (Quake 3's surfaces): each fetched and sent once */
+    if (mode == GL_TRIANGLES && count >= 24 && !GENV("PSPEXP_GL_NOINDEX")) {   /* shared vertices (Quake 3's surfaces): each fetched and sent once */
         int lo = idx[0], hi = idx[0];
         for (i = 1; i < count; i++) { if (idx[i] < lo) lo = idx[i]; if (idx[i] > hi) hi = idx[i]; }
         if (lo >= 0 && hi - lo + 1 < count && hi - lo < (int)PSPEXP_3D_MAX_VERTICES) {
@@ -4846,7 +4884,7 @@ GLAPI(void, glBindTexture, (GLenum target, GLuint name))
     if (target == GL_TEXTURE_3D && G.active_unit >= 0 && G.active_unit < 8) { G.units3d[G.active_unit] = name; texture_object(name); return; }
     if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     texture_object(name);
-    if (getenv("PSPEXP_GL_TRACE_TEX") && (G.units[G.active_unit] == (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) || name == (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX"))))
+    if (GENV("PSPEXP_GL_TRACE_TEX") && (G.units[G.active_unit] == (unsigned)atoi(GENV("PSPEXP_GL_TRACE_TEX")) || name == (unsigned)atoi(GENV("PSPEXP_GL_TRACE_TEX"))))
         gl_logf("bind %u on unit %d (was %u)", name, G.active_unit, G.units[G.active_unit]);
     G.units[G.active_unit] = name;
 }
@@ -4964,7 +5002,7 @@ static void store_pixels_changed(GlTex *t, int x0, int y0, int w, int h, GLenum 
 {
     const uint8_t *base = (const uint8_t *)pixels;
     t->ver++;
-    if (getenv("PSPEXP_GL_TRACE_TEX") && t->name + 2 >= (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) && t->name <= (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) + 2)   /* (a texture's every upload, and its neighbours') */
+    if (GENV("PSPEXP_GL_TRACE_TEX") && t->name + 2 >= (unsigned)atoi(GENV("PSPEXP_GL_TRACE_TEX")) && t->name <= (unsigned)atoi(GENV("PSPEXP_GL_TRACE_TEX")) + 2)   /* (a texture's every upload, and its neighbours') */
         gl_logf("texture %u: %d,%d %dx%d of %dx%d format %x type %x row length %d alignment %d skip %d,%d", t->name, x0, y0, w, h, t->w, t->h,
                 format, type, G.unpack_row_length, G.unpack_alignment, G.unpack_skip_pixels, G.unpack_skip_rows);
     int bpp = pixel_bytes(format, type), rowlen = G.unpack_row_length > 0 ? G.unpack_row_length : w, x, y;
@@ -5006,10 +5044,10 @@ static void cube_face(int f, GLint level, GLsizei w, GLsizei h, GLenum format, G
         t->rgba = keep; t->w = kw; t->h = kh;
     } else memset(p, 0, (size_t)w * (size_t)h * 4);
     t->face_ver++;
-    if (getenv("PSPEXP_GL_DUMP")) {
+    if (GENV("PSPEXP_GL_DUMP")) {
         char path[512];
         FILE *o;
-        snprintf(path, sizeof(path), "%s/cube-%u-%d-%dx%d.rgba", getenv("PSPEXP_GL_DUMP"), t->name, f, w, h);
+        snprintf(path, sizeof(path), "%s/cube-%u-%d-%dx%d.rgba", GENV("PSPEXP_GL_DUMP"), t->name, f, w, h);
         if ((o = fopen(path, "wb"))) { fwrite(p, 4, (size_t)w * (size_t)h, o); fclose(o); }
     }
 }
@@ -5147,7 +5185,7 @@ static void copy_to_texture(GLint xo, GLint yo, GLint x, GLint y, GLsizei w, GLs
     float sc;
     ensure_init();
     if (G.active_unit < 0 || G.active_unit >= 8 || !(t = find_texture(G.units[G.active_unit])) || w <= 0 || h <= 0) return;
-    if (!(ctx = shim_gl_frame()) || !pspexp_3d_copy_supported(ctx) || getenv("PSPEXP_GL_NOCOPY")) { unsupported("glCopyTexSubImage2D"); return; }
+    if (!(ctx = shim_gl_frame()) || !pspexp_3d_copy_supported(ctx) || GENV("PSPEXP_GL_NOCOPY")) { unsupported("glCopyTexSubImage2D"); return; }
     shim_gl_geometry(&ww, &wh, &sc, &ox, &oy);
     if ((G.fbo && !fbo_is_screen(G.fbo)) || fabsf(sc - 1.0f) > 1e-3f || t->w != pow2_at_least(t->w, PSPEXP_TEXTURE_MAX) ||
         t->h != pow2_at_least(t->h, PSPEXP_TEXTURE_MAX)) {
@@ -5467,7 +5505,7 @@ static void play_list(GLuint name)
         pos += sizeof(o) + (size_t)o.nf * sizeof(float);
         if (run_end && pos > run_end) { merging = 0; run_end = 0; merge_flush(); }
         if (o.op == OP_BEGIN && !merging && o.i[0] >= GL_TRIANGLES && o.i[0] <= GL_POLYGON && !G.in_begin &&
-            !getenv("PSPEXP_GL_NOMERGE")) {   /* two blocks or more before anything else: merged */
+            !GENV("PSPEXP_GL_NOMERGE")) {   /* two blocks or more before anything else: merged */
             size_t q = pos;
             int blocks = 1;
             while (q + sizeof(ListOp) <= l->len) {
@@ -5548,7 +5586,7 @@ static const char EXTENSIONS[] =
 static const char *extensions(void)
 {
     static char *all;
-    const char *more = getenv("PSPEXP_GL_EXTENSIONS");
+    const char *more = GENV("PSPEXP_GL_EXTENSIONS");
     if (all) return all;
     if (!more || !*more || !(all = (char *)malloc(sizeof(EXTENSIONS) + strlen(more) + 2))) return EXTENSIONS;
     snprintf(all, sizeof(EXTENSIONS) + strlen(more) + 2, "%s %s", EXTENSIONS, more);
@@ -5572,7 +5610,7 @@ GLAPI(const GLubyte *, glGetString, (GLenum name))
     switch (name) {
     case GL_VENDOR: return (const GLubyte *)"PSPExp";
     case GL_RENDERER: return (const GLubyte *)"PSP GE (PSPExp)";
-    case GL_VERSION: return (const GLubyte *)(getenv("PSPEXP_GL_VERSION") ? getenv("PSPEXP_GL_VERSION") : "2.1 PSPExp");
+    case GL_VERSION: return (const GLubyte *)(GENV("PSPEXP_GL_VERSION") ? GENV("PSPEXP_GL_VERSION") : "2.1 PSPExp");
     case GL_SHADING_LANGUAGE_VERSION: return (const GLubyte *)"1.20";
     case GL_EXTENSIONS: return (const GLubyte *)extensions();
     default: set_error(GL_INVALID_ENUM); return NULL;
@@ -5597,7 +5635,7 @@ static int get_values(GLenum p, float *f)
     case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_COORDS:   /* (PSPEXP_GL_UNITS: more, for shader games that ask) */
         /* 2 by default: unit 1 is drawn as a second pass (a mesh too), or as the one texture when unit 0
          * has none (Neverball: 73 KB a frame as with one; OpenArena 98 to 71 KB, its passes collapsed) */
-        f[0] = getenv("PSPEXP_GL_UNITS") && atoi(getenv("PSPEXP_GL_UNITS")) > 0 ? (float)atoi(getenv("PSPEXP_GL_UNITS")) : 2;
+        f[0] = GENV("PSPEXP_GL_UNITS") && atoi(GENV("PSPEXP_GL_UNITS")) > 0 ? (float)atoi(GENV("PSPEXP_GL_UNITS")) : 2;
         if (f[0] > 8) f[0] = 8;
         return 1;
     case GL_MAX_TEXTURE_IMAGE_UNITS: case 0x8B4D /* GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS */: f[0] = 8; return 1;

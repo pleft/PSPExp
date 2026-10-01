@@ -808,6 +808,25 @@ OpenArena on the same runtime, with two texture units reported (the default sinc
 
 The four from Debian are recipes (`recipes/supertux`, `chromium-bsu`, `openmrac`, `neverball`, with these options): installed with `pspexp-pkg install` and started from the launcher on the Pi 400 on 2026-09-30, their menus at the rates above (SuperTux with its sound). The fixed-function sphere maps are checked against a real OpenGL like the reflections: `GLDEMO_SPHERE=1`, the torus through `glTexGen(GL_SPHERE_MAP)` with a texture of four coloured quarters, the same in PPSSPP as on the Mac.
 
+**On the GameShell** (2026-10-01; the PSP-1000 on the GameShell's USB, the console reached over Wi-Fi; pspexp-core 2ab3d0d armhf, Debian 13's packages, the same recipes as on the Pi). Each game run alone for 30–40 s with scripted keys (`PSPEXP_PROFILE=1`), not yet by hand:
+
+| Game | fps | Notes |
+|---|---|---|
+| DreamChess | 59.4 | |
+| Blobby Volley 2 | 56.7 | |
+| OpenArena | 55.7 | one texture unit (its recipe) |
+| SuperTux | 52.5 | |
+| Teeworlds | 50.3 | |
+| X-Moto | 50 | |
+| openMrac | 49.5 | |
+| Trigger Rally | 47.8 | |
+| Quake (shareware) | 40.8 | the board's 22–25 ms a frame is the limit (the Pi's is a quarter of that) |
+| Chromium B.S.U. | 22 | 43 ms a frame on the board, 23 ms of it CPU: its own frame pacing, not looked into |
+| Neverball | 22 | the board 22 ms, then 15 ms waiting for the PSP; 112 KB a frame (74 KB from the Pi) |
+| Emilia Pinball | 7.1 | the board's CPU (below) |
+
+Emilia Pinball's 7,800 draws a frame took the board 226 ms (4.2 fps). Sampled with `perf` (Debian's `linux-perf`): one core busy, half of it the game's own engine (it transforms the table in software, `TransformVisitor`, about 65 ms a frame on the Cortex-A7), half the GL layer's work per draw. Three things in that were needless: the layer's environment settings looked up on every draw (`getenv`, then a list; now a table by the name's address: 165 ms); the toolchain's `memcmp` (zig's compiler_rt), which compares one byte at a time, comparing each draw's state, matrices and lights (some 550 bytes) with what went before (now compared a word at a time, `differs`), the projection times the modelview made for every draw's clipping test (kept while the matrices stay) and two allocations a draw (129 ms); `lroundf` calls into libm for the viewport and scissor (126 ms, 7.1 fps; gl-demo's pictures unchanged). Its own engine leaves it under 15 fps on this board whatever the layer does.
+
 **Next.** Fewer bytes for lit vertices (16-bit positions and coordinates are done for unlit draws; lit ones need 8-bit normals, which the GE does not renormalise after a scaled matrix, and 16-bit colours); display lists as meshes of their own rather than by content (runs of `glBegin`/`glEnd` blocks are merged and kept by content since DreamChess; a list with state changes inside is still replayed in pieces); room in VRAM for a render target by moving textures out to RAM; Neverball's 20 ms of GE time (fill: large blended or filtered polygons); more games (Quakespasm and ioquake3 done: Quake, OpenArena; DreamChess and Emilia Pinball in PPSSPP; AssaultCube and others being tried); shaders that combine textures other than multiplied or added; a shadow combined as one minus a texture's alpha (Neverball's, left out: a texture made of the alpha and the GE's blend function would do it); a texture matrix of its own message (Neverball's shadow would then cost little); mipmaps (shimmering far surfaces; tried once: a Neverball text texture drew white); the water, sky and sprite polygons Quake draws in immediate mode, and its text; cube maps whose direction is not a reflection about a normal (a skybox drawn through one); a shorter warm-up before a churning shader draw is streamed (the first seconds of a race are slower); per-vertex branches (Widelands' image flavours) resolved per draw; the SDL layer's render targets onto `3D_TARGET`; the SDL executor has no 3D, so the Mac stand-in shows nothing of these programs (PPSSPP and the PSP do).
 
 ---

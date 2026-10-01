@@ -311,6 +311,12 @@ Omega2+ and the Pi 400; `tests/test_launcher_lib.c` covers the library. A
 volume page is not needed: the sound plays on the PSP, whose own buttons set
 it. Next: per-entry art for games and apps, more packages, emulators.
 
+2026-10-01: the OpenGL games' recipes on the GameShell with the PSP on its
+USB: most run at 40–60 fps; Neverball and Chromium B.S.U. at 22 and Emilia
+Pinball at 7 are limited by the board's CPU (rates and causes: the
+architecture document, section 12a, "On the GameShell"). With the PSP on its
+one USB port the GameShell is reached over Wi-Fi.
+
 ### 3.5 Screenshots from any board
 
 `build/host/pspexp-sdl-server` is the SDL executor behind TCP port 3838, a
