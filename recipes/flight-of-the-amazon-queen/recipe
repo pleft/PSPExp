@@ -12,6 +12,9 @@ version=2
 [debian]
 apt=scummvm flight-of-the-amazon-queen
 
+[omega]
+build=flight-of-the-amazon-queen
+
 [entry]
 title=Flight of the Amazon Queen
 type=game

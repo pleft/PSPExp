@@ -148,3 +148,43 @@ check_sha256() {
 # map, L/R zoom (Page Down/Up), triangle and start close the top window
 # (Escape), select pauses
 SIMUTRANS_KEYS="up=up,down=down,left=left,right=right,l=pgdn,r=pgup,triangle=escape,start=escape,select=p,square=none"
+
+# ---- ScummVM's freeware adventures ------------------------------------------
+# scummvm_game DIR ID ENGINE SUBDIR DEB...   ScummVM (scripts/omega/build.sh
+# scummvm, built when missing) and the game's data into the package DIR: the
+# data from Debian's own packages (architecture-independent, the same files
+# the Debian boards install), unpacked to DIR/data with links resolved (the
+# Omega's card is FAT; only SUBDIR, the language played), ScummVM's engine
+# data file beside it. Sets
+# SCUMMVM_EXEC (the entry's exec: the game in DIR/data/SUBDIR). DEB is a path
+# in Debian's pool, e.g. b/beneath-a-steel-sky/beneath-a-steel-sky_0.0372-9_all.deb
+scummvm_game() {
+	_d=$1 _id=$2 _eng=$3 _sub=$4; shift 4
+	case "${BOARD:-omega}" in
+	omega) _bin="$ROOT/build/omega/bin/scummvm"
+	       [ -x "$_bin" ] || "$ROOT/scripts/omega/build.sh" scummvm ;;
+	*) echo "$_id: no build for $BOARD" >&2; exit 3 ;;
+	esac
+	_w="$_d/.unpack"
+	rm -rf "$_w"; mkdir -p "$_w/root" "$_d/data"
+	for _deb in "$@"; do
+		_f=$(fetch "https://deb.debian.org/debian/pool/main/$_deb") || exit 1
+		(cd "$_w" && rm -f data.tar.* && ar -x "$_f" && tar -xf data.tar.* -C root)
+	done
+	# only the folder played (Drascula and Lure have one per language, Debian
+	# linking the shared files and music into each: resolved, five copies)
+	mkdir -p "$_d/data/$_sub"
+	cp -RL "$_w/root/usr/share/scummvm/$_id/$_sub/." "$_d/data/$_sub/"
+	rm -rf "$_w"
+	_e="$ROOT/../scummvm/scummvm-2.9.0/dists/engine-data"
+	for _x in "$_e/$_eng.dat" "$_e/$_eng.tbl" "$_e/$_eng.cpt"; do [ -f "$_x" ] && cp "$_x" "$_d/data/$_sub/"; done
+	cp "$_bin" "$_d/scummvm"
+	chmod +x "$_d/scummvm"
+	cp "$ROOT/../scummvm/scummvm-2.9.0/COPYING" "$_d/COPYING.scummvm"
+	cp "$ROOT/recipes/$_id/cover.png" "$_d/$_id.png"   # the entry's cover (the Debian boards' too)
+	SCUMMVM_EXEC="env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy pspexp-exec ./scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p ./data/$_sub $_eng"
+}
+# as the Debian boards' recipes: the nub the mouse (cross and circle its
+# buttons), start ScummVM's menu (F5), select skips (Escape), triangle skips a
+# line, square pauses
+SCUMMVM_KEYS="start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right"

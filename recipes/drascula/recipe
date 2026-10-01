@@ -12,6 +12,9 @@ version=3
 [debian]
 apt=scummvm drascula drascula-music
 
+[omega]
+build=drascula
+
 [entry]
 title=Drascula: The Vampire Strikes Back
 type=game

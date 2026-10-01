@@ -27,11 +27,15 @@ packages/          what the launcher offers, for any board
   pspexp-pkg-build   the Omega2+'s builds of the recipes as archives (HOST=);
                      `publish`: the builds and the catalogue onto it, for Apps > Packages
   recipes/           the Omega2+'s build scripts, one per recipe it has: freedoom, opentyrian,
-                     cavestory, jazz, nes, gameboy, snes, megadrive; _lib.sh holds the shared helpers
+                     cavestory, jazz, nes, gameboy, snes, megadrive, and the four ScummVM adventures
+                     (beneath-a-steel-sky, flight-of-the-amazon-queen, lure-of-the-temptress,
+                     drascula); _lib.sh holds the shared helpers
                      (the recipes themselves are in recipes/ at the top)
   art/               the games' 128x128 launcher pictures (sources and licenses in its README)
   build-nxengine.sh  Cave Story's engine and its libraries, cross-compiled with Zig
   build-openjazz.sh  Jazz Jackrabbit's engine (OpenJazz) and its bundled libraries, the same way
+  build-scummvm.sh   ScummVM for the Omega2+ (the four adventures' engines; MP3 and Vorbis through
+                     integer decoders, libmad and Tremor), sources in ../scummvm
   cross-glibc.sh     a game (one of the two above) for the GameShell or the Pi: Zig,
                      linked against the board's own SDL2 (seconds, not the Pi's half hour)
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board

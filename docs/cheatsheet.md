@@ -133,6 +133,7 @@ Debian boards through apt, on the Omega2+ from our own builds.
 |---|---|
 | build the tools / Doom / OpenTyrian / an emulator (static, SDL layer linked in) | `scripts/omega/build.sh` / `... doom` / `... tyrian` / `CORE=quicknes scripts/omega/build.sh retro` |
 | Cave Story's / Jazz's engine (static, SDL layer linked in) | `scripts/omega/build.sh cavestory` / `... jazz` |
+| ScummVM with the four adventures' engines (static, SDL layer linked in; sources in `../scummvm`, see `scripts/packages/build-scummvm.sh`) | `scripts/omega/build.sh scummvm` |
 | install or update (the console, launcher, fonts, package tool) | `HOST=omega scripts/omega/install.sh` |
 | its builds of the recipes (`scripts/packages/recipes/ID.sh`) / onto it with the catalogue | `HOST=omega scripts/packages/pspexp-pkg-build build freedoom opentyrian nes gameboy` / `... publish` |
 | then install (Apps > Packages, or on the Omega) | `pspexp-pkg install freedoom` |

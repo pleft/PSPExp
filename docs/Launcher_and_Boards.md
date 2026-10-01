@@ -331,6 +331,29 @@ and openings, not play (in play on 2026-09-30: Mega Drive 43, SNES 33). The
 suite now waits for a section switch to show (up to 15 s): on the Omega it
 can take longer than the 2.5 s it allowed.
 
+The same night the four ScummVM adventures came to the Omega (they were on
+the Debian boards only): ScummVM 2.9.0 cross-compiled here, static with the
+SDL layer, only their engines (`scripts/omega/build.sh scummvm`,
+`scripts/packages/build-scummvm.sh`). The board has no FPU, so their sound
+goes through integer decoders: libmad for Flight of the Amazon Queen (its
+`queen.1c` is MP3) and Tremor for Drascula's Ogg music. Each recipe gained
+`[omega] build=`; the package holds ScummVM (7.6 MB), the game's data from
+Debian's own package and ScummVM's engine data file, only the language
+folder played (Drascula's and Lure's Debian folders link the shared files
+into five languages). All four start, draw and quit back on the real PSP
+(the games suite, 14 of 14); the frames they send in their first seconds:
+Beneath a Steel Sky 7 (6-20), Amazon Queen 8, Drascula 9, Lure 27, the
+games' own pace (Beneath a Steel Sky's engine runs about 12 a second; its
+first try took the board 7-11 ms of CPU a frame). Seen on the PSP: Beneath a
+Steel Sky in play, pointer on the nub. Not played by hand yet. A package over
+60 MB does not fit the Omega's /tmp, so `pspexp-pkg-build install` fails for
+it: after `publish`, `pspexp-pkg install ID` on the Omega installs from the
+card.
+
+The static builds' rename header now lists only the hooks the static SDL
+layer defines (its OpenGL ones are left out): ScummVM asks
+`SDL_GL_GetDrawableSize` without using OpenGL and failed to link.
+
 ### 3.5 Screenshots from any board
 
 `build/host/pspexp-sdl-server` is the SDL executor behind TCP port 3838, a

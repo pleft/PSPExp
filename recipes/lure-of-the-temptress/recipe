@@ -12,6 +12,9 @@ version=2
 [debian]
 apt=scummvm lure-of-the-temptress
 
+[omega]
+build=lure-of-the-temptress
+
 [entry]
 title=Lure of the Temptress
 type=game
