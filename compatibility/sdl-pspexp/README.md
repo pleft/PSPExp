@@ -51,6 +51,7 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 | PSP controls | a virtual game controller ("PSP (PSPExp)": a/b/x/y = cross/circle/square/triangle, shoulders, start/back, d-pad, left stick = nub) when the program initialised joysticks, plus keyboard events per `PSPEXP_KEYS` |
 | `SDL_GetKeyboardState`, `SDL_GetMouseState`, `SDL_GetRelativeMouseState` | answered by the layer with what the PSP's buttons and nub hold (events pushed from the PSP never reach SDL's own state: games that poll it saw a held button as one press) |
 | `SDL_WarpMouseInWindow` | the nub's pointer moves there (games that recentre the mouse every frame and read the distance); mouse motion events carry `xrel` / `yrel` |
+| `SDL_SetRelativeMouseMode`, `SDL_GetRelativeMouseMode` (with `PSPEXP_NUB=mouse`) | kept by the layer (a headless board's dummy driver refuses it): while on, the game gets the nub's whole motion, never stopped at an edge, and no pointer is drawn (the game draws its own: OpenArena showed two, and its cursor stuck where the layer's met the edge) |
 | held buttons, as keys | repeat as a keyboard does: after 400 ms, every 40 ms |
 | `SDL_GetWindowFlags` (while the PSP is the screen) | the window shown and focused, never minimised or hidden (`pspexp-run` hides it): games that stop drawing or pause for a hidden or unfocused window (Quakespasm stops swapping) carry on; `PSPEXP_FOCUS=host` gives the real flags |
 

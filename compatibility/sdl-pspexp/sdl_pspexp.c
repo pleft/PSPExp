@@ -190,10 +190,10 @@ static struct {
      * clock (headless hosts: SDL's dummy driver runs slow and jittery) */
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
-    int nub_mouse, nub_keys, hide_window, cursor_hidden; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
+    int nub_mouse, nub_keys, hide_window, cursor_hidden, relative; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
      * pushed events, and games that poll it (Chromium B.S.U.) would not */
-    Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y;
+    Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y, rel_ex, rel_ey;
     Uint32 held_since[16], last_repeat[16];
     SDL_Keycode keys[16][3];           /* up to three keys per PSP button ("return+y") */
     Uint32 quit_hold; int quit_sent;   /* START + SELECT held: leave the game */
@@ -1483,12 +1483,20 @@ static void feed_input(void)
         if (abs(ax) > 35 || abs(ay) > 35) {
             float fx = ax / 127.0f, fy = ay / 127.0f, speed = 300.0f * dt, ox = S.px, oy = S.py;
             SDL_Event ev;
-            S.px = fminf(fmaxf(S.px + fx * fabsf(fx) * speed, 0), (float)(S.win_w - 1));
-            S.py = fminf(fmaxf(S.py + fy * fabsf(fy) * speed, 0), (float)(S.win_h - 1));
-            S.rel_x += S.px - ox; S.rel_y += S.py - oy;
+            float dx = fx * fabsf(fx) * speed, dy = fy * fabsf(fy) * speed;
+            if (S.relative) {   /* the game draws its own cursor from the motion alone: never stopped at an edge */
+                S.rel_x += dx; S.rel_y += dy;
+                S.rel_ex += dx; S.rel_ey += dy;
+            } else {
+                S.px = fminf(fmaxf(S.px + dx, 0), (float)(S.win_w - 1));
+                S.py = fminf(fmaxf(S.py + dy, 0), (float)(S.win_h - 1));
+                S.rel_x += S.px - ox; S.rel_y += S.py - oy;
+                S.rel_ex += S.px - ox; S.rel_ey += S.py - oy;
+            }
             SDL_zero(ev);
             ev.type = SDL_MOUSEMOTION; ev.motion.x = (int)S.px; ev.motion.y = (int)S.py;
-            ev.motion.xrel = (int)lroundf(S.px - ox); ev.motion.yrel = (int)lroundf(S.py - oy);
+            ev.motion.xrel = (int)lroundf(S.rel_ex); ev.motion.yrel = (int)lroundf(S.rel_ey);
+            S.rel_ex -= (float)ev.motion.xrel; S.rel_ey -= (float)ev.motion.yrel;   /* the fractions carried to the next */
             ev.motion.state = S.mbuttons;
             ev.motion.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
             SDL_PushEvent(&ev);
@@ -1960,6 +1968,19 @@ static void service_link(void)
 /* PSPEXP_NUB=mouse: the PSP shows no host cursor, so the pointer is drawn
  * here on top of the frame (an arrow, black edge, white inside), while the
  * program has not hidden its cursor */
+/* SDL's relative mouse mode (Quake 3's engine: the motion only, its own cursor): the dummy driver of a
+ * headless board refuses it; the layer keeps it instead, draws no pointer and stops nothing at an edge */
+HOOK(int, SDL_SetRelativeMouseMode, (SDL_bool enabled))
+{
+    if (S.nub_mouse && S.active) { S.relative = enabled == SDL_TRUE; (void)REAL(SDL_SetRelativeMouseMode)(enabled); return 0; }
+    return REAL(SDL_SetRelativeMouseMode)(enabled);
+}
+HOOK(SDL_bool, SDL_GetRelativeMouseMode, (void))
+{
+    if (S.nub_mouse && S.active) return S.relative ? SDL_TRUE : SDL_FALSE;
+    return REAL(SDL_GetRelativeMouseMode)();
+}
+
 HOOK(int, SDL_ShowCursor, (int toggle))
 {
     if (toggle == SDL_ENABLE) S.cursor_hidden = 0;
@@ -2067,7 +2088,7 @@ static void end_frame(void)
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
     flush_quads();
-    if (S.nub_mouse && !S.cursor_hidden) draw_pointer();
+    if (S.nub_mouse && !S.cursor_hidden && !S.relative) draw_pointer();
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();
