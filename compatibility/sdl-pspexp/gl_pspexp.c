@@ -783,6 +783,8 @@ static void build_state(PspExp3DState *s, GlTex *tex)
 /* `color`: vertices without a colour of their own (meshes): the current
  * colour comes as the material's, which the GE takes for such vertices
  * (the ambient one when unlit; the colour-material ones when lit). */
+static float sh_lit_alpha = 1.0f;   /* the lit colour's alpha (sh_lit): a model's own (morph_draw) */
+
 static void build_lights(PspExp3DLights *l, const float *color)
 {
     int i, n = 0;
@@ -796,7 +798,9 @@ static void build_lights(PspExp3DLights *l, const float *color)
         const GlslPlan *pl = G.sh_lit;
         float amb[4] = { pl->light_ambient[0], pl->light_ambient[1], pl->light_ambient[2], 1 };
         float dif[4] = { pl->light_diffuse[0], pl->light_diffuse[1], pl->light_diffuse[2], 1 };
-        static const float white[4] = { 1, 1, 1, 1 }, black[4] = { 0, 0, 0, 1 };
+        float white[4] = { 1, 1, 1, 1 };
+        static const float black[4] = { 0, 0, 0, 1 };
+        white[3] = sh_lit_alpha;
         l->scene_ambient = abgr(amb);
         l->emissive = abgr(black) & 0xFFFFFF;
         l->ambient = abgr(white);
@@ -2361,6 +2365,7 @@ typedef struct GlProgram {
     char *bnames[16]; int blocs[16]; int nb;   /* glBindAttribLocation, for the next link */
     unsigned uver, planned_ver; int planned, builtins, reported, described;
     GlslPlan plan;
+    int morph_checked, morph_ok, morph_vert[2], morph_norm[2], morph_shade;   /* a Quake engine's model shader (morph_draw) */
     struct GlProgram *next;
 } GlProgram;
 typedef struct Vao { GLuint name; Array gattr[16]; int gnorm[16]; GLuint element_buffer; struct Vao *next; } Vao;
@@ -3121,6 +3126,7 @@ static void sh_pass_end(void)
 /* A draw by a shader program: its plan for the uniforms of now, each
  * vertex's attributes through it, the GE drawing what the plan says. */
 static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
+static int morph_draw(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
 
 static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
@@ -3142,6 +3148,7 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
                 G.program, G.blend, G.blend_src, G.blend_dst, G.depth_test, G.depth_func, G.depth_mask, G.cull,
                 G.units[0], G.units[1], G.units[2], G.cube_units[0], G.cube_units[1], G.cube_units[2], pl->textured, pl->sampler_unit, pl->lit, pl->alpha_test);
     }
+    if (morph_draw(p, mode, idx, first, count, ibo, ioffset, itype)) return;
     if (shader_mesh(p, mode, idx, first, count, ibo, ioffset, itype)) return;
     if (!(v = gather(count))) { set_error(GL_OUT_OF_MEMORY); return; }
     if (pl->mod_tex || pl->add_tex) {
@@ -3261,10 +3268,11 @@ typedef struct Mesh {
     uint64_t shkey;             /* ...and its key: the plan's per-vertex work, the arrays and buffers it read */
     GLuint bufs[8]; int nbufs;  /* ...the buffers it was made from */
     unsigned *code, code_frame; int code_any; float code_m[16];
+    float *mpos, mscale;        /* a morph mesh (morph_draw): both poses' positions here (clipping), their scale */
     struct Mesh *next;
 } Mesh;
 
-static void mesh_free(Mesh *m) { free(m->pos); free(m->code); free(m->vx); free(m); }
+static void mesh_free(Mesh *m) { free(m->pos); free(m->code); free(m->vx); free(m->mpos); free(m); }
 static int mesh_clipped(PspExpContext *ctx, Mesh *m, const Clip *c, GLenum mode, const int *idx, int first, int count, uint32_t vt);
 
 typedef struct IndexMesh {
@@ -3727,7 +3735,14 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
     int a, k, hi = 0, n = 1 << 30, any = 0, pass;
     if (G.compiling || getenv("PSPEXP_GL_NOMESH") || !pl->matrix_ok || !pl->vertex_hash || (used >> 16)) return 0;
     if (pl->pos_n > 1) return 0;   /* poses blended: other weights every frame (the sum is made per vertex) */
-    if (count < 192) return 0;   /* small draws (text, 2D: often from buffers made each frame) are cheaper streamed */
+    if (count < 192) {   /* small draws (text, 2D: often from buffers made each frame) are cheaper streamed; from
+        buffers meant to stay (GL_STATIC_DRAW: Quake's brush entities, a few faces each from the world's) not */
+        for (a = 0; a < 16; a++) {
+            GlBuf *b;
+            if (!(used & (1u << a)) || !G.gattr[a].enabled) continue;
+            if (!G.gattr[a].buffer || !(b = find_buffer(G.gattr[a].buffer)) || b->usage != 0x88E4 /* GL_STATIC_DRAW */) return 0;
+        }
+    }
     h = pl->vertex_hash;
     for (a = 0; a < 16; a++) {
         const Array *ar = &G.gattr[a];
@@ -3800,6 +3815,288 @@ static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, in
         sh_pass_end();
     }
     return k || pass == SH_PASSES;
+}
+
+/* ---- a Quake engine's models: two poses morphed by the GE ----------------------------------------
+ *
+ * Quakespasm (and the engines from it) draws a model with one shader: the position the mix of two
+ * poses' by a uniform Blend, each pose its own vertex and normal attributes from one buffer, and the
+ * colour LightColor times a shade of the normal against ShadeVector. Through the plan each vertex was
+ * worked out here and sent every frame (Quake's monsters: about 60 KB a frame). The GE morphs: a
+ * vertex can carry two targets, mixed by weights set per draw (3D_MORPH). So a pose pair is a mesh
+ * on the PSP (each target 16-bit coordinates, an 8-bit normal, a 16-bit position), made once, and a
+ * draw is its weights and a light: the colour's shade, measured from the plan at three normals (along
+ * ShadeVector, across it, against it), fitted to the GE's ambient + diffuse x max(0, n . light) (Quake's
+ * shade falls more gently on the far side than the GE's can: the fit splits the difference). Recognised
+ * by its names (Pose1Vert, Pose2Vert, Pose1Normal, Pose2Normal, ShadeVector), the plan's two-pose
+ * position checked against them. PSPEXP_GL_MORPH_CHECK=1 logs how far the GE's colour and position
+ * fall from the shader's own, vertex by vertex. */
+
+static void read_attrs(int k, float (*attrs)[4])
+{
+    int a, cmp;
+    for (a = 0; a < 16; a++) {
+        const Array *ar = &G.gattr[a];
+        const uint8_t *b;
+        int ts, stride;
+        memcpy(attrs[a], G.gcur[a], 16);
+        if (!ar->enabled || !(b = array_base(ar))) continue;
+        ts = type_size(ar->type);
+        stride = ar->stride ? ar->stride : ar->size * ts;
+        b += (size_t)k * (size_t)stride;
+        for (cmp = 0; cmp < 4; cmp++) attrs[a][cmp] = cmp < ar->size ? read_comp(b + cmp * ts, ar->type, G.gnorm[a]) : cmp == 3 ? 1.0f : 0.0f;
+    }
+}
+
+static int morph_names(GlProgram *pr)
+{
+    int i, n = glsl_attrib_count(pr->p), v1 = -1, v2 = -1;
+    pr->morph_norm[0] = pr->morph_norm[1] = -1;
+    for (i = 0; i < n; i++) {
+        const GlslVar *a = glsl_attrib(pr->p, i);
+        if (!strcmp(a->name, "Pose1Vert")) v1 = a->location;
+        else if (!strcmp(a->name, "Pose2Vert")) v2 = a->location;
+        else if (!strcmp(a->name, "Pose1Normal")) pr->morph_norm[0] = a->location;
+        else if (!strcmp(a->name, "Pose2Normal")) pr->morph_norm[1] = a->location;
+    }
+    pr->morph_shade = glsl_uniform_location(pr->p, "ShadeVector");
+    pr->morph_vert[0] = v1; pr->morph_vert[1] = v2;
+    return v1 >= 0 && v2 >= 0 && pr->morph_norm[0] >= 0 && pr->morph_norm[1] >= 0 && pr->morph_shade >= 0 &&
+           pr->morph_norm[0] < 16 && pr->morph_norm[1] < 16 && v1 < 16 && v2 < 16;
+}
+
+static Mesh *morph_make(GlProgram *pr, const GlslPlan *pl, uint64_t key, int n, PspExpContext *ctx)
+{
+    float attrs[GLSL_ATTR_ALL][4], mx = 0, *uv;
+    int i, k, tex16 = 1, e, tsz, offn, offp;
+    uint32_t vt, size;
+    uint8_t *out;
+    Mesh *m;
+    if (!(uv = (float *)malloc((size_t)n * 2 * sizeof(float)))) return NULL;
+    if (!(m = (Mesh *)calloc(1, sizeof(*m))) || !(m->mpos = (float *)malloc((size_t)n * 6 * sizeof(float)))) { free(uv); free(m); return NULL; }
+    for (i = 0; i < n; i++) {
+        read_attrs(i, attrs);
+        for (k = 0; k < 2; k++) {
+            float *p = m->mpos + ((size_t)k * (size_t)n + (size_t)i) * 3;
+            int c;
+            memcpy(p, attrs[pr->morph_vert[k]], 12);
+            for (c = 0; c < 3; c++) if (fabsf(p[c]) > mx) mx = fabsf(p[c]);
+        }
+        glsl_plan_uv(pl, 0, (const float (*)[4])attrs, uv + i * 2);
+        if (!(uv[i * 2] >= 0 && uv[i * 2] < 1.999f && uv[i * 2 + 1] >= 0 && uv[i * 2 + 1] < 1.999f)) tex16 = 0;
+    }
+    if (!(mx > 0 && mx < 1e6f)) mx = 1;
+    frexpf(mx, &e);
+    m->mscale = ldexpf(1.0f, -e);
+    vt = (tex16 ? PSPEXP_3D_VT_TEXTURE16 : PSPEXP_3D_VT_TEXTURE) | PSPEXP_3D_VT_NORMAL8 | PSPEXP_3D_VT_POSITION16 | PSPEXP_3D_VT_MORPH(2);
+    size = pspexp_3d_vertex_size(vt);
+    tsz = (int)size / 2; offn = tex16 ? 4 : 8; offp = (offn + 3 + 1) & ~1;
+    if (!size || !mesh_room(size * (uint32_t)n)) { free(uv); mesh_free(m); return NULL; }
+    m->handle = mesh_handle();
+    if (!(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
+        free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle; free(uv); mesh_free(m); return NULL;
+    }
+    memset(out, 0, (size_t)size * (size_t)n);
+    for (i = 0; i < n; i++) {
+        read_attrs(i, attrs);
+        for (k = 0; k < 2; k++) {
+            uint8_t *o = out + (size_t)i * size + (size_t)k * (size_t)tsz;
+            const float *p = m->mpos + ((size_t)k * (size_t)n + (size_t)i) * 3, *nn = attrs[pr->morph_norm[k]];
+            int c;
+            if (tex16) { uint16_t t[2] = { u16(uv[i * 2]), u16(uv[i * 2 + 1]) }; memcpy(o, t, 4); }
+            else memcpy(o, uv + i * 2, 8);
+            for (c = 0; c < 3; c++) {
+                float f = nn[c] * 127.0f;
+                o[offn + c] = (uint8_t)(int8_t)(f > 127 ? 127 : f < -127 ? -127 : lroundf(f));
+            }
+            { int16_t q[3] = { s16(p[0] * m->mscale), s16(p[1] * m->mscale), s16(p[2] * m->mscale) }; memcpy(o + offp, q, 6); }
+        }
+    }
+    pspexp_upload_mesh_commit(ctx);
+    free(uv);
+    m->shkey = key; m->vt = vt; m->count = n;
+    m->bytes = size * (uint32_t)n;
+    m->used = mesh_frame;
+    mesh_bytes += m->bytes;
+    m->next = meshes; meshes = m;
+    if (G.log) gl_logf("morph mesh %u: %d vertices, two poses (%u KB) key %016llx poses at %lx %lx buffer %u v%u", m->handle, n, m->bytes / 1024, (unsigned long long)key,
+                       (unsigned long)(uintptr_t)G.gattr[pr->morph_vert[0]].ptr, (unsigned long)(uintptr_t)G.gattr[pr->morph_vert[1]].ptr,
+                       G.gattr[pr->morph_vert[0]].buffer, buffer_version(G.gattr[pr->morph_vert[0]].buffer));
+    return m;
+}
+
+static int morph_draw(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
+{
+    GlslPlan *pl = &pr->plan;
+    static GlslPlan lit;
+    PspExpContext *ctx;
+    GlTex *tex;
+    Mesh *m;
+    uint64_t h = 0x6d6f727068ull;
+    unsigned used;
+    float attrs[GLSL_ATTR_ALL][4], S[3], w[8] = { 0 }, c3[3][4], *sv, wsum, *bp = NULL;
+    Vtx *bv = NULL;
+    int outside = 0;
+    int a, i, k, hi = 0, n = 1 << 30, pass, uc, rem, isint, drew = 0;
+#define NOT_MORPH(why) do { if (G.log >= 2 && pr->morph_ok) gl_logf("not morphed: %s", why); return 0; } while (0)
+    if (G.compiling || getenv("PSPEXP_GL_NOMORPH") || !pl->matrix_ok || pl->lit || pl->env || pl->pre_test || pl->mod_tex) return 0;
+    if (!pr->morph_checked) { pr->morph_checked = 1; pr->morph_ok = morph_names(pr); if (pr->morph_ok && G.log) gl_logf("program %u: a Quake model shader: poses morphed on the GE", pr->name); }
+    if (!pr->morph_ok || !(ctx = shim_gl_frame()) || !pspexp_3d_morph_supported(ctx) || !pspexp_3d16_supported(ctx)) return 0;
+    /* the weights: the plan's two poses, or one of them alone (Blend 0 or 1) */
+    if (pl->pos_n == 2) {
+        for (k = 0; k < 2; k++) {
+            if (pl->pos_attrs[k] == pr->morph_vert[0]) w[0] += pl->pos_w[k];
+            else if (pl->pos_attrs[k] == pr->morph_vert[1]) w[1] += pl->pos_w[k];
+            else NOT_MORPH("a pose not the shader's");
+        }
+    } else if (pl->pos_n <= 1 && pl->pos_attr == pr->morph_vert[0]) w[0] = 1;
+    else if (pl->pos_n <= 1 && pl->pos_attr == pr->morph_vert[1]) w[1] = 1;
+    else NOT_MORPH("a position not a pose");
+    /* the plan's weights are against the larger one, its matrix carrying the rest: the GE's to sum to 1
+     * (the normals are mixed by them too), the matrix's first three columns times their sum */
+    wsum = w[0] + w[1];
+    if (!(wsum > 1e-6f)) NOT_MORPH("no weight");
+    w[0] /= wsum; w[1] /= wsum;
+    used = pl->attribs_used | 1u << pr->morph_norm[0] | 1u << pr->morph_norm[1] | 1u << pr->morph_vert[0] | 1u << pr->morph_vert[1];
+    for (a = 0; a < 16; a++) {   /* every array read from a buffer, as a mesh's must be */
+        const Array *ar = &G.gattr[a];
+        GlBuf *b;
+        int elem, stride, c;
+        if (!(used & (1u << a))) continue;
+        if (!ar->enabled) NOT_MORPH("an attribute not from an array");
+        if (!ar->buffer || !(b = find_buffer(ar->buffer)) || !b->data || b->usage == 0x88E0) NOT_MORPH("an array not in a buffer");
+        elem = ar->size * type_size(ar->type); stride = ar->stride ? ar->stride : elem;
+        if (elem <= 0 || (uintptr_t)ar->ptr + (size_t)elem > b->size) return 0;
+        c = (int)((b->size - (uintptr_t)ar->ptr - (size_t)elem) / (size_t)stride) + 1;
+        if (c < n) n = c;
+        h = (h ^ ((uint64_t)ar->buffer << 32 | b->version)) * 1099511628211ull;
+        h = (h ^ ((uint64_t)(uintptr_t)ar->ptr << 16 ^ (uint64_t)stride << 8 ^ (uint64_t)ar->type ^ (uint64_t)ar->size << 40 ^ (uint64_t)G.gnorm[a] << 48)) * 1099511628211ull;
+        h = (h ^ (uint64_t)a) * 1099511628211ull;
+    }
+    /* (not the plan's coordinate hash: it moves with uniforms these coordinates do not read; Quake's are the attribute as is) */
+    if (!h) h = 1;
+    if (n > (int)PSPEXP_3D_MAX_VERTICES + 1) n = PSPEXP_3D_MAX_VERTICES + 1;
+    if (idx) { for (k = 0; k < count; k++) if (idx[k] > hi) hi = idx[k]; } else hi = first + count - 1;
+    if (hi >= n) NOT_MORPH("indices past the arrays");
+    if (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES) return 1;
+    for (m = meshes; m; m = m->next) if (m->shkey == h && m->mpos && m->count >= hi + 1) break;
+    if (!m && !(m = morph_make(pr, pl, h, hi + 1, ctx))) NOT_MORPH("no mesh made");
+    m->used = mesh_frame;
+    {   /* where it falls: reaching outside the GE's range (the weapon in view), the triangles that need it
+         * are cut here (mesh_emit) from the poses blended here, the rest drawn from the mesh */
+        Clip c;
+        memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
+        G.sh_active = 1;
+        clip_setup(&c);
+        G.sh_active = 0;
+        for (k = 0; k < count; k++) {
+            int v = idx ? idx[k] : first + k;
+            const float *p1 = m->mpos + (size_t)v * 3, *p2 = m->mpos + ((size_t)m->count + (size_t)v) * 3;
+            float p[3] = { wsum * (w[0] * p1[0] + w[1] * p2[0]), wsum * (w[0] * p1[1] + w[1] * p2[1]), wsum * (w[0] * p1[2] + w[1] * p2[2]) }, o[4];
+            clip_xform(&c, p, o);
+            if (outcode(&c, o)) { outside = 1; break; }
+        }
+    }
+    if (outside) {
+        bp = (float *)malloc((size_t)m->count * 3 * sizeof(float));
+        bv = (Vtx *)calloc((size_t)m->count, sizeof(Vtx));
+        if (!bp || !bv) { free(bp); free(bv); NOT_MORPH("no memory to cut it"); }
+        for (k = 0; k < m->count; k++) {
+            const float *p1 = m->mpos + (size_t)k * 3, *p2 = m->mpos + ((size_t)m->count + (size_t)k) * 3;
+            int c;
+            read_attrs(k, attrs);
+            for (c = 0; c < 3; c++) {
+                bp[k * 3 + c] = (w[0] * p1[c] + w[1] * p2[c]) * m->mscale;   /* the space of the matrix sent */
+                bv[k].n[c] = w[0] * attrs[pr->morph_norm[0]][c] + w[1] * attrs[pr->morph_norm[1]][c];
+            }
+            memcpy(bv[k].p, bp + k * 3, 12);
+            glsl_plan_uv(pl, 0, (const float (*)[4])attrs, bv[k].t);
+            bv[k].c = 0xFFFFFFFFu;
+        }
+        m->pos = bp; m->vx = bv; m->code_frame = 0;
+    }
+    /* the light: the shader's colour at three normals against ShadeVector, fitted */
+    if (!(sv = glsl_uniform_slot(pr->p, pr->morph_shade, &uc, &rem, &isint)) || uc < 3) return 0;
+    {
+        float len = sqrtf(sv[0] * sv[0] + sv[1] * sv[1] + sv[2] * sv[2]), T[3], tl;
+        if (len < 1e-6f) { S[0] = S[1] = 0; S[2] = 1; } else { S[0] = sv[0] / len; S[1] = sv[1] / len; S[2] = sv[2] / len; }
+        T[0] = -S[1]; T[1] = S[0]; T[2] = 0;   /* across it */
+        tl = sqrtf(T[0] * T[0] + T[1] * T[1]);
+        if (tl < 1e-3f) { T[0] = 1; T[1] = 0; T[2] = 0; } else { T[0] /= tl; T[1] /= tl; }
+        read_attrs(idx ? idx[0] : first, attrs);
+        for (k = 0; k < 3; k++) {
+            const float *d = k == 0 ? S : T;
+            float sg = k == 2 ? -1.0f : 1.0f, pos[4], uv[2];
+            if (k == 2) d = S;
+            for (i = 0; i < 2; i++) { int c; for (c = 0; c < 3; c++) attrs[pr->morph_norm[i]][c] = sg * d[c]; attrs[pr->morph_norm[i]][3] = 0; }
+            glsl_plan_vertex(pl, (const float (*)[4])attrs, pos, uv, c3[k]);
+        }
+        memset(&lit, 0, sizeof(lit));
+        lit.lit = 1;
+        memcpy(lit.light_dir, S, sizeof(S));
+        for (i = 0; i < 3; i++) {   /* c(d) = c0 + front x d, c0 - back x |d|: least squares of a + b max(0, d) */
+            float c0 = c3[1][i], front = c3[0][i] - c0, back = c0 - c3[2][i];
+            float am = c0 - 0.4f * back, di = front + 0.6f * back;
+            lit.light_ambient[i] = am < 0 ? 0 : am;
+            lit.light_diffuse[i] = di < 0 ? 0 : di;
+        }
+        sh_lit_alpha = c3[1][3];
+    }
+    if (getenv("PSPEXP_GL_MORPH_CHECK")) {   /* the GE's against the shader's, every vertex of the draw */
+        static double worst_c, worst_p, sum_c;
+        static long nv;
+        for (k = 0; k < count; k++) {
+            int v = idx ? idx[k] : first + k, c;
+            float pos[4], uv[2], rgba[4], nb[3], d, ge[3], gp[4], p[3];
+            read_attrs(v, attrs);
+            glsl_plan_vertex(pl, (const float (*)[4])attrs, pos, uv, rgba);
+            for (c = 0; c < 3; c++) {
+                float n1 = (float)lroundf(attrs[pr->morph_norm[0]][c] * 127.0f) / 127.0f, n2 = (float)lroundf(attrs[pr->morph_norm[1]][c] * 127.0f) / 127.0f;
+                nb[c] = w[0] * n1 + w[1] * n2;
+                p[c] = wsum * (w[0] * (float)s16(attrs[pr->morph_vert[0]][c] * m->mscale) / 32768.0f / m->mscale + w[1] * (float)s16(attrs[pr->morph_vert[1]][c] * m->mscale) / 32768.0f / m->mscale);
+            }
+            d = nb[0] * S[0] + nb[1] * S[1] + nb[2] * S[2];
+            for (c = 0; c < 3; c++) {
+                ge[c] = lit.light_ambient[c] + lit.light_diffuse[c] * (d > 0 ? d : 0);
+                if (ge[c] > 1) ge[c] = 1;
+                if (rgba[c] > 1) rgba[c] = 1;   /* (vertex colours are bytes: the streamed ones were clamped too) */
+                if (fabsf(ge[c] - rgba[c]) > worst_c) worst_c = fabsf(ge[c] - rgba[c]);
+                sum_c += fabsf(ge[c] - rgba[c]);
+            }
+            for (c = 0; c < 4; c++) gp[c] = pl->matrix[c] * p[0] + pl->matrix[4 + c] * p[1] + pl->matrix[8 + c] * p[2] + pl->matrix[12 + c];
+            {   /* the plan gives the position before its matrix */
+                float q[4];
+                for (c = 0; c < 4; c++) q[c] = pl->matrix[c] * pos[0] + pl->matrix[4 + c] * pos[1] + pl->matrix[8 + c] * pos[2] + pl->matrix[12 + c];
+                memcpy(pos, q, sizeof(q));
+            }
+            if (G.log >= 3 && k < 3)
+                gl_logf("morph check vertex %d: d %.3f shader %.3f %.3f %.3f GE %.3f %.3f %.3f (light %.2f + %.2f, w %.2f %.2f)", v, d, rgba[0], rgba[1], rgba[2], ge[0], ge[1], ge[2], lit.light_ambient[0], lit.light_diffuse[0], w[0], w[1]);
+            if (gp[3] > 0.1f && pos[3] > 0.1f) {   /* in pixels on the PSP's screen (480 wide) */
+                double dx = (gp[0] / gp[3] - pos[0] / pos[3]) * 240.0, dy = (gp[1] / gp[3] - pos[1] / pos[3]) * 136.0, dd = sqrt(dx * dx + dy * dy);
+                if (dd > worst_p) worst_p = dd;
+            }
+            nv++;
+        }
+        if (nv > 20000) {
+            gl_logf("morph check: %ld vertices, colour off by %.3f at most, %.4f on average; position off by %.2f px at most", nv, worst_c, sum_c / (double)nv / 3.0, worst_p);
+            worst_c = worst_p = sum_c = 0; nv = 0;
+        }
+    }
+    memcpy(G.sh_proj, pl->matrix, sizeof(G.sh_proj));
+    for (i = 0; i < 12; i++) G.sh_proj[i] *= wsum / m->mscale;
+    for (pass = 0; pass < SH_PASSES; pass++) {
+        if (!sh_pass(pl, pass)) continue;
+        if (pass == SH_MAIN) G.sh_lit = &lit;
+        if (!(ctx = prepare_colour(&tex, NULL))) continue;
+        pspexp_3d_morph(ctx, w);   /* with each pass's draw: a frame sent early in between keeps them */
+        /* (the vertex type for the cut triangles: theirs are plain) */
+        if (mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_NORMAL | PSPEXP_3D_VT_POSITION)) drew = 1;
+    }
+    sh_pass_end();
+    if (outside) { m->pos = NULL; m->vx = NULL; free(bp); free(bv); }
+    sh_lit_alpha = 1.0f;
+    (void)drew;
+    return 1;
 }
 
 /* At the end of a frame: the meshes dropped during the one before (whose

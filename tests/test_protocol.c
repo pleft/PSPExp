@@ -259,6 +259,20 @@ static void test_colors(void)
     CHECK_EQ(pspexp_color_5650(255, 255, 255), PSPEXP_COLOR_NONE);
 }
 
+/* The GE's vertex layouts: what the board packs and the PSP reads must agree to the byte */
+static void test_vertex_sizes(void)
+{
+    CHECK_EQ(pspexp_3d_vertex_size(PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_COLOR | PSPEXP_3D_VT_NORMAL | PSPEXP_3D_VT_POSITION), 36);
+    CHECK_EQ(pspexp_3d_vertex_size(PSPEXP_3D_VT_TEXTURE16 | PSPEXP_3D_VT_POSITION16), 10);
+    /* morph targets: 16-bit coordinates (4), an 8-bit normal (3), a 16-bit position at 8 (6): 14 each */
+    CHECK_EQ(pspexp_3d_vertex_size(PSPEXP_3D_VT_TEXTURE16 | PSPEXP_3D_VT_NORMAL8 | PSPEXP_3D_VT_POSITION16 | PSPEXP_3D_VT_MORPH(2)), 28);
+    /* float coordinates (8), normal (3), position at 12 (6), padded to 4: 20 each */
+    CHECK_EQ(pspexp_3d_vertex_size(PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_NORMAL8 | PSPEXP_3D_VT_POSITION16 | PSPEXP_3D_VT_MORPH(2)), 40);
+    CHECK_EQ(pspexp_3d_vertex_size(PSPEXP_3D_VT_POSITION | PSPEXP_3D_VT_MORPH(8)), 96);
+    CHECK_EQ(pspexp_3d_vertex_size(PSPEXP_3D_VT_POSITION | (1u << 9)), 0);   /* weights: not accepted */
+    CHECK(strcmp(pspexp_opcode_name(PSPEXP_OP_3D_MORPH), "3D_MORPH") == 0);
+}
+
 int main(void)
 {
     CHECK_EQ(sizeof(PspExpMessageHeader), 16);
@@ -271,5 +285,6 @@ int main(void)
     test_texture_validation();
     test_swizzle();
     test_colors();
+    test_vertex_sizes();
     return test_summary("test_protocol");
 }

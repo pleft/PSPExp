@@ -290,6 +290,13 @@ static void op_lights3d(void *u, const PspExp3DLights *l)
     }
 }
 
+static void op_morph3d(void *u, const PspExp3DMorph *m)
+{
+    int i;
+    (void)u;
+    for (i = 0; i < 8; i++) sceGuMorphWeight(i, m->weight[i]);
+}
+
 static void op_clear3d(void *u, const PspExp3DClear *c)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
@@ -631,6 +638,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->lights3d = op_lights3d;
     ops->draw3d = op_draw3d;
     ops->clear3d = op_clear3d;
+    ops->morph3d = op_morph3d;
     ops->draw3d_mesh = op_draw3d_mesh;
     ops->target3d = op_target3d;
 }

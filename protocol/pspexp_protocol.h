@@ -204,6 +204,8 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_3D_INDEXED 0x00000080u  /* 3D_DRAW with indices after its vertices */
 #define PSPEXP_FEATURE_3D16       0x00000040u  /* 3D vertices with 16-bit coordinates and positions
                                                   (PSPEXP_3D_VT_TEXTURE16, _POSITION16) */
+#define PSPEXP_FEATURE_3D_MORPH   0x00000100u  /* 3D_MORPH and vertices with 8-bit normals and morph
+                                                  targets (PSPEXP_3D_VT_NORMAL8, _MORPH) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
@@ -478,20 +480,28 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDraw) == 16, draw3d_size);
  * host scales the positions and the matrices undo it. A third less than floats. */
 #define PSPEXP_3D_VT_TEXTURE16  (2u << 0)   /* GU_TEXTURE_16BIT */
 #define PSPEXP_3D_VT_POSITION16 (2u << 7)   /* GU_VERTEX_16BIT */
+/* With PSPEXP_FEATURE_3D_MORPH: normals as signed bytes (over 127), and vertices made of 2 to 8 morph
+ * targets one after another, each in the layout above, mixed by the weights of the last 3D_MORPH
+ * (GU_VERTICES(n): an animation's two poses, blended on the GE; Quake's models). */
+#define PSPEXP_3D_VT_NORMAL8    (1u << 5)   /* GU_NORMAL_8BIT */
+#define PSPEXP_3D_VT_MORPH(n)   ((((uint32_t)(n)) - 1u) << 18)   /* GU_VERTICES(n) */
+#define PSPEXP_3D_VT_MORPH_MASK (7u << 18)
 #define PSPEXP_3D_PRIM_MAX     5u           /* GU_TRIANGLE_FAN */
 /* A vertex's size for a vertex type (the GE's layout: each part aligned to its own size, the whole to the
  * largest); 0 when the type is not accepted. */
 static inline uint32_t pspexp_3d_vertex_size(uint32_t vt)
 {
     uint32_t t = vt & 3u, c = (vt >> 2) & 7u, nm = (vt >> 5) & 3u, p = (vt >> 7) & 3u, n = 0, al = 1;
-    if (vt & ~(PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_COLOR | PSPEXP_3D_VT_NORMAL | PSPEXP_3D_VT_POSITION)) return 0;
-    if ((p != 3 && p != 2) || (t != 0 && t != 3 && t != 2) || (c != 0 && c != 7) || (nm != 0 && nm != 3)) return 0;
+    uint32_t morphs = ((vt & PSPEXP_3D_VT_MORPH_MASK) >> 18) + 1u;
+    if (vt & ~(PSPEXP_3D_VT_TEXTURE | PSPEXP_3D_VT_COLOR | PSPEXP_3D_VT_NORMAL | PSPEXP_3D_VT_POSITION | PSPEXP_3D_VT_MORPH_MASK)) return 0;
+    if ((p != 3 && p != 2) || (t != 0 && t != 3 && t != 2) || (c != 0 && c != 7) || (nm != 0 && nm != 3 && nm != 1)) return 0;
     if (t) { al = t == 3 ? 4 : 2; n = t == 3 ? 8 : 4; }
     if (c) { n = (n + 3u) & ~3u; n += 4; al = 4; }
-    if (nm) { n = (n + 3u) & ~3u; n += 12; al = 4; }
+    if (nm == 1) n += 3;
+    else if (nm) { n = (n + 3u) & ~3u; n += 12; al = 4; }
     if (p == 3) { n = (n + 3u) & ~3u; n += 12; al = 4; }
     else { n = (n + 1u) & ~1u; n += 6; if (al < 2) al = 2; }
-    return (n + al - 1u) & ~(al - 1u);
+    return ((n + al - 1u) & ~(al - 1u)) * morphs;
 }
 #define PSPEXP_3D_MAX_VERTICES 65535u       /* the GE's count field */
 
@@ -506,6 +516,13 @@ typedef struct PspExp3DClear {
     uint8_t  reserved[6];
 } PspExp3DClear;
 PSPEXP_STATIC_ASSERT(sizeof(PspExp3DClear) == 16, clear3d_size);
+
+/* 3D_MORPH (PSPEXP_FEATURE_3D_MORPH): the weights of the morph targets of the draws that follow
+ * (sceGuMorphWeight), each target's position, normal, colour and coordinates times its weight. */
+typedef struct PspExp3DMorph {
+    float weight[8];
+} PspExp3DMorph;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DMorph) == 32, morph3d_size);
 
 /* Meshes: vertices (a 3D vertex type, as in 3D_DRAW) or 16-bit indices,
  * uploaded once (RESOURCE_UPLOAD_MESH, kept in main RAM) and drawn by

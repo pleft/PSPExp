@@ -1140,6 +1140,18 @@ void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_CLEAR, 0, &c, sizeof(c));
 }
 
+int pspexp_3d_morph_supported(const PspExpContext *ctx)
+{
+    return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D_MORPH) != 0;
+}
+
+void pspexp_3d_morph(PspExpContext *ctx, const float weight[8])
+{
+    PspExp3DMorph m;
+    memcpy(m.weight, weight, sizeof(m.weight));
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_MORPH, 0, &m, sizeof(m));
+}
+
 void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count)
 {
     PspExp3DDraw d;

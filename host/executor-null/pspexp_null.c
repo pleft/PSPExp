@@ -64,6 +64,7 @@ static void op_state3d(void *u, const PspExp3DState *s) { (void)s; ((PspExpNullE
 static void op_matrices3d(void *u, const PspExp3DMatrices *m) { (void)m; ((PspExpNullExecutor *)u)->stats.matrices3d++; }
 static void op_lights3d(void *u, const PspExp3DLights *l) { (void)l; ((PspExpNullExecutor *)u)->stats.lights3d++; }
 static void op_clear3d(void *u, const PspExp3DClear *c) { (void)c; ((PspExpNullExecutor *)u)->stats.clears3d++; }
+static void op_morph3d(void *u, const PspExp3DMorph *m) { (void)u; (void)m; }
 static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal, uint8_t prim, uint32_t vt, uint32_t count, const void *v)
 {
     PspExpNullExecutor *x = (PspExpNullExecutor *)u;
@@ -156,6 +157,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.lights3d = op_lights3d;
     ops.draw3d = op_draw3d;
     ops.clear3d = op_clear3d;
+    ops.morph3d = op_morph3d;
     ops.draw3d_mesh = op_draw3d_mesh;
     ops.draw3d_indexed = op_draw3d_indexed;
     ops.target3d = op_target3d;

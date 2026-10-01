@@ -143,7 +143,8 @@ static void send_hello(PspExpRuntime *rt)
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
-                 (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0);
+                 (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
+                 (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -426,6 +427,11 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
         return;
     case PSPEXP_OP_3D_DRAW_MESH:
         handle_draw_mesh(rt, m);
+        return;
+    case PSPEXP_OP_3D_MORPH:
+        if (!rt->ops.morph3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        if (pspexp_message_expect(m, sizeof(PspExp3DMorph)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        rt->ops.morph3d(rt->ops.user, (const PspExp3DMorph *)m->payload);
         return;
     case PSPEXP_OP_3D_TARGET: {
         const PspExp3DTarget *t;
@@ -990,7 +996,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         handle_target_create(rt, m);
         break;
     case PSPEXP_OP_3D_STATE: case PSPEXP_OP_3D_MATRICES: case PSPEXP_OP_3D_LIGHTS:
-    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH: case PSPEXP_OP_3D_TARGET:
+    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH: case PSPEXP_OP_3D_TARGET: case PSPEXP_OP_3D_MORPH:
         if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         if (!rt->in_frame) { send_error(rt, PSPEXP_ERR_NOT_IN_FRAME, m, 0); return; }
         handle_3d(rt, m);
