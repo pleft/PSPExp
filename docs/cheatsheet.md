@@ -184,6 +184,12 @@ arrows). Rotation is not mirrored, SDL render targets only partly; OpenGL
 can. See the README in
 `compatibility/sdl-pspexp/`.
 
+After a change to the OpenGL layer, the protocol or the runtime:
+`tests/psp/gl-ppsspp.sh` (a minute or two, PPSSPP on the Mac) runs
+`gl-demo`'s modes from set frames and compares the PSP's frames with
+`tests/gl-ref/`; a difference fails with `build/gl-regress/<case>-diff.png`.
+`--record` takes new references after a change meant to alter the picture.
+
 ## Sprite demo controls (PSP)
 
 d-pad or nub: move · cross: shape · circle: tint · square: field on/off ·
