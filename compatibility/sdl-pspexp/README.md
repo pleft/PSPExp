@@ -94,8 +94,9 @@ PSP transforms, lights, clips and draws. Needs a runtime with 3D (from
 | depth, alpha test, blending (5650 framebuffer: no destination alpha), culling, scissor, `glColorMask`, `glClear` | the GE's own; a 16-bit depth buffer (VRAM for textures shrinks by 272 KB) |
 | queries (`glGet*`, `glGetString`: "1.3 PSPExp"), `glGetError`, `glPushAttrib` | answered here |
 
-Not there: a second texture unit (`GL_ARB_multitexture` is
-advertised with one unit: what goes in the others is left out), stencil,
+Not there: texture units past the second (`GL_ARB_multitexture` is
+advertised with two: what goes in the others is left out), a unit
+combined as one minus its texture's alpha (Neverball's shadow: left out), stencil,
 reading pixels back (`glReadPixels` gives black), copying from the
 framebuffer, clip planes, polygon modes other than fill, line width,
 `glBitmap`/`glDrawPixels`. Each is logged once when a program uses it.
@@ -175,7 +176,8 @@ function; the tests check it is current).
 | `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |
 | `PSPEXP_GL_NOCLIP=1` | OpenGL: no cutting of triangles that reach outside the GE's range (they then vanish whole) |
 | `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
-| `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 1). With 2 or more, fixed-function texture unit 1 is drawn, as a second pass blended as its environment says (modulate, `GL_COMBINE` modulate x2, add, decal, replace); its draws are streamed, not made meshes, so a game that keeps unit 1 on for everything (Neverball's shadow) sends all of it each frame: hence 1 by default. Quakespasm takes its shader path only with 3 |
+| `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 2). Fixed-function texture unit 1 is drawn as a second pass blended as its environment says (modulate, `GL_COMBINE` modulate x2, add, decal, replace), from buffer objects as a mesh like the first; with unit 0 off, as the draw's only texture; its coordinate generation and texture matrix are its own. `1`: what a game does with one unit. Quakespasm takes its shader path only with 3 |
+| `PSPEXP_GL_NOMESH1=1` | OpenGL: texture unit 1's pass streamed, not a mesh (to compare) |
 | `PSPEXP_GL_EXTENSIONS=GL_ARB_framebuffer_object,GL_ARB_texture_non_power_of_two` | OpenGL: extension names reported besides the layer's own, for a game that will not start without one the layer covers in part (DreamChess); spaces or commas between them (a launcher entry's `env=` takes no spaces). Told to every program, others would take paths they did not before: hence per game |
 | `PSPEXP_GL_NOJOIN=1` | OpenGL: every draw its own `3D_DRAW`, none joined onto the one before (to compare) |
 | `PSPEXP_GL_NOMERGE=1` | OpenGL: a display list's `glBegin`/`glEnd` blocks drawn one by one, not merged (to compare) |

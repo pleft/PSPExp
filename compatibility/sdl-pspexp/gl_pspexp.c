@@ -13,8 +13,8 @@
  * lists (replayed on the board), the matrix stacks, 2D textures (resampled to
  * powers of two of at most PSPEXP_GL_TEXMAX, 16 bits a texel), lighting (the
  * GE's four lights), linear fog, blending, alpha and depth tests, culling,
- * scissor, colour mask, the queries programs make. What is not: shaders,
- * multitexture (unit 0 only), stencil, reading pixels back, copying from the
+ * scissor, colour mask, the queries programs make, two texture units (the
+ * second as a pass of its own). What is not: stencil, reading pixels back, copying from the
  * framebuffer, clip planes, polygon modes other than fill, line width.
  *
  * Linux: the gl* functions are exported, so with LD_PRELOAD they come before
@@ -293,6 +293,9 @@ static struct {
     int polygon_offset, normalize;
     float po_factor, po_units;
     int texgen[2]; GLenum texgen_mode[2]; float texgen_obj[2][4], texgen_eye[2][4];   /* s, t */
+    /* texture unit 1's coordinate generation and matrix stack (unit 0's are the fields above): set
+     * with unit 1 active, swapped in for its pass (mt_begin); [1]: units 2 and on, kept and unused */
+    struct { int texgen[2]; GLenum texgen_mode[2]; float texgen_obj[2][4], texgen_eye[2][4]; float texm[TEX_DEPTH][16]; int tex_top; } u1[2];
     int active_unit;
     /* state values */
     GLenum depth_func; int depth_mask; float depth_near, depth_far; float clear_depth;
@@ -307,6 +310,7 @@ static struct {
     GLenum tex_env_mode; float tex_env_color[4];
     /* texture unit 1 (fixed function): drawn as a pass of its own after unit 0's, blended as its environment says */
     int tex1_on, mt_pass; GLenum tex1_env, tex1_combine; float tex1_scale, texcoord1[2]; Array ta1;
+    GLenum tex0_combine, tex0_op1;   /* unit 0's GL_COMBINE_RGB and GL_OPERAND1_RGB (unit0_shadow) */
     Light light[MAX_LIGHTS];
     Material mat;
     float scene_ambient[4];
@@ -421,11 +425,13 @@ static int mat_invert(const float *m, float *out)   /* general 4x4; -1 when sing
     return 0;
 }
 
+#define U1 (&G.u1[G.active_unit == 1 ? 0 : 1])   /* the unit's own when not unit 0 (G.active_unit != 0) */
+
 static float *cur_matrix(void)
 {
     switch (G.matrix_mode) {
     case GL_PROJECTION: return G.proj[G.proj_top];
-    case GL_TEXTURE: return G.texm[G.tex_top];
+    case GL_TEXTURE: return G.active_unit ? U1->texm[U1->tex_top] : G.texm[G.tex_top];
     default: return G.mv[G.mv_top];
     }
 }
@@ -443,6 +449,12 @@ static void init_state(void)
         while (G.texmax * 2 <= atoi(e) && G.texmax < PSPEXP_TEXTURE_MAX) G.texmax *= 2;
     }
     mat_identity(G.mv[0]); mat_identity(G.proj[0]); mat_identity(G.texm[0]);
+    for (i = 0; i < 2; i++) {
+        mat_identity(G.u1[i].texm[0]);
+        G.u1[i].texgen_mode[0] = G.u1[i].texgen_mode[1] = GL_EYE_LINEAR;
+        G.u1[i].texgen_obj[0][0] = G.u1[i].texgen_eye[0][0] = 1.0f;
+        G.u1[i].texgen_obj[1][1] = G.u1[i].texgen_eye[1][1] = 1.0f;
+    }
     G.matrix_mode = GL_MODELVIEW;
     G.color[0] = G.color[1] = G.color[2] = G.color[3] = 1.0f;
     G.normal[2] = 1.0f;
@@ -619,7 +631,6 @@ static int texcoord_mode(float *ge)
     int gen = G.texgen[0] || G.texgen[1], c, i, j;
     float g[16], t[16];
     mat_identity(ge);
-    if (G.mt_pass) return TC_PLAIN;   /* unit 1: its own coordinates as they are (its generation and matrix not kept) */
     if (!gen && texture_matrix_identity()) return TC_PLAIN;
     /* a sphere map as the GE's environment map: (1 + n.x) / 2, (1 + n.y) / 2
      * of the eye-space normal, GL's own for a view straight ahead; its two
@@ -1091,9 +1102,19 @@ static PspExpContext *prepare(GlTex **texp) { return prepare_colour(texp, NULL);
 
 /* The texture a fixed-function draw samples: a 3D one (as its atlas) when GL_TEXTURE_3D is on, else unit 0's
  * (unit 1's in its pass) */
+/* Unit 0 combined as the colour times (1 - its alpha): a shadow (Neverball's, with two units). The GE
+ * cannot take a texture's alpha so: left out, the surface as it would be unshadowed. */
+static int unit0_shadow(void)
+{
+    if (G.tex_env_mode != GL_COMBINE || G.tex0_combine != GL_MODULATE || G.tex0_op1 != GL_ONE_MINUS_SRC_ALPHA) return 0;
+    unsupported("a texture combined as one minus its alpha (a shadow): left out");
+    return 1;
+}
+
 static GlTex *bound_texture(void)
 {
     if (!G.mt_pass && G.texture_3d && G.units3d[0]) { GlTex *t = find_texture(G.units3d[0]); if (t && t->d3) return t; }
+    if (!G.mt_pass && G.texture_2d && unit0_shadow()) return NULL;
     return G.texture_2d ? find_texture(G.units[G.mt_pass]) : NULL;
 }
 
@@ -1439,34 +1460,104 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
 /* Texture unit 1 on (multitexturing, fixed function): the draw again with its texture and coordinates,
  * blended in as its environment says (modulate: the framebuffer times it, once or twice over with
  * GL_COMBINE's scale; add; decal; replace), where the first drew (depth EQUAL). */
-static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
+/* Whether a draw now gets unit 1's pass */
+static int mt_applies(void)
 {
     GlTex *t1;
-    Vtx *copy = NULL;
-    int i, mt = !G.sh_active && !G.mt_pass && G.tex1_on && G.units[1] && (t1 = find_texture(G.units[1])) && (t1->rgba || t1->rt);
     GLenum env = G.tex1_env == GL_COMBINE ? (G.tex1_combine == GL_ADD ? GL_ADD : GL_MODULATE) : G.tex1_env;
-    if (mt && G.blend && (env == GL_MODULATE || env == GL_BLEND)) mt = 0;   /* (a translucent draw: the framebuffer's other colours would be multiplied too) */
-    if (mt && (copy = (Vtx *)malloc((size_t)n * sizeof(Vtx)))) memcpy(copy, v, (size_t)n * sizeof(Vtx));
+    if (G.sh_active || G.mt_pass || !G.tex1_on || !G.units[1] || !(t1 = find_texture(G.units[1])) || !(t1->rgba || t1->rt)) return 0;
+    return !(G.blend && (env == GL_MODULATE || env == GL_BLEND));   /* (a translucent draw: the framebuffer's other colours would be multiplied too) */
+}
+
+typedef struct MtSave { int blend, mask, tex2d, light, fog; GLenum bs, bd, be, df, tenv; } MtSave;
+
+/* Unit 0 without a texture, unit 1 with one: unit 1 is the draw's one texture, drawn in one pass as
+ * unit 0's would be (Neverball, told of two units, keeps its shadow on unit 0, off but where shadows
+ * fall, and every surface's texture on unit 1: its draws are blended, where a second pass could not
+ * multiply, so they came out white) */
+static int u1_alone(void)
+{
+    GlTex *t1;
+    return !G.sh_active && !G.mt_pass && (!G.texture_2d || unit0_shadow()) && !(G.texture_3d && G.units3d[0]) && G.tex1_on && G.units[1] &&
+           (t1 = find_texture(G.units[1])) && (t1->rgba || t1->rt);
+}
+
+static void u1_swap(void);
+
+static void alone_begin(MtSave *s)
+{
+    s->tex2d = G.texture_2d; s->tenv = G.tex_env_mode;
+    u1_swap();
+    G.mt_pass = 1;   /* bound_texture: unit 1's */
+    G.texture_2d = 1;
+    G.tex_env_mode = G.tex1_env == GL_COMBINE ? (G.tex1_combine == GL_ADD ? GL_ADD : G.tex1_combine == GL_REPLACE ? GL_REPLACE : GL_MODULATE) : G.tex1_env;
+}
+
+static void alone_end(const MtSave *s)
+{
+    u1_swap();
+    G.mt_pass = 0;
+    G.texture_2d = s->tex2d; G.tex_env_mode = s->tenv;
+}
+
+/* unit 1's pass: its texture (bound_texture), as it is, blended over what the first drew */
+/* unit 1's generation and matrix in unit 0's place, or back (the pass draws through unit 0's paths) */
+static void u1_swap(void)
+{
+    int tg[2]; GLenum md[2]; float ob[2][4], ey[2][4], m[16];
+    memcpy(tg, G.texgen, sizeof(tg)); memcpy(G.texgen, G.u1[0].texgen, sizeof(tg)); memcpy(G.u1[0].texgen, tg, sizeof(tg));
+    memcpy(md, G.texgen_mode, sizeof(md)); memcpy(G.texgen_mode, G.u1[0].texgen_mode, sizeof(md)); memcpy(G.u1[0].texgen_mode, md, sizeof(md));
+    memcpy(ob, G.texgen_obj, sizeof(ob)); memcpy(G.texgen_obj, G.u1[0].texgen_obj, sizeof(ob)); memcpy(G.u1[0].texgen_obj, ob, sizeof(ob));
+    memcpy(ey, G.texgen_eye, sizeof(ey)); memcpy(G.texgen_eye, G.u1[0].texgen_eye, sizeof(ey)); memcpy(G.u1[0].texgen_eye, ey, sizeof(ey));
+    memcpy(m, G.texm[G.tex_top], 64); memcpy(G.texm[G.tex_top], G.u1[0].texm[G.u1[0].tex_top], 64); memcpy(G.u1[0].texm[G.u1[0].tex_top], m, 64);
+}
+
+static void mt_begin(MtSave *s)
+{
+    GLenum env = G.tex1_env == GL_COMBINE ? (G.tex1_combine == GL_ADD ? GL_ADD : GL_MODULATE) : G.tex1_env;
+    u1_swap();
+    s->blend = G.blend; s->mask = G.depth_mask; s->tex2d = G.texture_2d; s->light = G.lighting; s->fog = G.fog;
+    s->bs = G.blend_src; s->bd = G.blend_dst; s->be = G.blend_eq; s->df = G.depth_func; s->tenv = G.tex_env_mode;
+    G.mt_pass = 1;
+    G.texture_2d = 1; G.lighting = 0; G.fog = 0;
+    G.tex_env_mode = GL_REPLACE;   /* its colour as it is: the blend does the rest */
+    G.blend_eq = GL_FUNC_ADD;
+    if (env == GL_MODULATE || env == GL_BLEND) { G.blend = 1; G.blend_src = GL_DST_COLOR; G.blend_dst = G.tex1_env == GL_COMBINE && G.tex1_scale >= 2 ? GL_SRC_COLOR : GL_ZERO; }
+    else if (env == GL_ADD) { G.blend = 1; G.blend_src = G.blend_dst = GL_ONE; }
+    else if (env == GL_DECAL) { G.blend = 1; G.blend_src = GL_SRC_ALPHA; G.blend_dst = GL_ONE_MINUS_SRC_ALPHA; }
+    if (G.depth_test && s->mask) G.depth_func = GL_EQUAL;
+    G.depth_mask = 0;
+}
+
+static void mt_end(const MtSave *s)
+{
+    u1_swap();
+    G.mt_pass = 0;
+    G.blend = s->blend; G.depth_mask = s->mask; G.texture_2d = s->tex2d; G.lighting = s->light; G.fog = s->fog;
+    G.blend_src = s->bs; G.blend_dst = s->bd; G.blend_eq = s->be; G.depth_func = s->df; G.tex_env_mode = s->tenv;
+}
+
+static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
+{
+    Vtx *copy = NULL;
+    int i;
+    MtSave sv;
+    if (u1_alone()) {
+        if (!(copy = (Vtx *)malloc((size_t)n * sizeof(Vtx)))) return;
+        for (i = 0; i < n; i++) { copy[i] = v[i]; copy[i].t[0] = v[i].t1[0]; copy[i].t[1] = v[i].t1[1]; }
+        alone_begin(&sv);
+        draw_vertices_ix0(mode, copy, n, ix, nix);
+        alone_end(&sv);
+        free(copy);
+        return;
+    }
+    if (mt_applies() && (copy = (Vtx *)malloc((size_t)n * sizeof(Vtx)))) memcpy(copy, v, (size_t)n * sizeof(Vtx));
     draw_vertices_ix0(mode, v, n, ix, nix);
     if (!copy) return;
-    {
-        int blend = G.blend, mask = G.depth_mask, tex2d = G.texture_2d, light = G.lighting, fog = G.fog;
-        GLenum bs = G.blend_src, bd = G.blend_dst, be = G.blend_eq, df = G.depth_func, tenv = G.tex_env_mode;
-        for (i = 0; i < n; i++) { copy[i].t[0] = copy[i].t1[0]; copy[i].t[1] = copy[i].t1[1]; }
-        G.mt_pass = 1;
-        G.texture_2d = 1; G.lighting = 0; G.fog = 0;
-        G.tex_env_mode = GL_REPLACE;   /* its colour as it is: the blend does the rest */
-        G.blend_eq = GL_FUNC_ADD;
-        if (env == GL_MODULATE || env == GL_BLEND) { G.blend = 1; G.blend_src = GL_DST_COLOR; G.blend_dst = G.tex1_env == GL_COMBINE && G.tex1_scale >= 2 ? GL_SRC_COLOR : GL_ZERO; }
-        else if (env == GL_ADD) { G.blend = 1; G.blend_src = G.blend_dst = GL_ONE; }
-        else if (env == GL_DECAL) { G.blend = 1; G.blend_src = GL_SRC_ALPHA; G.blend_dst = GL_ONE_MINUS_SRC_ALPHA; }
-        if (G.depth_test && mask) G.depth_func = GL_EQUAL;
-        G.depth_mask = 0;
-        draw_vertices_ix0(mode, copy, n, ix, nix);
-        G.mt_pass = 0;
-        G.blend = blend; G.depth_mask = mask; G.texture_2d = tex2d; G.lighting = light; G.fog = fog;
-        G.blend_src = bs; G.blend_dst = bd; G.blend_eq = be; G.depth_func = df; G.tex_env_mode = tenv;
-    }
+    for (i = 0; i < n; i++) { copy[i].t[0] = copy[i].t1[0]; copy[i].t[1] = copy[i].t1[1]; }
+    mt_begin(&sv);
+    draw_vertices_ix0(mode, copy, n, ix, nix);
+    mt_end(&sv);
     free(copy);
 }
 
@@ -1867,6 +1958,10 @@ GLAPI(void, glPushMatrix, (void))
         if (G.proj_top + 1 >= PROJ_DEPTH) { set_error(GL_STACK_OVERFLOW); return; }
         memcpy(G.proj[G.proj_top + 1], G.proj[G.proj_top], sizeof(G.proj[0])); G.proj_top++; break;
     case GL_TEXTURE:
+        if (G.active_unit) {
+            if (U1->tex_top + 1 >= TEX_DEPTH) { set_error(GL_STACK_OVERFLOW); return; }
+            memcpy(U1->texm[U1->tex_top + 1], U1->texm[U1->tex_top], sizeof(U1->texm[0])); U1->tex_top++; break;
+        }
         if (G.tex_top + 1 >= TEX_DEPTH) { set_error(GL_STACK_OVERFLOW); return; }
         memcpy(G.texm[G.tex_top + 1], G.texm[G.tex_top], sizeof(G.texm[0])); G.tex_top++; break;
     default:
@@ -1880,7 +1975,9 @@ GLAPI(void, glPopMatrix, (void))
     RECORD0(OP_POP_MATRIX);
     switch (G.matrix_mode) {
     case GL_PROJECTION: if (G.proj_top == 0) { set_error(GL_STACK_UNDERFLOW); return; } G.proj_top--; break;
-    case GL_TEXTURE: if (G.tex_top == 0) { set_error(GL_STACK_UNDERFLOW); return; } G.tex_top--; break;
+    case GL_TEXTURE:
+        if (G.active_unit) { if (U1->tex_top == 0) { set_error(GL_STACK_UNDERFLOW); return; } U1->tex_top--; break; }
+        if (G.tex_top == 0) { set_error(GL_STACK_UNDERFLOW); return; } G.tex_top--; break;
     default: if (G.mv_top == 0) { set_error(GL_STACK_UNDERFLOW); return; } G.mv_top--; break;
     }
 }
@@ -3376,7 +3473,7 @@ static int converted_max(GLenum mode, int n) { return mode == GL_QUADS ? n / 4 *
 static int mesh_emit(PspExpContext *ctx, Mesh *m, GLenum mode, const int *idx, int first, int count,
                      GLuint ibo, uintptr_t ioffset, GLenum itype, uint32_t vt);
 
-static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
+static int draw_mesh1(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
     PspExpContext *ctx;
     GlTex *tex;
@@ -3387,7 +3484,6 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
     GlBuf *vb;
 #define NOT_MESH(why) do { if (G.log >= 2) gl_logf("streamed: %s", why); return 0; } while (0)
     if (G.compiling || getenv("PSPEXP_GL_NOMESH")) return 0;
-    if (G.tex1_on && G.units[1]) NOT_MESH("texture unit 1 (drawn in a second pass, from the vertices)");
     if (G.texture_3d && G.units3d[0]) NOT_MESH("a 3D texture (its coordinates mapped into its atlas per vertex)");
     if (!G.va.enabled || !G.va.buffer || !(vb = find_buffer(G.va.buffer))) return 0;
     if (vb->usage == 0x88E0 /* GL_STREAM_DRAW */) NOT_MESH("a stream buffer");
@@ -3411,6 +3507,45 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
     if (G.lighting || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (!(m = vertex_mesh(ctx, vt, hi + 1))) NOT_MESH("no vertex mesh");
     return mesh_emit(ctx, m, mode, idx, first, count, ibo, ioffset, itype, vt);
+}
+
+/* With texture unit 1's pass: the same draw again as a mesh of its own, unit 1's coordinate array in
+ * unit 0's place (a mesh is keyed on the arrays it read, so it is another), under the pass's state.
+ * Streamed, a game that keeps unit 1 on for everything sent its whole level each frame (Neverball:
+ * 110 to 790 KB), which is why one unit was reported by default before. */
+static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
+{
+    Array ta;
+    float tc[2];
+    MtSave sv;
+    int i, ok;
+    if (u1_alone()) {   /* unit 1's coordinates in unit 0's place, one pass */
+        if (G.ta1.enabled && !G.ta1.buffer) NOT_MESH("texture unit 1's coordinates in client memory");
+        ta = G.ta; memcpy(tc, G.texcoord, sizeof(tc));
+        G.ta = G.ta1; memcpy(G.texcoord, G.texcoord1, sizeof(tc));
+        alone_begin(&sv);
+        ok = draw_mesh1(mode, idx, first, count, ibo, ioffset, itype);
+        alone_end(&sv);
+        G.ta = ta; memcpy(G.texcoord, tc, sizeof(tc));
+        return ok;
+    }
+    if (!mt_applies()) return draw_mesh1(mode, idx, first, count, ibo, ioffset, itype);
+    if (getenv("PSPEXP_GL_NOMESH1") || (G.ta1.enabled ? !G.ta1.buffer : !(G.u1[0].texgen[0] && G.u1[0].texgen[1])))
+        NOT_MESH("texture unit 1's coordinates neither from a buffer nor generated");
+    if (!draw_mesh1(mode, idx, first, count, ibo, ioffset, itype)) return 0;
+    ta = G.ta; memcpy(tc, G.texcoord, sizeof(tc));
+    G.ta = G.ta1; memcpy(G.texcoord, G.texcoord1, sizeof(tc));
+    mt_begin(&sv);
+    if (!draw_mesh1(mode, idx, first, count, ibo, ioffset, itype)) {   /* no mesh for it: this pass streamed */
+        Vtx *v = gather(count);
+        if (v) {
+            for (i = 0; i < count; i++) fetch(idx ? idx[i] : first + i, &v[i]);
+            draw_vertices_ix0(mode, v, count, NULL, 0);
+        }
+    }
+    mt_end(&sv);
+    G.ta = ta; memcpy(G.texcoord, tc, sizeof(tc));
+    return 1;
 }
 
 /* A mesh drawn: cut where it reaches outside the GE's range, else by
@@ -3941,8 +4076,8 @@ static void set_cap(GLenum cap, int on)
     case GL_STENCIL_TEST:
         if (on) unsupported("stencil test");
         break;
-    case GL_TEXTURE_GEN_S: G.texgen[0] = on; break;
-    case GL_TEXTURE_GEN_T: G.texgen[1] = on; break;
+    case GL_TEXTURE_GEN_S: if (G.active_unit) U1->texgen[0] = on; else G.texgen[0] = on; break;
+    case GL_TEXTURE_GEN_T: if (G.active_unit) U1->texgen[1] = on; else G.texgen[1] = on; break;
     case GL_TEXTURE_GEN_R: case GL_TEXTURE_GEN_Q: break;   /* 2D textures: s and t are all that count */
     default:
         if (cap >= GL_CLIP_PLANE0 && cap < GL_CLIP_PLANE0 + 6) { if (on) unsupported("clip planes"); break; }
@@ -3970,8 +4105,8 @@ GLAPI(GLboolean, glIsEnabled, (GLenum cap))
     case GL_DITHER: return (GLboolean)G.dither;
     case GL_NORMALIZE: return (GLboolean)G.normalize;
     case GL_POLYGON_OFFSET_FILL: return (GLboolean)G.polygon_offset;
-    case GL_TEXTURE_GEN_S: return (GLboolean)G.texgen[0];
-    case GL_TEXTURE_GEN_T: return (GLboolean)G.texgen[1];
+    case GL_TEXTURE_GEN_S: return (GLboolean)(G.active_unit ? U1->texgen[0] : G.texgen[0]);
+    case GL_TEXTURE_GEN_T: return (GLboolean)(G.active_unit ? U1->texgen[1] : G.texgen[1]);
     case GL_VERTEX_ARRAY: return (GLboolean)G.va.enabled;
     case GL_COLOR_ARRAY: return (GLboolean)G.ca.enabled;
     case GL_NORMAL_ARRAY: return (GLboolean)G.na.enabled;
@@ -4604,6 +4739,8 @@ GLAPI(void, glTexEnvfv, (GLenum target, GLenum p, const GLfloat *v))
         return;
     }
     if (G.active_unit != 0) return;
+    if (p == 0x8571 /* GL_COMBINE_RGB */) G.tex0_combine = (GLenum)v[0];
+    else if (p == 0x8591 /* GL_OPERAND1_RGB */) G.tex0_op1 = (GLenum)v[0];
     if (p == GL_TEXTURE_ENV_MODE) {
         G.tex_env_mode = (GLenum)v[0];
         if (G.tex_env_mode == GL_COMBINE) unsupported("GL_COMBINE texture environment (modulate instead)");
@@ -4622,20 +4759,25 @@ static int mat_invert(const float *m, float *out);
 GLAPI(void, glTexGenfv, (GLenum coord, GLenum p, const GLfloat *v))
 {
     int c = coord == GL_S ? 0 : coord == GL_T ? 1 : -1;
+    GLenum *mode;
+    float (*obj)[4], (*eye)[4];
     ensure_init();
     if (c < 0) return;   /* r, q: not for 2D textures */
+    mode = G.active_unit ? U1->texgen_mode : G.texgen_mode;
+    obj = G.active_unit ? U1->texgen_obj : G.texgen_obj;
+    eye = G.active_unit ? U1->texgen_eye : G.texgen_eye;
     switch (p) {
     case GL_TEXTURE_GEN_MODE:
-        G.texgen_mode[c] = (GLenum)v[0];
-        if (G.texgen_mode[c] != GL_SPHERE_MAP && G.texgen_mode[c] != GL_OBJECT_LINEAR && G.texgen_mode[c] != GL_EYE_LINEAR)
+        mode[c] = (GLenum)v[0];
+        if (mode[c] != GL_SPHERE_MAP && mode[c] != GL_OBJECT_LINEAR && mode[c] != GL_EYE_LINEAR)
             unsupported("texture coordinate generation other than sphere map and linear");
         break;
-    case GL_OBJECT_PLANE: memcpy(G.texgen_obj[c], v, 16); break;
+    case GL_OBJECT_PLANE: memcpy(obj[c], v, 16); break;
     case GL_EYE_PLANE: {   /* kept as GL does: times the inverse of the modelview of the moment */
         float inv[16];
         int i;
-        if (mat_invert(G.mv[G.mv_top], inv) < 0) { memcpy(G.texgen_eye[c], v, 16); break; }
-        for (i = 0; i < 4; i++) G.texgen_eye[c][i] = v[0] * inv[i * 4 + 0] + v[1] * inv[i * 4 + 1] + v[2] * inv[i * 4 + 2] + v[3] * inv[i * 4 + 3];
+        if (mat_invert(G.mv[G.mv_top], inv) < 0) { memcpy(eye[c], v, 16); break; }
+        for (i = 0; i < 4; i++) eye[c][i] = v[0] * inv[i * 4 + 0] + v[1] * inv[i * 4 + 1] + v[2] * inv[i * 4 + 2] + v[3] * inv[i * 4 + 3];
         break;
     }
     default: break;
@@ -4883,8 +5025,8 @@ static void play_list(GLuint name)
 
 /* ---- queries ------------------------------------------------------------------------------ */
 
-/* GL_ARB_multitexture: one unit (the GE's); programs that need it at all
- * still run, what they put in other units is left out. */
+/* GL_ARB_multitexture: two units (the GE has one: unit 1 is a second pass, or the only texture when
+ * unit 0 has none); what programs put in others is left out. */
 static const char EXTENSIONS[] =
     "GL_ARB_multitexture GL_ARB_point_parameters GL_ARB_vertex_buffer_object GL_EXT_bgra GL_EXT_compiled_vertex_array GL_EXT_texture_edge_clamp "
     "GL_SGIS_texture_edge_clamp GL_EXT_draw_range_elements GL_ARB_transpose_matrix GL_EXT_blend_minmax "
@@ -4943,9 +5085,9 @@ static int get_values(GLenum p, float *f)
     case GL_MAX_PROJECTION_STACK_DEPTH: f[0] = PROJ_DEPTH; return 1;
     case GL_MAX_TEXTURE_STACK_DEPTH: f[0] = TEX_DEPTH; return 1;
     case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_COORDS:   /* (PSPEXP_GL_UNITS: more, for shader games that ask) */
-        /* 1 by default: a game told of a second unit may turn it on for its every draw (Neverball: its
-         * shadow), and draws with unit 1 are not made meshes, so all of it would be sent each frame */
-        f[0] = getenv("PSPEXP_GL_UNITS") && atoi(getenv("PSPEXP_GL_UNITS")) > 0 ? (float)atoi(getenv("PSPEXP_GL_UNITS")) : 1;
+        /* 2 by default: unit 1 is drawn as a second pass (a mesh too), or as the one texture when unit 0
+         * has none (Neverball: 73 KB a frame as with one; OpenArena 98 to 71 KB, its passes collapsed) */
+        f[0] = getenv("PSPEXP_GL_UNITS") && atoi(getenv("PSPEXP_GL_UNITS")) > 0 ? (float)atoi(getenv("PSPEXP_GL_UNITS")) : 2;
         if (f[0] > 8) f[0] = 8;
         return 1;
     case GL_MAX_TEXTURE_IMAGE_UNITS: case 0x8B4D /* GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS */: f[0] = 8; return 1;
@@ -4978,10 +5120,10 @@ static int get_values(GLenum p, float *f)
     case GL_MATRIX_MODE: f[0] = (float)G.matrix_mode; return 1;
     case GL_MODELVIEW_MATRIX: memcpy(f, G.mv[G.mv_top], 64); return 16;
     case GL_PROJECTION_MATRIX: memcpy(f, G.proj[G.proj_top], 64); return 16;
-    case GL_TEXTURE_MATRIX: memcpy(f, G.texm[G.tex_top], 64); return 16;
+    case GL_TEXTURE_MATRIX: memcpy(f, G.active_unit ? U1->texm[U1->tex_top] : G.texm[G.tex_top], 64); return 16;
     case GL_MODELVIEW_STACK_DEPTH: f[0] = (float)(G.mv_top + 1); return 1;
     case GL_PROJECTION_STACK_DEPTH: f[0] = (float)(G.proj_top + 1); return 1;
-    case GL_TEXTURE_STACK_DEPTH: f[0] = (float)(G.tex_top + 1); return 1;
+    case GL_TEXTURE_STACK_DEPTH: f[0] = (float)((G.active_unit ? U1->tex_top : G.tex_top) + 1); return 1;
     case GL_CURRENT_COLOR: memcpy(f, G.color, 16); return 4;
     case GL_CURRENT_NORMAL: memcpy(f, G.normal, 12); return 3;
     case GL_CURRENT_TEXTURE_COORDS: memcpy(f, G.texcoord, 16); return 4;
