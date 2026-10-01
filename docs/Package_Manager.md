@@ -368,8 +368,9 @@ finishes or cleans up, and the user sees which.
   - the checksum manifest of what was staged;
   - the last checkpoint reached.
 
-  `recover` works from the journal and the staged files alone, never from
-  the catalogue, which may have changed meanwhile.
+  `recover` works from the journal, the staged files and the helper's
+  meta-package for the operation (below) alone, never from the catalogue,
+  which may have changed meanwhile.
 - **Every action is bracketed by two checkpoints:** `<action>-started`
   is written before it begins, and `<action>-done` after it ends. A crash
   can fall between the action and its `-done`. So recovery never trusts
@@ -379,14 +380,25 @@ finishes or cleans up, and the user sees which.
 - **Staging is kept until the operation ends.** It is deleted only at
   `done`, or when the user abandons a broken operation (Remove), or when
   recovery finds that nothing past `staged` began.
+- **Abandoning:** while a journal exists every other operation is refused
+  ("run pspexp-pkg recover"), except `remove` of the recipe the journal is
+  about: that drops the journal and staging, then removes whatever of the
+  recipe is installed (its launcher files, an aside `.old`, its
+  meta-package and what §5.4 lets go). Packages apt installed for it before
+  a lost record (below) stay, marked automatic, for `apt autoremove`.
 - **Checkpoints, in this order:**
   1. **`staged`:** everything the operation will publish is built under
      `<root>/state/stage/<id>/`, and its manifest is recorded:
      - pinned data (checksums checked);
      - the new app folder;
      - the new system files;
-     - the list of system files to unpublish;
-     - the meta-package `.deb`.
+     - the list of system files to unpublish.
+
+     Before the journal says `staged`, the root helper writes the
+     operation's meta-package `.deb` (`prepare`, §5.2) into its own
+     root-owned folder, `/var/lib/pspexp/meta`, not into the staging (which
+     the console's user owns): what apt installs is decided as root, from
+     the catalogue, once. `resume` installs from that file.
   2. **`apt-started`,** written before the helper is called, then
      **`apt-done`** after it succeeds. apt and dpkg keep their own
      consistency.
@@ -408,11 +420,9 @@ finishes or cleans up, and the user sees which.
   | last checkpoint | how `recover` reconciles | outcome |
   |---|---|---|
   | none, or `staged` | nothing past staging began | staging deleted; nothing changed |
-  | `apt-started` | runs `repair` if dpkg reports anything half-installed, then asks dpkg whether the journal's meta-package is in the state the operation wanted: installed and configured at the journal's version, or absent for a removal | yes: continues at publishing; no: the recipe shows as **broken** (Retry uses the kept staging; Remove abandons it) |
-  | `apt-done` | none needed | publishes from staging |
-  | `app-swap-started` | inspects `apps/<id>` and `apps/.<id>.old` against the manifest to see which renames happened | finishes the swap, or undoes the half of it that happened |
-  | `app-swapped`, `systems-started` | compares each system file in `systems/` with the manifest; every step can be redone | finishes publishing |
-  | a manifest that doesn't check | staging is damaged | rolls back: `.old` returns, and its own system files are republished; the recipe shows as broken |
+  | `apt-started` | runs `repair` if dpkg reports anything half-installed, then asks dpkg whether the journal's meta-package is in the state the operation wanted: installed and configured at the journal's version, or absent for a removal; if not, `resume` once more from the helper's meta-package | yes: continues at publishing; no: the recipe shows as **broken** (Retry: `recover` again; Remove abandons it). The helper's meta-package missing or unreadable is **broken** too, never "nothing changed": apt may have installed part of it before the record was lost |
+  | `apt-done`, `app-swap-started`, `app-swapped`, `systems-started`, `systems-published` | checks every staged file against the manifest wherever it now is: the app folder in the staging, or already swapped into `apps/<id>` (nothing changes it there before `done`), and the system files and unpublish list in the staging; then redoes the remaining steps, each of which can be redone | publishes from staging, or finishes publishing |
+  | a file that doesn't match the manifest, at any of those | the staged files are damaged | rolls back: a swapped-in app folder is removed, `.old` returns, the new system files are removed and the old install's own are republished; with no previous install nothing of it stays published, its programs installed until it is removed |
 
 - **Power loss:** the console runs `pspexp-pkg recover` at every start,
   under the lock, before the launcher first reads its library. A `dpkg`
@@ -1024,9 +1034,22 @@ because boards differ.
     recovering from `apt-done`. The helper now `prepare`s the meta-package
     before the journal says `staged` and installs from it with `resume`
     (§5.2); `recover` resumes from it alone, and checks the staged files at
-    every checkpoint. Two new failure checks (the recipe removed from the
+    `apt-done` too. Two new failure checks (the recipe removed from the
     catalogue meanwhile; a staged file damaged at `apt-done`): the suite
     passes 30 of 30 on the Pi 400.
+  - **A second review (the same day):** the check still stopped once the
+    app folder was swapped in (system files damaged after it were
+    published), and a missing helper record was taken as "apt had not
+    begun". `recover` now checks every staged file at every checkpoint from
+    `apt-done` on, the app folder wherever it is; the rollback also removes
+    a fresh install's app folder and system files; a missing record leaves
+    the operation open and broken; and `remove` of its recipe abandons it
+    (it was refused while any journal existed, so the documented Remove had
+    no way through; and with nothing of the recipe installed, `remove` took
+    the archive path, which never saw the journal). Three more failure
+    checks (a staged system file damaged after the swap; the swapped-in app
+    damaged; the helper's record lost, then Remove): the suite passes 34 of
+    34 on the Pi 400.
   - **The PSP's manual route could leave it unbootable:** see §6.1, which
     now says to delete the folder first, or to use `runtime-slot --install`,
     which now clears old slots and a pending update itself.

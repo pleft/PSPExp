@@ -85,6 +85,26 @@ pspexp-pkg recover >/dev/null 2>&1
 check '[ ! -d "$APPS/pkgtest-hello" ] && clean pkgtest-hello' "killed at apt-done, a staged file then damaged: recover publishes nothing of it"
 pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
 
+echo "damage found after the app folder is swapped in (§5.3)"
+crashrun app-swapped install pkgtest-sys
+echo damaged >> "$ST/stage/pkgtest-sys/systems/pkgtest-sys.system"
+pspexp-pkg recover >/dev/null 2>&1
+check '[ ! -d "$APPS/pkgtest-sys" ] && [ ! -f "$SYS/pkgtest-sys.system" ] && clean pkgtest-sys' "killed at app-swapped, a staged system file then damaged: recover publishes nothing of it"
+pspexp-pkg remove pkgtest-sys >/dev/null 2>&1
+crashrun app-swapped install pkgtest-hello
+echo damaged >> "$APPS/pkgtest-hello/package"
+pspexp-pkg recover >/dev/null 2>&1
+check '[ ! -d "$APPS/pkgtest-hello" ] && clean pkgtest-hello' "killed at app-swapped, the swapped-in app then damaged: recover takes it out"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
+
+echo "the helper's record lost: broken, not cancelled (§5.3)"
+crashrun apt-started install pkgtest-hello
+sudo rm -f /var/lib/pspexp/meta/pspexp-recipe-pkgtest-hello_*.deb
+pspexp-pkg recover >/dev/null 2>&1; r=$?
+check '[ $r -ne 0 ] && [ -f "$ST/txn" ] && [ -d "$ST/stage/pkgtest-hello" ]' "recover reports it broken and keeps the operation open"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1; r=$?
+check '[ $r -eq 0 ] && gone_ok pkgtest-hello' "remove abandons the operation and leaves nothing of it"
+
 echo "one operation at a time (§5.3)"
 ( exec 9>"$ST/lock"; flock 9; sleep 6 ) &
 sleep 1

@@ -154,7 +154,16 @@ crash() { [ "${PSPEXP_PKG_CRASH:-}" = "$1" ] && { echo "pspexp-pkg: crash test a
 
 # the manifest of a staging folder: every file's checksum
 manifest() { (cd "$1" && find . -type f ! -name MANIFEST | sort | xargs sha256sum 2>/dev/null) ; }
-manifest_ok() { [ -f "$1/MANIFEST" ] && [ "$(manifest "$1")" = "$(cat "$1/MANIFEST")" ]; }
+# staged_ok: what the operation staged, as its manifest recorded it, wherever it is now: the app
+# folder still in $STAGE, or already swapped into $APPS/$ID (nothing changes it there before finish)
+staged_ok() {
+	[ -f "$STAGE/MANIFEST" ] || return 1
+	_now=$( { (cd "$STAGE" && find . -type f ! -name MANIFEST ! -path './app/*' | sort | xargs -r sha256sum)
+		if [ -d "$STAGE/app" ]; then (cd "$STAGE" && find ./app -type f | sort | xargs -r sha256sum)
+		elif [ -d "$APPS/$ID" ]; then (cd "$APPS/$ID" && find . -type f | sort | xargs -r sha256sum) | sed 's|  \./|  ./app/|'
+		fi; } | sort -k2)
+	[ "$_now" = "$(sort -k2 "$STAGE/MANIFEST")" ]
+}
 
 # ---- recipes: staging ---------------------------------------------------------------------
 
@@ -279,7 +288,14 @@ finish() {
 begin() {   # begin OP ID
 	OP="$1"; ID="$2"; STAGE="$STATE/stage/$ID"
 	case "$ID" in ""|*[!a-z0-9-]*) die "'$ID' is not a recipe id" ;; esac
-	[ ! -f "$J" ] || die "an earlier operation was interrupted: run pspexp-pkg recover"
+	ABANDONED=""
+	if [ -f "$J" ]; then
+		# removing the recipe an interrupted operation was about abandons that operation (§5.3:
+		# a broken one recover cannot finish); anything else waits for recover
+		[ "$OP" = remove ] && [ "$(jget id)" = "$ID" ] || die "an earlier operation was interrupted: run pspexp-pkg recover"
+		echo "abandoning the interrupted $(jget op) of $ID (at $(jget checkpoint))"
+		rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; ABANDONED=1
+	fi
 	SERIAL=$(serial); RV=""
 }
 
@@ -327,7 +343,11 @@ install_recipe() {
 remove_recipe() {
 	begin remove "$1"
 	if [ ! -f "$APPS/$ID/package" ] || [ -z "$(field "$APPS/$ID" recipe)" ]; then
-		[ -d "$APPS/$ID" ] || [ -n "$(meta_version "$ID")" ] || die "$ID is not installed"
+		if [ ! -d "$APPS/$ID" ] && [ ! -d "$APPS/.$ID.old" ] && [ -z "$(meta_version "$ID")" ]; then
+			# (packages apt installed for it before its record was lost stay, marked automatic: apt autoremove)
+			[ -n "$ABANDONED" ] && { echo "removed $ID (nothing of it was installed)"; return 0; }
+			die "$ID is not installed"
+		fi
 	fi
 	RV=$(field "$APPS/$ID" version | tr -dc 0-9)
 	# staged: nothing to publish, and every system file it owns to unpublish
@@ -378,8 +398,11 @@ recover() {
 			# once more (Retry), from the meta-package the helper prepared for
 			# this operation, not the catalogue, which may have changed since
 			rc=0; $APT_HELPER resume "$ID" "$RV" >/dev/null 2>&1 || rc=$?
-			if [ $rc = 3 ]; then   # none (removed by hand?): apt had not begun, nothing changed (the launcher's files come after it)
-				rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; echo "nothing had changed (apt had not begun)"; return 0
+			if [ $rc = 3 ]; then
+				# the helper's record is gone (prepare wrote it before the journal said staged):
+				# apt may have installed part of it, so the operation stays open, broken
+				echo "$ID is broken: the record of what apt was to install is missing, and apt may have begun (remove it: pspexp-pkg remove $ID)" >&2
+				return 1
 			fi
 		fi
 		[ "$(meta_version "$ID")" = "$RV" ] || { echo "$ID is broken: its programs were not installed (retry: pspexp-pkg recover; or remove it)" >&2; return 1; }
@@ -388,12 +411,23 @@ recover() {
 	CP=$(jget checkpoint)
 	if [ "$CP" = apt-done ] || [ "$CP" = app-swap-started ] || [ "$CP" = app-swapped ] || [ "$CP" = systems-started ] || [ "$CP" = systems-published ]; then
 		if [ -d "$STAGE/app" ] || [ -d "$APPS/$ID" ]; then
-			if [ -d "$STAGE/app" ] && ! manifest_ok "$STAGE"; then
-				# the staging is damaged: back to exactly the old install
-				[ -d "$APPS/.$ID.old" ] && { rm -rf "$APPS/$ID"; mv "$APPS/.$ID.old" "$APPS/$ID"; }
+			if ! staged_ok; then
+				# the staged files are damaged (in the staging or already published): back to
+				# exactly the old install, or to none
+				if [ -d "$STAGE/app" ]; then   # not swapped in: $APPS/$ID is the old one, or it is aside
+					[ -d "$APPS/.$ID.old" ] && { rm -rf "$APPS/$ID"; mv "$APPS/.$ID.old" "$APPS/$ID"; }
+				else   # swapped in: $APPS/$ID is the damaged new one
+					rm -rf "$APPS/$ID"; [ -d "$APPS/.$ID.old" ] && mv "$APPS/.$ID.old" "$APPS/$ID"
+				fi
+				for s in "$STAGE"/systems/*.system; do   # the new system files out (by name: theirs may be the damage)
+					[ -f "$s" ] || continue; n=$(basename "$s")
+					[ "$(sed -n 's/^pkg=//p' "$SYS/$n" 2>/dev/null | head -1)" = "$ID" ] && rm -f "$SYS/$n"
+				done
 				[ -d "$APPS/$ID/systems" ] && for s in "$APPS/$ID"/systems/*.system; do [ -f "$s" ] && cp "$s" "$SYS/"; done
 				rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"
-				echo "$ID: its staged files were damaged; the previous install is back" >&2; return 1
+				if [ -d "$APPS/$ID" ]; then echo "$ID: its staged files were damaged; the previous install is back" >&2
+				else echo "$ID: its staged files were damaged; nothing of it is published (its programs stay: pspexp-pkg remove $ID)" >&2; fi
+				return 1
 			fi
 			case "$CP" in systems-started|systems-published) publish_systems; finish ;; *) publish ;; esac
 			echo "installed $ID (recipe $RV)"
@@ -442,7 +476,8 @@ remove)
 	[ $# -ge 1 ] || die "usage: pspexp-pkg remove ID..."
 	lock
 	for i in "$@"; do
-		if [ "$FAMILY" = debian ] && { [ -n "$(field "$APPS/$i" recipe)" ] || [ -n "$(meta_version "$i")" ]; }; then remove_recipe "$i"; else remove_one "$i"; fi
+		# a recipe's: installed by one, or the subject of an interrupted operation (abandoned, §5.3)
+		if [ "$FAMILY" = debian ] && { [ -n "$(field "$APPS/$i" recipe)" ] || [ -n "$(meta_version "$i")" ] || [ "$(jget id)" = "$i" ]; }; then remove_recipe "$i"; else remove_one "$i"; fi
 	done ;;
 upgrade)
 	lock
