@@ -747,7 +747,9 @@ static void build_state(PspExp3DState *s, GlTex *tex)
         to_psp_rect(all, &s->scissor_x, &s->scissor_y, &s->scissor_w, &s->scissor_h, 0);
     }
     s->pixel_mask = (G.color_mask[0] ? 0 : 0xFFu) | (G.color_mask[1] ? 0 : 0xFF00u) | (G.color_mask[2] ? 0 : 0xFF0000u);
-    {   /* PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex: parts left out (bisecting a difference) */
+    {   /* PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex: parts left out (bisecting a difference); also
+         * nopatch (textures sent whole), nomod / noadd (a shader's multiplied / added texture's pass), ramtex
+         * (every texture in the PSP's main RAM), ids (each draw a flat colour of its texture's) */
         static const char *dbg;
         static int read;
         if (!read) { read = 1; dbg = getenv("PSPEXP_GL_DEBUG"); }
@@ -997,7 +999,8 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     t->dirty = 0;
     t->part = 0;
     if (t->rt || !t->rgba || t->w <= 0 || t->h <= 0) return;   /* a render target: drawn on the PSP */
-    if (part && t->handle && t->psp_bytes == bytes && pw == t->w && ph == t->h && mul == t->sent_mul && pspexp_patch_supported(ctx)) {
+    if (part && t->handle && t->psp_bytes == bytes && pw == t->w && ph == t->h && mul == t->sent_mul && pspexp_patch_supported(ctx) &&
+        !(getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), "nopatch"))) {
         /* only a rectangle changed: its 8 x 8 blocks (16-bit texels: 16 bytes by 8 rows each), which the
          * swizzled layout keeps left to right in each 8-row strip: one run of bytes per strip */
         int x0 = t->part_x0 & ~7, x1 = (t->part_x1 + 7) & ~7, y0 = t->part_y0 & ~7, y1 = (t->part_y1 + 7) & ~7, ok = 1, by;
@@ -1089,7 +1092,7 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
     d.format = alpha ? PSPEXP_TEX_4444 : PSPEXP_TEX_5650;
     t->sent_alpha = alpha; t->sent_mul = mul;
     d.layout = PSPEXP_LAYOUT_SWIZZLED;
-    d.priority = PSPEXP_PRIORITY_NORMAL;
+    d.priority = getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), "ramtex") ? PSPEXP_PRIORITY_LOW : PSPEXP_PRIORITY_NORMAL;
     dst = pspexp_upload_texture_begin(ctx, t->handle, &d, bytes, NULL, 0);
     if (dst) {
         pspexp_swizzle(dst, lin, (uint32_t)pw * 2u, (uint32_t)ph);
@@ -1169,7 +1172,26 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     } else tex = NULL;
     G.tc = tex && !G.sh_active ? texcoord_mode(G.ge_texmat) : TC_PLAIN;
     if (G.tc != TC_GE) mat_identity(G.ge_texmat);
+    if (tex && getenv("PSPEXP_GL_HIDE_TEX") && (unsigned)atoi(getenv("PSPEXP_GL_HIDE_TEX")) == tex->name) return NULL;   /* (draws with one texture left out) */
     build_state(&st, tex);
+    {   /* PSPEXP_GL_DEBUG=ids: each draw a flat colour of its texture's (lit, no lights, the colour emissive):
+         * which draw made a pixel; the colours named in the log */
+        static int ids = -1;
+        if (ids < 0) ids = getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), "ids");
+        if (ids) {
+            PspExp3DLights l;
+            uint32_t hsh = (tex ? tex->name : 0) * 2654435761u ^ (G.sh_active ? 0x55u : 0);
+            uint32_t col = 0xFF000000u | (0x40u + (hsh & 0x3Fu) * 3u) | (0x40u + ((hsh >> 8) & 0x3Fu) * 3u) << 8 | (0x40u + ((hsh >> 16) & 0x3Fu) * 3u) << 16;
+            static unsigned char seen[4096];
+            st.enable &= ~(uint32_t)PSPEXP_3D_TEXTURE;
+            st.enable |= PSPEXP_3D_LIGHTING;
+            memset(&l, 0, sizeof(l));
+            l.emissive = col & 0xFFFFFFu; l.diffuse = 0xFF000000u;
+            pspexp_3d_lights(ctx, &l);
+            G.lights_sent = 0;
+            if (tex && tex->name < 4096 && !seen[tex->name]) { seen[tex->name] = 1; gl_logf("ids: texture %u (%dx%d) is %06x", tex->name, tex->w, tex->h, col & 0xFFFFFFu); }
+        }
+    }
     if (G.log >= 3 && (!G.state_sent || memcmp(&st, &G.sent_state, sizeof(st))))
         gl_logf("state: enable %x viewport %d,%d %dx%d depth %u..%u scissor %d,%d %dx%d mask %x blend %d/%d tex %u",
                 st.enable, st.viewport_x, st.viewport_y, st.viewport_w, st.viewport_h, st.depth_near, st.depth_far,
@@ -3084,6 +3106,7 @@ static int sh_pass(const GlslPlan *pl, int k)
         return 1;
     case SH_MOD: case SH_ADD:
         if (pl->env_only || !(k == SH_MOD ? pl->mod_tex : pl->add_tex)) return 0;
+        if (getenv("PSPEXP_GL_DEBUG") && strstr(getenv("PSPEXP_GL_DEBUG"), k == SH_MOD ? "nomod" : "noadd")) return 0;
         if (!(G.sh_tex = find_texture(G.units[(k == SH_MOD ? pl->mod_unit : pl->add_unit) & 7])) || (!G.sh_tex->rgba && !G.sh_tex->rt)) return 0;
         G.sh_uvset = k == SH_MOD ? 1 : 2;
         G.sh_replace = 1;
@@ -4682,6 +4705,8 @@ GLAPI(void, glBindTexture, (GLenum target, GLuint name))
     if (target == GL_TEXTURE_3D && G.active_unit >= 0 && G.active_unit < 8) { G.units3d[G.active_unit] = name; texture_object(name); return; }
     if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     texture_object(name);
+    if (getenv("PSPEXP_GL_TRACE_TEX") && (G.units[G.active_unit] == (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) || name == (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX"))))
+        gl_logf("bind %u on unit %d (was %u)", name, G.active_unit, G.units[G.active_unit]);
     G.units[G.active_unit] = name;
 }
 
@@ -4797,6 +4822,9 @@ static void store_pixels(GlTex *t, int x0, int y0, int w, int h, GLenum format, 
 static void store_pixels_changed(GlTex *t, int x0, int y0, int w, int h, GLenum format, GLenum type, const void *pixels, int *changed)
 {
     const uint8_t *base = (const uint8_t *)pixels;
+    if (getenv("PSPEXP_GL_TRACE_TEX") && t->name + 2 >= (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) && t->name <= (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) + 2)   /* (a texture's every upload, and its neighbours') */
+        gl_logf("texture %u: %d,%d %dx%d of %dx%d format %x type %x row length %d alignment %d skip %d,%d", t->name, x0, y0, w, h, t->w, t->h,
+                format, type, G.unpack_row_length, G.unpack_alignment, G.unpack_skip_pixels, G.unpack_skip_rows);
     int bpp = pixel_bytes(format, type), rowlen = G.unpack_row_length > 0 ? G.unpack_row_length : w, x, y;
     size_t row = (size_t)rowlen * (size_t)bpp;
     int al = G.unpack_alignment > 0 ? G.unpack_alignment : 1;

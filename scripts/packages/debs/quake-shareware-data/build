@@ -34,6 +34,14 @@ if [ ! -s "$D/id1/pak0.pak" ]; then
 	mv "$T/id1/pak0.pak" "$D/id1/pak0.pak.part" && mv "$D/id1/pak0.pak.part" "$D/id1/pak0.pak"
 	cp "$T/slicnse.txt" "$D/" 2>/dev/null || true
 fi
+# Liquids the old way: by default Quakespasm draws each into an image it makes by copying from the
+# framebuffer (glCopyTexSubImage2D), which PSPExp's OpenGL cannot do: the image kept what memory held
+# when it was made, rainbow noise on water and slime. Set in autoexec.cfg (on the command line it did
+# not hold), unless the player set it there.
+if ! grep -qs '^r_oldwater' "$D/id1/autoexec.cfg"; then
+	mkdir -p "$D/id1"
+	echo 'r_oldwater 1 // water warped by Quake itself (PSPExp: no framebuffer copies)' >> "$D/id1/autoexec.cfg"
+fi
 exec /usr/games/quakespasm -basedir "$D" "$@"
 S
 chmod 755 "$W/root/usr/games/quake-shareware"
@@ -45,7 +53,7 @@ Packaged by PSPExp (docs/Package_Manager.md).
 D
 cat > "$W/control" <<C
 Package: quake-shareware-data
-Version: 1.06-pspexp1
+Version: 1.06-pspexp2
 Architecture: all
 Maintainer: PSPExp <pspexp@localhost>
 Section: non-free/games
@@ -56,4 +64,4 @@ Description: Quake shareware episode, for Quakespasm
  archive unaltered; quake-shareware unpacks the game data on the first start
  and runs Quakespasm. Packaged by PSPExp.
 C
-python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/quake-shareware-data_1.06-pspexp1_all.deb"
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/quake-shareware-data_1.06-pspexp2_all.deb"

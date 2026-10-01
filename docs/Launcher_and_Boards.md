@@ -417,7 +417,10 @@ Quakespasm. Its data is our package `quake-shareware-data`
 pass the shareware on free of charge only as a whole, so id's `quake106.zip`
 goes in unaltered, and `/usr/games/quake-shareware` unpacks `id1/pak0.pak`
 from it on the first start (lhasa, into `~/.local/share/quake-shareware`)
-before running Quakespasm there. The recipe asks for three texture units
+before running Quakespasm there; it also puts `r_oldwater 1` in that
+folder's `id1/autoexec.cfg` (package 1.06-pspexp2, 2026-10-01: water and
+slime warped by Quake itself, as its default needs framebuffer copies the PSP's
+OpenGL cannot make). The recipe asks for three texture units
 (`env=PSPEXP_GL_UNITS=3`), which puts Quakespasm on its shader path. Keys only,
 on Quake's own bindings: the nub and d-pad move and turn, cross fires and
 selects, circle jumps, square changes weapon, L / R strafe, start is the

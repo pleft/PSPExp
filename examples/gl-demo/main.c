@@ -22,6 +22,9 @@
  *   GLDEMO_MULTI=1             multitexturing (fixed function): a checker on unit 0, a light
  *                              gradient on unit 1; left modulated, right GL_COMBINE x2 (Quake's
  *                              overbright lightmaps); top immediate mode, bottom client arrays
+ *   GLDEMO_UV=offset           a long checkered floor seen low, its texture coordinates plus
+ *                              `offset` (whole numbers: the same picture on a repeating texture;
+ *                              how large coordinates fare on the GE: Quake's long ledges)
  *   GLDEMO_READ=file.ppm       the last frame's pixels written out (a reference, with a
  *                              real OpenGL)
  */
@@ -354,6 +357,30 @@ static void sphere_frame(int n, int w, int h)
 }
 
 /* GL 1.3: two texture units, the second a lightmap */
+/* GLDEMO_UV: a floor 4 units wide and 80 long under a camera 0.5 above it, 1 repeat a unit */
+static void uv_frame(GLuint checker, float off)
+{
+    glClearColor(0.1f, 0.1f, 0.15f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_LIGHTING); glDisable(GL_BLEND); glDisable(GL_CULL_FACE); glDisable(GL_FOG);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, checker);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    glLoadIdentity();
+    glRotatef(8, 1, 0, 0);
+    glTranslatef(0, -0.5f, 0);
+    glBegin(GL_QUADS);
+    glTexCoord2f(off - 2, off + 2); glVertex3f(-2, 0, 2);
+    glTexCoord2f(off + 2, off + 2); glVertex3f(2, 0, 2);
+    glTexCoord2f(off + 2, off - 78); glVertex3f(2, 0, -78);
+    glTexCoord2f(off - 2, off - 78); glVertex3f(-2, 0, -78);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+}
+
 static void multi_frame(GLuint checker, int w, int h)
 {
     static GLuint light;
@@ -498,6 +525,13 @@ int main(int argc, char **argv)
         glFrustum(-0.1 * w / h, 0.1 * w / h, -0.1, 0.1, 0.2, 40.0);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        if (getenv("GLDEMO_UV")) {
+            uv_frame(tex, (float)atof(getenv("GLDEMO_UV")));
+            if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);
+            SDL_GL_SwapWindow(win);
+            if (++n == frames) running = 0;
+            continue;
+        }
         if (getenv("GLDEMO_MULTI")) {
             multi_frame(tex, w, h);
             if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);

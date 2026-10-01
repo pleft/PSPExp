@@ -186,7 +186,9 @@ function; the tests check it is current).
 | `PSPEXP_GL_NOMERGE=1` | OpenGL: a display list's `glBegin`/`glEnd` blocks drawn one by one, not merged (to compare) |
 | `PSPEXP_GL_RB_TARGETS=1` | OpenGL: a window-sized colour renderbuffer drawn into a render target of its own and copied onto the window, as GL does it, rather than drawn on the screen (to compare; needs the VRAM) |
 | `PSPEXP_GL_KEEP_TARGETS=1` | OpenGL: render targets never textured from are kept and drawn into, not let go after 120 frames |
-| `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference) |
+| `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference); also `nopatch` (textures sent whole), `nomod` / `noadd` (a shader's multiplied / added texture's pass left out), `ramtex` (every texture in the PSP's main RAM), `ids` (each draw a flat colour of its texture's, the colours named in the log: which draw made a pixel) |
+| `PSPEXP_GL_HIDE_TEX=N` | OpenGL: the draws with texture N left out |
+| `PSPEXP_GL_TRACE_TEX=N` | OpenGL: every upload into texture N and its neighbours, and every bind of N, in the log |
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |
 | `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, and the frame rate over them, in the log every 300 frames |
