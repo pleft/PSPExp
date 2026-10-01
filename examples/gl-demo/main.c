@@ -25,6 +25,9 @@
  *   GLDEMO_UV=offset           a long checkered floor seen low, its texture coordinates plus
  *                              `offset` (whole numbers: the same picture on a repeating texture;
  *                              how large coordinates fare on the GE: Quake's long ledges)
+ *   GLDEMO_SPRITES=1           quads facing the camera, as Quake draws its particles: left one
+ *                              to a draw (two triangles each), right all in one draw (the GE's
+ *                              sprites, 16-bit); the same picture each side
  *   GLDEMO_READ=file.ppm       the last frame's pixels written out (a reference, with a
  *                              real OpenGL)
  */
@@ -381,6 +384,34 @@ static void uv_frame(GLuint checker, float off)
     glDisable(GL_TEXTURE_2D);
 }
 
+/* GLDEMO_SPRITES: a column of quads facing the camera, the texture's top-left quarter on each */
+static void sprites_frame(GLuint checker)
+{
+    int i, side;
+    glClearColor(0.1f, 0.1f, 0.15f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_LIGHTING); glDisable(GL_CULL_FACE); glDisable(GL_FOG); glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, checker);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glLoadIdentity();
+    for (side = 0; side < 2; side++) {
+        if (side) glBegin(GL_QUADS);   /* all four in one draw: 16 vertices, 16-bit, the GE's sprites */
+        for (i = 0; i < 4; i++) {
+            float x = side ? 1.0f : -2.0f, y = -1.5f + i * 0.8f, z = -6.0f - i, s = 0.6f;
+            if (!side) glBegin(GL_QUADS);
+            glColor3f(1, 1, 1);
+            glTexCoord2f(0, 0); glVertex3f(x, y, z);
+            glTexCoord2f(0.5f, 0); glVertex3f(x, y + s, z);
+            glTexCoord2f(0.5f, 0.5f); glVertex3f(x + s, y + s, z);
+            glTexCoord2f(0, 0.5f); glVertex3f(x + s, y, z);
+            if (!side) glEnd();
+        }
+        if (side) glEnd();
+    }
+    glDisable(GL_TEXTURE_2D);
+}
+
 static void multi_frame(GLuint checker, int w, int h)
 {
     static GLuint light;
@@ -525,6 +556,13 @@ int main(int argc, char **argv)
         glFrustum(-0.1 * w / h, 0.1 * w / h, -0.1, 0.1, 0.2, 40.0);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        if (getenv("GLDEMO_SPRITES")) {
+            sprites_frame(tex);
+            if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);
+            SDL_GL_SwapWindow(win);
+            if (++n == frames) running = 0;
+            continue;
+        }
         if (getenv("GLDEMO_UV")) {
             uv_frame(tex, (float)atof(getenv("GLDEMO_UV")));
             if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);

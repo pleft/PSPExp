@@ -182,6 +182,8 @@ void *pspexp_3d_draw_more(PspExpContext *ctx, uint8_t primitive, uint32_t vertex
 int pspexp_3d_indexed_supported(const PspExpContext *ctx);
 /* PSPEXP_FEATURE_3D_MORPH: the weights of the morph targets (PSPEXP_3D_VT_MORPH) of the draws that follow */
 int pspexp_3d_morph_supported(const PspExpContext *ctx);
+/* PSPEXP_FEATURE_3D_SPRITES: 3D draws of PSPEXP_3D_PRIM_SPRITES */
+int pspexp_3d_sprites_supported(const PspExpContext *ctx);
 void pspexp_3d_morph(PspExpContext *ctx, const float weight[8]);
 void *pspexp_3d_draw_indexed(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count, uint32_t index_count,
                              uint16_t **indices);

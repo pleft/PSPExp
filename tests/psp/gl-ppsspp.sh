@@ -28,7 +28,9 @@ shader|GLDEMO_SHADER=1|60
 one|GLDEMO_ONE=45|0
 cube|GLDEMO_CUBE=1|60
 sphere|GLDEMO_SPHERE=1|60
-multi|GLDEMO_MULTI=1|0'
+multi|GLDEMO_MULTI=1|0
+uv|GLDEMO_UV=512|0
+sprites|GLDEMO_SPRITES=1|0'
 
 stop() { killall PPSSPPSDL 2>/dev/null; i=0; while pgrep -x PPSSPPSDL >/dev/null && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done; }
 shot() {   # $1 name, $2 environment, $3 first frame -> $OUT/$1.png

@@ -1140,6 +1140,11 @@ void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_CLEAR, 0, &c, sizeof(c));
 }
 
+int pspexp_3d_sprites_supported(const PspExpContext *ctx)
+{
+    return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D_SPRITES) != 0;
+}
+
 int pspexp_3d_morph_supported(const PspExpContext *ctx)
 {
     return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D_MORPH) != 0;
@@ -1174,8 +1179,8 @@ void *pspexp_3d_draw_more(PspExpContext *ctx, uint8_t primitive, uint32_t vertex
     PspExp3DDraw d;
     uint32_t size = pspexp_3d_vertex_size(vertex_type);
     uint8_t *p;
-    /* lists of separate points, lines or triangles only (GE 0, 1, 3): a strip or fan cannot go on */
-    if (!size || !count || (primitive != 0 && primitive != 1 && primitive != 3)) return NULL;
+    /* lists of separate points, lines, triangles or sprites only (GE 0, 1, 3, 6): a strip or fan cannot go on */
+    if (!size || !count || (primitive != 0 && primitive != 1 && primitive != 3 && primitive != PSPEXP_3D_PRIM_SPRITES)) return NULL;
     if (ctx->last_draw + PSPEXP_HEADER_SIZE + sizeof(d) > w->len) return NULL;
     memcpy(&d, w->buf + ctx->last_draw + PSPEXP_HEADER_SIZE, sizeof(d));
     if (((const PspExpMessageHeader *)(const void *)(w->buf + ctx->last_draw))->opcode != PSPEXP_OP_3D_DRAW ||

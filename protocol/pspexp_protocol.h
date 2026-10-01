@@ -206,6 +206,7 @@ enum PspExpExecutorKind {
                                                   (PSPEXP_3D_VT_TEXTURE16, _POSITION16) */
 #define PSPEXP_FEATURE_3D_MORPH   0x00000100u  /* 3D_MORPH and vertices with 8-bit normals and morph
                                                   targets (PSPEXP_3D_VT_NORMAL8, _MORPH) */
+#define PSPEXP_FEATURE_3D_SPRITES 0x00000200u  /* 3D draws of GU_SPRITES (PSPEXP_3D_PRIM_SPRITES) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
@@ -486,7 +487,10 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExp3DDraw) == 16, draw3d_size);
 #define PSPEXP_3D_VT_NORMAL8    (1u << 5)   /* GU_NORMAL_8BIT */
 #define PSPEXP_3D_VT_MORPH(n)   ((((uint32_t)(n)) - 1u) << 18)   /* GU_VERTICES(n) */
 #define PSPEXP_3D_VT_MORPH_MASK (7u << 18)
-#define PSPEXP_3D_PRIM_MAX     5u           /* GU_TRIANGLE_FAN */
+#define PSPEXP_3D_PRIM_MAX     6u           /* GU_SPRITES (only with PSPEXP_FEATURE_3D_SPRITES; older runtimes stop at 5,
+                                               GU_TRIANGLE_FAN): two vertices each, opposite corners of a rectangle on
+                                               the screen, after the transform (a quad facing the camera: Quake's particles) */
+#define PSPEXP_3D_PRIM_SPRITES 6u
 /* A vertex's size for a vertex type (the GE's layout: each part aligned to its own size, the whole to the
  * largest); 0 when the type is not accepted. */
 static inline uint32_t pspexp_3d_vertex_size(uint32_t vt)

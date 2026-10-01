@@ -233,6 +233,8 @@ typedef struct GlTex {
     int dirty;                /* to be sent before the next draw with it */
     GLenum min_filter, mag_filter, wrap_s, wrap_t;
     int rt, rt_w, rt_h, rt_fmt;  /* a framebuffer object's colour: a render target on the PSP, drawn there */
+    unsigned ver;                /* its contents' version: one more each time they are stored */
+    int diag_sym; unsigned diag_ver;   /* the same mirrored across its diagonal (1 or 0) for contents ver diag_ver - 1 */
     unsigned rt_made;            /* ...the frame it was made in */
     int write_only; unsigned wo_frame;   /* drawn into, never drawn with: its target let go, draws into it dropped */
     uint32_t psp_bytes;          /* what it takes on the PSP now (0: not there) */
@@ -1587,6 +1589,23 @@ static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
     free(copy);
 }
 
+/* A texture the same mirrored across its diagonal (a round dot: Quake's particle): one mapped turned a
+ * quarter on a quad looks the same mapped straight, as a sprite must be */
+static int diag_symmetric(GlTex *t)
+{
+    int x, y, k;
+    if (!t || !t->rgba || t->w != t->h || t->w > 256) return 0;
+    if (t->diag_ver == t->ver + 1u) return t->diag_sym;
+    t->diag_ver = t->ver + 1u; t->diag_sym = 1;
+    for (y = 0; y < t->h && t->diag_sym; y++)
+        for (x = y + 1; x < t->w; x++) {
+            uint32_t p = t->rgba[y * t->w + x], q = t->rgba[x * t->w + y];
+            for (k = 0; k < 32; k += 8) if (abs((int)(p >> k & 0xFF) - (int)(q >> k & 0xFF)) > 8) { t->diag_sym = 0; break; }
+            if (!t->diag_sym) break;
+        }
+    return t->diag_sym;
+}
+
 static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix)
 {
     PspExpContext *ctx;
@@ -1759,7 +1778,54 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
             v = t; n = nix;
         }
     }
+    if (mode == GL_QUADS && n >= 8 && !G.lighting && !G.sh_active && (ctx = shim_gl_frame()) && pspexp_3d_sprites_supported(ctx) &&
+        !getenv("PSPEXP_GL_NOSPRITES")) {
+        /* quads that face the camera, each an upright rectangle on the screen with its texture upright on it
+         * and one colour (Quake's particles, thousands in an explosion): the GE's sprites, two vertices each,
+         * its opposite corners, instead of two triangles' six */
+        static Vtx *sp;
+        static int spcap;
+        const float *m = G.mv[G.mv_top];
+        int q, nq = n / 4, ok = 1, why = 0;
+        if (nq * 2 > spcap) { Vtx *p2 = (Vtx *)realloc(sp, (size_t)nq * 2 * sizeof(Vtx)); if (p2) { sp = p2; spcap = nq * 2; } else ok = 0; }
+        for (q = 0; ok && q < nq; q++) {
+            const Vtx *a = v + q * 4, *b = a + 1, *c = a + 2, *d = a + 3;
+            float e[4][3], tz, tol, tu;
+            int k, bx;
+            for (k = 0; k < 4; k++) {
+                const float *pp = a[k].p;
+                e[k][0] = m[0] * pp[0] + m[4] * pp[1] + m[8] * pp[2] + m[12];
+                e[k][1] = m[1] * pp[0] + m[5] * pp[1] + m[9] * pp[2] + m[13];
+                e[k][2] = m[2] * pp[0] + m[6] * pp[1] + m[10] * pp[2] + m[14];
+            }
+            tz = 1e-3f * (fabsf(e[0][2]) > 1 ? fabsf(e[0][2]) : 1);
+            tol = 1e-3f * (fabsf(e[2][0] - e[0][0]) + fabsf(e[2][1] - e[0][1]));
+            tu = 1e-4f;
+            if (fabsf(e[1][2] - e[0][2]) > tz || fabsf(e[2][2] - e[0][2]) > tz || fabsf(e[3][2] - e[0][2]) > tz) { ok = 0; why = __LINE__; break; }
+            if (fabsf(e[2][0] - e[0][0]) <= tol || fabsf(e[2][1] - e[0][1]) <= tol) { ok = 0; why = __LINE__; break; }
+            if (a->c != b->c || a->c != c->c || a->c != d->c) { ok = 0; why = __LINE__; break; }
+            /* b at (c.x, a.y) and d at (a.x, c.y), or the other way round; the texture along the same axes */
+            bx = fabsf(e[1][0] - e[2][0]) <= tol && fabsf(e[1][1] - e[0][1]) <= tol;
+            if (bx) {
+                if (!(fabsf(e[3][0] - e[0][0]) <= tol && fabsf(e[3][1] - e[2][1]) <= tol)) { ok = 0; why = __LINE__; break; }
+                if ((fabsf(b->t[0] - c->t[0]) > tu || fabsf(b->t[1] - a->t[1]) > tu || fabsf(d->t[0] - a->t[0]) > tu || fabsf(d->t[1] - c->t[1]) > tu) &&
+                    (fabsf(b->t[0] - a->t[0]) > tu || fabsf(b->t[1] - c->t[1]) > tu || fabsf(d->t[0] - c->t[0]) > tu || fabsf(d->t[1] - a->t[1]) > tu ||
+                     !(tex && diag_symmetric(tex)))) { ok = 0; why = __LINE__; break; }
+            } else {
+                if (!(fabsf(e[1][0] - e[0][0]) <= tol && fabsf(e[1][1] - e[2][1]) <= tol &&
+                      fabsf(e[3][0] - e[2][0]) <= tol && fabsf(e[3][1] - e[0][1]) <= tol)) { ok = 0; why = __LINE__; break; }
+                if ((fabsf(b->t[0] - a->t[0]) > tu || fabsf(b->t[1] - c->t[1]) > tu || fabsf(d->t[0] - c->t[0]) > tu || fabsf(d->t[1] - a->t[1]) > tu) &&
+                    /* turned a quarter: the same only on a texture symmetric across its diagonal */
+                    (fabsf(b->t[0] - c->t[0]) > tu || fabsf(b->t[1] - a->t[1]) > tu || fabsf(d->t[0] - a->t[0]) > tu || fabsf(d->t[1] - c->t[1]) > tu ||
+                     !(tex && diag_symmetric(tex)))) { ok = 0; why = __LINE__; break; }
+            }
+            sp[q * 2] = *a; sp[q * 2 + 1] = *c;
+        }
+        if (!ok && G.log >= 2) gl_logf("quads not sprites: check at line %d, quad %d of %d", why, q, nq);
+        if (ok) { v = sp; n = nq * 2; mode = 0x7FFF; }   /* (sprites, below) */
+    }
     switch (mode) {
+    case 0x7FFF: prim = PSPEXP_3D_PRIM_SPRITES; per = 2; break;
     case GL_POINTS: prim = GU_POINTS; per = 1; break;
     case GL_LINES: prim = GU_LINES; per = 2; break;
     case GL_LINE_LOOP: case GL_LINE_STRIP: prim = GU_LINE_STRIP; per = 0; break;
@@ -1787,7 +1853,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
         t[n] = v[0];
         v = t; n++;
     }
-    if (prim >= GU_TRIANGLES && clip_and_send(ctx, prim, vt, v, n)) return;
+    if (prim >= GU_TRIANGLES && prim != PSPEXP_3D_PRIM_SPRITES && clip_and_send(ctx, prim, vt, v, n)) return;
     if (per == 0) {
         if (n <= CHUNK_VERTICES) { send_prim(ctx, prim, vt, v, n); return; }
         if (prim == GU_LINE_STRIP) {   /* strips of lines overlap by one vertex */
@@ -4822,6 +4888,7 @@ static void store_pixels(GlTex *t, int x0, int y0, int w, int h, GLenum format, 
 static void store_pixels_changed(GlTex *t, int x0, int y0, int w, int h, GLenum format, GLenum type, const void *pixels, int *changed)
 {
     const uint8_t *base = (const uint8_t *)pixels;
+    t->ver++;
     if (getenv("PSPEXP_GL_TRACE_TEX") && t->name + 2 >= (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) && t->name <= (unsigned)atoi(getenv("PSPEXP_GL_TRACE_TEX")) + 2)   /* (a texture's every upload, and its neighbours') */
         gl_logf("texture %u: %d,%d %dx%d of %dx%d format %x type %x row length %d alignment %d skip %d,%d", t->name, x0, y0, w, h, t->w, t->h,
                 format, type, G.unpack_row_length, G.unpack_alignment, G.unpack_skip_pixels, G.unpack_skip_rows);
@@ -4901,7 +4968,7 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
         t->handle = 0; t->rt = 0;
     }
     if (pixels) store_pixels(t, 0, 0, w, h, format, type, pixels);
-    else memset(t->rgba, 0, (size_t)w * (size_t)h * 4);
+    else { memset(t->rgba, 0, (size_t)w * (size_t)h * 4); t->ver++; }
     t->prescale = type == 0x8036 || type == 0x8368 ? 4.0f : 1.0f;
     t->dirty = 1;
 }

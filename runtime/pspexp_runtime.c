@@ -144,7 +144,8 @@ static void send_hello(PspExpRuntime *rt)
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
-                 (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0);
+                 (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
+                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D_SPRITES : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;

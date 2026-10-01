@@ -186,7 +186,7 @@ can. See the README in
 
 After a change to the OpenGL layer, the protocol or the runtime:
 `tests/psp/gl-ppsspp.sh` (a minute or two, PPSSPP on the Mac) runs
-`gl-demo`'s modes from set frames and compares the PSP's frames with
+`gl-demo`'s ten modes from set frames and compares the PSP's frames with
 `tests/gl-ref/`; a difference fails with `build/gl-regress/<case>-diff.png`.
 `--record` takes new references after a change meant to alter the picture.
 
