@@ -19,6 +19,9 @@
  *                              row, a dark one along its first column)
  *   GLDEMO_SPHERE=1            the same torus through OpenGL 1.x's sphere map
  *                              (glTexGen GL_SPHERE_MAP; a texture of four coloured quarters)
+ *   GLDEMO_MULTI=1             multitexturing (fixed function): a checker on unit 0, a light
+ *                              gradient on unit 1; left modulated, right GL_COMBINE x2 (Quake's
+ *                              overbright lightmaps); top immediate mode, bottom client arrays
  *   GLDEMO_READ=file.ppm       the last frame's pixels written out (a reference, with a
  *                              real OpenGL)
  */
@@ -350,6 +353,86 @@ static void sphere_frame(int n, int w, int h)
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 }
 
+/* GL 1.3: two texture units, the second a lightmap */
+static void multi_frame(GLuint checker, int w, int h)
+{
+    static GLuint light;
+    int half;
+    if (!light) {
+        static unsigned char px[32 * 32 * 3];
+        int x, y;
+        for (y = 0; y < 32; y++)
+            for (x = 0; x < 32; x++) {
+                unsigned char *p = px + (y * 32 + x) * 3;
+                p[0] = (unsigned char)(x * 8); p[1] = (unsigned char)(y * 8); p[2] = 96;
+            }
+        glGenTextures(1, &light);
+        glBindTexture(GL_TEXTURE_2D, light);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 32, 32, 0, GL_RGB, GL_UNSIGNED_BYTE, px);
+    }
+    glViewport(0, 0, w, h);
+    glClearColor(0.1f, 0.12f, 0.2f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_LIGHTING);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, 2, 0, 2, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glColor4f(1, 1, 1, 1);
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, checker);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    glActiveTexture(GL_TEXTURE1);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, light);
+    for (half = 0; half < 2; half++) {
+        float x0 = (float)half;
+        if (half == 0) glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        else {
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_TEXTURE);
+            glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
+        }
+        /* top: immediate mode */
+        glBegin(GL_QUADS);
+        glMultiTexCoord2f(GL_TEXTURE0, 0, 0); glMultiTexCoord2f(GL_TEXTURE1, 0, 0); glVertex2f(x0 + 0.05f, 1.05f);
+        glMultiTexCoord2f(GL_TEXTURE0, 2, 0); glMultiTexCoord2f(GL_TEXTURE1, 1, 0); glVertex2f(x0 + 0.95f, 1.05f);
+        glMultiTexCoord2f(GL_TEXTURE0, 2, 2); glMultiTexCoord2f(GL_TEXTURE1, 1, 1); glVertex2f(x0 + 0.95f, 1.95f);
+        glMultiTexCoord2f(GL_TEXTURE0, 0, 2); glMultiTexCoord2f(GL_TEXTURE1, 0, 1); glVertex2f(x0 + 0.05f, 1.95f);
+        glEnd();
+        {   /* bottom: client arrays */
+            float pos[8] = { x0 + 0.05f, 0.05f, x0 + 0.95f, 0.05f, x0 + 0.95f, 0.95f, x0 + 0.05f, 0.95f };
+            float t0[8] = { 0, 0, 2, 0, 2, 2, 0, 2 }, t1[8] = { 0, 0, 1, 0, 1, 1, 0, 1 };
+            glEnableClientState(GL_VERTEX_ARRAY);
+            glVertexPointer(2, GL_FLOAT, 0, pos);
+            glClientActiveTexture(GL_TEXTURE0);
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glTexCoordPointer(2, GL_FLOAT, 0, t0);
+            glClientActiveTexture(GL_TEXTURE1);
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glTexCoordPointer(2, GL_FLOAT, 0, t1);
+            glDrawArrays(GL_QUADS, 0, 4);
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+            glClientActiveTexture(GL_TEXTURE0);
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+            glDisableClientState(GL_VERTEX_ARRAY);
+        }
+    }
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glDisable(GL_TEXTURE_2D);
+    glActiveTexture(GL_TEXTURE0);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+}
+
 static void read_frame(const char *path, int w, int h)
 {
     unsigned char *px = (unsigned char *)malloc((size_t)w * (size_t)h * 3);
@@ -379,7 +462,7 @@ int main(int argc, char **argv)
     if (!win) { fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); return 1; }
     gl = SDL_GL_CreateContext(win);
     if (!gl) { fprintf(stderr, "SDL_GL_CreateContext: %s\n", SDL_GetError()); return 1; }
-    SDL_GL_SetSwapInterval(1);
+    SDL_GL_SetSwapInterval(getenv("GLDEMO_READ") ? 0 : 1);   /* a reference frame: no wait for a display that may be asleep */
     printf("GL_RENDERER: %s\nGL_VERSION: %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
 
     tex = make_texture();
@@ -415,6 +498,13 @@ int main(int argc, char **argv)
         glFrustum(-0.1 * w / h, 0.1 * w / h, -0.1, 0.1, 0.2, 40.0);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        if (getenv("GLDEMO_MULTI")) {
+            multi_frame(tex, w, h);
+            if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);
+            SDL_GL_SwapWindow(win);
+            if (++n == frames) running = 0;
+            continue;
+        }
         if (getenv("GLDEMO_SPHERE")) {
             sphere_frame(n + first, w, h);
             if (n + 1 == frames && getenv("GLDEMO_READ")) read_frame(getenv("GLDEMO_READ"), w, h);

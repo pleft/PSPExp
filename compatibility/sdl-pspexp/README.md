@@ -171,11 +171,11 @@ function; the tests check it is current).
 | `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |
 | `PSPEXP_GL_NOCLIP=1` | OpenGL: no cutting of triangles that reach outside the GE's range (they then vanish whole) |
 | `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
-| `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 1: fixed-function multitexturing is not drawn; shader programs' textures are, in passes). Quakespasm takes its shader path only with 3 |
+| `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 1). With 2 or more, fixed-function texture unit 1 is drawn, as a second pass blended as its environment says (modulate, `GL_COMBINE` modulate x2, add, decal, replace); its draws are streamed, not made meshes, so a game that keeps unit 1 on for everything (Neverball's shadow) sends all of it each frame: hence 1 by default. Quakespasm takes its shader path only with 3 |
 | `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference) |
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |
-| `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, in the log every 300 frames |
+| `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, and the frame rate over them, in the log every 300 frames |
 | `PSPEXP_GL_NOINDEX=1` | OpenGL: indexed triangle lists always sent as triangles (by default, when the PSP takes indices and nothing needs cutting, each shared vertex goes once, with 16-bit indices) |
 | `PSPEXP_GL_FLOATS=1` | OpenGL: streamed vertices always as floats (by default unlit draws of 16 or more vertices go with 16-bit positions and coordinates, when the PSP takes them) |
 | `PSPEXP_RECORD=FILE` | every byte sent to the PSP, in order (a stream to replay) |

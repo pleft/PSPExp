@@ -222,7 +222,7 @@ enum {
 
 /* ---- state ----------------------------------------------------------------- */
 
-typedef struct Vtx { float t[2]; uint32_t c; float n[3]; float p[3]; } Vtx;   /* one vertex, all attributes */
+typedef struct Vtx { float t[2]; uint32_t c; float n[3]; float p[3]; float t1[2]; } Vtx;   /* one vertex, all attributes (t1: texture unit 1's) */
 
 typedef struct GlTex {
     GLuint name;
@@ -301,6 +301,8 @@ static struct {
     int viewport[4], scissor[4];
     GLenum fog_mode; float fog_start, fog_end, fog_density, fog_color[4];
     GLenum tex_env_mode; float tex_env_color[4];
+    /* texture unit 1 (fixed function): drawn as a pass of its own after unit 0's, blended as its environment says */
+    int tex1_on, mt_pass; GLenum tex1_env, tex1_combine; float tex1_scale, texcoord1[2]; Array ta1;
     Light light[MAX_LIGHTS];
     Material mat;
     float scene_ambient[4];
@@ -446,6 +448,7 @@ static void init_state(void)
     G.dither = 1;
     G.fog_mode = GL_EXP; G.fog_density = 1.0f; G.fog_end = 1.0f;
     G.tex_env_mode = GL_MODULATE;
+    G.tex1_env = GL_MODULATE; G.tex1_combine = GL_MODULATE; G.tex1_scale = 1;
     for (i = 0; i < MAX_LIGHTS; i++) {
         Light *l = &G.light[i];
         l->ambient[3] = 1.0f;
@@ -609,6 +612,7 @@ static int texcoord_mode(float *ge)
     int gen = G.texgen[0] || G.texgen[1], c, i, j;
     float g[16], t[16];
     mat_identity(ge);
+    if (G.mt_pass) return TC_PLAIN;   /* unit 1: its own coordinates as they are (its generation and matrix not kept) */
     if (!gen && texture_matrix_identity()) return TC_PLAIN;
     /* a sphere map as the GE's environment map: (1 + n.x) / 2, (1 + n.y) / 2
      * of the eye-space normal, GL's own for a view straight ahead; its two
@@ -1072,7 +1076,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     }
     {   /* a texture to send that does not fit beside this frame's: the frame goes now (a program
          * loading draws hundreds of images into a target without ever swapping) */
-        GlTex *t = G.sh_active ? G.sh_tex : G.texture_2d ? find_texture(G.units[0]) : NULL;
+        GlTex *t = G.sh_active ? G.sh_tex : G.texture_2d ? find_texture(G.units[G.mt_pass]) : NULL;
         if (t && t->rgba && !t->rt && (t->dirty || !t->handle) && !texture_fits(ctx, t, texture_psp_bytes(t) - t->psp_bytes)) {
             if (G.log) gl_logf("frame sent early: textures to make room for");
             shim_gl_flush();
@@ -1089,7 +1093,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         G.frame_cleared = 1;
         pspexp_3d_clear(ctx, PSPEXP_3D_CLEAR_COLOR | PSPEXP_3D_CLEAR_DEPTH, 0xFF000000u, 0);
     }
-    if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : G.texture_2d && (tex = find_texture(G.units[0])) && (tex->rgba || tex->rt)) {
+    if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : G.texture_2d && (tex = find_texture(G.units[G.mt_pass])) && (tex->rgba || tex->rt)) {
         tex->used = tex_frame;
         if (tex->dirty || !tex->handle) send_texture(ctx, tex);
         if (!tex->handle) tex = NULL;
@@ -1366,7 +1370,43 @@ static int clip_and_send(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vt
  * needs cutting, else made into the triangles here. */
 static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix);
 static void draw_vertices(GLenum mode, Vtx *v, int n) { draw_vertices_ix(mode, v, n, NULL, 0); }
+static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix);
+
+/* Texture unit 1 on (multitexturing, fixed function): the draw again with its texture and coordinates,
+ * blended in as its environment says (modulate: the framebuffer times it, once or twice over with
+ * GL_COMBINE's scale; add; decal; replace), where the first drew (depth EQUAL). */
 static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
+{
+    GlTex *t1;
+    Vtx *copy = NULL;
+    int i, mt = !G.sh_active && !G.mt_pass && G.tex1_on && G.units[1] && (t1 = find_texture(G.units[1])) && (t1->rgba || t1->rt);
+    GLenum env = G.tex1_env == GL_COMBINE ? (G.tex1_combine == GL_ADD ? GL_ADD : GL_MODULATE) : G.tex1_env;
+    if (mt && G.blend && (env == GL_MODULATE || env == GL_BLEND)) mt = 0;   /* (a translucent draw: the framebuffer's other colours would be multiplied too) */
+    if (mt && (copy = (Vtx *)malloc((size_t)n * sizeof(Vtx)))) memcpy(copy, v, (size_t)n * sizeof(Vtx));
+    draw_vertices_ix0(mode, v, n, ix, nix);
+    if (!copy) return;
+    {
+        int blend = G.blend, mask = G.depth_mask, tex2d = G.texture_2d, light = G.lighting, fog = G.fog;
+        GLenum bs = G.blend_src, bd = G.blend_dst, be = G.blend_eq, df = G.depth_func, tenv = G.tex_env_mode;
+        for (i = 0; i < n; i++) { copy[i].t[0] = copy[i].t1[0]; copy[i].t[1] = copy[i].t1[1]; }
+        G.mt_pass = 1;
+        G.texture_2d = 1; G.lighting = 0; G.fog = 0;
+        G.tex_env_mode = GL_REPLACE;   /* its colour as it is: the blend does the rest */
+        G.blend_eq = GL_FUNC_ADD;
+        if (env == GL_MODULATE || env == GL_BLEND) { G.blend = 1; G.blend_src = GL_DST_COLOR; G.blend_dst = G.tex1_env == GL_COMBINE && G.tex1_scale >= 2 ? GL_SRC_COLOR : GL_ZERO; }
+        else if (env == GL_ADD) { G.blend = 1; G.blend_src = G.blend_dst = GL_ONE; }
+        else if (env == GL_DECAL) { G.blend = 1; G.blend_src = GL_SRC_ALPHA; G.blend_dst = GL_ONE_MINUS_SRC_ALPHA; }
+        if (G.depth_test && mask) G.depth_func = GL_EQUAL;
+        G.depth_mask = 0;
+        draw_vertices_ix0(mode, copy, n, ix, nix);
+        G.mt_pass = 0;
+        G.blend = blend; G.depth_mask = mask; G.texture_2d = tex2d; G.lighting = light; G.fog = fog;
+        G.blend_src = bs; G.blend_dst = bd; G.blend_eq = be; G.depth_func = df; G.tex_env_mode = tenv;
+    }
+    free(copy);
+}
+
+static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix)
 {
     PspExpContext *ctx;
     GlTex *tex;
@@ -1472,15 +1512,34 @@ static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
                     k += clip_triangle(&c, &v[ix[t]], &v[ix[t + 1]], &v[ix[t + 2]], cut + k);
                 }
             }
-            if (ns && (vb = (uint8_t *)pspexp_3d_draw_indexed(ctx, GU_TRIANGLES, vt, (uint32_t)n, (uint32_t)ns, &out16))) {
-                pack(vb, vt, v, n);
-                memcpy(out16, safe, (size_t)ns * 2u);
-                G.draws++; G.vertices += (unsigned)ns;
-            } else if (ns) {   /* (no room: as triangles) */
-                Vtx *tv = scratch(ns);
-                if (tv) {
-                    for (i = 0; i < ns; i++) tv[i] = v[safe[i]];
-                    for (i = 0; i < ns; i += CHUNK_VERTICES / 3 * 3) send_prim(ctx, GU_TRIANGLES, vt, tv + i, ns - i < CHUNK_VERTICES / 3 * 3 ? ns - i : CHUNK_VERTICES / 3 * 3);
+            if (ns) {   /* only the vertices these triangles use (those only cut triangles use: not sent) */
+                static int *map;
+                static Vtx *used_v;
+                static int mcap;
+                int nu = 0;
+                if (n > mcap) {
+                    int *m2 = (int *)realloc(map, (size_t)n * sizeof(int));
+                    Vtx *u2 = m2 ? (Vtx *)realloc(used_v, (size_t)n * sizeof(Vtx)) : NULL;
+                    if (m2) map = m2;
+                    if (!m2 || !u2) return;
+                    used_v = u2; mcap = n;
+                }
+                for (i = 0; i < n; i++) map[i] = -1;
+                for (i = 0; i < ns; i++) {
+                    int a = safe[i];
+                    if (map[a] < 0) { map[a] = nu; used_v[nu++] = v[a]; }
+                    safe[i] = (uint16_t)map[a];
+                }
+                if ((vb = (uint8_t *)pspexp_3d_draw_indexed(ctx, GU_TRIANGLES, vt, (uint32_t)nu, (uint32_t)ns, &out16))) {
+                    pack(vb, vt, used_v, nu);
+                    memcpy(out16, safe, (size_t)ns * 2u);
+                    G.draws++; G.vertices += (unsigned)ns;
+                } else {   /* (no room: as triangles) */
+                    Vtx *tv = scratch(ns);
+                    if (tv) {
+                        for (i = 0; i < ns; i++) tv[i] = used_v[safe[i]];
+                        for (i = 0; i < ns; i += CHUNK_VERTICES / 3 * 3) send_prim(ctx, GU_TRIANGLES, vt, tv + i, ns - i < CHUNK_VERTICES / 3 * 3 ? ns - i : CHUNK_VERTICES / 3 * 3);
+                    }
                 }
             }
             for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
@@ -1727,6 +1786,7 @@ GLAPI(void, glFrustum, (GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble
 static void current_vtx(Vtx *v, float x, float y, float z)
 {
     v->t[0] = G.texcoord[0]; v->t[1] = G.texcoord[1];
+    v->t1[0] = G.texcoord1[0]; v->t1[1] = G.texcoord1[1];
     v->c = abgr(G.color);
     v->n[0] = G.normal[0]; v->n[1] = G.normal[1]; v->n[2] = G.normal[2];
     v->p[0] = x; v->p[1] = y; v->p[2] = z;
@@ -1841,11 +1901,11 @@ GLAPI(void, glTexCoord2s, (GLshort s, GLshort t)) { GLFN(glTexCoord4f)((float)s,
 GLAPI(void, glTexCoord2fv, (const GLfloat *v)) { GLFN(glTexCoord4f)(v[0], v[1], 0, 1); }
 GLAPI(void, glTexCoord2dv, (const GLdouble *v)) { GLFN(glTexCoord4f)((float)v[0], (float)v[1], 0, 1); }
 GLAPI(void, glTexCoord4fv, (const GLfloat *v)) { GLFN(glTexCoord4f)(v[0], v[1], v[2], v[3]); }
-GLAPI(void, glMultiTexCoord2f, (GLenum unit, GLfloat s, GLfloat t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, 0, 1); }
-GLAPI(void, glMultiTexCoord2fv, (GLenum unit, const GLfloat *v)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(v[0], v[1], 0, 1); }
-GLAPI(void, glMultiTexCoord2d, (GLenum unit, GLdouble s, GLdouble t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)((float)s, (float)t, 0, 1); }
-GLAPI(void, glMultiTexCoord2i, (GLenum unit, GLint s, GLint t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)((float)s, (float)t, 0, 1); }
-GLAPI(void, glMultiTexCoord4f, (GLenum unit, GLfloat s, GLfloat t, GLfloat r, GLfloat q)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, r, q); }
+GLAPI(void, glMultiTexCoord2f, (GLenum unit, GLfloat s, GLfloat t)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, 0, 1); else if (unit == GL_TEXTURE0 + 1) { G.texcoord1[0] = s; G.texcoord1[1] = t; } }
+GLAPI(void, glMultiTexCoord2fv, (GLenum unit, const GLfloat *v)) { GLFN(glMultiTexCoord2f)(unit, v[0], v[1]); }
+GLAPI(void, glMultiTexCoord2d, (GLenum unit, GLdouble s, GLdouble t)) { GLFN(glMultiTexCoord2f)(unit, (float)s, (float)t); }
+GLAPI(void, glMultiTexCoord2i, (GLenum unit, GLint s, GLint t)) { GLFN(glMultiTexCoord2f)(unit, (float)s, (float)t); }
+GLAPI(void, glMultiTexCoord4f, (GLenum unit, GLfloat s, GLfloat t, GLfloat r, GLfloat q)) { if (unit == GL_TEXTURE0) GLFN(glTexCoord4f)(s, t, r, q); else if (q != 0) GLFN(glMultiTexCoord2f)(unit, s / q, t / q); }
 GLAPI(void, glPointParameterf, (GLenum p, GLfloat v)) { (void)p; (void)v; }
 GLAPI(void, glPointParameterfv, (GLenum p, const GLfloat *v)) { (void)p; (void)v; }
 
@@ -1942,6 +2002,12 @@ static void fetch(int i, Vtx *v)
         v->t[1] = G.ta.size > 1 ? read_comp(b + ts, G.ta.type, 0) : 0.0f;
         if (G.ta.size == 4) { float q = read_comp(b + 3 * ts, G.ta.type, 0); if (q != 0.0f && q != 1.0f) { v->t[0] /= q; v->t[1] /= q; } }
     }
+    if (G.tex1_on && G.ta1.enabled && (b = array_base(&G.ta1))) {
+        int st = G.ta1.stride ? G.ta1.stride : G.ta1.size * type_size(G.ta1.type), ts = type_size(G.ta1.type);
+        b += (size_t)i * st;
+        v->t1[0] = read_comp(b, G.ta1.type, 0);
+        v->t1[1] = G.ta1.size > 1 ? read_comp(b + ts, G.ta1.type, 0) : 0.0f;
+    }
 }
 
 static Vtx *gather(int n)
@@ -1992,6 +2058,7 @@ GLAPI(void, glColorPointer, (GLint size, GLenum type, GLsizei stride, const GLvo
 GLAPI(void, glNormalPointer, (GLenum type, GLsizei stride, const GLvoid *ptr)) { set_array(&G.na, 3, type, stride, ptr); }
 GLAPI(void, glTexCoordPointer, (GLint size, GLenum type, GLsizei stride, const GLvoid *ptr))
 {
+    if (G.client_unit == 1) { set_array(&G.ta1, size, type, stride, ptr); return; }
     if (G.client_unit != 0) return;
     set_array(&G.ta, size, type, stride, ptr);
 }
@@ -2002,7 +2069,7 @@ static Array *client_array(GLenum cap)
     case GL_VERTEX_ARRAY: return &G.va;
     case GL_COLOR_ARRAY: return &G.ca;
     case GL_NORMAL_ARRAY: return &G.na;
-    case GL_TEXTURE_COORD_ARRAY: return G.client_unit == 0 ? &G.ta : NULL;
+    case GL_TEXTURE_COORD_ARRAY: return G.client_unit == 0 ? &G.ta : G.client_unit == 1 ? &G.ta1 : NULL;
     default: return NULL;
     }
 }
@@ -3036,6 +3103,7 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
     GlBuf *vb;
 #define NOT_MESH(why) do { if (G.log >= 2) gl_logf("streamed: %s", why); return 0; } while (0)
     if (G.compiling || getenv("PSPEXP_GL_NOMESH")) return 0;
+    if (G.tex1_on && G.units[1]) NOT_MESH("texture unit 1 (drawn in a second pass, from the vertices)");
     if (!G.va.enabled || !G.va.buffer || !(vb = find_buffer(G.va.buffer))) return 0;
     if (vb->usage == 0x88E0 /* GL_STREAM_DRAW */) NOT_MESH("a stream buffer");
     for (k = 0; k < 4; k++) if (arr[k]->enabled && !arr[k]->buffer) NOT_MESH("an array in client memory");   /* may change unseen */
@@ -3574,7 +3642,7 @@ static void set_cap(GLenum cap, int on)
     case GL_CULL_FACE: G.cull = on; break;
     case GL_BLEND: G.blend = on; break;
     case GL_ALPHA_TEST: G.alpha_test = on; break;
-    case GL_TEXTURE_2D: if (G.active_unit == 0) G.texture_2d = on; break;
+    case GL_TEXTURE_2D: if (G.active_unit == 0) G.texture_2d = on; else if (G.active_unit == 1) G.tex1_on = on; break;
     case GL_FOG: G.fog = on; break;
     case GL_LIGHTING: G.lighting = on; G.lights_dirty = 1; break;
     case GL_COLOR_MATERIAL: G.color_material = on; G.lights_dirty = 1; break;
@@ -3609,7 +3677,7 @@ GLAPI(GLboolean, glIsEnabled, (GLenum cap))
     case GL_CULL_FACE: return (GLboolean)G.cull;
     case GL_BLEND: return (GLboolean)G.blend;
     case GL_ALPHA_TEST: return (GLboolean)G.alpha_test;
-    case GL_TEXTURE_2D: return (GLboolean)G.texture_2d;
+    case GL_TEXTURE_2D: return (GLboolean)(G.active_unit == 1 ? G.tex1_on : G.texture_2d);
     case GL_FOG: return (GLboolean)G.fog;
     case GL_LIGHTING: return (GLboolean)G.lighting;
     case GL_COLOR_MATERIAL: return (GLboolean)G.color_material;
@@ -4183,7 +4251,14 @@ GLAPI(void, glTexEnvfv, (GLenum target, GLenum p, const GLfloat *v))
 {
     RECORD(OP_TEX_ENV, target, p, 0, p == GL_TEXTURE_ENV_COLOR ? 4 : 1, v);
     ensure_init();
-    if (target != GL_TEXTURE_ENV || G.active_unit != 0) return;
+    if (target != GL_TEXTURE_ENV) return;
+    if (G.active_unit == 1) {
+        if (p == GL_TEXTURE_ENV_MODE) G.tex1_env = (GLenum)v[0];
+        else if (p == 0x8571 /* GL_COMBINE_RGB */) G.tex1_combine = (GLenum)v[0];
+        else if (p == 0x8573 /* GL_RGB_SCALE */) G.tex1_scale = v[0];
+        return;
+    }
+    if (G.active_unit != 0) return;
     if (p == GL_TEXTURE_ENV_MODE) {
         G.tex_env_mode = (GLenum)v[0];
         if (G.tex_env_mode == GL_COMBINE) unsupported("GL_COMBINE texture environment (modulate instead)");
@@ -4493,7 +4568,9 @@ static int get_values(GLenum p, float *f)
     case GL_MAX_PROJECTION_STACK_DEPTH: f[0] = PROJ_DEPTH; return 1;
     case GL_MAX_TEXTURE_STACK_DEPTH: f[0] = TEX_DEPTH; return 1;
     case GL_MAX_TEXTURE_UNITS: case GL_MAX_TEXTURE_COORDS:   /* (PSPEXP_GL_UNITS: more, for shader games that ask) */
-        f[0] = getenv("PSPEXP_GL_UNITS") && atoi(getenv("PSPEXP_GL_UNITS")) > 1 ? (float)atoi(getenv("PSPEXP_GL_UNITS")) : 1;
+        /* 1 by default: a game told of a second unit may turn it on for its every draw (Neverball: its
+         * shadow), and draws with unit 1 are not made meshes, so all of it would be sent each frame */
+        f[0] = getenv("PSPEXP_GL_UNITS") && atoi(getenv("PSPEXP_GL_UNITS")) > 0 ? (float)atoi(getenv("PSPEXP_GL_UNITS")) : 1;
         if (f[0] > 8) f[0] = 8;
         return 1;
     case GL_MAX_TEXTURE_IMAGE_UNITS: case 0x8B4D /* GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS */: f[0] = 8; return 1;

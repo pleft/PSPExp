@@ -200,8 +200,12 @@ static void trace_tally(const void *data, size_t len)
 
 static void trace_report(PspExpContext *ctx, uint32_t frames)
 {
+    static uint64_t last_us;
+    uint64_t now = pspexp_time_us();
     char line[1024];
-    int n = snprintf(line, sizeof(line), "bytes a frame over %u frames:", frames), i;
+    int n = snprintf(line, sizeof(line), "bytes a frame over %u frames (%.1f fps):", frames,
+                     last_us && now > last_us ? frames * 1e6 / (double)(now - last_us) : 0.0), i;
+    last_us = now;
     uint64_t total = 0;
     for (i = 0; i < 64; i++) total += trace_op_bytes[i][1];
     for (i = 0; i < 64 && n < (int)sizeof(line) - 48; i++)
