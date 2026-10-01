@@ -1,0 +1,27 @@
+# DreamChess: 3D chess against its own engine (Dreamer), Debian's package, at
+# the PSP's size. It asks for GL_ARB_framebuffer_object, which the SDL layer
+# covers in part and reports only when told (env below). Played by keys: the
+# d-pad (or the nub) moves the selector, cross picks a piece and its square,
+# circle / start open the menu. Its mouse picking reads pixels back, which the
+# PSP does not give: the pointer does not pick pieces.
+
+[package]
+id=dreamchess
+title=DreamChess
+description=3D chess against the computer, with several board and piece sets
+category=game
+license=GPL-3+ (DreamChess)
+version=1
+
+[debian]
+apt=dreamchess
+
+[entry]
+title=DreamChess
+type=game
+description=3D chess against the computer, with several board and piece sets
+icon=crown
+exec=/usr/games/dreamchess -W480 -H272
+keys=cross=return,circle=escape,start=escape,select=escape
+nub=keys
+env=PSPEXP_GL_EXTENSIONS=GL_ARB_framebuffer_object,GL_ARB_texture_non_power_of_two

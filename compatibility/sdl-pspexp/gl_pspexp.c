@@ -233,6 +233,8 @@ typedef struct GlTex {
     int dirty;                /* to be sent before the next draw with it */
     GLenum min_filter, mag_filter, wrap_s, wrap_t;
     int rt, rt_w, rt_h, rt_fmt;  /* a framebuffer object's colour: a render target on the PSP, drawn there */
+    unsigned rt_made;            /* ...the frame it was made in */
+    int write_only; unsigned wo_frame;   /* drawn into, never drawn with: its target let go, draws into it dropped */
     uint32_t psp_bytes;          /* what it takes on the PSP now (0: not there) */
     struct GlTex *hnext;         /* in the name table */
     unsigned used;               /* the frame it was last drawn with */
@@ -339,6 +341,7 @@ static struct {
     /* GL 2: the generic vertex attributes (of the vertex array object bound), the program in use */
     Array gattr[16]; int gnorm[16]; float gcur[16][4];
     GLuint program, vao, fbo, next_object;
+    GLuint read_fbo, rbo;       /* the framebuffer glBlitFramebuffer reads; the renderbuffer bound */
     GlTex *target;              /* the render target the PSP draws into now (NULL: the screen) */
     int reconnects;
     /* per frame */
@@ -867,6 +870,8 @@ static uint32_t tex_bytes;          /* textures on the PSP (texture_room) */
 static unsigned tex_frame = 1;
 static void texture_room(PspExpContext *ctx, GlTex *keep, uint32_t bytes);
 static GlTex *fbo_texture(GLuint fb);
+static int fbo_is_screen(GLuint fb);
+static int alias_drawn;   /* this frame, into a framebuffer that is the screen here (fbo_is_screen) */
 
 /* Where the draws go: the render target of the framebuffer object bound
  * (made on the PSP the first time), or the screen. 0: nowhere (a
@@ -874,10 +879,30 @@ static GlTex *fbo_texture(GLuint fb);
 static int select_target(PspExpContext *ctx)
 {
     GlTex *want = NULL;
-    if (G.fbo && !(want = fbo_texture(G.fbo))) return 0;
+    if (G.fbo && fbo_is_screen(G.fbo)) alias_drawn = 1;
+    else if (G.fbo && !(want = fbo_texture(G.fbo))) return 0;
+    if (want && want->write_only) {
+        if (want->used <= want->wo_frame) return 0;
+        want->write_only = 0;   /* drawn with after all: a target again */
+    }
+    if (want && want->rt && want->handle) {
+        /* A target the PSP had no room for: what is drawn into it goes nowhere, not onto the screen.
+         * One drawn into for seconds and never textured from (DreamChess's colour picking, read back
+         * with glReadPixels, which reads black here) is let go: its VRAM, its draws and their bytes. */
+        if (pspexp_resource_state(ctx, want->handle, NULL) == PSPEXP_RES_FAILED) return 0;
+        if (tex_frame - want->rt_made >= 120 && want->used < want->rt_made && !getenv("PSPEXP_GL_KEEP_TARGETS")) {
+            mesh_release(want->handle, 0);
+            tex_bytes -= want->psp_bytes;
+            want->psp_bytes = 0; want->handle = 0; want->rt = 0;
+            want->write_only = 1; want->wo_frame = tex_frame;
+            if (G.log) gl_logf("texture %u: drawn into for %u frames, never drawn with: its draws dropped", want->name, tex_frame - want->rt_made);
+            return 0;
+        }
+    }
     if (want && !want->rt) {
         int bytes;
         want->rt = 1;
+        want->rt_made = tex_frame;
         want->rt_w = 8; while (want->rt_w < want->w && want->rt_w < PSPEXP_TEXTURE_MAX) want->rt_w *= 2;
         want->rt_h = 8; while (want->rt_h < want->h && want->rt_h < PSPEXP_TEXTURE_MAX) want->rt_h *= 2;
         want->rt_fmt = want->has_alpha ? PSPEXP_TEX_8888 : PSPEXP_TEX_5650;
@@ -1100,8 +1125,14 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
          * swap GL leaves the buffer undefined, so nothing is lost; PPSSPP,
          * which loses track of a framebuffer that is never cleared, then
          * copies the right frame to screenshots */
+        PspExp3DState st0;
         G.frame_cleared = 1;
+        build_state(&st0, NULL);   /* the whole PSP screen: the letterbox bars too */
+        st0.scissor_x = 0; st0.scissor_y = 0; st0.scissor_w = PSPEXP_DISPLAY_WIDTH; st0.scissor_h = PSPEXP_DISPLAY_HEIGHT;
+        st0.pixel_mask = 0;
+        pspexp_3d_state(ctx, &st0);
         pspexp_3d_clear(ctx, PSPEXP_3D_CLEAR_COLOR | PSPEXP_3D_CLEAR_DEPTH, 0xFF000000u, 0);
+        G.state_sent = 0;
     }
     if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : (tex = bound_texture()) != NULL && (tex->rgba || tex->rt)) {
         tex->used = tex_frame;
@@ -1643,6 +1674,7 @@ void pspexp_gl_frame_done(void)
     G.draws = G.vertices = G.clears = 0;
     G.state_sent = G.matrices_sent = G.lights_sent = 0;   /* each frame says it all again: small, and nothing gets stale */
     G.target = NULL;   /* every frame starts on the screen */
+    alias_drawn = 0;
     G.frame_cleared = 0;
     tex_frame++;
 }
@@ -1660,6 +1692,49 @@ enum {
 };
 
 static int replaying;
+
+/* A display list's run of glBegin/glEnd blocks with nothing but vertices between them, drawn as one
+ * list of triangles (DreamChess: a piece is hundreds of short strips, 9400 draws a frame; as one
+ * draw each, 512 vertices and more, the same every frame, it is kept on the PSP as a mesh) */
+static Vtx *merge_v;
+static int merge_n, merge_cap, merging;
+
+static void merge_flush(void)
+{
+    int n = merge_n;
+    merge_n = 0;
+    if (n) draw_vertices(GL_TRIANGLES, merge_v, n);
+}
+
+static int merge_add(GLenum mode, const Vtx *v, int n)
+{
+    int i, t = 0;
+    switch (mode) {
+    case GL_TRIANGLES: t = n / 3; break;
+    case GL_TRIANGLE_STRIP: case GL_TRIANGLE_FAN: case GL_POLYGON: t = n >= 3 ? n - 2 : 0; break;
+    case GL_QUADS: t = n / 4 * 2; break;
+    case GL_QUAD_STRIP: t = n >= 4 ? (n - 2) / 2 * 2 : 0; break;
+    default: return 0;
+    }
+    if (merge_n + t * 3 > (int)PSPEXP_3D_MAX_VERTICES - 2) merge_flush();
+    if (merge_n + t * 3 > merge_cap) {
+        int c = merge_cap ? merge_cap : 1024;
+        Vtx *p;
+        while (c < merge_n + t * 3) c *= 2;
+        if (!(p = (Vtx *)realloc(merge_v, (size_t)c * sizeof(Vtx)))) return 0;
+        merge_v = p; merge_cap = c;
+    }
+#define TRI(a, b, c) do { merge_v[merge_n++] = v[a]; merge_v[merge_n++] = v[b]; merge_v[merge_n++] = v[c]; } while (0)
+    switch (mode) {
+    case GL_TRIANGLES: for (i = 0; i + 2 < n; i += 3) TRI(i, i + 1, i + 2); break;
+    case GL_TRIANGLE_STRIP: for (i = 0; i + 2 < n; i++) { if (i & 1) TRI(i + 1, i, i + 2); else TRI(i, i + 1, i + 2); } break;
+    case GL_TRIANGLE_FAN: case GL_POLYGON: for (i = 1; i + 1 < n; i++) TRI(0, i, i + 1); break;
+    case GL_QUADS: for (i = 0; i + 3 < n; i += 4) { TRI(i, i + 1, i + 2); TRI(i, i + 2, i + 3); } break;
+    case GL_QUAD_STRIP: for (i = 0; i + 3 < n; i += 2) { TRI(i, i + 1, i + 3); TRI(i, i + 3, i + 2); } break;
+    }
+#undef TRI
+    return 1;
+}
 
 /* Record a call into the list being compiled; 1: the caller stops there (GL_COMPILE). */
 static int rec(uint16_t op, uint32_t a, uint32_t b, uint32_t c, int nf, const float *f)
@@ -1837,7 +1912,7 @@ GLAPI(void, glEnd, (void))
     RECORD0(OP_END);
     if (!G.in_begin) { set_error(GL_INVALID_OPERATION); return; }
     G.in_begin = 0;
-    draw_vertices(G.prim, G.imm, G.nimm);
+    if (!merging || !merge_add(G.prim, G.imm, G.nimm)) { merge_flush(); draw_vertices(G.prim, G.imm, G.nimm); }
     G.nimm = 0;
 }
 
@@ -2510,10 +2585,27 @@ GLAPI(GLboolean, glIsVertexArray, (GLuint name)) { return name && find_vao(name)
 /* framebuffer objects: a colour texture becomes a render target on the PSP
  * (select_target); depth and stencil attachments are not kept (the screen's
  * depth buffer serves) */
-typedef struct Fbo { GLuint name, tex; struct Fbo *next; } Fbo;
+typedef struct Fbo { GLuint name, tex; int rb; struct Fbo *next; } Fbo;   /* rb: the colour is a renderbuffer */
 static Fbo *fbos;
 static Fbo *find_fbo(GLuint n) { Fbo *f; for (f = fbos; f; f = f->next) if (f->name == n) return f; return NULL; }
 static GlTex *fbo_texture(GLuint fb) { Fbo *f = find_fbo(fb); return f && f->tex ? find_texture(f->tex) : NULL; }
+
+/* A framebuffer whose colour is a renderbuffer the window's size is the screen here: nothing can
+ * texture from a renderbuffer, only copy it out (glBlitFramebuffer), and a program that draws its
+ * frame into one (DreamChess, for multisampling) copies it onto the window as it is. Drawn on the
+ * screen, the copy is nothing: no render target in the PSP's VRAM (which has room for one beside
+ * its own framebuffers), no full-screen pass. */
+static int fbo_is_screen(GLuint fb)
+{
+    Fbo *f;
+    GlTex *t;
+    int ww, wh, ox, oy;
+    float sc;
+    if (!fb) return 1;
+    if (!(f = find_fbo(fb)) || !f->rb || !(t = fbo_texture(fb)) || getenv("PSPEXP_GL_RB_TARGETS")) return 0;
+    shim_gl_geometry(&ww, &wh, &sc, &ox, &oy);
+    return t->w == ww && t->h == wh;
+}
 
 GLAPI(void, glGenFramebuffers, (GLsizei n, GLuint *out))
 {
@@ -2528,9 +2620,9 @@ GLAPI(void, glGenFramebuffers, (GLsizei n, GLuint *out))
 GLAPI(void, glBindFramebuffer, (GLenum target, GLuint fb))
 {
     ensure_init();
-    if (target == GL_READ_FRAMEBUFFER) return;
     if (fb && !find_fbo(fb)) { Fbo *f = (Fbo *)calloc(1, sizeof(*f)); if (f) { f->name = fb; f->next = fbos; fbos = f; } }
-    G.fbo = fb;
+    if (target != GL_DRAW_FRAMEBUFFER) G.read_fbo = fb;
+    if (target != GL_READ_FRAMEBUFFER) G.fbo = fb;
 }
 GLAPI(void, glDeleteFramebuffers, (GLsizei n, const GLuint *fbs))
 {
@@ -2544,19 +2636,120 @@ GLAPI(void, glDeleteFramebuffers, (GLsizei n, const GLuint *fbs))
 }
 GLAPI(void, glFramebufferTexture2D, (GLenum t, GLenum a, GLenum tt, GLuint tex, GLint l))
 {
-    Fbo *f = find_fbo(G.fbo);
-    (void)t; (void)tt; (void)l;
+    Fbo *f = find_fbo(t == GL_READ_FRAMEBUFFER ? G.read_fbo : G.fbo);
+    (void)tt; (void)l;
+    if (f && a == 0x8CE0) f->rb = 0;
     if (f && a == 0x8CE0 /* GL_COLOR_ATTACHMENT0 */) f->tex = tex;
 }
 GLAPI(GLenum, glCheckFramebufferStatus, (GLenum t)) { (void)t; return GL_FRAMEBUFFER_COMPLETE; }
 GLAPI(GLboolean, glIsFramebuffer, (GLuint fb)) { return fb != 0; }
+/* Renderbuffers: a colour one is a texture of our own (made a render target when drawn into, like a
+ * framebuffer's texture); depth and stencil ones are nothing (the GE's one depth buffer serves) */
+typedef struct Rbo { GLuint name, tex; struct Rbo *next; } Rbo;
+static Rbo *rbos;
+static Rbo *find_rbo(GLuint n) { Rbo *r; for (r = rbos; r; r = r->next) if (r->name == n) return r; return NULL; }
+static GlTex *texture_object(GLuint name);
+#ifdef __APPLE__
+static void my_glDeleteTextures(GLsizei n, const GLuint *names);
+#else
+void glDeleteTextures(GLsizei n, const GLuint *names);
+#endif
 GLAPI(void, glGenRenderbuffers, (GLsizei n, GLuint *out)) { int i; ensure_init(); for (i = 0; i < n; i++) out[i] = G.next_object++; }
-GLAPI(void, glBindRenderbuffer, (GLenum t, GLuint rb)) { (void)t; (void)rb; }
-GLAPI(void, glDeleteRenderbuffers, (GLsizei n, const GLuint *rb)) { (void)n; (void)rb; }
-GLAPI(void, glRenderbufferStorage, (GLenum t, GLenum f, GLsizei w, GLsizei h)) { (void)t; (void)f; (void)w; (void)h; }
-GLAPI(void, glFramebufferRenderbuffer, (GLenum t, GLenum a, GLenum rt, GLuint rb)) { (void)t; (void)a; (void)rt; (void)rb; }
-GLAPI(void, glBlitFramebuffer, (GLint a, GLint b, GLint c, GLint d, GLint e, GLint f, GLint g, GLint h, GLbitfield m, GLenum fl))
-{ (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h; (void)m; (void)fl; }
+GLAPI(void, glBindRenderbuffer, (GLenum t, GLuint rb)) { (void)t; G.rbo = rb; }
+GLAPI(void, glDeleteRenderbuffers, (GLsizei n, const GLuint *rb))
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        Rbo **pp = &rbos;
+        while (*pp && (*pp)->name != rb[i]) pp = &(*pp)->next;
+        if (*pp) { Rbo *r = *pp; *pp = r->next; if (r->tex) GLFN(glDeleteTextures)(1, &r->tex); free(r); }
+    }
+}
+GLAPI(void, glRenderbufferStorage, (GLenum t, GLenum f, GLsizei w, GLsizei h))
+{
+    Rbo *r;
+    GlTex *x;
+    (void)t;
+    ensure_init();
+    if (!G.rbo || f == 0x1902 || (f >= 0x81A5 && f <= 0x81A7) || f == 0x88F0 || f == 0x8CAC || f == 0x8CAD || f == 0x8D48 || f == 0x84F9)
+        return;   /* depth, stencil: the GE's own depth buffer */
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return;
+    if (!(r = find_rbo(G.rbo))) { if (!(r = (Rbo *)calloc(1, sizeof(*r)))) return; r->name = G.rbo; r->next = rbos; rbos = r; }
+    if (!r->tex) { while (find_texture(G.next_texture)) G.next_texture++; r->tex = G.next_texture++; }
+    if (!(x = texture_object(r->tex))) return;
+    if (x->w != w || x->h != h || !x->rgba) {
+        uint32_t *p2 = (uint32_t *)realloc(x->rgba, (size_t)w * (size_t)h * 4);
+        if (!p2) return;
+        x->rgba = p2; x->w = w; x->h = h;
+        memset(x->rgba, 0, (size_t)w * (size_t)h * 4);
+        if (x->rt) { if (x->handle) mesh_release(x->handle, 0); tex_bytes -= x->psp_bytes; x->psp_bytes = 0; x->handle = 0; x->rt = 0; }
+    }
+    x->has_alpha = f == 0x1908 /* GL_RGBA */ || f == 0x8058 /* GL_RGBA8 */ || f == 0x8056 || f == 0x8057;
+    x->min_filter = x->mag_filter = GL_LINEAR;
+    x->wrap_s = x->wrap_t = GL_CLAMP_TO_EDGE;
+}
+GLAPI(void, glRenderbufferStorageMultisample, (GLenum t, GLsizei n, GLenum f, GLsizei w, GLsizei h)) { (void)n; GLFN(glRenderbufferStorage)(t, f, w, h); }
+GLAPI(GLboolean, glIsRenderbuffer, (GLuint rb)) { return rb != 0; }
+GLAPI(void, glGetRenderbufferParameteriv, (GLenum t, GLenum p, GLint *v)) { (void)t; (void)p; if (v) *v = 0; }
+GLAPI(void, glGetFramebufferAttachmentParameteriv, (GLenum t, GLenum a, GLenum p, GLint *v)) { (void)t; (void)a; (void)p; if (v) *v = 0; }
+GLAPI(void, glFramebufferTexture1D, (GLenum t, GLenum a, GLenum tt, GLuint tex, GLint l)) { (void)t; (void)a; (void)tt; (void)tex; (void)l; }
+GLAPI(void, glFramebufferTexture3D, (GLenum t, GLenum a, GLenum tt, GLuint tex, GLint l, GLint z)) { (void)t; (void)a; (void)tt; (void)tex; (void)l; (void)z; }
+GLAPI(void, glFramebufferTextureLayer, (GLenum t, GLenum a, GLuint tex, GLint l, GLint layer)) { (void)t; (void)a; (void)tex; (void)l; (void)layer; }
+GLAPI(void, glFramebufferRenderbuffer, (GLenum t, GLenum a, GLenum rt, GLuint rb))
+{
+    Fbo *f = find_fbo(t == GL_READ_FRAMEBUFFER ? G.read_fbo : G.fbo);
+    Rbo *r = find_rbo(rb);
+    (void)rt;
+    if (f && a == 0x8CE0 /* GL_COLOR_ATTACHMENT0 */) { f->tex = r ? r->tex : 0; f->rb = 1; }
+}
+
+/* A framebuffer's colour onto another (the screen, mostly: DreamChess draws its scenes into one and
+ * copies it out): its texture drawn over the rectangle, through the drawing here, GL's state kept */
+GLAPI(void, glBlitFramebuffer, (GLint sx0, GLint sy0, GLint sx1, GLint sy1, GLint dx0, GLint dy0, GLint dx1, GLint dy1, GLbitfield mask, GLenum filter))
+{
+    GlTex *src;
+    Vtx v[4];
+    int i, dw, dh;
+    float sw, sh;
+    ensure_init();
+    if (!(mask & GL_COLOR_BUFFER_BIT) || G.read_fbo == G.fbo || !(src = fbo_texture(G.read_fbo)) || src->w <= 0 || src->h <= 0) return;
+    if (fbo_is_screen(G.read_fbo) && fbo_is_screen(G.fbo)) return;   /* the same pixels */
+    if (G.fbo) { GlTex *d = fbo_texture(G.fbo); if (!d) return; dw = d->w; dh = d->h; }
+    else { float sc; int ox, oy; shim_gl_geometry(&dw, &dh, &sc, &ox, &oy); }
+    sw = (float)src->w; sh = (float)src->h;
+    memset(v, 0, sizeof(v));
+    v[0].p[0] = (float)dx0; v[0].p[1] = (float)dy0; v[0].t[0] = sx0 / sw; v[0].t[1] = sy0 / sh;
+    v[1].p[0] = (float)dx1; v[1].p[1] = (float)dy0; v[1].t[0] = sx1 / sw; v[1].t[1] = sy0 / sh;
+    v[2].p[0] = (float)dx1; v[2].p[1] = (float)dy1; v[2].t[0] = sx1 / sw; v[2].t[1] = sy1 / sh;
+    v[3].p[0] = (float)dx0; v[3].p[1] = (float)dy1; v[3].t[0] = sx0 / sw; v[3].t[1] = sy1 / sh;
+    for (i = 0; i < 4; i++) { v[i].c = 0xFFFFFFFFu; v[i].n[2] = 1; }
+    {   /* GL's state for a plain copy, then as it was */
+        int depth = G.depth_test, blend = G.blend, cull = G.cull, alpha = G.alpha_test, fog = G.fog, light = G.lighting;
+        int t2d = G.texture_2d, t3d = G.texture_3d, t1 = G.tex1_on, sc = G.scissor_test, cm[4], vp[4], tg0 = G.texgen[0], tg1 = G.texgen[1];
+        int po = G.polygon_offset;
+        GLuint u0 = G.units[0], prog = G.program;
+        GLenum env = G.tex_env_mode;
+        float proj[16], mv[16], tm[16];
+        memcpy(cm, G.color_mask, sizeof(cm)); memcpy(vp, G.viewport, sizeof(vp));
+        memcpy(proj, G.proj[G.proj_top], 64); memcpy(mv, G.mv[G.mv_top], 64); memcpy(tm, G.texm[G.tex_top], 64);
+        G.depth_test = G.blend = G.cull = G.alpha_test = G.fog = G.lighting = G.texture_3d = G.tex1_on = G.scissor_test = 0;
+        G.texgen[0] = G.texgen[1] = 0; G.polygon_offset = 0;
+        G.texture_2d = 1; G.units[0] = src->name; G.program = 0; G.tex_env_mode = GL_REPLACE;
+        for (i = 0; i < 4; i++) G.color_mask[i] = 1;
+        G.viewport[0] = G.viewport[1] = 0; G.viewport[2] = dw; G.viewport[3] = dh;
+        mat_identity(G.mv[G.mv_top]); mat_identity(G.texm[G.tex_top]);
+        mat_identity(G.proj[G.proj_top]);   /* glOrtho(0, dw, 0, dh, -1, 1) */
+        G.proj[G.proj_top][0] = 2.0f / (float)dw; G.proj[G.proj_top][5] = 2.0f / (float)dh; G.proj[G.proj_top][10] = -1.0f;
+        G.proj[G.proj_top][12] = -1.0f; G.proj[G.proj_top][13] = -1.0f;
+        draw_vertices(GL_TRIANGLE_FAN, v, 4);
+        G.depth_test = depth; G.blend = blend; G.cull = cull; G.alpha_test = alpha; G.fog = fog; G.lighting = light;
+        G.texture_2d = t2d; G.texture_3d = t3d; G.tex1_on = t1; G.scissor_test = sc; G.texgen[0] = tg0; G.texgen[1] = tg1;
+        G.polygon_offset = po; G.units[0] = u0; G.program = prog; G.tex_env_mode = env;
+        memcpy(G.color_mask, cm, sizeof(cm)); memcpy(G.viewport, vp, sizeof(vp));
+        memcpy(G.proj[G.proj_top], proj, 64); memcpy(G.mv[G.mv_top], mv, 64); memcpy(G.texm[G.tex_top], tm, 64);
+    }
+    (void)filter;
+}
 GLAPI(void, glDrawBuffers, (GLsizei n, const GLenum *b)) { (void)n; (void)b; }
 GLAPI(void, glSampleCoverage, (GLclampf v, GLboolean inv)) { (void)v; (void)inv; }
 GLEXT(void, glReleaseShaderCompiler, (void)) { }
@@ -3840,13 +4033,14 @@ GLAPI(void, glClear, (GLbitfield mask))
     uint32_t flags = 0;
     RECORD(OP_CLEAR, mask, 0, 0, 0, NULL);
     ensure_init();
-    if (mask & GL_COLOR_BUFFER_BIT) flags |= PSPEXP_3D_CLEAR_COLOR;
+    if ((mask & GL_COLOR_BUFFER_BIT) && !(alias_drawn && !G.fbo)) flags |= PSPEXP_3D_CLEAR_COLOR;   /* the window cleared
+        for the copy of a framebuffer drawn onto it (fbo_is_screen): it holds the frame already */
     if ((mask & GL_DEPTH_BUFFER_BIT) && G.depth_mask) flags |= PSPEXP_3D_CLEAR_DEPTH;
     if (!flags) return;
     {
         int ww, wh, ox, oy; float s;
         shim_gl_geometry(&ww, &wh, &s, &ox, &oy);
-        if ((flags & PSPEXP_3D_CLEAR_COLOR) && !G.scissor_test && !G.fbo && (ox > 0 || oy > 0) && (ctx = shim_gl_frame())) {
+        if ((flags & PSPEXP_3D_CLEAR_COLOR) && !G.scissor_test && fbo_is_screen(G.fbo) && (ox > 0 || oy > 0) && (ctx = shim_gl_frame())) {
             PspExp3DState st;
             G.state_sent = 0;
             if (!(ctx = prepare(&tex))) return;
@@ -3858,7 +4052,7 @@ GLAPI(void, glClear, (GLbitfield mask))
             G.state_sent = 0;
         }
     }
-    G.frame_cleared |= !G.fbo;   /* the program's own: no black one first */
+    G.frame_cleared |= fbo_is_screen(G.fbo);   /* the program's own: no black one first */
     if (!(ctx = prepare(&tex))) return;
     {
         float c[4];
@@ -4540,7 +4734,7 @@ GLAPI(void, glPopClientAttrib, (void))
 static void play_list(GLuint name)
 {
     List *l = find_list(name);
-    size_t pos = 0;
+    size_t pos = 0, run_end = 0;   /* run_end: where a merged run ends */
     if (!l || G.list_depth >= 64) return;
     G.list_depth++;
     replaying++;
@@ -4550,6 +4744,20 @@ static void play_list(GLuint name)
         memcpy(&o, l->ops + pos, sizeof(o));
         f = (const float *)(const void *)(l->ops + pos + sizeof(o));
         pos += sizeof(o) + (size_t)o.nf * sizeof(float);
+        if (run_end && pos > run_end) { merging = 0; run_end = 0; merge_flush(); }
+        if (o.op == OP_BEGIN && !merging && o.i[0] >= GL_TRIANGLES && o.i[0] <= GL_POLYGON && !G.in_begin &&
+            !getenv("PSPEXP_GL_NOMERGE")) {   /* two blocks or more before anything else: merged */
+            size_t q = pos;
+            int blocks = 1;
+            while (q + sizeof(ListOp) <= l->len) {
+                ListOp p;
+                memcpy(&p, l->ops + q, sizeof(p));
+                if (p.op == OP_BEGIN) { if (p.i[0] < GL_TRIANGLES || p.i[0] > GL_POLYGON) break; blocks++; }
+                else if (p.op != OP_END && p.op != OP_VERTEX && p.op != OP_COLOR && p.op != OP_NORMAL && p.op != OP_TEXCOORD) break;
+                q += sizeof(p) + (size_t)p.nf * sizeof(float);
+            }
+            if (blocks >= 2) { merging = 1; run_end = q; }
+        }
         switch (o.op) {
         case OP_BEGIN: GLFN(glBegin)(o.i[0]); break;
         case OP_END: GLFN(glEnd)(); break;
@@ -4599,6 +4807,7 @@ static void play_list(GLuint name)
         default: break;
         }
     }
+    if (run_end) { merging = 0; merge_flush(); }
     replaying--;
     G.list_depth--;
 }
@@ -4612,12 +4821,26 @@ static const char EXTENSIONS[] =
     "GL_SGIS_texture_edge_clamp GL_EXT_draw_range_elements GL_ARB_transpose_matrix GL_EXT_blend_minmax "
     "GL_EXT_blend_subtract GL_ARB_texture_env_add GL_EXT_texture_env_add GL_EXT_packed_pixels";
 
+/* The list, with any PSPEXP_GL_EXTENSIONS names added: a program that will not start without one the
+ * layer covers in part (DreamChess and GL_ARB_framebuffer_object: render targets, renderbuffers as
+ * nothing) is told so by its recipe; told to every program, others take paths they did not before */
+static const char *extensions(void)
+{
+    static char *all;
+    const char *more = getenv("PSPEXP_GL_EXTENSIONS");
+    if (all) return all;
+    if (!more || !*more || !(all = (char *)malloc(sizeof(EXTENSIONS) + strlen(more) + 2))) return EXTENSIONS;
+    snprintf(all, sizeof(EXTENSIONS) + strlen(more) + 2, "%s %s", EXTENSIONS, more);
+    { char *c; for (c = all; *c; c++) if (*c == ',') *c = ' '; }   /* commas too: a launcher entry's env= takes no spaces */
+    return all;
+}
+
 int pspexp_gl_extension(const char *name)
 {
-    const char *p = EXTENSIONS;
+    const char *list = extensions(), *p = list;
     size_t n = strlen(name);
     while ((p = strstr(p, name))) {
-        if ((p == EXTENSIONS || p[-1] == ' ') && (p[n] == ' ' || p[n] == 0)) return 1;
+        if ((p == list || p[-1] == ' ') && (p[n] == ' ' || p[n] == 0)) return 1;
         p += n;
     }
     return 0;
@@ -4630,7 +4853,7 @@ GLAPI(const GLubyte *, glGetString, (GLenum name))
     case GL_RENDERER: return (const GLubyte *)"PSP GE (PSPExp)";
     case GL_VERSION: return (const GLubyte *)(getenv("PSPEXP_GL_VERSION") ? getenv("PSPEXP_GL_VERSION") : "2.1 PSPExp");
     case GL_SHADING_LANGUAGE_VERSION: return (const GLubyte *)"1.20";
-    case GL_EXTENSIONS: return (const GLubyte *)EXTENSIONS;
+    case GL_EXTENSIONS: return (const GLubyte *)extensions();
     default: set_error(GL_INVALID_ENUM); return NULL;
     }
 }

@@ -445,6 +445,12 @@ or cross / square drive, circle the handbrake) and Teeworlds (`teeworlds`:
 online servers or a LAN, it has no bots; the nub aims, R fires, L hooks, the
 d-pad runs, cross jumps, square / triangle change weapon).
 
+DreamChess (`dreamchess`, 2026-10-01; seen playing in PPSSPP, not yet on the
+PSP): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
+selector, cross picks a piece and then its square, circle / start open the
+menu; the pointer cannot pick pieces (DreamChess reads the pixel under it
+back, which the PSP does not give). Its recipe sets `PSPEXP_GL_EXTENSIONS`.
+
 On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272

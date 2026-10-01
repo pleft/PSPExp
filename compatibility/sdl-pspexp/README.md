@@ -83,7 +83,8 @@ PSP transforms, lights, clips and draws. Needs a runtime with 3D (from
 |---|---|
 | `glBegin`/`glEnd`, vertex arrays, `glDrawArrays`/`glDrawElements`, `glInterleavedArrays` | vertices in the GE's format (texture, colour, normal, position as floats), sent with the draw |
 | buffer objects (`glGenBuffers`...; not `GL_STREAM_DRAW`) | **meshes**: the buffer converted once and kept on the PSP (`RESOURCE_UPLOAD_MESH`), element buffers too; a draw is then 16 bytes. Neverball: 2.1 MB to 90 KB a frame |
-| display lists | recorded, replayed on the board (their vertices go every frame) |
+| display lists | recorded, replayed on the board; a run of `glBegin`/`glEnd` blocks with nothing but vertices between them is drawn as one list of triangles, which, 512 vertices or more and the same each frame, is kept on the PSP as a mesh (DreamChess's pieces, hundreds of short strips each: 9,400 draws and 4.4 MB a frame down to 250 draws and 260 KB) |
+| framebuffer objects (`GL_ARB_framebuffer_object`, reported only when asked for: `PSPEXP_GL_EXTENSIONS`) | a texture's colour: a render target in the PSP's VRAM (sides up to 512); a colour renderbuffer the window's size: the screen itself, so copying it onto the window (`glBlitFramebuffer`) costs nothing; other colour renderbuffers: a texture of their own; depth and stencil renderbuffers: the GE's one depth buffer; `glBlitFramebuffer` otherwise: the colour drawn as a textured quad. A target the PSP has no room for, or one drawn into for 120 frames and never textured from (it could only be read back, which gives black here), is let go and its draws dropped |
 | matrix stacks, `glFrustum`, `glOrtho`, `glRotate`... | the GE's projection and world matrices (lighting in eye space) |
 | `glTexImage2D`, `glTexSubImage2D`, parameters, `glTexEnv` modulate / replace / decal / blend / add | textures resampled to powers of two of at most `PSPEXP_GL_TEXMAX` (256), 4444 with alpha or 5650, swizzled; sent before the first draw that uses them, again after a change |
 | lighting (4 lights), materials, `glColorMaterial`, linear fog (exp fog as a line) | the GE's own |
@@ -175,6 +176,10 @@ function; the tests check it is current).
 | `PSPEXP_GL_NOCLIP=1` | OpenGL: no cutting of triangles that reach outside the GE's range (they then vanish whole) |
 | `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
 | `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 1). With 2 or more, fixed-function texture unit 1 is drawn, as a second pass blended as its environment says (modulate, `GL_COMBINE` modulate x2, add, decal, replace); its draws are streamed, not made meshes, so a game that keeps unit 1 on for everything (Neverball's shadow) sends all of it each frame: hence 1 by default. Quakespasm takes its shader path only with 3 |
+| `PSPEXP_GL_EXTENSIONS=GL_ARB_framebuffer_object,GL_ARB_texture_non_power_of_two` | OpenGL: extension names reported besides the layer's own, for a game that will not start without one the layer covers in part (DreamChess); spaces or commas between them (a launcher entry's `env=` takes no spaces). Told to every program, others would take paths they did not before: hence per game |
+| `PSPEXP_GL_NOMERGE=1` | OpenGL: a display list's `glBegin`/`glEnd` blocks drawn one by one, not merged (to compare) |
+| `PSPEXP_GL_RB_TARGETS=1` | OpenGL: a window-sized colour renderbuffer drawn into a render target of its own and copied onto the window, as GL does it, rather than drawn on the screen (to compare; needs the VRAM) |
+| `PSPEXP_GL_KEEP_TARGETS=1` | OpenGL: render targets never textured from are kept and drawn into, not let go after 120 frames |
 | `PSPEXP_GL_DEBUG=nocull,nodepth,noblend,noalpha,notex` | OpenGL: parts of the state left out (bisecting a difference) |
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |

@@ -145,6 +145,7 @@ typedef struct PspExpRuntime {
     int      connected;          /* HELLO_ACK received */
     int      maintenance;        /* ...marked maintenance: only SYSTEM and FILE are served */
     int      in_frame;
+    int      no_target;          /* a 3D_TARGET named a target not here: draws dropped until the next one */
     uint32_t frame_seq;
     uint32_t frame_start_us;
     uint32_t frame_bytes;

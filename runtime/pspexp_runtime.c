@@ -396,6 +396,11 @@ static void handle_draw_mesh(PspExpRuntime *rt, const PspExpMessage *m);
 
 static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
 {
+    /* Into a target that is not here (no room for it made): nowhere. Drawn on whatever came
+     * before, the screen mostly, it would cover the frame (a clear first, often). */
+    if (rt->no_target && (m->header->opcode == PSPEXP_OP_3D_DRAW || m->header->opcode == PSPEXP_OP_3D_DRAW_MESH ||
+                          m->header->opcode == PSPEXP_OP_3D_CLEAR))
+        return;
     switch (m->header->opcode) {
     case PSPEXP_OP_3D_STATE: {
         const PspExp3DState *s;
@@ -431,6 +436,7 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
             e = pspexp_cache_find(&rt->cache, t->id);
             if (!e || !e->target) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, t->id, e ? PSPEXP_RERR_WRONG_KIND : PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); e = NULL; }
         }
+        rt->no_target = !e && t->id != PSPEXP_TARGET_SCREEN;
         if (rt->ops.target3d && (e || t->id == PSPEXP_TARGET_SCREEN)) rt->ops.target3d(rt->ops.user, e);
         return;
     }
@@ -915,6 +921,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         b = (const PspExpBeginFrame *)m->payload;
         if (rt->in_frame) rt_log(rt, "BEGIN_FRAME %u while frame %u open", b->frame_seq, rt->frame_seq);
         rt->in_frame = 1;
+        rt->no_target = 0;
         rt->frame_seq = b->frame_seq;
         rt->frame_start_us = now_us(rt);
         rt->frame_bytes = PSPEXP_HEADER_SIZE + m->length;
