@@ -7,7 +7,10 @@
 # under the left thumb): the nub aims (the mouse, sensitivity raised for it),
 # the face buttons move (triangle / cross forward and back, square / circle
 # strafe), R fires (and clicks in the menus), L jumps, the d-pad changes weapon
-# (up / down) and crouches (left).
+# (up / down) and crouches (left). One texture unit (PSPEXP_GL_UNITS=1): told of
+# two, with its lightmaps on (its saved config can turn them on) the engine
+# multitextures every surface, drawn twice here: 160 KB a frame, 15 fps
+# on the PSP-1000, against 62-98 KB and 30.
 
 [package]
 id=openarena
@@ -15,7 +18,7 @@ title=OpenArena
 description=Fast arena shooter on the Quake 3 engine, with bots
 category=game
 license=GPL-2.0 (ioquake3, OpenArena)
-version=2
+version=3
 
 [debian]
 apt=openarena
@@ -29,4 +32,5 @@ exec=/usr/games/openarena +set cl_renderer opengl1 +set r_mode -1 +set r_customw
 keys=triangle=w,cross=s,square=a,circle=d,l=space,up=slash,down=q,left=c,start=escape,select=tab
 nub=mouse
 env=PSPEXP_JOYSTICK=0
+env=PSPEXP_GL_UNITS=1
 env=PSPEXP_MOUSE_BUTTONS=left=r,right=none

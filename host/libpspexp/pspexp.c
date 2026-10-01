@@ -181,8 +181,10 @@ void pspexp_batch_begin(PspExpContext *ctx)
     ctx->batching = 1;
 }
 
-/* PSPEXP_TRACE_BYTES=1: what the bytes sent were, by message, in the log every 300 frames */
+/* PSPEXP_TRACE_BYTES=1: what the bytes sent were, by message, in the log every 300 frames (=N above 1:
+ * every N frames) */
 static int trace_bytes = -1;
+static uint32_t trace_every = 300;
 static uint64_t trace_op_bytes[64][2];   /* [opcode hash] -> opcode, bytes */
 
 static void trace_tally(const void *data, size_t len)
@@ -219,7 +221,10 @@ static void trace_report(PspExpContext *ctx, uint32_t frames)
 static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
 {
     if (!ctx->t) return -1;
-    if (trace_bytes < 0) trace_bytes = getenv("PSPEXP_TRACE_BYTES") && atoi(getenv("PSPEXP_TRACE_BYTES")) > 0;
+    if (trace_bytes < 0) {
+        trace_bytes = getenv("PSPEXP_TRACE_BYTES") && atoi(getenv("PSPEXP_TRACE_BYTES")) > 0;
+        if (trace_bytes && atoi(getenv("PSPEXP_TRACE_BYTES")) > 1) trace_every = (uint32_t)atoi(getenv("PSPEXP_TRACE_BYTES"));
+    }
     if (trace_bytes) trace_tally(data, len);
     if (ctx->batching) {
         if (ctx->batch_len + len > ctx->batch_cap) {   /* full: out with what is there */
@@ -1319,7 +1324,7 @@ long pspexp_present(PspExpContext *ctx)
             ctx_log(ctx, "%s", line);
         }
     }
-    if (trace_bytes > 0 && seq % 300 == 0) trace_report(ctx, 300);
+    if (trace_bytes > 0 && seq % trace_every == 0) trace_report(ctx, trace_every);
     rec = &ctx->ring[seq % SEND_RING];
     rec->sent_us = pspexp_time_us();
     ctx->stats.last_frame_bytes = (uint32_t)ctx->frame.len;

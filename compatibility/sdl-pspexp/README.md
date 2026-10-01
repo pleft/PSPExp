@@ -193,9 +193,10 @@ function; the tests check it is current).
 | `PSPEXP_GL_TRACE_TEX=N` | OpenGL: every upload into texture N and its neighbours, and every bind of N, in the log |
 | `PSPEXP_GL_MAXDRAWS=N` | OpenGL: only the first N draws of each frame (bisecting) |
 | `PSPEXP_TRACE_FRAMES=N` | the messages of the first N frames, in the log |
-| `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, and the frame rate over them, in the log every 300 frames |
+| `PSPEXP_TRACE_BYTES=1` | what the bytes sent were, by message, averaged over 300 frames, and the frame rate over them, in the log every 300 frames (`=N` above 1: every N frames) |
 | `PSPEXP_GL_NOINDEX=1` | OpenGL: indexed triangle lists always sent as triangles (by default, when the PSP takes indices and nothing needs cutting, each shared vertex goes once, with 16-bit indices) |
 | `PSPEXP_GL_FLOATS=1` | OpenGL: streamed vertices always as floats (by default unlit draws go with 16-bit positions and coordinates when the PSP takes them: those of 16 vertices or more, and smaller ones that are small beside where they lie, the scale of the draw before shared where it fits so that the matrices stay and draws join; a large small draw, a floor quad, as floats times that scale) |
+| `PSPEXP_PROFILE=1` | where a frame's time goes on the board, in ms a frame every 2 s: the program and its OpenGL here between frames (wall and CPU), texture work, the batch flush, the wait for the PSP's last frame, the send |
 | `PSPEXP_RECORD=FILE` | every byte sent to the PSP, in order (a stream to replay) |
 | `PSPEXP_DEBUG_SKIP=clear,rects,lines,quads,audio` | leave parts of the stream out (bisecting a rendering difference) |
 | `PSPEXP_DELTA=0`, `PSPEXP_CLUT=0` | send every page of a changed texture / never CLUT8; both together also bring back the even page grid: the shim as it was before 2026-09-26, for `scripts/dev/bench-shim.sh` |

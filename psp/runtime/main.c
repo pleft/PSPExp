@@ -203,7 +203,8 @@ static void op_log(void *u, const char *msg)
     strncpy(g_log[g_log_n % 4], msg, sizeof(g_log[0]) - 1);
     g_log[g_log_n % 4][sizeof(g_log[0]) - 1] = 0;
     g_log_n++;
-    if (!strncmp(msg, "connected", 9) || !strncmp(msg, "maintenance", 11) || !strncmp(msg, "3D:", 3)) trace(msg);   /* once per connection: kept in the log file too */
+    if (!strncmp(msg, "connected", 9) || !strncmp(msg, "maintenance", 11) || !strncmp(msg, "3D:", 3) ||
+        !strncmp(msg, "us/bytes", 8)) trace(msg);   /* once per connection, or every 600 frames: kept in the log file too */
 }
 
 static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)

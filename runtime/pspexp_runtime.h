@@ -149,6 +149,9 @@ typedef struct PspExpRuntime {
     int      no_target;          /* a 3D_TARGET named a target not here: draws dropped until the next one */
     uint32_t frame_seq;
     uint32_t frame_start_us;
+    uint32_t frame_busy_us;      /* this frame's messages handled so far (PRESENT_DONE.execute_us) */
+    uint16_t prof_op[24];        /* time and bytes by message kind (logged every 600 frames) */
+    uint32_t prof_us[24], prof_bytes[24];
     uint32_t frame_bytes;
     uint32_t input_seq;
     PspExpHelloAck ack;

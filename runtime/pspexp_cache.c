@@ -9,11 +9,18 @@ void pspexp_cache_init(PspExpCache *c, uint32_t vram_budget, uint32_t ram_budget
     c->ram_budget = ram_budget;
 }
 
+/* Where each id was found last (its slot + 1): a lookup checks it first. The table scanned whole is
+ * 1024 entries of some 60 bytes, far more than the PSP's 16 KB data cache: 10-15 us a lookup, three a
+ * mesh draw, 9 ms of a Quake frame (2026-10-01). Checked on use (the slot still in use, the same id),
+ * so nothing else has to keep it, and one table serves any number of caches. */
+static uint16_t last_slot[65536];
+
 PspExpCacheEntry *pspexp_cache_find(PspExpCache *c, uint16_t id)
 {
-    int i;
+    int i = last_slot[id];
+    if (i && c->entries[i - 1].used && c->entries[i - 1].id == id) return &c->entries[i - 1];
     for (i = 0; i < PSPEXP_CACHE_MAX; i++)
-        if (c->entries[i].used && c->entries[i].id == id) return &c->entries[i];
+        if (c->entries[i].used && c->entries[i].id == id) { last_slot[id] = (uint16_t)(i + 1); return &c->entries[i]; }
     return NULL;
 }
 

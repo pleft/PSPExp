@@ -931,6 +931,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         rt->no_target = 0;
         rt->frame_seq = b->frame_seq;
         rt->frame_start_us = now_us(rt);
+        rt->frame_busy_us = 0;
         rt->frame_bytes = PSPEXP_HEADER_SIZE + m->length;
         rt->stats.frame_sprites = 0;
         rt->stats.frame_dropped = 0;
@@ -965,10 +966,22 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
             rt->stats.lines++;
         } else {
             PspExpPresentDone d;
-            uint32_t exec_us = now_us(rt) - rt->frame_start_us;
+            uint32_t exec_us = rt->frame_busy_us;   /* (before 2026-10-01: from BEGIN_FRAME, the USB waits with it) */
             uint32_t ts = rt->ops.present ? rt->ops.present(rt->ops.user) : now_us(rt);
             rt->in_frame = 0;
             rt->stats.frames++;
+            if (rt->stats.frames % 600 == 0) {
+                char line[160];
+                int k, o = 0;
+                for (k = 0; k < 24 && rt->prof_op[k]; k++) {
+                    if (rt->prof_us[k] >= 60000u)   /* 0.1 ms a frame or more */
+                        o += snprintf(line + o, sizeof(line) - (size_t)o, " %s %u/%u", pspexp_opcode_name(rt->prof_op[k]),
+                                      (unsigned)(rt->prof_us[k] / 600u), (unsigned)(rt->prof_bytes[k] / 600u));
+                    rt->prof_us[k] = rt->prof_bytes[k] = 0;
+                    if (o > (int)sizeof(line) - 40) break;
+                }
+                rt_log(rt, "us/bytes a frame:%s", line);
+            }
             rt->stats.last_frame_bytes = rt->frame_bytes;
             rt->stats.last_execute_us = exec_us;
             memset(&d, 0, sizeof(d));
@@ -1011,8 +1024,18 @@ static int process(PspExpRuntime *rt)
 {
     PspExpMessage m;
     int r;
-    while ((r = pspexp_stream_next(&rt->in, &m)) == 1)
+    while ((r = pspexp_stream_next(&rt->in, &m)) == 1) {
+        /* the frame's work: its messages handled, not the waits for them between (execute_us) */
+        uint32_t t0 = now_us(rt), dt;
+        int was = rt->in_frame, k;
+        uint16_t op = m.header->opcode;
         dispatch(rt, &m);
+        dt = now_us(rt) - t0;
+        if (was && rt->in_frame) rt->frame_busy_us += dt;
+        /* the time by message kind, in the log every 600 frames (which of them a frame's work goes to) */
+        for (k = 0; k < 24 && rt->prof_op[k] && rt->prof_op[k] != op; k++) { }
+        if (k < 24) { rt->prof_op[k] = op; rt->prof_us[k] += dt; rt->prof_bytes[k] += m.header->length; }
+    }
     if (r < 0) { rt_log(rt, "inbound stream corrupt"); return -1; }
     return 0;
 }

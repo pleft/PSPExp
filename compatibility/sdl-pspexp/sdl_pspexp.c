@@ -208,7 +208,9 @@ static struct {
     uint64_t up_ticks, tot_up_ticks;
     uint64_t prof_shadow, prof_convert, prof_write;   /* ns: compare, convert (wall), write */
     uint64_t prof_wait, prof_send;    /* ns: waiting for the PSP's last frame, sending this one */
-    uint64_t prof_flush, prof_flush_cpu;   /* ns: the batched uploads out (wall, and this thread's CPU) */   /* ns of this thread's CPU converting textures (waits do not count) */
+    uint64_t prof_flush, prof_flush_cpu;   /* ns: the batched uploads out (wall, and this thread's CPU) */
+    uint64_t prof_game, prof_game_cpu, prof_last_end, prof_last_end_cpu;   /* ns: between frames: the program and its
+                                         OpenGL here (wall, and this thread's CPU), from the end of the frame before */   /* ns of this thread's CPU converting textures (waits do not count) */
     unsigned pages_sent, pages_t8, pages_kept;          /* since the last report */
     unsigned long tot_pages_sent, tot_pages_t8, tot_pages_kept;
     Uint64 first_frame;                /* performance counter at the first frame sent */
@@ -2130,6 +2132,7 @@ static void end_frame(void)
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();
+        if (S.prof_last_end) { S.prof_game += f0 - S.prof_last_end; S.prof_game_cpu += c0 - S.prof_last_end_cpu; }
         /* the frame's uploads out in one transfer, before waiting for the
          * PSP's last frame: they travel while it finishes */
         pspexp_batch_flush(S.ctx);
@@ -2141,6 +2144,7 @@ static void end_frame(void)
         pspexp_present(S.ctx);
         S.prof_wait += w1 - w0;
         S.prof_send += wall_ns() - w1;
+        S.prof_last_end = wall_ns(); S.prof_last_end_cpu = cpu_ns();
     }
     S.frame_open = 0;
     pspexp_pump(S.ctx, 0);
@@ -2162,11 +2166,13 @@ static void end_frame(void)
                   st->last_frame_sprites, st->last_execute_us, st->last_ge_us, S.uploads,
                   st->resource_errors + st->protocol_errors, au->buffered_frames, au->underruns);
             if (getenv("PSPEXP_PROFILE"))
-                logf_("profile: compare %.2f  convert %.2f  write %.2f  flush %.2f (cpu %.2f)  wait for the PSP %.2f  send %.2f ms/frame",
+                logf_("profile: program and its GL %.2f (cpu %.2f)  compare %.2f  convert %.2f  write %.2f  flush %.2f (cpu %.2f)  wait for the PSP %.2f  send %.2f ms/frame",
+                      (double)S.prof_game / 1e6 / fr, (double)S.prof_game_cpu / 1e6 / fr,
                       (double)S.prof_shadow / 1e6 / fr, (double)S.prof_convert / 1e6 / fr, (double)S.prof_write / 1e6 / fr,
                       (double)S.prof_flush / 1e6 / fr, (double)S.prof_flush_cpu / 1e6 / fr,
                       (double)S.prof_wait / 1e6 / fr, (double)S.prof_send / 1e6 / fr);
             S.prof_shadow = S.prof_convert = S.prof_write = S.prof_wait = S.prof_send = S.prof_flush = S.prof_flush_cpu = 0;
+            S.prof_game = S.prof_game_cpu = 0;
             logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)",
                   (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, S.pages_sent, S.pages_t8, S.pages_kept,
                   (double)S.up_ticks / 1e6 / fr);
