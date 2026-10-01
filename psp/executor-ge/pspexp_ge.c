@@ -323,22 +323,6 @@ static void op_clear3d(void *u, const PspExp3DClear *c)
     }
 }
 
-/* The GE let at the frame's display list so far (pspsdk's GU keeps the list and its queue id in these),
- * every few draws: it draws the frame's start while the rest still arrives over USB and is built, so a
- * frame takes about the longer of the two, not their sum. Before, the GE started at the frame's end.
- * The data cache goes out first: the list, the vertices, meshes made this frame. */
-typedef struct { unsigned int *start, *current; int parent_context; } PspExpGuList;
-extern PspExpGuList *gu_list;
-extern int ge_list_executed[2];
-static void ge_kick(PspExpGeExecutor *ge)
-{
-    if (++ge->draws_unkicked < 16 || !gu_list) return;
-    ge->draws_unkicked = 0;
-    sceKernelDcacheWritebackAll();
-    sceGeListUpdateStallAddr(ge_list_executed[0], gu_list->current);
-    ge->stats.kicks++;
-}
-
 static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette, uint8_t prim,
                       uint32_t vtype, uint32_t count, const void *vertices)
 {
@@ -357,7 +341,6 @@ static void op_draw3d(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *palette,
         if (ge->tex_enabled != 1) { sceGuEnable(GU_TEXTURE_2D); ge->tex_enabled = 1; }
     } else if (ge->tex_enabled != 0) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
     sceGuDrawArray(prim, (int)vtype | GU_TRANSFORM_3D, (int)count, 0, v);
-    ge_kick(ge);
     ge->stats.draws3d++;
     ge->stats.last_vertex_bytes = ge->ring_used;
 }
@@ -382,7 +365,6 @@ static void op_draw3d_indexed(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *
         if (ge->tex_enabled != 1) { sceGuEnable(GU_TEXTURE_2D); ge->tex_enabled = 1; }
     } else if (ge->tex_enabled != 0) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
     sceGuDrawArray(prim, (int)vtype | GU_TRANSFORM_3D | GU_INDEX_16BIT, (int)nidx, ix, v);
-    ge_kick(ge);
     ge->stats.draws3d++;
     ge->stats.last_vertex_bytes = ge->ring_used;
 }
@@ -409,7 +391,6 @@ static void op_draw3d_mesh(void *u, PspExpCacheEntry *tex, PspExpCacheEntry *pal
     } else if (ge->tex_enabled != 0) { sceGuDisable(GU_TEXTURE_2D); ge->tex_enabled = 0; }
     /* meshes are written back with the whole data cache at present */
     sceGuDrawArray(prim, (int)vtype | GU_TRANSFORM_3D | (indices ? GU_INDEX_16BIT : 0), (int)count, indices, vertices);
-    ge_kick(ge);
     ge->stats.draws3d++;
 }
 
@@ -457,7 +438,6 @@ static void op_frame_begin(void *u, uint32_t seq)
     ge->cur_palette = NULL;
     ge->tex_enabled = 0;
     ge->in_frame = 1;
-    ge->draws_unkicked = 0;
     ge->clip_x = ge->clip_y = 0; ge->clip_w = PSPEXP_DISPLAY_WIDTH; ge->clip_h = PSPEXP_DISPLAY_HEIGHT;
     ge->mode3d = 1;   /* whatever the last frame left: set the 2D state afresh */
     leave_3d(ge);

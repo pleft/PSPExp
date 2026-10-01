@@ -19,7 +19,6 @@ typedef struct PspExpGeStats {
     uint32_t last_vertex_bytes;
     uint32_t vram_alloc_failures; /* fragmentation: demoted to RAM */
     uint32_t draws3d, dropped3d;  /* 3D draws, and those dropped for lack of vertex space */
-    uint32_t kicks;               /* times the GE was let at a frame's list before its end */
 } PspExpGeStats;
 
 typedef struct PspExpGeExecutor {
@@ -28,7 +27,6 @@ typedef struct PspExpGeExecutor {
     int ring_cur;
     uint32_t ring_used;
     int in_frame;
-    int draws_unkicked;         /* 3D draws in the list the GE has not been let at yet (ge_kick) */
     int tex_enabled;
     PspExpCacheEntry *cur_atlas;
     PspExpCacheEntry *cur_palette;
