@@ -1,0 +1,25 @@
+# Blobby Volley 2: beach volleyball between two blobs, Debian's package. Its
+# 4:3 picture letterboxed; the menus by pointer (the nub, circle clicks); in a
+# match the d-pad moves the left blob and cross jumps.
+
+[package]
+id=blobby
+title=Blobby Volley 2
+description=Beach volleyball between two blobs, against the computer or a friend
+category=game
+license=GPL-2.0+ (Blobby Volley 2)
+version=1
+
+[debian]
+apt=blobby
+
+[entry]
+title=Blobby Volley 2
+type=game
+description=Beach volleyball between two blobs, against the computer or a friend
+icon=gamepad-2
+exec=/usr/games/blobby
+keys=left=a,right=d,up=w,cross=w,start=escape,select=escape
+nub=mouse
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_MOUSE_BUTTONS=left=circle,right=none

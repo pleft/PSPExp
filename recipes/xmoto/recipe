@@ -1,0 +1,24 @@
+# X-Moto: a physics motocross game, Debian's package, drawn by the PSP's GE
+# through the SDL layer's OpenGL. The d-pad drives (up throttle, down brake,
+# left / right lean), circle turns the bike round, cross selects in menus.
+
+[package]
+id=xmoto
+title=X-Moto
+description=Physics motocross: ride, lean and flip through hundreds of levels
+category=game
+license=GPL-2.0+ (X-Moto)
+version=1
+
+[debian]
+apt=xmoto
+
+[entry]
+title=X-Moto
+type=game
+description=Physics motocross: ride, lean and flip through hundreds of levels
+icon=gamepad-2
+exec=/usr/games/xmoto
+keys=up=up,down=down,left=left,right=right,cross=return,circle=space,start=escape,select=escape
+nub=keys
+env=PSPEXP_JOYSTICK=0

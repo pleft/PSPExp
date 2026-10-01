@@ -1,0 +1,26 @@
+# Trigger Rally: rally racing on dirt and snow, Debian's package, drawn by the
+# PSP's GE (full screen at the PSP's size). The menus by pointer (the nub, R
+# clicks); racing on the d-pad (up / cross throttle, down / square brake,
+# left / right steer), circle the handbrake.
+
+[package]
+id=trigger-rally
+title=Trigger Rally
+description=Rally racing on dirt, snow and tarmac
+category=game
+license=GPL-2.0+ (Trigger Rally)
+version=1
+
+[debian]
+apt=trigger-rally
+
+[entry]
+title=Trigger Rally
+type=game
+description=Rally racing on dirt, snow and tarmac
+icon=gauge
+exec=/usr/games/trigger-rally
+keys=up=up,down=down,left=left,right=right,cross=up,square=down,circle=space,start=escape,select=escape
+nub=mouse
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_MOUSE_BUTTONS=left=r,right=none

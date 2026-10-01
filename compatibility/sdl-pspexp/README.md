@@ -87,6 +87,7 @@ PSP transforms, lights, clips and draws. Needs a runtime with 3D (from
 | matrix stacks, `glFrustum`, `glOrtho`, `glRotate`... | the GE's projection and world matrices (lighting in eye space) |
 | `glTexImage2D`, `glTexSubImage2D`, parameters, `glTexEnv` modulate / replace / decal / blend / add | textures resampled to powers of two of at most `PSPEXP_GL_TEXMAX` (256), 4444 with alpha or 5650, swizzled; sent before the first draw that uses them, again after a change |
 | lighting (4 lights), materials, `glColorMaterial`, linear fog (exp fog as a line) | the GE's own |
+| `glTexImage3D`, `GL_TEXTURE_3D` | a 2D atlas, the slices in a grid; each vertex's (s, t, r) mapped into r's cell on the board (the GE has no 3D textures: Teeworlds keeps its map tiles so, one a slice) |
 | texture coordinate generation: object and eye linear, texture matrix | the GE's texture matrix (no per-vertex work here) |
 | sphere maps | the GE's environment map (the normal's eye-space x and y: GL's sphere map for a view straight ahead) |
 | depth, alpha test, blending (5650 framebuffer: no destination alpha), culling, scissor, `glColorMask`, `glClear` | the GE's own; a 16-bit depth buffer (VRAM for textures shrinks by 272 KB) |

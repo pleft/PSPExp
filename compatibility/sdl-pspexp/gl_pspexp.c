@@ -222,7 +222,7 @@ enum {
 
 /* ---- state ----------------------------------------------------------------- */
 
-typedef struct Vtx { float t[2]; uint32_t c; float n[3]; float p[3]; float t1[2]; } Vtx;   /* one vertex, all attributes (t1: texture unit 1's) */
+typedef struct Vtx { float t[2]; uint32_t c; float n[3]; float p[3]; float t1[2]; float r; } Vtx;   /* one vertex, all attributes (t1: texture unit 1's; r: the third coordinate, a 3D texture's slice) */
 
 typedef struct GlTex {
     GLuint name;
@@ -237,6 +237,7 @@ typedef struct GlTex {
     struct GlTex *hnext;         /* in the name table */
     unsigned used;               /* the frame it was last drawn with */
     uint32_t *face[6];           /* a cube map's faces, RGBA8 (only here: shaders' reflections are made from them) */
+    int d3, cols3, rows3, tw3, th3;  /* a 3D texture: d3 slices of tw3 x th3, kept as a 2D atlas cols3 x rows3 (rgba) */
     float prescale;              /* rgba holds its colours times this, clamped (10-bit uploads: 4, keeping their bits) */
     float scale;                 /* what the draws want them times (a lightmap multiplied in more than twice over) */
     int part, part_x0, part_x1, part_y0, part_y1;  /* dirty only in this rectangle (glTexSubImage2D): sent as a patch when the PSP can */
@@ -295,6 +296,7 @@ static struct {
     GLenum depth_func; int depth_mask; float depth_near, depth_far; float clear_depth;
     GLenum blend_src, blend_dst, blend_eq; float blend_color[4];
     GLuint cube_units[8];         /* cube maps bound, per unit */
+    GLuint units3d[8]; int texture_3d;   /* 3D textures bound, per unit; GL_TEXTURE_3D on (unit 0) */
     GLenum alpha_func; float alpha_ref;
     GLenum cull_mode, front_face, shade_model;
     int color_mask[4]; float clear_color[4];
@@ -1060,6 +1062,14 @@ static void send_texture(PspExpContext *ctx, GlTex *t)
 static PspExpContext *prepare_colour(GlTex **texp, const float *color);
 static PspExpContext *prepare(GlTex **texp) { return prepare_colour(texp, NULL); }
 
+/* The texture a fixed-function draw samples: a 3D one (as its atlas) when GL_TEXTURE_3D is on, else unit 0's
+ * (unit 1's in its pass) */
+static GlTex *bound_texture(void)
+{
+    if (!G.mt_pass && G.texture_3d && G.units3d[0]) { GlTex *t = find_texture(G.units3d[0]); if (t && t->d3) return t; }
+    return G.texture_2d ? find_texture(G.units[G.mt_pass]) : NULL;
+}
+
 static PspExpContext *prepare_colour(GlTex **texp, const float *color)
 {
     PspExpContext *ctx = shim_gl_frame();
@@ -1076,7 +1086,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     }
     {   /* a texture to send that does not fit beside this frame's: the frame goes now (a program
          * loading draws hundreds of images into a target without ever swapping) */
-        GlTex *t = G.sh_active ? G.sh_tex : G.texture_2d ? find_texture(G.units[G.mt_pass]) : NULL;
+        GlTex *t = G.sh_active ? G.sh_tex : bound_texture();
         if (t && t->rgba && !t->rt && (t->dirty || !t->handle) && !texture_fits(ctx, t, texture_psp_bytes(t) - t->psp_bytes)) {
             if (G.log) gl_logf("frame sent early: textures to make room for");
             shim_gl_flush();
@@ -1093,7 +1103,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         G.frame_cleared = 1;
         pspexp_3d_clear(ctx, PSPEXP_3D_CLEAR_COLOR | PSPEXP_3D_CLEAR_DEPTH, 0xFF000000u, 0);
     }
-    if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : G.texture_2d && (tex = find_texture(G.units[G.mt_pass])) && (tex->rgba || tex->rt)) {
+    if (G.sh_active ? (tex = G.sh_tex) != NULL && (tex->rgba || tex->rt) : (tex = bound_texture()) != NULL && (tex->rgba || tex->rt)) {
         tex->used = tex_frame;
         if (tex->dirty || !tex->handle) send_texture(ctx, tex);
         if (!tex->handle) tex = NULL;
@@ -1432,6 +1442,16 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
         }
     }
     if (!(ctx = prepare(&tex))) return;
+    if (tex && tex->d3 && !G.sh_active) {   /* a 3D texture: (s, t) into the slice r picks, in its atlas */
+        for (i = 0; i < n; i++) {
+            int z = (int)floorf(v[i].r * (float)tex->d3), cx, cy;
+            float s0 = v[i].t[0] < 0 ? 0 : v[i].t[0] > 1 ? 1 : v[i].t[0], t0 = v[i].t[1] < 0 ? 0 : v[i].t[1] > 1 ? 1 : v[i].t[1];
+            z = z < 0 ? 0 : z >= tex->d3 ? tex->d3 - 1 : z;
+            cx = z % tex->cols3; cy = z / tex->cols3;
+            v[i].t[0] = ((float)cx + s0) / (float)tex->cols3;
+            v[i].t[1] = ((float)cy + t0) / (float)tex->rows3;
+        }
+    }
     if (G.log >= 2)
         gl_logf("draw %s mode %u n %d tex %u(%s %dx%d) colour %08x blend %d %x/%x depth %d cull %d light %d alpha %d fog %d env %x uv %.3f,%.3f %.3f,%.3f pos %.2f,%.2f,%.2f",
                 G.in_begin || G.nimm ? "imm" : G.array_buffer || G.va.buffer ? "vbo" : "arrays",
@@ -1785,7 +1805,7 @@ GLAPI(void, glFrustum, (GLdouble l, GLdouble r, GLdouble b, GLdouble t, GLdouble
 
 static void current_vtx(Vtx *v, float x, float y, float z)
 {
-    v->t[0] = G.texcoord[0]; v->t[1] = G.texcoord[1];
+    v->t[0] = G.texcoord[0]; v->t[1] = G.texcoord[1]; v->r = G.texcoord[2];
     v->t1[0] = G.texcoord1[0]; v->t1[1] = G.texcoord1[1];
     v->c = abgr(G.color);
     v->n[0] = G.normal[0]; v->n[1] = G.normal[1]; v->n[2] = G.normal[2];
@@ -2000,6 +2020,7 @@ static void fetch(int i, Vtx *v)
         b += (size_t)i * st;
         v->t[0] = read_comp(b, G.ta.type, 0);
         v->t[1] = G.ta.size > 1 ? read_comp(b + ts, G.ta.type, 0) : 0.0f;
+        v->r = G.ta.size > 2 ? read_comp(b + 2 * ts, G.ta.type, 0) : 0.0f;
         if (G.ta.size == 4) { float q = read_comp(b + 3 * ts, G.ta.type, 0); if (q != 0.0f && q != 1.0f) { v->t[0] /= q; v->t[1] /= q; } }
     }
     if (G.tex1_on && G.ta1.enabled && (b = array_base(&G.ta1))) {
@@ -3104,6 +3125,7 @@ static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint i
 #define NOT_MESH(why) do { if (G.log >= 2) gl_logf("streamed: %s", why); return 0; } while (0)
     if (G.compiling || getenv("PSPEXP_GL_NOMESH")) return 0;
     if (G.tex1_on && G.units[1]) NOT_MESH("texture unit 1 (drawn in a second pass, from the vertices)");
+    if (G.texture_3d && G.units3d[0]) NOT_MESH("a 3D texture (its coordinates mapped into its atlas per vertex)");
     if (!G.va.enabled || !G.va.buffer || !(vb = find_buffer(G.va.buffer))) return 0;
     if (vb->usage == 0x88E0 /* GL_STREAM_DRAW */) NOT_MESH("a stream buffer");
     for (k = 0; k < 4; k++) if (arr[k]->enabled && !arr[k]->buffer) NOT_MESH("an array in client memory");   /* may change unseen */
@@ -3643,6 +3665,7 @@ static void set_cap(GLenum cap, int on)
     case GL_BLEND: G.blend = on; break;
     case GL_ALPHA_TEST: G.alpha_test = on; break;
     case GL_TEXTURE_2D: if (G.active_unit == 0) G.texture_2d = on; else if (G.active_unit == 1) G.tex1_on = on; break;
+    case GL_TEXTURE_3D: if (G.active_unit == 0) G.texture_3d = on; break;
     case GL_FOG: G.fog = on; break;
     case GL_LIGHTING: G.lighting = on; G.lights_dirty = 1; break;
     case GL_COLOR_MATERIAL: G.color_material = on; G.lights_dirty = 1; break;
@@ -3961,6 +3984,7 @@ GLAPI(void, glBindTexture, (GLenum target, GLuint name))
     RECORD(OP_BIND_TEXTURE, target, name, 0, 0, NULL);
     ensure_init();
     if (target == GL_TEXTURE_CUBE_MAP && G.active_unit >= 0 && G.active_unit < 8) { G.cube_units[G.active_unit] = name; texture_object(name); return; }
+    if (target == GL_TEXTURE_3D && G.active_unit >= 0 && G.active_unit < 8) { G.units3d[G.active_unit] = name; texture_object(name); return; }
     if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8) return;
     texture_object(name);
     G.units[G.active_unit] = name;
@@ -3984,7 +4008,7 @@ GLAPI(void, glDeleteTextures, (GLsizei n, const GLuint *names))
             { int f; for (f = 0; f < 6; f++) free(t->face[f]); }
             free(t);
         }
-        { int u; for (u = 0; u < 8; u++) { if (G.units[u] == names[i]) G.units[u] = 0; if (G.cube_units[u] == names[i]) G.cube_units[u] = 0; } }
+        { int u; for (u = 0; u < 8; u++) { if (G.units[u] == names[i]) G.units[u] = 0; if (G.cube_units[u] == names[i]) G.cube_units[u] = 0; if (G.units3d[u] == names[i]) G.units3d[u] = 0; } }
     }
 }
 GLAPI(GLboolean, glIsTexture, (GLuint name)) { return find_texture(name) != NULL; }
@@ -4158,6 +4182,63 @@ GLAPI(void, glTexImage2D, (GLenum target, GLint level, GLint internal, GLsizei w
     t->prescale = type == 0x8036 || type == 0x8368 ? 4.0f : 1.0f;
     t->dirty = 1;
 }
+/* GL_TEXTURE_3D: kept as a 2D atlas, its slices in a grid (the GE has no 3D textures); a draw maps each
+ * vertex's (s, t, r) into r's cell. Teeworlds keeps its map tiles so, one a slice. */
+GLAPI(void, glTexImage3D, (GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h, GLsizei d, GLint border,
+                           GLenum format, GLenum type, const GLvoid *pixels))
+{
+    GlTex *t;
+    int cols = 1, rows, z;
+    size_t slice;
+    (void)border;
+    ensure_init();
+    if (target != GL_TEXTURE_3D || level != 0 || G.active_unit < 0 || G.active_unit >= 8) return;
+    if (!(t = texture_object(G.units3d[G.active_unit]))) { set_error(GL_INVALID_OPERATION); return; }
+    if (w <= 0 || h <= 0 || d <= 0 || w > 1024 || h > 1024 || d > 1024) { set_error(GL_INVALID_VALUE); return; }
+    while (cols * cols < d) cols *= 2;
+    rows = (d + cols - 1) / cols;
+    if (w * cols > 4096 || h * rows > 4096) { set_error(GL_INVALID_VALUE); return; }
+    {
+        uint32_t *p = (uint32_t *)realloc(t->rgba, (size_t)w * (size_t)cols * (size_t)h * (size_t)rows * 4);
+        if (!p) { set_error(GL_OUT_OF_MEMORY); return; }
+        t->rgba = p;
+    }
+    t->w = w * cols; t->h = h * rows;
+    t->d3 = d; t->cols3 = cols; t->rows3 = rows; t->tw3 = w; t->th3 = h;
+    t->has_alpha = format_has_alpha(internal, format);
+    t->prescale = t->scale = 1;
+    memset(t->rgba, 0, (size_t)t->w * (size_t)t->h * 4);
+    {   /* a slice's bytes, as the unpacking reads them */
+        int al = G.unpack_alignment > 0 ? G.unpack_alignment : 1, rowlen = G.unpack_row_length > 0 ? G.unpack_row_length : w;
+        size_t row = (size_t)rowlen * (size_t)pixel_bytes(format, type);
+        row = (row + (size_t)al - 1) / (size_t)al * (size_t)al;
+        slice = row * (size_t)h;
+    }
+    if (pixels)
+        for (z = 0; z < d; z++) store_pixels(t, (z % cols) * w, (z / cols) * h, w, h, format, type, (const uint8_t *)pixels + (size_t)z * slice);
+    t->dirty = 1; t->part = 0;
+}
+GLAPI(void, glTexSubImage3D, (GLenum target, GLint level, GLint x, GLint y, GLint zo, GLsizei w, GLsizei h, GLsizei d,
+                              GLenum format, GLenum type, const GLvoid *pixels))
+{
+    GlTex *t;
+    int z;
+    size_t slice;
+    ensure_init();
+    if (target != GL_TEXTURE_3D || level != 0 || G.active_unit < 0 || G.active_unit >= 8) return;
+    if (!(t = find_texture(G.units3d[G.active_unit])) || !t->d3 || !t->rgba) { set_error(GL_INVALID_OPERATION); return; }
+    if (x < 0 || y < 0 || zo < 0 || x + w > t->tw3 || y + h > t->th3 || zo + d > t->d3) { set_error(GL_INVALID_VALUE); return; }
+    {
+        int al = G.unpack_alignment > 0 ? G.unpack_alignment : 1, rowlen = G.unpack_row_length > 0 ? G.unpack_row_length : w;
+        size_t row = (size_t)rowlen * (size_t)pixel_bytes(format, type);
+        row = (row + (size_t)al - 1) / (size_t)al * (size_t)al;
+        slice = row * (size_t)h;
+    }
+    for (z = 0; z < d; z++)
+        store_pixels(t, ((zo + z) % t->cols3) * t->tw3 + x, ((zo + z) / t->cols3) * t->th3 + y, w, h, format, type, (const uint8_t *)pixels + (size_t)z * slice);
+    t->dirty = 1; t->part = 0;
+}
+
 GLAPI(void, glTexImage1D, (GLenum target, GLint level, GLint internal, GLsizei w, GLint border, GLenum format, GLenum type, const GLvoid *pixels))
 {
     (void)target; (void)level; (void)internal; (void)w; (void)border; (void)format; (void)type; (void)pixels;
@@ -4205,7 +4286,8 @@ GLAPI(void, glTexParameteri, (GLenum target, GLenum p, GLint v))
     float f = (float)v;
     RECORD(OP_TEX_PARAMETER, target, p, 0, 1, &f);
     ensure_init();
-    if (target != GL_TEXTURE_2D || G.active_unit < 0 || G.active_unit >= 8 || !(t = texture_object(G.units[G.active_unit]))) return;
+    if ((target != GL_TEXTURE_2D && target != GL_TEXTURE_3D) || G.active_unit < 0 || G.active_unit >= 8 ||
+        !(t = texture_object(target == GL_TEXTURE_3D ? G.units3d[G.active_unit] : G.units[G.active_unit]))) return;
     switch (p) {
     case GL_TEXTURE_MIN_FILTER: t->min_filter = (GLenum)v; break;
     case GL_TEXTURE_MAG_FILTER: t->mag_filter = (GLenum)v; break;
@@ -4562,6 +4644,7 @@ static int get_values(GLenum p, float *f)
     ensure_init();
     switch (p) {
     case GL_MAX_TEXTURE_SIZE: f[0] = 4096; return 1;   /* taken, and scaled to the PSP's 512 at most on the way */
+    case 0x8073 /* GL_MAX_3D_TEXTURE_SIZE */: f[0] = 256; return 1;   /* kept as a 2D atlas (glTexImage3D) */
     case GL_MAX_LIGHTS: f[0] = MAX_LIGHTS; return 1;
     case GL_MAX_CLIP_PLANES: f[0] = 6; return 1;
     case GL_MAX_MODELVIEW_STACK_DEPTH: f[0] = MV_DEPTH; return 1;

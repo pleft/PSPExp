@@ -436,6 +436,15 @@ jumps, d-pad up / down change weapon, left crouches, start is the menu, select
 the scores. Played on the PSP-1000 from the Pi 400 (2026-10-01): menus and
 movement fine once the layer kept SDL's relative mouse mode.
 
+Four more from Debian (recipes, 2026-10-01; seen drawing right in PPSSPP and,
+Teeworlds, on the PSP; not yet played): X-Moto (`xmoto`: the d-pad drives,
+circle turns round, cross selects), Blobby Volley 2 (`blobby`: menus by the
+nub as a pointer with circle clicking, the d-pad moves the left blob, cross
+jumps), Trigger Rally (`trigger-rally`: menus by the nub, R clicks; the d-pad
+or cross / square drive, circle the handbrake) and Teeworlds (`teeworlds`:
+online servers or a LAN, it has no bots; the nub aims, R fires, L hooks, the
+d-pad runs, cross jumps, square / triangle change weapon).
+
 On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit
 38-50 fps in the level (7-23 in the plasma menu; each frame a full 480x272
