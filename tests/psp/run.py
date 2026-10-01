@@ -148,8 +148,13 @@ class Run:
         self.expect(name in cats, "no %s section (sections: %s)" % (name, ", ".join(cats)))
         ok, _ = self.t.ctl("category " + name)   # straight there (older consoles: by the buttons below)
         if ok:
-            self.ctl("idle 2500")
-            return self.state()
+            # (the Omega can take longer than an idle to show it: its covers loading)
+            for _ in range(6):
+                self.ctl("idle 2500")
+                s = self.state()
+                if s["launcher.category"] == name:
+                    return s
+            raise Fail("asked for %s, still in %s" % (name, s["launcher.category"]))
         for _ in range(len(cats) + 2):
             s = self.state()
             cur = s["launcher.category"]

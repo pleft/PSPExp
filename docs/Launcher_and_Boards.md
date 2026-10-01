@@ -317,6 +317,20 @@ Pinball at 7 are limited by the board's CPU (rates and causes: the
 architecture document, section 12a, "On the GameShell"). With the PSP on its
 one USB port the GameShell is reached over Wi-Fi.
 
+2026-10-01: the Omega2+ brought up to date (console, tools and its eight
+packages rebuilt from the current sources: `scripts/omega/build.sh` and its
+game targets, then `pspexp-pkg-build build`, `publish`, `install`). The
+real-PSP suite on it (`tests/psp/run.py --host omega --term
+/mnt/mmcblk0p1/pspexp/pspexp-term`) passed 35 of 36, the miss a section
+switch slower than the suite waited (below; the launcher suite then passed
+on its own). The games' first
+seconds: Cave Story 50 fps, Freedoom 34-35, Jazz Jackrabbit 9 (9-21),
+OpenTyrian 6 (2-35, its menus' plasma), and the first ROM of each system
+59-60 (Game Boy, Game Boy Color, NES, Mega Drive), SNES 50; title screens
+and openings, not play (in play on 2026-09-30: Mega Drive 43, SNES 33). The
+suite now waits for a section switch to show (up to 15 s): on the Omega it
+can take longer than the 2.5 s it allowed.
+
 ### 3.5 Screenshots from any board
 
 `build/host/pspexp-sdl-server` is the SDL executor behind TCP port 3838, a
