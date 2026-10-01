@@ -35,6 +35,7 @@ enum PspExpOpcode {
     PSPEXP_OP_3D_DRAW_MESH      = 0x0115,  /* PspExp3DDrawMesh [+ 16-bit indices] */
     PSPEXP_OP_3D_TARGET         = 0x0116,  /* PspExp3DTarget: draw into a render target, or the screen */
     PSPEXP_OP_3D_MORPH          = 0x0117,  /* PspExp3DMorph: morph weights (PSPEXP_FEATURE_3D_MORPH) */
+    PSPEXP_OP_3D_COPY           = 0x0118,  /* PspExp3DCopy: drawn pixels into a render target (PSPEXP_FEATURE_3D_COPY) */
 
     /* RESOURCE (0x02xx) */
     PSPEXP_OP_RESOURCE_UPLOAD_TEXTURE = 0x0201,  /* host -> PSP, PspExpTextureUpload + data + frames */

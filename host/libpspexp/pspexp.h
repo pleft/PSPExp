@@ -184,6 +184,9 @@ int pspexp_3d_indexed_supported(const PspExpContext *ctx);
 int pspexp_3d_morph_supported(const PspExpContext *ctx);
 /* PSPEXP_FEATURE_3D_SPRITES: 3D draws of PSPEXP_3D_PRIM_SPRITES */
 int pspexp_3d_sprites_supported(const PspExpContext *ctx);
+/* PSPEXP_FEATURE_3D_COPY: a rectangle of the buffer being drawn into render target `target` (flip: rows turned) */
+int pspexp_3d_copy_supported(const PspExpContext *ctx);
+void pspexp_3d_copy(PspExpContext *ctx, uint16_t target, int sx, int sy, int w, int h, int dx, int dy, int flip);
 void pspexp_3d_morph(PspExpContext *ctx, const float weight[8]);
 void *pspexp_3d_draw_indexed(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count, uint32_t index_count,
                              uint16_t **indices);

@@ -207,6 +207,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_3D_MORPH   0x00000100u  /* 3D_MORPH and vertices with 8-bit normals and morph
                                                   targets (PSPEXP_3D_VT_NORMAL8, _MORPH) */
 #define PSPEXP_FEATURE_3D_SPRITES 0x00000200u  /* 3D draws of GU_SPRITES (PSPEXP_3D_PRIM_SPRITES) */
+#define PSPEXP_FEATURE_3D_COPY    0x00000400u  /* 3D_COPY: part of the buffer being drawn into a render target */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
@@ -520,6 +521,20 @@ typedef struct PspExp3DClear {
     uint8_t  reserved[6];
 } PspExp3DClear;
 PSPEXP_STATIC_ASSERT(sizeof(PspExp3DClear) == 16, clear3d_size);
+
+/* 3D_COPY (PSPEXP_FEATURE_3D_COPY): a rectangle of the buffer being drawn (the screen, or the render
+ * target drawn into), in its pixels, copied into a render target at (dx, dy) by the GE, in order with the
+ * draws (glCopyTexSubImage2D: Quakespasm's warped water). Both 5650; FLIP turns the rows upside down
+ * (the screen's rows run down, GL's up). Clipped to both. */
+#define PSPEXP_3D_COPY_FLIP 0x1u
+typedef struct PspExp3DCopy {
+    uint16_t target;            /* a render target (RESOURCE_CREATE_TARGET) */
+    uint16_t flags;
+    int16_t  sx, sy;
+    uint16_t w, h;
+    int16_t  dx, dy;
+} PspExp3DCopy;
+PSPEXP_STATIC_ASSERT(sizeof(PspExp3DCopy) == 16, copy3d_size);
 
 /* 3D_MORPH (PSPEXP_FEATURE_3D_MORPH): the weights of the morph targets of the draws that follow
  * (sceGuMorphWeight), each target's position, normal, colour and coordinates times its weight. */

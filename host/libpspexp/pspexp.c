@@ -1145,6 +1145,20 @@ void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_CLEAR, 0, &c, sizeof(c));
 }
 
+int pspexp_3d_copy_supported(const PspExpContext *ctx)
+{
+    return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D_COPY) != 0;
+}
+
+void pspexp_3d_copy(PspExpContext *ctx, uint16_t target, int sx, int sy, int w, int h, int dx, int dy, int flip)
+{
+    PspExp3DCopy c;
+    memset(&c, 0, sizeof(c));
+    c.target = target; c.flags = flip ? PSPEXP_3D_COPY_FLIP : 0;
+    c.sx = (int16_t)sx; c.sy = (int16_t)sy; c.w = (uint16_t)w; c.h = (uint16_t)h; c.dx = (int16_t)dx; c.dy = (int16_t)dy;
+    pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_COPY, 0, &c, sizeof(c));
+}
+
 int pspexp_3d_sprites_supported(const PspExpContext *ctx)
 {
     return pspexp_3d_supported(ctx) && (ctx->hello.features & PSPEXP_FEATURE_3D_SPRITES) != 0;

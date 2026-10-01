@@ -330,6 +330,7 @@ static struct {
     /* texture coordinates for the draw being prepared */
     int tc;                     /* TC_* */
     float ge_texmat[16];        /* with TC_GE */
+    int tc_pos;                 /* ...the coordinates the positions themselves (the same array: Neverball's shadow) */
     PspExp3DLights sent_lights; int lights_sent;
     int lights_dirty;
     int lights_const;   /* the lights sent carry a draw's constant colour */
@@ -633,6 +634,8 @@ static int texcoord_mode(float *ge)
     int gen = G.texgen[0] || G.texgen[1], c, i, j;
     float g[16], t[16];
     mat_identity(ge);
+    G.tc_pos = !gen && G.ta.enabled && G.va.enabled && G.ta.buffer == G.va.buffer && G.ta.ptr == G.va.ptr &&
+               G.ta.stride == G.va.stride && G.ta.type == G.va.type && G.ta.size >= 3 && G.va.size >= 3 && !texture_matrix_identity();
     if (!gen && texture_matrix_identity()) return TC_PLAIN;
     /* a sphere map as the GE's environment map: (1 + n.x) / 2, (1 + n.y) / 2
      * of the eye-space normal, GL's own for a view straight ahead; its two
@@ -641,6 +644,10 @@ static int texcoord_mode(float *ge)
         texture_matrix_identity() && (!G.lighting || lights_enabled() <= PSPEXP_3D_LIGHTS - 2))
         return TC_ENV;
     if (gen && !(G.texgen[0] && G.texgen[1] && G.texgen_mode[0] != GL_SPHERE_MAP && G.texgen_mode[1] != GL_SPHERE_MAP)) return TC_HOST;
+    if (!gen && !G.tc_pos) {   /* a matrix that reads a third coordinate (r) the vertices have: here (the GE's are two) */
+        const float *tm = G.texm[G.tex_top];
+        if ((tm[8] != 0.0f || tm[9] != 0.0f || tm[11] != 0.0f) && (G.ta.enabled ? G.ta.size > 2 : G.texcoord[2] != 0.0f)) return TC_HOST;
+    }
     mat_identity(g);
     if (gen) {
         const float *mv = G.mv[G.mv_top];
@@ -660,7 +667,7 @@ static int texcoord_mode(float *ge)
     for (j = 0; j < 4; j++) {   /* the GE's rows: s, t and q (GL's fourth) */
         ge[j * 4 + 0] = t[j * 4 + 0]; ge[j * 4 + 1] = t[j * 4 + 1]; ge[j * 4 + 2] = t[j * 4 + 3]; ge[j * 4 + 3] = 0.0f;
     }
-    if (!gen) ge[8] = ge[9] = ge[10] = 0.0f;   /* a vertex's (u, v): no third coordinate, whatever the GE puts there */
+    if (!gen && !G.tc_pos) ge[8] = ge[9] = ge[10] = 0.0f;   /* a vertex's (u, v): no third coordinate, whatever the GE puts there */
     return TC_GE;
 }
 
@@ -722,7 +729,7 @@ static void build_state(PspExp3DState *s, GlTex *tex)
     s->tex_source = GU_UV;
     if (tex && G.tc == TC_GE) {
         s->tex_map = GU_TEXTURE_MATRIX;
-        s->tex_source = G.texgen[0] ? GU_POSITION : GU_UV;
+        s->tex_source = G.texgen[0] || G.tc_pos ? GU_POSITION : GU_UV;   /* (tc_pos: an array that is the positions) */
     } else if (tex && G.tc == TC_ENV) {   /* (u from the second light given: see PspExp3DState) */
         s->tex_map = GU_ENVIRONMENT_MAP;
         s->tex_env_lights = (PSPEXP_3D_LIGHTS - 1) | (PSPEXP_3D_LIGHTS - 2) << 4;
@@ -1113,17 +1120,17 @@ static PspExpContext *prepare(GlTex **texp) { return prepare_colour(texp, NULL);
  * (unit 1's in its pass) */
 /* Unit 0 combined as the colour times (1 - its alpha): a shadow (Neverball's, with two units). The GE
  * cannot take a texture's alpha so: left out, the surface as it would be unshadowed. */
+static int shadow_pass;   /* drawing unit 0's shadow (shadow_begin): its texture, as it is */
+
 static int unit0_shadow(void)
 {
-    if (G.tex_env_mode != GL_COMBINE || G.tex0_combine != GL_MODULATE || G.tex0_op1 != GL_ONE_MINUS_SRC_ALPHA) return 0;
-    unsupported("a texture combined as one minus its alpha (a shadow): left out");
-    return 1;
+    return G.tex_env_mode == GL_COMBINE && G.tex0_combine == GL_MODULATE && G.tex0_op1 == GL_ONE_MINUS_SRC_ALPHA;
 }
 
 static GlTex *bound_texture(void)
 {
     if (!G.mt_pass && G.texture_3d && G.units3d[0]) { GlTex *t = find_texture(G.units3d[0]); if (t && t->d3) return t; }
-    if (!G.mt_pass && G.texture_2d && unit0_shadow()) return NULL;
+    if (!G.mt_pass && G.texture_2d && unit0_shadow() && !shadow_pass) return NULL;
     return G.texture_2d ? find_texture(G.units[G.mt_pass]) : NULL;
 }
 
@@ -1173,7 +1180,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
         if (!tex->handle) tex = NULL;
     } else tex = NULL;
     G.tc = tex && !G.sh_active ? texcoord_mode(G.ge_texmat) : TC_PLAIN;
-    if (G.tc != TC_GE) mat_identity(G.ge_texmat);
+    if (G.tc != TC_GE) { mat_identity(G.ge_texmat); G.tc_pos = 0; }
     if (tex && getenv("PSPEXP_GL_HIDE_TEX") && (unsigned)atoi(getenv("PSPEXP_GL_HIDE_TEX")) == tex->name) return NULL;   /* (draws with one texture left out) */
     build_state(&st, tex);
     {   /* PSPEXP_GL_DEBUG=ids: each draw a flat colour of its texture's (lit, no lights, the colour emissive):
@@ -1565,7 +1572,56 @@ static void mt_end(const MtSave *s)
     G.blend_src = s->bs; G.blend_dst = s->bd; G.blend_eq = s->be; G.depth_func = s->df; G.tex_env_mode = s->tenv;
 }
 
+/* Unit 0 combined as the colour times one minus its alpha (Neverball's ball's shadow, on unit 0 with
+ * every surface's texture on unit 1): drawn as a pass of its own after the surface, the shadow texture
+ * as it is, blended as the framebuffer times one minus its alpha where the surface drew (depth equal) */
+typedef struct ShadowSave { int blend, mask, light, fog, tex1, mt; GLenum bs, bd, be, df, tenv; } ShadowSave;
+
+static int shadow_wanted(void)
+{
+    GlTex *t;
+    int on = !G.sh_active && !G.mt_pass && !shadow_pass && G.texture_2d && unit0_shadow() && G.units[0] &&
+           (t = find_texture(G.units[0])) && (t->rgba || t->rt) && getenv("PSPEXP_GL_SHADOW") != NULL;
+    /* (asked for only: on the PSP-1000 Neverball's shadow cost 30 to 28 fps, its every surface drawn twice,
+     * the texture matrix and lights sent again around each) */
+    return on;
+}
+
+static void shadow_begin(ShadowSave *s)
+{
+    s->blend = G.blend; s->mask = G.depth_mask; s->light = G.lighting; s->fog = G.fog; s->tex1 = G.tex1_on; s->mt = G.mt_pass;
+    s->bs = G.blend_src; s->bd = G.blend_dst; s->be = G.blend_eq; s->df = G.depth_func; s->tenv = G.tex_env_mode;
+    shadow_pass = 1;
+    G.tex1_on = 0; G.lighting = 0; G.fog = 0;
+    G.tex_env_mode = GL_REPLACE;
+    G.blend = 1; G.blend_src = GL_ZERO; G.blend_dst = GL_ONE_MINUS_SRC_ALPHA; G.blend_eq = GL_FUNC_ADD;
+    if (G.depth_test && s->mask) G.depth_func = GL_EQUAL;
+    G.depth_mask = 0;
+}
+
+static void shadow_end(const ShadowSave *s)
+{
+    shadow_pass = 0;
+    G.blend = s->blend; G.depth_mask = s->mask; G.lighting = s->light; G.fog = s->fog; G.tex1_on = s->tex1;
+    G.blend_src = s->bs; G.blend_dst = s->bd; G.blend_eq = s->be; G.depth_func = s->df; G.tex_env_mode = s->tenv;
+}
+
+static void draw_vertices_ix1(GLenum mode, Vtx *v, int n, const int *ix, int nix);
+
 static void draw_vertices_ix(GLenum mode, Vtx *v, int n, const int *ix, int nix)
+{
+    Vtx *sh = NULL;
+    ShadowSave ss;
+    if (shadow_wanted() && (sh = (Vtx *)malloc((size_t)n * sizeof(Vtx)))) memcpy(sh, v, (size_t)n * sizeof(Vtx));
+    draw_vertices_ix1(mode, v, n, ix, nix);
+    if (!sh) return;
+    shadow_begin(&ss);
+    draw_vertices_ix0(mode, sh, n, ix, nix);
+    shadow_end(&ss);
+    free(sh);
+}
+
+static void draw_vertices_ix1(GLenum mode, Vtx *v, int n, const int *ix, int nix)
 {
     Vtx *copy = NULL;
     int i;
@@ -1663,7 +1719,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
                 mode, n, G.units[0], tex ? "on" : G.texture_2d ? "missing" : "off", tex ? tex->w : 0, tex ? tex->h : 0,
                 v[0].c, G.blend, G.blend_src, G.blend_dst, G.depth_test, G.cull, G.lighting, G.alpha_test, G.fog,
                 G.tex_env_mode, v[0].t[0], v[0].t[1], v[n > 2 ? 2 : 0].t[0], v[n > 2 ? 2 : 0].t[1], v[0].p[0], v[0].p[1], v[0].p[2]);
-    if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV && !G.sh_env) vt |= PSPEXP_3D_VT_TEXTURE;
+    if (tex && !(G.tc == TC_GE && (G.texgen[0] || G.tc_pos)) && G.tc != TC_ENV && !G.sh_env) vt |= PSPEXP_3D_VT_TEXTURE;
     if ((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (G.sh_lit) vt &= ~(uint32_t)PSPEXP_3D_VT_COLOR;   /* lit: the material's colour */
     if (G.pk_scale > 0 && !G.pk_float) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_POSITION) | PSPEXP_3D_VT_POSITION16;
@@ -1703,10 +1759,10 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
     if (tex && G.tc == TC_HOST && !texture_matrix_identity()) {
         const float *m = G.texm[G.tex_top];
         for (i = 0; i < n; i++) {
-            float s = v[i].t[0], t = v[i].t[1];
-            float q = m[3] * s + m[7] * t + m[15];
-            v[i].t[0] = m[0] * s + m[4] * t + m[12];
-            v[i].t[1] = m[1] * s + m[5] * t + m[13];
+            float s = v[i].t[0], t = v[i].t[1], r = v[i].r;   /* (r: a third coordinate, 0 when there is none) */
+            float q = m[3] * s + m[7] * t + m[11] * r + m[15];
+            v[i].t[0] = m[0] * s + m[4] * t + m[8] * r + m[12];
+            v[i].t[1] = m[1] * s + m[5] * t + m[9] * r + m[13];
             if (q != 0.0f && q != 1.0f) { v[i].t[0] /= q; v[i].t[1] /= q; }
         }
     }
@@ -3599,7 +3655,7 @@ static int draw_mesh1(GLenum mode, const int *idx, int first, int count, GLuint 
         memcpy(c, G.color, sizeof(c));
         if (!(ctx = prepare_colour(&tex, G.ca.enabled ? NULL : c))) return 1;
     }
-    if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV) vt |= PSPEXP_3D_VT_TEXTURE;
+    if (tex && !(G.tc == TC_GE && (G.texgen[0] || G.tc_pos)) && G.tc != TC_ENV) vt |= PSPEXP_3D_VT_TEXTURE;
     if (G.ca.enabled) vt |= PSPEXP_3D_VT_COLOR;
     if (G.lighting || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (!(m = vertex_mesh(ctx, vt, hi + 1))) NOT_MESH("no vertex mesh");
@@ -3610,7 +3666,26 @@ static int draw_mesh1(GLenum mode, const int *idx, int first, int count, GLuint 
  * unit 0's place (a mesh is keyed on the arrays it read, so it is another), under the pass's state.
  * Streamed, a game that keeps unit 1 on for everything sent its whole level each frame (Neverball:
  * 110 to 790 KB), which is why one unit was reported by default before. */
+static int draw_mesh2(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
+
 static int draw_mesh(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
+{
+    ShadowSave ss;
+    int want = shadow_wanted(), ok;
+    if (!draw_mesh2(mode, idx, first, count, ibo, ioffset, itype)) return 0;
+    if (!want) return 1;
+    shadow_begin(&ss);
+    ok = draw_mesh1(mode, idx, first, count, ibo, ioffset, itype);
+    if (!ok) {   /* no mesh for it: this pass streamed */
+        Vtx *v = gather(count);
+        int i;
+        if (v) { for (i = 0; i < count; i++) fetch(idx ? idx[i] : first + i, &v[i]); draw_vertices_ix0(mode, v, count, NULL, 0); }
+    }
+    shadow_end(&ss);
+    return 1;
+}
+
+static int draw_mesh2(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
     Array ta;
     float tc[2];
@@ -5060,10 +5135,53 @@ GLAPI(void, glTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsi
     t->dirty = 1;
 }
 
+/* Pixels drawn copied into the bound texture: the texture made a render target (5650, as the screen),
+ * the copy done by the GE in order with the draws (3D_COPY), rows turned (GL's run up). From the screen
+ * at the PSP's scale only (a block transfer does not scale): Quakespasm's warped water draws each
+ * liquid's image in a corner of the screen and copies it. */
+static void copy_to_texture(GLint xo, GLint yo, GLint x, GLint y, GLsizei w, GLsizei h)
+{
+    PspExpContext *ctx;
+    GlTex *t;
+    int ww, wh, ox, oy;
+    float sc;
+    ensure_init();
+    if (G.active_unit < 0 || G.active_unit >= 8 || !(t = find_texture(G.units[G.active_unit])) || w <= 0 || h <= 0) return;
+    if (!(ctx = shim_gl_frame()) || !pspexp_3d_copy_supported(ctx) || getenv("PSPEXP_GL_NOCOPY")) { unsupported("glCopyTexSubImage2D"); return; }
+    shim_gl_geometry(&ww, &wh, &sc, &ox, &oy);
+    if ((G.fbo && !fbo_is_screen(G.fbo)) || fabsf(sc - 1.0f) > 1e-3f || t->w != pow2_at_least(t->w, PSPEXP_TEXTURE_MAX) ||
+        t->h != pow2_at_least(t->h, PSPEXP_TEXTURE_MAX)) {
+        unsupported("glCopyTexSubImage2D other than from the screen at the PSP's scale into a texture of a power of two");
+        return;
+    }
+    if (!t->rt || t->rt_fmt != PSPEXP_TEX_5650) {   /* a render target of its own, its size, 16-bit as the screen */
+        if (t->handle) mesh_release(t->handle, 0);
+        tex_bytes -= t->psp_bytes;
+        t->rt = 1; t->rt_w = t->w; t->rt_h = t->h; t->rt_fmt = PSPEXP_TEX_5650; t->rt_made = tex_frame;
+        t->psp_bytes = (uint32_t)t->rt_w * (uint32_t)t->rt_h * 2u;
+        texture_room(ctx, t, t->psp_bytes);
+        tex_bytes += t->psp_bytes;
+        t->handle = mesh_handle();
+        t->dirty = 0;
+        pspexp_create_target(ctx, t->handle, (uint16_t)t->rt_w, (uint16_t)t->rt_h, PSPEXP_TEX_5650);
+        if (G.log) gl_logf("texture %u (%dx%d): copied into from the screen, a render target", t->name, t->w, t->h);
+    }
+    t->used = tex_frame;   /* (drawn with, as far as letting it go is concerned) */
+    pspexp_3d_copy(ctx, t->handle, ox + x, oy + (wh - (y + h)), w, h, xo, yo, 1);
+}
+
 GLAPI(void, glCopyTexImage2D, (GLenum target, GLint level, GLenum internal, GLint x, GLint y, GLsizei w, GLsizei h, GLint border))
-{ (void)target; (void)level; (void)internal; (void)x; (void)y; (void)w; (void)h; (void)border; unsupported("glCopyTexImage2D"); }
+{
+    (void)border;
+    if (target != GL_TEXTURE_2D || level != 0) { unsupported("glCopyTexImage2D"); return; }
+    GLFN(glTexImage2D)(target, 0, (GLint)internal, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    copy_to_texture(0, 0, x, y, w, h);
+}
 GLAPI(void, glCopyTexSubImage2D, (GLenum target, GLint level, GLint xo, GLint yo, GLint x, GLint y, GLsizei w, GLsizei h))
-{ (void)target; (void)level; (void)xo; (void)yo; (void)x; (void)y; (void)w; (void)h; unsupported("glCopyTexSubImage2D"); }
+{
+    if (target != GL_TEXTURE_2D || level != 0) { unsupported("glCopyTexSubImage2D"); return; }
+    copy_to_texture(xo, yo, x, y, w, h);
+}
 GLAPI(void, glCompressedTexImage2D, (GLenum target, GLint level, GLenum internal, GLsizei w, GLsizei h, GLint border, GLsizei size, const GLvoid *data))
 { (void)target; (void)level; (void)internal; (void)w; (void)h; (void)border; (void)size; (void)data; unsupported("compressed textures"); }
 GLAPI(void, glCompressedTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsizei w, GLsizei h, GLenum format, GLsizei size, const GLvoid *data))

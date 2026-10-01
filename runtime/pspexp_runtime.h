@@ -67,6 +67,7 @@ typedef struct PspExpRuntimeOps {
                            uint32_t vertex_type, uint32_t count, const void *vertices, uint32_t index_count, const uint16_t *indices);
     void (*clear3d)(void *user, const PspExp3DClear *c);
     void (*morph3d)(void *user, const PspExp3DMorph *m);   /* optional: PSPEXP_FEATURE_3D_MORPH */
+    void (*copy3d)(void *user, PspExpCacheEntry *target, const PspExp3DCopy *c);   /* optional: PSPEXP_FEATURE_3D_COPY */
     /* A mesh draw: `vertices` is a vertex mesh's data (kept until released);
      * `indices` NULL, an index mesh's data, or (indices_inline) data only
      * valid during the call. The runtime has checked every index. */

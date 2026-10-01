@@ -145,7 +145,8 @@ static void send_hello(PspExpRuntime *rt)
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
                  (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
-                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D_SPRITES : 0);
+                 (rt->ops.draw3d ? PSPEXP_FEATURE_3D_SPRITES : 0) |
+                 (rt->ops.draw3d && rt->ops.copy3d ? PSPEXP_FEATURE_3D_COPY : 0);
     h.audio_rate_min = 8000;
     h.audio_rate_max = 48000;
     h.usb_chunk = rt->cfg.usb_chunk;
@@ -429,6 +430,17 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
     case PSPEXP_OP_3D_DRAW_MESH:
         handle_draw_mesh(rt, m);
         return;
+    case PSPEXP_OP_3D_COPY: {
+        const PspExp3DCopy *c;
+        PspExpCacheEntry *e;
+        if (!rt->ops.copy3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        c = (const PspExp3DCopy *)m->payload;
+        e = pspexp_cache_find(&rt->cache, c->target);
+        if (!e || !e->target) { send_resource_error(rt, PSPEXP_OP_RESOURCE_MISS, c->target, e ? PSPEXP_RERR_WRONG_KIND : PSPEXP_RERR_UNKNOWN_ID, rt->frame_seq); return; }
+        rt->ops.copy3d(rt->ops.user, e, c);
+        return;
+    }
     case PSPEXP_OP_3D_MORPH:
         if (!rt->ops.morph3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         if (pspexp_message_expect(m, sizeof(PspExp3DMorph)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
@@ -1010,7 +1022,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         handle_target_create(rt, m);
         break;
     case PSPEXP_OP_3D_STATE: case PSPEXP_OP_3D_MATRICES: case PSPEXP_OP_3D_LIGHTS:
-    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH: case PSPEXP_OP_3D_TARGET: case PSPEXP_OP_3D_MORPH:
+    case PSPEXP_OP_3D_DRAW: case PSPEXP_OP_3D_CLEAR: case PSPEXP_OP_3D_DRAW_MESH: case PSPEXP_OP_3D_TARGET: case PSPEXP_OP_3D_MORPH: case PSPEXP_OP_3D_COPY:
         if (!rt->ops.draw3d) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         if (!rt->in_frame) { send_error(rt, PSPEXP_ERR_NOT_IN_FRAME, m, 0); return; }
         handle_3d(rt, m);

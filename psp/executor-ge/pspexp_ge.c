@@ -290,6 +290,40 @@ static void op_lights3d(void *u, const PspExp3DLights *l)
     }
 }
 
+static uint32_t draw_offset(PspExpGeExecutor *ge);
+
+/* Drawn pixels into a render target: the GE's block transfer, in order with the draws */
+static void op_copy3d(void *u, PspExpCacheEntry *e, const PspExp3DCopy *c)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    GeTexture *t = (GeTexture *)e->user;
+    unsigned char *vram = (unsigned char *)sceGeEdramGetAddr(), *src, *dst;
+    int sw, sh, sstride, sx = c->sx, sy = c->sy, w = c->w, h = c->h, dx = c->dx, dy = c->dy, r;
+    if (!ge->in_frame || !t || t->tier != PSPEXP_TIER_VRAM || e->format != PSPEXP_TEX_5650) return;
+    if (ge->target) {
+        GeTexture *st = (GeTexture *)ge->target->user;
+        if (!st || ge->target->format != PSPEXP_TEX_5650 || ge->target == e) return;
+        src = vram + ge->tex_base + st->vram_off; sw = ge->target->width; sh = ge->target->height; sstride = sw;
+    } else {
+        src = vram + draw_offset(ge); sw = PSPEXP_DISPLAY_WIDTH; sh = PSPEXP_DISPLAY_HEIGHT; sstride = PSPEXP_DISPLAY_STRIDE;
+    }
+    dst = vram + ge->tex_base + t->vram_off;
+    if (sx < 0) { w += sx; dx -= sx; sx = 0; }
+    if (sy < 0) { h += sy; if (!(c->flags & PSPEXP_3D_COPY_FLIP)) dy -= sy; sy = 0; }
+    if (dx < 0) { w += dx; sx -= dx; dx = 0; }
+    if (dy < 0) { h += dy; if (!(c->flags & PSPEXP_3D_COPY_FLIP)) sy -= dy; dy = 0; }
+    if (sx + w > sw) w = sw - sx;
+    if (sy + h > sh) h = sh - sy;
+    if (dx + w > e->width) w = e->width - dx;
+    if (dy + h > e->height) h = e->height - dy;
+    if (w <= 0 || h <= 0) return;
+    if (c->flags & PSPEXP_3D_COPY_FLIP)
+        for (r = 0; r < h; r++) sceGuCopyImage(GU_PSM_5650, sx, sy + h - 1 - r, w, 1, sstride, src, dx, dy + r, e->width, dst);
+    else sceGuCopyImage(GU_PSM_5650, sx, sy, w, h, sstride, src, dx, dy, e->width, dst);
+    sceGuTexFlush();
+    ge->cur_atlas = NULL;
+}
+
 static void op_morph3d(void *u, const PspExp3DMorph *m)
 {
     int i;
@@ -639,6 +673,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->draw3d = op_draw3d;
     ops->clear3d = op_clear3d;
     ops->morph3d = op_morph3d;
+    ops->copy3d = op_copy3d;
     ops->draw3d_mesh = op_draw3d_mesh;
     ops->target3d = op_target3d;
 }

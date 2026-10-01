@@ -98,9 +98,10 @@ PSP transforms, lights, clips and draws. Needs a runtime with 3D (from
 
 Not there: texture units past the second (`GL_ARB_multitexture` is
 advertised with two: what goes in the others is left out), a unit
-combined as one minus its texture's alpha (Neverball's shadow: left out), stencil,
-reading pixels back (`glReadPixels` gives black), copying from the
-framebuffer, clip planes, polygon modes other than fill, line width,
+combined as one minus its texture's alpha (Neverball's shadow: left out unless
+`PSPEXP_GL_SHADOW`), stencil, reading pixels back (`glReadPixels` gives black),
+copying from the framebuffer other than from the screen at the PSP's scale into a
+texture (`glCopyTexSubImage2D`, done by the GE, `PSPEXP_FEATURE_3D_COPY`), clip planes, polygon modes other than fill, line width,
 `glBitmap`/`glDrawPixels`. Each is logged once when a program uses it.
 
 Measured 2026-09-30 on the PSP-1000 over USB from the Pi 400:
@@ -180,6 +181,8 @@ function; the tests check it is current).
 | `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
 | `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 2). Fixed-function texture unit 1 is drawn as a second pass blended as its environment says (modulate, `GL_COMBINE` modulate x2, add, decal, replace), from buffer objects as a mesh like the first; with unit 0 off, as the draw's only texture; its coordinate generation and texture matrix are its own. `1`: what a game does with one unit. Quakespasm takes its shader path only with 3 |
 | `PSPEXP_GL_NOMESH1=1` | OpenGL: texture unit 1's pass streamed, not a mesh (to compare) |
+| `PSPEXP_GL_SHADOW=1` | OpenGL: a texture unit 0 combined as the colour times one minus its alpha (Neverball's ball's shadow, with two units) drawn as a pass of its own after each surface, blended as the framebuffer times one minus the shadow's alpha; off by default: Neverball 30 to 28 fps on the PSP-1000 |
+| `PSPEXP_GL_NOCOPY=1` | OpenGL: `glCopyTexSubImage2D` left out as before (to compare) |
 | `PSPEXP_GL_NOSPRITES=1` | OpenGL: quads facing the camera drawn as triangles, not the GE's sprites (to compare) |
 | `PSPEXP_GL_NOMORPH=1` | OpenGL: Quake engines' models streamed as before, not morphed on the GE (to compare) |
 | `PSPEXP_GL_MORPH_CHECK=1` | OpenGL: Quake's models: the GE's colour and position against the shader's, vertex by vertex, logged every 20,000 vertices |
