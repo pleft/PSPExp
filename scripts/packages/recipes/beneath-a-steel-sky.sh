@@ -6,7 +6,7 @@
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
-scummvm_game "$D" beneath-a-steel-sky sky . b/beneath-a-steel-sky/beneath-a-steel-sky_0.0372-9_all.deb
+scummvm_game "$D" beneath-a-steel-sky sky . b/beneath-a-steel-sky/beneath-a-steel-sky_0.0372-9_all.deb@492550d0358469583050cfcc3c9bb8f319f3cfc43d79db5ca4a2cf07fbe17020
 cat > "$D/package" <<P
 version=0.0372-9
 title=Beneath a Steel Sky

@@ -8,7 +8,8 @@ Paths are relative to the PSPExp tree; the WarCraft project is `../WarCraft`.
 |---|---|
 | build everything (host + PSP) and run the tests | `scripts/build.sh` |
 | PSP install, once (PSP in USB mode) | `scripts/packages/runtime-slot --install <stick>/PSP/GAME/PSPExp` (EBOOT.PBP, slot-a/, active) |
-| PSP install without slots (older way) | `dist/PSPExp/` → `ms0:/PSP/GAME/PSPExp/` (EBOOT.PBP, pspexp_usb.prx, pspexp_runtime.prx) |
+| PSP install without slots (older way) | `dist/PSPExp/` → `ms0:/PSP/GAME/PSPExp/` (EBOOT.PBP, pspexp_usb.prx, pspexp_runtime.prx), into an empty folder: with any slot file there the loader ignores these |
+| PSP recovery, a broken install (PSP in USB mode) | `scripts/packages/runtime-slot --install <stick>/PSP/GAME/PSPExp` (removes the old slots and pending update first); without the repository: delete the folder, then copy `dist/PSPExp/` |
 | a runtime set with its VERSION / the `pspexp-runtime` package | `scripts/packages/runtime-slot OUTDIR` / `scripts/packages/debs/pspexp-runtime/build OUTDIR` |
 | rebuild Stratagus with the backend | `cd ../WarCraft && cmake --build build/host-stratagus -j8 --target stratagus` |
 | regenerate the Stratagus patch after editing the `pspexp` branch | `scripts/dev/export-stratagus-patch.sh` |

@@ -157,7 +157,9 @@ SIMUTRANS_KEYS="up=up,down=down,left=left,right=right,l=pgdn,r=pgup,triangle=esc
 # Omega's card is FAT; only SUBDIR, the language played), ScummVM's engine
 # data file beside it. Sets
 # SCUMMVM_EXEC (the entry's exec: the game in DIR/data/SUBDIR). DEB is a path
-# in Debian's pool, e.g. b/beneath-a-steel-sky/beneath-a-steel-sky_0.0372-9_all.deb
+# in Debian's pool and its SHA-256 (as Debian's package index gives it: these
+# files do not pass through apt, so the pin is the only check), e.g.
+# b/beneath-a-steel-sky/beneath-a-steel-sky_0.0372-9_all.deb@492550d0...
 scummvm_game() {
 	_d=$1 _id=$2 _eng=$3 _sub=$4; shift 4
 	case "${BOARD:-omega}" in
@@ -168,7 +170,8 @@ scummvm_game() {
 	_w="$_d/.unpack"
 	rm -rf "$_w"; mkdir -p "$_w/root" "$_d/data"
 	for _deb in "$@"; do
-		_f=$(fetch "https://deb.debian.org/debian/pool/main/$_deb") || exit 1
+		_f=$(fetch "https://deb.debian.org/debian/pool/main/${_deb%@*}") || exit 1
+		check_sha256 "$_f" "${_deb#*@}"
 		(cd "$_w" && rm -f data.tar.* && ar -x "$_f" && tar -xf data.tar.* -C root)
 	done
 	# only the folder played (Drascula and Lure have one per language, Debian

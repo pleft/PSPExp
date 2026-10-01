@@ -4,7 +4,9 @@
 # docs/Package_Manager.md §5.2; it takes recipe ids, never package names.
 #
 #   pspexp-pkg-apt update        the catalogue (signature and serial checked, §5.1), then apt's lists
-#   pspexp-pkg-apt install ID    the recipe's meta-package pspexp-recipe-ID, built here from the
+#   pspexp-pkg-apt prepare ID V  the recipe's meta-package at version V, written before apt begins
+#   pspexp-pkg-apt resume ID V   install from it (exit 3 when there is none: apt had not begun)
+#   pspexp-pkg-apt install ID    both; the recipe's meta-package pspexp-recipe-ID, built here from the
 #                                trusted recipe, installed (or upgraded) with apt; dependencies an
 #                                older version had and nothing needs any more are removed (§5.4, §5.6)
 #   pspexp-pkg-apt remove ID     the meta-package, then only its own dependencies apt reports unneeded
@@ -70,6 +72,70 @@ lists() {
 	apt-get -q -o DPkg::Lock::Timeout=120 update >/dev/null 2>&1 || die "apt could not read its lists (no network?)"
 }
 
+# prepare_meta ID VERSION: the recipe's meta-package, pspexp-recipe-ID, built
+# from the catalogue's recipe (refused unless it is at VERSION, the one the
+# operation staged) and written whole (a rename) into $META before apt
+# begins: the operation's own record of what it installs. resume_meta reads
+# it, so finishing an operation cut short never depends on the catalogue,
+# which may have changed meanwhile (docs/Package_Manager.md §5.3)
+prepare_meta() {
+	id="$1"; R=$(recipe "$id")
+	pk=$(rget "$R" debian apt); [ -n "$pk" ] || die "$id has nothing for this board"
+	v=$(rget "$R" package version); case "$v" in ""|*[!0-9]*) die "$id: bad version" ;; esac
+	[ "$v" = "$2" ] || die "$id: the catalogue has version $v, not $2"
+	mkdir -p "$META"; w=$(mktemp -d); trap 'rm -rf "$w"' EXIT
+	mkdir -p "$w/p/DEBIAN" "$w/p/usr/share/doc/pspexp-recipe-$id"
+	echo "The PSPExp recipe $id (docs/Package_Manager.md §5.4): it holds the recipe's packages." > "$w/p/usr/share/doc/pspexp-recipe-$id/README"
+	cat > "$w/p/DEBIAN/control" <<C
+Package: pspexp-recipe-$id
+Version: $v
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: metapackages
+Priority: optional
+Depends: $(echo $pk | sed 's/ /, /g')
+Description: PSPExp recipe $id
+ Installed by PSPExp's Packages: it depends on what the recipe $id needs,
+ so apt keeps those while the recipe is installed.
+C
+	dpkg-deb --root-owner-group -b "$w/p" "$w/m.deb" >/dev/null && mv "$w/m.deb" "$META/pspexp-recipe-${id}_${v}_all.deb"
+	echo "prepared pspexp-recipe-$id $v"
+}
+
+# resume_meta ID VERSION: install what the prepared meta-package names (exit 3
+# when there is none: nothing was prepared, so apt had not begun)
+resume_meta() {
+	id="$1"; v="$2"
+	case "$id" in ""|*[!a-z0-9-]*) die "'$id' is not a recipe id" ;; esac
+	case "$v" in ""|*[!0-9]*) die "bad version" ;; esac
+	deb="$META/pspexp-recipe-${id}_${v}_all.deb"
+	pk=$(dpkg-deb -f "$deb" Depends 2>/dev/null | tr -d ',') || pk=""
+	[ -n "$pk" ] || { echo "pspexp-pkg-apt: no meta-package for $id $v: apt had not begun" >&2; exit 3; }
+	# an older version's dependencies, pruned after (§5.6); when an earlier try
+	# already installed this version, none
+	olddeps=""
+	[ "$(dpkg-query -W -f='${Version}' "pspexp-recipe-$id" 2>/dev/null)" != "$v" ] && installed "pspexp-recipe-$id" && olddeps=$(deps_of "pspexp-recipe-$id" | tr '\n' ' ')
+	lists
+	install_meta "$id" "$pk" "$deb"
+	[ -n "$olddeps" ] && prune "$olddeps"
+	echo "installed pspexp-recipe-$id $v"
+}
+
+# install_meta ID "PACKAGES" DEB: the recipe's packages one at a time, in the
+# order it lists them: a Debian package that asks for "A or B" (freedoom:
+# dsda-doom | doom-engine; a core: retroarch | libretro-frontend) then finds
+# the one the recipe listed before it (chocolate-doom, pspexp-retro) already
+# installed, instead of apt adding its first choice; then the meta-package
+install_meta() {
+	for p in $2; do
+		installed "$p" && continue
+		$APT --no-install-recommends install "$p"
+		apt-mark auto "$p" >/dev/null   # held by the meta-package below, like the rest
+	done
+	$APT --no-install-recommends install "$3"
+	apt-mark manual "pspexp-recipe-$1" >/dev/null
+}
+
 cmd="$1"; [ $# -gt 0 ] && shift
 case "$cmd" in
 update)
@@ -88,44 +154,13 @@ update)
 	echo "catalogue $new: $(ls "$CAT/recipes" | wc -l) recipes"
 	apt-get -q -o DPkg::Lock::Timeout=120 update >/dev/null 2>&1 || die "apt could not read its lists"
 	echo "apt lists updated" ;;
-install)
-	id="$1"; R=$(recipe "$id")
-	lists
-	pk=$(rget "$R" debian apt); [ -n "$pk" ] || die "$id has nothing for this board"
-	v=$(rget "$R" package version); case "$v" in ""|*[!0-9]*) die "$id: bad version" ;; esac
-	olddeps=""; installed "pspexp-recipe-$id" && olddeps=$(deps_of "pspexp-recipe-$id" | tr '\n' ' ')
-	mkdir -p "$META"; w=$(mktemp -d); trap 'rm -rf "$w"' EXIT
-	mkdir -p "$w/p/DEBIAN" "$w/p/usr/share/doc/pspexp-recipe-$id"
-	echo "The PSPExp recipe $id (docs/Package_Manager.md §5.4): it holds the recipe's packages." > "$w/p/usr/share/doc/pspexp-recipe-$id/README"
-	cat > "$w/p/DEBIAN/control" <<C
-Package: pspexp-recipe-$id
-Version: $v
-Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
-Section: metapackages
-Priority: optional
-Depends: $(echo $pk | sed 's/ /, /g')
-Description: PSPExp recipe $id
- Installed by PSPExp's Packages: it depends on what the recipe $id needs,
- so apt keeps those while the recipe is installed.
-C
-	deb="$META/pspexp-recipe-${id}_${v}_all.deb"
-	dpkg-deb --root-owner-group -b "$w/p" "$deb" >/dev/null
-	# the recipe's packages one at a time, in the order it lists them: a Debian
-	# package that asks for "A or B" (freedoom: dsda-doom | doom-engine; a core:
-	# retroarch | libretro-frontend) then finds the one the recipe listed before
-	# it (chocolate-doom, pspexp-retro) already installed, instead of apt adding
-	# its first choice
-	for p in $pk; do
-		installed "$p" && continue
-		$APT --no-install-recommends install "$p"
-		apt-mark auto "$p" >/dev/null   # held by the meta-package below, like the rest
-	done
-	$APT --no-install-recommends install "$deb"
-	apt-mark manual "pspexp-recipe-$id" >/dev/null
-	# an older version's dependencies the new one dropped, when nothing needs them (§5.6)
-	[ -n "$olddeps" ] && prune "$olddeps"
-	echo "installed pspexp-recipe-$id $v" ;;
+prepare)   # the meta-package for recipe ID at VERSION, before anything is installed
+	prepare_meta "$1" "$2" ;;
+resume)   # install from the meta-package prepare wrote (pspexp-pkg's apt step, and recover's), never the catalogue
+	resume_meta "$1" "$2" ;;
+install)   # both at once (by hand)
+	id="$1"; v=$(rget "$(recipe "$id")" package version)
+	prepare_meta "$id" "$v" && resume_meta "$id" "$v" ;;
 remove)
 	id="$1"; case "$id" in ""|*[!a-z0-9-]*) die "'$id' is not a recipe id" ;; esac
 	if installed "pspexp-recipe-$id"; then
@@ -144,5 +179,5 @@ upgrade)
 repair)
 	dpkg --configure -a
 	$APT -f install ;;
-*) echo "usage: pspexp-pkg-apt update | install ID | remove ID | upgrade | repair" >&2; exit 2 ;;
+*) echo "usage: pspexp-pkg-apt update | prepare ID VERSION | resume ID VERSION | install ID | remove ID | upgrade | repair" >&2; exit 2 ;;
 esac

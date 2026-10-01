@@ -306,9 +306,12 @@ install_recipe() {
 	[ -n "$(rget "$R" debian apt)" ] || die "$ID: nothing for this board"
 	RV=$(rget "$R" package version)
 	stage
+	# what apt will install, recorded by the helper before the journal says staged:
+	# recover finishes from it, not from the catalogue
+	$APT_HELPER prepare "$ID" "$RV" >/dev/null || die "$ID: could not prepare its meta-package"
 	jset staged; crash staged
 	jset apt-started; crash apt-started
-	$APT_HELPER install "$ID" || { echo "pspexp-pkg: apt did not finish; $ID is broken (retry: pspexp-pkg recover, or remove it)" >&2; exit 1; }
+	$APT_HELPER resume "$ID" "$RV" || { echo "pspexp-pkg: apt did not finish; $ID is broken (retry: pspexp-pkg recover, or remove it)" >&2; exit 1; }
 	crash apt-unrecorded
 	jset apt-done; crash apt-done
 	# a system's core must now exist where the system file says
@@ -372,8 +375,12 @@ recover() {
 	apt-started)   # did apt do it? ask dpkg (after finishing anything half-installed)
 		$APT_HELPER repair >/dev/null 2>&1 || true
 		if [ "$(meta_version "$ID")" != "$RV" ]; then
-			# once more, with the kept staging (Retry)
-			$APT_HELPER install "$ID" >/dev/null 2>&1 || true
+			# once more (Retry), from the meta-package the helper prepared for
+			# this operation, not the catalogue, which may have changed since
+			rc=0; $APT_HELPER resume "$ID" "$RV" >/dev/null 2>&1 || rc=$?
+			if [ $rc = 3 ]; then   # none (removed by hand?): apt had not begun, nothing changed (the launcher's files come after it)
+				rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; echo "nothing had changed (apt had not begun)"; return 0
+			fi
 		fi
 		[ "$(meta_version "$ID")" = "$RV" ] || { echo "$ID is broken: its programs were not installed (retry: pspexp-pkg recover; or remove it)" >&2; return 1; }
 		jset apt-done ;;
@@ -381,7 +388,7 @@ recover() {
 	CP=$(jget checkpoint)
 	if [ "$CP" = apt-done ] || [ "$CP" = app-swap-started ] || [ "$CP" = app-swapped ] || [ "$CP" = systems-started ] || [ "$CP" = systems-published ]; then
 		if [ -d "$STAGE/app" ] || [ -d "$APPS/$ID" ]; then
-			if [ -d "$STAGE/app" ] && [ "$CP" != apt-done ] && ! manifest_ok "$STAGE"; then
+			if [ -d "$STAGE/app" ] && ! manifest_ok "$STAGE"; then
 				# the staging is damaged: back to exactly the old install
 				[ -d "$APPS/.$ID.old" ] && { rm -rf "$APPS/$ID"; mv "$APPS/.$ID.old" "$APPS/$ID"; }
 				[ -d "$APPS/$ID/systems" ] && for s in "$APPS/$ID"/systems/*.system; do [ -f "$s" ] && cp "$s" "$SYS/"; done

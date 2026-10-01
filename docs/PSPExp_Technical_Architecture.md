@@ -148,7 +148,7 @@ A plausible total is 35–50 ms, roughly two to three frames, compared with abou
 
 **Measured so far (v0.1 link, 2026-09-22, no GE executor yet):** USB to host and USB to PSP are ≈ 0.15 ms each for input-sized packets and ≈ 2 ms for a 40 KB frame. With one frame in flight, present-to-`PRESENT_DONE` averaged 16.6 ms (max 22.6 ms) at a sustained 60.1 fps: the PSP executed each 500-sprite frame in 0.17 ms and the rest was the wait for the next vblank. The transport is therefore not the dominant term in the latency budget; display pacing is.
 
-**Measured with the GE executor (sprite demo, 2026-09-22):** 60 Hz sustained at 500, 2,000 and 5,000 sprites per frame (4 KB, 16 KB and 40 KB per frame); PSP-side parse-plus-expand cost 0.25 / 0.71 / 1.85 ms (≈ 0.37 µs per sprite); input sample to the vblank that displayed the frame consuming it: one frame period, 16.7 ms. With LCD scan-out and the sampling phase of a real button press, input-to-photon is ≈ 25–41 ms, so the ≤ 50 ms target is met. The proof of concept of §16, including the cable pull, is complete (`docs/v01-usb-bringup.md`).
+**Measured with the GE executor (sprite demo, 2026-09-22):** 60 Hz sustained at 500, 2,000 and 5,000 sprites per frame (4 KB, 16 KB and 40 KB per frame); PSP-side parse-plus-expand cost 0.25 / 0.71 / 1.85 ms (≈ 0.37 µs per sprite); input sample to the vblank that displayed the frame consuming it: one frame period, 16.7 ms (measured). Adding the LCD's scan-out (≈ 8 ms) and the sampling phase of a real button press (0–16.7 ms), both estimated rather than measured, gives an input-to-photon of ≈ 25–41 ms: within the ≤ 50 ms target by that estimate. No optical measurement (a camera on the button and the screen) has been made, so the target is not yet verified end to end. The proof of concept of §16, including the cable pull, is complete (`docs/v01-usb-bringup.md`).
 
 ---
 
@@ -391,9 +391,11 @@ Given the resource budget in §3.3, prefetch is a requirement rather than an opt
 
 ### 6.3 Two-tier cache
 
-The runtime keeps a **VRAM tier** (≈ 1.2–1.45 MiB after framebuffers, §3.2; fastest sampling) and a **main-RAM tier** (several MiB; reduced sampling rate). Placement is the runtime's decision: it promotes high-priority textures into VRAM when space allows and demotes lower-priority ones under pressure, reporting each change with `RESOURCE_TIER`. The host influences placement only through the `priority` given at upload or changed with `RESOURCE_HINT`. `MEMORY_STATUS` reports both tiers separately.
+The runtime keeps a **VRAM tier** (≈ 1.2–1.45 MiB after framebuffers, §3.2; fastest sampling) and a **main-RAM tier** (several MiB; reduced sampling rate). `MEMORY_STATUS` reports both tiers separately.
 
-For v0.1 the placement policy is deliberately naive — priority order, then upload order — and is one of the things the benchmark plan measures.
+**What is built** (through 2026-10): placement is decided once, at upload. A texture uploaded with `priority` low goes to main RAM; any other goes to VRAM when it fits there and to main RAM when it does not (the GE executor also falls back to RAM when VRAM is too fragmented for it). Nothing moves afterwards: `RESOURCE_HINT` records a new priority without acting on it, the runtime never sends `RESOURCE_TIER` (the host library only understands it), and a texture stays in its tier until it is evicted or deleted.
+
+**The design, not yet built:** the runtime promoting high-priority textures into VRAM when space allows and demoting lower-priority ones under pressure, reporting each move with `RESOURCE_TIER`, the host influencing placement only through `priority` at upload and `RESOURCE_HINT`. Room for a render target by moving textures out to RAM is on §12a's Next list for the same reason.
 
 This makes PSP RAM a working-set cache rather than requiring the complete application and asset set to fit simultaneously in the PSP-1000's 32 MB.
 
@@ -585,13 +587,16 @@ build frame N+2              render N+1
 
 A free-running host has no knowledge of the PSP's vblank. Without a signal back it either drops frames constantly (visible judder) or fills its queue to the cap (added latency). PSPExp therefore closes the loop:
 
-- After each vblank at which a new frame was displayed, the PSP sends `PRESENT_DONE { frame_seq, timestamp_us, queue_depth, dropped }` on the SYSTEM channel.
-- The host paces frame generation on `PRESENT_DONE`, targeting exactly one frame in flight.
-- The runtime's frame queue is bounded at **one pending frame** (triple-buffer semantics: one displayed, one rendering, one queued). If a newer complete frame arrives while one is still queued, the queued frame is discarded and `dropped` is incremented. A frame whose execution has begun is never discarded.
+**What is built** (through 2026-10): the host side of the loop.
+- The PSP sends `PRESENT_DONE { frame_seq, timestamp_us, queue_depth, dropped, ... }` on the SYSTEM channel for each frame it presents (with its execute and GE times, bytes and sprite counts).
+- The host library paces on it: it allows one frame in flight by default (`max_in_flight`), and the SDL layer waits (up to 40 ms) for the previous frame's `PRESENT_DONE` before presenting the next (`pspexp_wait_present`).
+- The runtime has **no frame queue**: it executes each message as it is read from the link, in the main loop, and `queue_depth` and `dropped` are always 0. Nothing is discarded: a frame that arrives while another is executing waits in the transport. Reading the PSP's buttons and sending `INPUT_STATE` happens in the same loop after the commands read, so a long frame delays input by as much.
 
-For interactive rendering the policy is:
+**The design, not yet built:** a runtime queue bounded at **one pending frame** (one displayed, one rendering, one queued), a newer complete frame replacing a queued one (counted in `dropped`), a frame whose execution has begun never discarded, and input read on its own schedule. Its policy for interactive rendering:
 
 > Prefer the newest complete frame over preserving obsolete frames.
+
+With the host waiting for each frame (above), at most one frame is ever ahead of the PSP, so a queue would rarely have anything to drop; it matters for a host that does not wait.
 
 ### 10.3 Ordering and drop policy
 

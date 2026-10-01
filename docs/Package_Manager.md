@@ -1,6 +1,6 @@
 # PSPExp packages: recipes over the board's own package manager
 
-*Design, reviewed on 2026-09-28 (findings closed at the design level): decisions in §11; operational contracts in §5.1-5.6 and §6.1. Implementation and hardware failure tests must still show these guarantees hold. Nothing here is implemented yet except what "Today" describes.*
+*Design reviewed on 2026-09-28 (decisions in §11; operational contracts in §5.1-5.6 and §6.1), and built since: §12 records what is built and what was found (steps 1 to 7: recipes and their check, `pspexp-pkg` and its root helper, the signed catalogue and apt repository, the Packages app, the GameShell image, the Omega2+ on recipes, the PSP runtime's slots, fallback and maintenance mode). The failure-path tests (`tests/pkg`, §10.3) exercise §5.3's guarantees on the Pi 400. The sections themselves describe the design; where one says more than §12 records as built, §12 is the account.*
 
 ## Contents
 
@@ -118,81 +118,132 @@ files, so no new parser or dependency is needed:
 - `[debian]`, `[omega]`: what to install on each kind of board;
 - `[entry]` and `[system]`: what the launcher shows.
 
-Example 1, a game that Debian has:
+Comments are whole lines starting with `#`: a `#` after a value is part of
+the value. `scripts/packages/check-recipes` checks every recipe in
+`recipes/` (sections, keys, ids, button names); the three examples below are
+the repository's own recipes as they are, and pass it.
+
+Example 1, a game that Debian has (`recipes/opentyrian/recipe`). Its data
+comes from PSPExp's own `tyrian-data` package; `first-run` writes a file
+into the home folder on first install, when it is missing; `[omega]` names
+the Omega2+'s static build (§9):
 
 ```ini
+# OpenTyrian: Debian's game, and the freeware Tyrian 2.1 data from
+# PSPExp's repository (Debian's own route to it, game-data-packager, brings
+# GTK and more). See docs/Package_Manager.md for the format.
+
 [package]
 id=opentyrian
 title=OpenTyrian
 description=The vertical shooter Tyrian 2.1, freeware since 2004
 category=game
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
-version=2                        # the recipe's own version: bump it when the entry changes
+version=1
 
 [debian]
-apt=opentyrian                   # Debian's package (and whatever it depends on)
-data=https://camanis.net/tyrian/tyrian21.zip sha256=<...> into=~/.local/share/pspexp/opentyrian
-                                 # only when the distribution does not ship the data
+apt=opentyrian tyrian-data
+
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/opentyrian.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=opentyrian
 
 [entry]
 title=OpenTyrian
 type=game
-exec=opentyrian --data=~/.local/share/pspexp/opentyrian --no-joystick
-keys=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape
+description=Tyrian 2.1: a vertical shooter, freeware since 2004
+icon=rocket
+exec=/usr/games/opentyrian --no-joystick
+keys=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right
 nub=keys
-config=~/.config/opentyrian/opentyrian.cfg:section video\n\titem fullscreen -1
-                                 # written once, on first install, when missing
+first-run=.config/opentyrian/opentyrian.cfg:section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n
 ```
 
-Example 2, an emulated system from Debian's libretro cores and our player:
+Example 2, an emulated system: Debian's libretro core and our player
+(`recipes/nes/recipe`). `core` is the core's file in the distribution's
+libretro folder; `ext` the ROM extensions, `thumbs` the cover set's name;
+`[package:omega]` overrides a field on one kind of board:
 
 ```ini
+# The NES: Debian's Nestopia core, played by pspexp-retro (PSPExp's
+# player, which also stands in for the libretro frontend Debian asks for).
+
 [package]
 id=nes
 title=NES
-description=Nintendo Entertainment System (ROMs in ~/roms/nes)
+description=Nintendo Entertainment System: Debian's Nestopia core; ROMs in ~/roms/nes
 category=system
-license=GPL-2.0 (Nestopia core)
+license=GPL-2.0 (Nestopia); pspexp-retro is part of PSPExp
+version=1
+
+[package:omega]
+description=Nintendo Entertainment System: PSPExp's static player with the QuickNES core; ROMs in ~/roms/nes
 
 [debian]
-apt=libretro-nestopia
-core=nestopia_libretro.so        # found in the distribution's libretro folder
+apt=pspexp-retro libretro-nestopia
+core=nestopia_libretro.so
+
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/nes.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=nes
 
 [system]
+id=nes
 name=Nintendo Entertainment System
 short=NES
-extensions=nes
+icon=gamepad-2
+ext=nes
 roms=~/roms/nes
-boxart=Nintendo - Nintendo Entertainment System
+thumbs=Nintendo - Nintendo Entertainment System
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
 ```
 
-Example 3, a game Debian lacks: our own `.deb`, built from a recipe.
+Example 3, a game Debian lacks: our own `.deb` from PSPExp's apt repository
+(§6), `recipes/cavestory/recipe`:
 
 ```ini
+# Cave Story: NXEngine-evo and the freeware data, from PSPExp's repository
+# (Debian does not carry NXEngine-evo).
+
 [package]
 id=cavestory
 title=Cave Story
+description=The freeware platformer Cave Story (2004), on NXEngine-evo
 category=game
-license=GPL-3.0 (NXEngine-evo); freeware data (Cave Story, 2004)
+license=GPL-3.0 (NXEngine-evo); freeware data (Cave Story, Studio Pixel; English translation by Aeon Genesis)
+version=1
 
 [debian]
-apt=pspexp-cavestory             # from PSPExp's apt repository (§6)
+apt=pspexp-cavestory
+
+
+# the Omega2+: PSPExp's own static build (scripts/packages/recipes/cavestory.sh, BOARD=omega), from the
+# builds the Mac publishes to it (pspexp-pkg-build publish)
+[omega]
+build=cavestory
 
 [entry]
 title=Cave Story
 type=game
-exec=nxengine-evo
-keys=cross=z,circle=x,square=a,triangle=s,start=escape,select=f2
+description=Studio Pixel's 2004 platformer: explore a floating island
+icon=gamepad-2
+exec=/usr/games/pspexp-cavestory
+keys=cross=z,square=x,circle=x,l=a,r=s,triangle=q,select=w,start=escape,up=up,down=down,left=left,right=right
+nub=keys
 ```
 
-`recipes/cavestory/build` says how `pspexp-cavestory` is made:
-- the upstream source: address and exact commit;
-- the patches;
-- the build commands, one set per architecture (armhf for the GameShell,
-  arm64 for the Pi);
-- the files to package.
-
-A shared script turns that into `.deb` files on the Mac (§6).
+`scripts/packages/debs/pspexp-cavestory/build OUTDIR ARCH` makes
+`pspexp-cavestory`: it packages the engine already built for that
+architecture (arm64 on the Pi, `scripts/pi/install.sh cavestory`; armhf
+cross-compiled for the GameShell, `scripts/packages/cross-glibc.sh`) with the
+freeware data. Data a
+recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
+it without the checksum; §4.3).
 
 ### 4.3 Rules
 
@@ -279,14 +330,17 @@ complete list:
 | operation | what it runs | arguments accepted |
 |---|---|---|
 | `update` | fetch and check the catalogue (§5.1), then `apt-get update` | none |
-| `install <id>` | build and install the recipe's meta-package `pspexp-recipe-<id>` (§5.4) with `apt-get install` | a recipe id present in the trusted catalogue |
+| `prepare <id> <version>` | build the recipe's meta-package `pspexp-recipe-<id>` (§5.4) into the helper's own root-owned folder, written whole: the operation's record of what it installs. Run before the journal says `staged` | a recipe id present in the trusted catalogue, at that version |
+| `resume <id> <version>` | install what that meta-package names with `apt-get install`, then the meta-package; never reads the catalogue, so `recover` (§5.3) finishes an operation from it even when the catalogue changed. Exit 3 when there is none (apt had not begun) | a recipe id and the version its operation prepared |
+| `install <id>` | `prepare` then `resume`, at the catalogue's version (by hand) | a recipe id present in the trusted catalogue |
 | `remove <id>` | `apt-get remove pspexp-recipe-<id>`, then remove only the packages §5.4 allows | an installed recipe id |
 | `upgrade` | for each installed recipe: its meta-package rebuilt when the recipe changed and installed with `apt-get install` (new dependencies come in); then `apt-get install --only-upgrade` of the packages the installed meta-packages depend on, and `pspexp-*` (§5.6) | none (the list comes from the catalogue and apt's state) |
 | `repair` | `dpkg --configure -a`, then `apt-get -f install` | none |
 
 - **Package names never come from the user's side.** The helper takes
   recipe ids, which must match `[a-z0-9-]+` and exist in the root-owned
-  catalogue, and reads the package names from the recipe itself.
+  catalogue, and reads the package names from the recipe itself (or, for
+  `resume`, from the meta-package it built from that recipe).
 - **Every apt call** uses `DEBIAN_FRONTEND=noninteractive`,
   `--no-install-recommends` and `-o DPkg::Lock::Timeout=120`. Output goes
   to a log. Progress is read from apt's status output
@@ -578,9 +632,21 @@ implementing this section.
 
 **The manual route, needing nothing of PSPExp.** When nothing else works, a
 new loader included, the PSP's own **USB mode in the XMB** (Settings > USB
-Connection) shows its memory stick to any computer. Copy a known-good
-`dist/PSPExp` folder to `ms0:/PSP/GAME/PSPExp/`. This is the documented
-last resort, and the only way the boot loader itself is replaced.
+Connection) shows its memory stick to any computer. This is the documented
+last resort, and the only way the boot loader itself is replaced. Copying a
+known-good set **over** the old folder is not enough: the loader prefers a
+pending `active.new` whose slot checks (even one whose runtime never
+connects, until it has failed three times), and it uses modules next to the
+EBOOT only when no slot file (`slot-a/VERSION`, `slot-b/VERSION`, `active`,
+`active.new`) is there at all. So either:
+- with this repository at hand: `scripts/packages/runtime-slot --install
+  <stick>/PSP/GAME/PSPExp`, which removes both slots, `active`,
+  `active.new`, `fallback` and any modules next to the EBOOT, then writes
+  the loader, a fresh `slot-a/` and `active`; or
+- with only a `dist/PSPExp` folder: **delete** `ms0:/PSP/GAME/PSPExp/`
+  first (nothing in it needs keeping: the runtime log and screenshots), then
+  copy `dist/PSPExp` there; the loader then runs the modules beside it,
+  without slots.
 
 **The console's side:** after a successful connection to an updated slot,
 the console keeps the other slot as it is (the previous version, for the
@@ -951,6 +1017,25 @@ because boards differ.
     folder is gone. Titles installed from an archive stay removable.
   - **Not yet:** the GameShell card image's first boot still installs the
     bundled archives; it moves to recipes with the image work.
+- **A review's findings (2026-10-02):**
+  - **Recovery leaned on the catalogue:** retrying an install cut off at
+    `apt-started` called the helper's `install`, which reads the current
+    catalogue, against §5.3; and the staged files were not checked when
+    recovering from `apt-done`. The helper now `prepare`s the meta-package
+    before the journal says `staged` and installs from it with `resume`
+    (§5.2); `recover` resumes from it alone, and checks the staged files at
+    every checkpoint. Two new failure checks (the recipe removed from the
+    catalogue meanwhile; a staged file damaged at `apt-done`): the suite
+    passes 30 of 30 on the Pi 400.
+  - **The PSP's manual route could leave it unbootable:** see §6.1, which
+    now says to delete the folder first, or to use `runtime-slot --install`,
+    which now clears old slots and a pending update itself.
+  - **Unpinned downloads:** the Omega's ScummVM adventures fetch Debian's
+    `.deb` files outside apt; each is now pinned by its SHA-256 (as
+    Debian's package index gives it), and ScummVM's builder checks its
+    source archives and pins Tremor's commit (§4.3).
+  - **The examples in §4.2** used keys the check refuses; they are now the
+    repository's own recipes.
 
 Each step ends tested on a board. The Pi is first, since it's online and
 also runs Debian.

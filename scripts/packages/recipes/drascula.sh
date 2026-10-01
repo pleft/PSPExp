@@ -6,7 +6,7 @@
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
-scummvm_game "$D" drascula drascula en d/drascula/drascula_1.0+ds4-2_all.deb d/drascula/drascula-music_1.0+ds4-2_all.deb
+scummvm_game "$D" drascula drascula en d/drascula/drascula_1.0+ds4-2_all.deb@ed4af8e2d41ad446e2f3b73533daa1804e2f13f62f596c0b02b8dc39544f22b4 d/drascula/drascula-music_1.0+ds4-2_all.deb@340e0beb1bacf005cbabebc07ebdd88adf6aee363d437f8a7d73cb0c77a93e79
 cat > "$D/package" <<P
 version=1.0+ds4-2
 title=Drascula: The Vampire Strikes Back

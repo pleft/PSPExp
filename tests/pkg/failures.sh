@@ -72,6 +72,19 @@ pspexp-pkg recover >/dev/null 2>&1
 check "installed_ok pkgtest-hello" "recover repairs dpkg and finishes the install"
 pspexp-pkg remove pkgtest-hello >/dev/null 2>&1; rm -f /tmp/hello_*.deb
 
+echo "recover works from the operation's own record, not the catalogue (§5.3)"
+crashrun apt-started install pkgtest-hello
+sudo mv "$CAT/recipes/pkgtest-hello" /tmp/pkgtest-hello-recipe   # the recipe gone from the catalogue meanwhile
+pspexp-pkg recover >/dev/null 2>&1
+check "installed_ok pkgtest-hello" "killed at apt-started, the recipe then gone: recover still finishes the install"
+sudo mv /tmp/pkgtest-hello-recipe "$CAT/recipes/pkgtest-hello"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
+crashrun apt-done install pkgtest-hello
+f=$(find "$ST/stage/pkgtest-hello/app" -type f ! -name MANIFEST | head -1); echo damaged >> "$f"
+pspexp-pkg recover >/dev/null 2>&1
+check '[ ! -d "$APPS/pkgtest-hello" ] && clean pkgtest-hello' "killed at apt-done, a staged file then damaged: recover publishes nothing of it"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
+
 echo "one operation at a time (§5.3)"
 ( exec 9>"$ST/lock"; flock 9; sleep 6 ) &
 sleep 1

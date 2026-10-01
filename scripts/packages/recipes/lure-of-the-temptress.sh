@@ -6,7 +6,7 @@
 set -e
 . "$ROOT/scripts/packages/recipes/_lib.sh"
 D="$1"
-scummvm_game "$D" lure-of-the-temptress lure en l/lure-of-the-temptress/lure-of-the-temptress_1.1+ds3-1_all.deb
+scummvm_game "$D" lure-of-the-temptress lure en l/lure-of-the-temptress/lure-of-the-temptress_1.1+ds3-1_all.deb@bbbc73a79ce175e6e22334c4ed18061e775d835dd1a082ab227b00c9af745bcc
 cat > "$D/package" <<P
 version=1.1+ds3-1
 title=Lure of the Temptress

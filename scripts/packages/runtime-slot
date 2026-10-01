@@ -4,7 +4,9 @@ A PSP runtime set with its VERSION file (docs/Package_Manager.md §6.1), from th
 build's dist/PSPExp:
   scripts/packages/runtime-slot OUTDIR            OUTDIR/pspexp_runtime.prx, pspexp_usb.prx, VERSION
   scripts/packages/runtime-slot --install OUTDIR  a whole slotted install for a memory stick:
-                                                  EBOOT.PBP (the loader), slot-a/ (the set), active
+                                                  EBOOT.PBP (the loader), slot-a/ (the set), active;
+                                                  over an existing one (recovery) its slots, pending
+                                                  update and flat modules are removed first
 VERSION: version=..., then file=NAME size=N sha256=HEX per module.
 """
 import hashlib, os, shutil, subprocess, sys, time
@@ -36,6 +38,15 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--install":
         out = sys.argv[2]
         os.makedirs(out, exist_ok=True)
+        # also the recovery of a broken install: the loader prefers a pending
+        # active.new (when its slot checks) and never looks at modules next to
+        # the EBOOT while any slot file is there, so what was there goes first
+        for name in ("active.new", "active", "fallback") + MODULES:
+            p = os.path.join(out, name)
+            if os.path.exists(p):
+                os.remove(p)
+        for slot in ("slot-a", "slot-b"):
+            shutil.rmtree(os.path.join(out, slot), ignore_errors=True)
         shutil.copy(os.path.join(DIST, "EBOOT.PBP"), os.path.join(out, "EBOOT.PBP"))
         v = make_set(os.path.join(out, "slot-a"))
         open(os.path.join(out, "active"), "w").write("slot=a\ntries=0\n")

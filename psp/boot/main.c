@@ -181,8 +181,9 @@ static int boot_main(SceSize args, void *argp)
         snprintf(why, sizeof(why), "from=%c to=%c reason=%s\n", slot, other, !valid ? "not valid" : "did not connect 3 times");
         if (!slot_valid(other, version, sizeof(version))) {
             pspDebugScreenPrintf("\nNo valid PSPExp runtime (slot %c %s, slot %c not valid).\n"
-                                 "Put the PSP in USB mode (Settings > USB Connection) and copy\n"
-                                 "a known-good PSPExp folder to ms0:/PSP/GAME/PSPExp/\n", slot, valid ? "failed" : "not valid", other);
+                                 "Put the PSP in USB mode (Settings > USB Connection), delete\n"
+                                 "ms0:/PSP/GAME/PSPExp/ and copy a known-good PSPExp folder\n"
+                                 "there (or run runtime-slot --install onto it)\n", slot, valid ? "failed" : "not valid", other);
             sceKernelDelayThread(8000000);
             goto fail;
         }

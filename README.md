@@ -20,10 +20,10 @@ its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Te
 | `host/executor-sdl` reference renderer (keyboard + game controller input) | done |
 | `examples/sprite-demo` (§16 proof of concept; Null, SDL or USB; survives cable pull) | **done on hardware 2026-09-22**: the v0.1 decisive result |
 | `tools/usb-bench` throughput / latency / frame-loop benchmark, concurrent-upload workload | done, measured on hardware 2026-09-22 |
-| CLUT4/CLUT8 textures with palette resources (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** (`sprite-demo --clut`) |
+| CLUT4/CLUT8 textures with palette resources (v0.3 item pulled forward) | done; on the PSP since 2026-09-26 through the SDL layer's 8-bit pages (Doom, OpenTyrian, the emulators, ScummVM). `sprite-demo --clut` itself not run on hardware |
 | host-baked text: built-in 6x8 CLUT4 font, `pspexp_draw_text` (v0.3 item pulled forward) | done, shown in the demo HUD |
 | per-batch palette, flip, 4444 alpha tints, translucent rects, lines, quad batches (v0.2 needs) | done, tested |
-| audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done on Null/SDL, **not yet run on hardware** |
+| audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done; on the PSP since 2026-09-22 (Warcraft, the SDL layer's streamed audio: the rows below) |
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
 | **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
@@ -44,9 +44,10 @@ the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
    `scripts/packages/runtime-slot --install /Volumes/<stick>/PSP/GAME/PSPExp`
    writes the boot loader, the runtime in `slot-a/` and `active`. This is
    needed only once: after that a board's console updates the runtime over
-   the link (the cheatsheet's "Updating the PSP's runtime"). Copying
-   `dist/PSPExp/` flat still works too; the loader then runs the runtime
-   next to the EBOOT, without slots.
+   the link (the cheatsheet's "Updating the PSP's runtime"); it also
+   repairs a broken install. Copying `dist/PSPExp/` flat into an empty
+   folder still works too; the loader then runs the runtime next to the
+   EBOOT, without slots (with slot files there it ignores those modules).
 2. Launch PSPExp from the XMB and connect the USB cable. The screen shows
    `waiting for host sync`.
 3. On the host: `build/host/pspexp-bench` (add `--verbose` for libusb errors).
