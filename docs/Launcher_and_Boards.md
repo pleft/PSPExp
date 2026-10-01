@@ -426,10 +426,15 @@ in its demos.
 
 OpenArena (recipe `openarena`, 2026-10-01): Debian's, data included, on the
 Quake 3 engine's OpenGL 1.x renderer at the PSP's size with the engine's
-low-end settings (all on its command line in the recipe). The nub aims (as a
-mouse), cross fires, the d-pad moves and strafes (WASD), square jumps,
-triangle changes weapon, L crouches, R fires too, start is the menu, select
-the scores. Not yet played on the PSP itself.
+low-end settings (all on its command line in the recipe). Controls as the
+PSP's own shooters have them, since the nub and the d-pad are both under the
+left thumb (the first layout, d-pad moving and nub aiming, could not do both
+at once; aiming was slow at the desktop's sensitivity): the nub aims (as a
+mouse, sensitivity 25), triangle / cross move forward and back, square /
+circle strafe, R fires and clicks in the menus (`PSPEXP_MOUSE_BUTTONS`), L
+jumps, d-pad up / down change weapon, left crouches, start is the menu, select
+the scores. Played on the PSP-1000 from the Pi 400 (2026-10-01): menus and
+movement fine once the layer kept SDL's relative mouse mode.
 
 On the real PSP over USB from the GameShell (played, 2026-09-27): Cave
 Story 47-49 fps of its 50, no underruns ("felt great"); Jazz Jackrabbit

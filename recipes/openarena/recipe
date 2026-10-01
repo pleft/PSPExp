@@ -2,8 +2,12 @@
 # package with its data. Its classic OpenGL 1.x renderer (the newer one is all
 # shaders), at the PSP's size, with the engine's own settings for weak
 # hardware: vertex lighting instead of lightmaps (one pass), coarser curves and
-# models, no marks, gibs, shadows, flares or dynamic lights, a plain sky. The
-# nub aims (the mouse), cross fires; the d-pad moves and strafes.
+# models, no marks, gibs, shadows, flares or dynamic lights, a plain sky.
+# Controls as the PSP's own shooters have them (the nub and d-pad are both
+# under the left thumb): the nub aims (the mouse, sensitivity raised for it),
+# the face buttons move (triangle / cross forward and back, square / circle
+# strafe), R fires (and clicks in the menus), L jumps, the d-pad changes weapon
+# (up / down) and crouches (left).
 
 [package]
 id=openarena
@@ -11,7 +15,7 @@ title=OpenArena
 description=Fast arena shooter on the Quake 3 engine, with bots
 category=game
 license=GPL-2.0 (ioquake3, OpenArena)
-version=1
+version=2
 
 [debian]
 apt=openarena
@@ -21,7 +25,8 @@ title=OpenArena
 type=game
 description=Fast arena shooter on the Quake 3 engine, with bots
 icon=swords
-exec=/usr/games/openarena +set cl_renderer opengl1 +set r_mode -1 +set r_customwidth 480 +set r_customheight 272 +set r_fullscreen 0 +set r_vertexLight 1 +set r_lodbias 2 +set r_subdivisions 25 +set r_lodCurveError 1000 +set cg_simpleItems 1 +set r_dynamiclight 0 +set cg_marks 0 +set cg_gibs 0 +set r_fastsky 1 +set cg_shadows 0 +set r_flares 0 +set cg_brassTime 0 +set r_drawSun 0
-keys=up=w,down=s,left=a,right=d,square=space,triangle=slash,l=c,r=lctrl,start=escape,select=tab
+exec=/usr/games/openarena +set cl_renderer opengl1 +set r_mode -1 +set r_customwidth 480 +set r_customheight 272 +set r_fullscreen 0 +set r_vertexLight 1 +set r_lodbias 2 +set r_subdivisions 25 +set r_lodCurveError 1000 +set cg_simpleItems 1 +set r_dynamiclight 0 +set cg_marks 0 +set cg_gibs 0 +set r_fastsky 1 +set cg_shadows 0 +set r_flares 0 +set cg_brassTime 0 +set r_drawSun 0 +set sensitivity 25 +bind q weapprev
+keys=triangle=w,cross=s,square=a,circle=d,l=space,up=slash,down=q,left=c,start=escape,select=tab
 nub=mouse
 env=PSPEXP_JOYSTICK=0
+env=PSPEXP_MOUSE_BUTTONS=left=r,right=none

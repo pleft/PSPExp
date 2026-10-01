@@ -190,7 +190,8 @@ static struct {
      * clock (headless hosts: SDL's dummy driver runs slow and jittery) */
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
-    int nub_mouse, nub_keys, hide_window, cursor_hidden, relative; uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
+    int nub_mouse, nub_keys, hide_window, cursor_hidden, relative;
+    int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
      * pushed events, and games that poll it (Chromium B.S.U.) would not */
     Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y, rel_ex, rel_ey;
@@ -301,6 +302,20 @@ static void connect_once(void)
     S.next_handle = 1;
     S.local_audio = !(getenv("PSPEXP_LOCAL_AUDIO") && !strcmp(getenv("PSPEXP_LOCAL_AUDIO"), "0"));
     S.nub_mouse = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "mouse");
+    S.mouse_left = B_CROSS; S.mouse_right = B_CIRCLE;
+    if (getenv("PSPEXP_MOUSE_BUTTONS")) {   /* "left=r,right=none": which PSP buttons are the mouse's */
+        char buf[64], *tok, *save = NULL;
+        snprintf(buf, sizeof(buf), "%s", getenv("PSPEXP_MOUSE_BUTTONS"));
+        for (tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
+            char *eq = strchr(tok, '=');
+            int b, which = -1;
+            if (!eq) continue;
+            *eq = 0;
+            for (b = 0; b < B_COUNT; b++) if (!strcmp(eq + 1, BUTTON_NAMES[b])) which = b;
+            if (!strcmp(tok, "left")) S.mouse_left = which;
+            else if (!strcmp(tok, "right")) S.mouse_right = which;
+        }
+    }
     S.nub_keys = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "keys");
     S.hide_window = getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
     S.shot_every = getenv("PSPEXP_SHOT_EVERY") ? (unsigned)atoi(getenv("PSPEXP_SHOT_EVERY")) : 0;
@@ -1427,7 +1442,7 @@ static void feed_input(void)
     for (i = 0; i < B_COUNT; i++) {
         int k;
         Uint32 now = SDL_GetTicks();
-        if (S.nub_mouse && (i == B_CROSS || i == B_CIRCLE)) continue;
+        if (S.nub_mouse && (i == S.mouse_left || i == S.mouse_right)) continue;
         if (pressed & BUTTON_BITS[i]) { S.held_since[i] = now ? now : 1; S.last_repeat[i] = now; }
         if (released & BUTTON_BITS[i]) S.held_since[i] = 0;
         for (k = 0; k < 3; k++) {
@@ -1501,10 +1516,10 @@ static void feed_input(void)
             ev.motion.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
             SDL_PushEvent(&ev);
         }
-        if (pressed & PSPEXP_BUTTON_CROSS) push_mouse_button(SDL_BUTTON_LEFT, 1);
-        if (released & PSPEXP_BUTTON_CROSS) push_mouse_button(SDL_BUTTON_LEFT, 0);
-        if (pressed & PSPEXP_BUTTON_CIRCLE) push_mouse_button(SDL_BUTTON_RIGHT, 1);
-        if (released & PSPEXP_BUTTON_CIRCLE) push_mouse_button(SDL_BUTTON_RIGHT, 0);
+        if (S.mouse_left >= 0 && (pressed & BUTTON_BITS[S.mouse_left])) push_mouse_button(SDL_BUTTON_LEFT, 1);
+        if (S.mouse_left >= 0 && (released & BUTTON_BITS[S.mouse_left])) push_mouse_button(SDL_BUTTON_LEFT, 0);
+        if (S.mouse_right >= 0 && (pressed & BUTTON_BITS[S.mouse_right])) push_mouse_button(SDL_BUTTON_RIGHT, 1);
+        if (S.mouse_right >= 0 && (released & BUTTON_BITS[S.mouse_right])) push_mouse_button(SDL_BUTTON_RIGHT, 0);
     }
 }
 
