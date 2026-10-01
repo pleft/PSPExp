@@ -336,7 +336,9 @@ static struct {
     int sh_env, sh_env_alpha;   /* ...a pass drawing a cube map as a sphere map (the GE's environment map) */
     int sh_uvset, sh_replace;
     float pk_scale;             /* a draw with 16-bit positions: they are sent times this, the modelview sent over it (0: floats) */
-    float pk_next;              /* ...chosen by draw_vertices for the prepare that follows (which takes it) */   /* ...a pass with another set of texture coordinates (glsl_plan_uv), its texture as is */
+    float pk_next;              /* ...chosen by draw_vertices for the prepare that follows (which takes it) */
+    float pk_last;              /* the frame's last 16-bit draw's scale, shared when it fits (the draws then join) */
+    int pk_float, pk_float_next;   /* ...positions as floats all the same, times the scale (the matrices stay) */   /* ...a pass with another set of texture coordinates (glsl_plan_uv), its texture as is */
     float sh_env_axes[2][3];    /* ...its axes: the eye's x and y on the normals */
     /* GL 2: the generic vertex attributes (of the vertex array object bound), the program in use */
     Array gattr[16]; int gnorm[16]; float gcur[16][4];
@@ -1101,6 +1103,7 @@ static PspExpContext *prepare_colour(GlTex **texp, const float *color)
     GlTex *tex = NULL;
     PspExp3DState st;
     G.pk_scale = G.pk_next; G.pk_next = 0;   /* this draw's, or none */
+    G.pk_float = G.pk_float_next; G.pk_float_next = 0;
     if (!ctx) return NULL;
     if (shim_gl_reconnects() != G.reconnects) {   /* the PSP has none of it */
         GlTex *t;
@@ -1211,8 +1214,10 @@ static void pack(uint8_t *out, uint32_t vt, const Vtx *v, int n)
         else if (vt & 3u) { uint16_t t[2] = { u16(v[i].t[0]), u16(v[i].t[1]) }; memcpy(o, t, 4); o += 4; }
         if (vt & PSPEXP_3D_VT_COLOR) { memcpy(o, &v[i].c, 4); o += 4; }
         if (vt & PSPEXP_3D_VT_NORMAL) { memcpy(o, v[i].n, 12); o += 12; }
-        if ((vt & PSPEXP_3D_VT_POSITION) == PSPEXP_3D_VT_POSITION) memcpy(o, v[i].p, 12);
-        else {
+        if ((vt & PSPEXP_3D_VT_POSITION) == PSPEXP_3D_VT_POSITION) {
+            if (G.pk_scale > 0) { float q[3] = { v[i].p[0] * G.pk_scale, v[i].p[1] * G.pk_scale, v[i].p[2] * G.pk_scale }; memcpy(o, q, 12); }
+            else memcpy(o, v[i].p, 12);
+        } else {
             int16_t q[3] = { s16(v[i].p[0] * G.pk_scale), s16(v[i].p[1] * G.pk_scale), s16(v[i].p[2] * G.pk_scale) };
             memcpy(o, q, 6);
             if (o + 6 < out + size) memset(o + 6, 0, (size_t)(out + size - (o + 6)));
@@ -1220,11 +1225,13 @@ static void pack(uint8_t *out, uint32_t vt, const Vtx *v, int n)
     }
 }
 
+static int merge_flushing;   /* the draws of a display list's merged run going out: kept by content at any size */
+
 static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *v, int n)
 {
     uint8_t *out;
     int i;
-    if (n >= 512) {   /* a large draw: the same vertices as before may be a mesh on the PSP already */
+    if (n >= 512 || (merge_flushing && n >= 3)) {   /* a large draw: the same vertices as before may be a mesh on the PSP already */
         static uint8_t *buf;
         static size_t cap;
         size_t bytes = (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
@@ -1232,6 +1239,7 @@ static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *
         if (bytes <= cap) {
             pack(buf, vt, v, n);
             if (content_mesh(ctx, prim, vt, buf, n)) { G.draws++; G.vertices += (unsigned)n; return; }
+            if (G.log >= 2) gl_logf("streamed: %d vertices, not (yet) a mesh by content", n);
             if ((out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n))) memcpy(out, buf, bytes);
             G.draws++; G.vertices += (unsigned)n;
             return;
@@ -1253,6 +1261,17 @@ static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *
     (void)i;
     G.draws++;
     G.vertices += (unsigned)n;
+}
+
+/* A list of `per`-vertex primitives in messages of at most CHUNK_VERTICES, the pieces as even as
+ * they can be: a large draw's last piece is then no small leftover, which (under 512 vertices) would
+ * not be kept on the PSP as a mesh by content and went every frame (DreamChess: 110 KB a frame) */
+static void send_chunked(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *v, int n, int per)
+{
+    int max = CHUNK_VERTICES / per * per, pieces = (n + max - 1) / max, len, i;
+    if (pieces <= 1) { if (n > 0) send_prim(ctx, prim, vt, v, n); return; }
+    len = (n / per + pieces - 1) / pieces * per;
+    for (i = 0; i < n; i += len) send_prim(ctx, prim, vt, v + i, n - i < len ? n - i : len);
 }
 
 static Vtx *scratch(int n)
@@ -1404,8 +1423,7 @@ static int clip_and_send(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vt
         if (!(code[a] | code[b] | code[d])) { out[k++] = v[a]; out[k++] = v[b]; out[k++] = v[d]; }
         else if (!(code[a] & code[b] & code[d])) k += clip_triangle(&c, &v[a], &v[b], &v[d], out + k);   /* else: all beyond one plane, unseen */
     }
-    for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
-        send_prim(ctx, GU_TRIANGLES, vt, out + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+    send_chunked(ctx, GU_TRIANGLES, vt, out, k, 3);
     free(out);
     free(code);
     return 1;
@@ -1461,20 +1479,35 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
     int per, i;
     if (n <= 0 || (G.cull && G.cull_mode == GL_FRONT_AND_BACK && mode >= GL_TRIANGLES)) return;
     G.pk_next = 0;
-    if (n >= 16 && !((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || (G.texgen[0] && G.texture_2d && !G.sh_active)) &&
+    if (n >= 3 && !((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || (G.texgen[0] && G.texture_2d && !G.sh_active)) &&
         (ctx = shim_gl_frame()) && pspexp_3d16_supported(ctx) && !getenv("PSPEXP_GL_FLOATS")) {
-        /* unlit (the GE does not renormalise normals): 16-bit positions, over a power of two that fits them */
-        float mx = 0;
+        /* unlit (the GE does not renormalise normals): 16-bit positions, over a power of two that fits them.
+         * The scale of the draw before when they fit it losing two bits at most: the matrices then stay as
+         * they were and the draws join (pspexp_3d_draw_more): Emilia Pinball's triangles, three vertices a
+         * draw, one scale for most of a frame */
+        float mx = 0, lo[3], hi[3], ext = 0;
+        int k;
+        for (k = 0; k < 3; k++) lo[k] = hi[k] = v[0].p[k];
         for (i = 0; i < n; i++) {
             float a = fabsf(v[i].p[0]), b = fabsf(v[i].p[1]), c = fabsf(v[i].p[2]);
             if (a > mx) mx = a;
             if (b > mx) mx = b;
             if (c > mx) mx = c;
+            for (k = 0; k < 3; k++) { if (v[i].p[k] < lo[k]) lo[k] = v[i].p[k]; if (v[i].p[k] > hi[k]) hi[k] = v[i].p[k]; }
         }
+        for (k = 0; k < 3; k++) if (hi[k] - lo[k] > ext) ext = hi[k] - lo[k];
+        /* a small draw in 16 bits only when small against where it lies: its rounding then tiny beside it
+         * (a large polygon, gl-demo's floor, moved its edge a pixel near the horizon); else in floats, times
+         * the frame's scale if there is one (not to send the matrices again for it) */
+        int big = n < 16 && ext * 16.0f > mx;
         if (mx > 0 && mx < 1e6f && mx > 1e-6f) {
             int e;
+            float own;
             frexpf(mx, &e);   /* mx < 2^e */
-            G.pk_next = ldexpf(1.0f, -e);
+            own = ldexpf(1.0f, -e);
+            if (big) { if (G.pk_last > 0) { G.pk_next = G.pk_last; G.pk_float_next = 1; } }
+            else if (G.pk_last > 0 && mx * G.pk_last < 1.0f && own <= 4.0f * G.pk_last) G.pk_next = G.pk_last;
+            else G.pk_next = G.pk_last = own;
         }
     }
     if (!(ctx = prepare(&tex))) return;
@@ -1497,7 +1530,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
     if (tex && !(G.tc == TC_GE && G.texgen[0]) && G.tc != TC_ENV && !G.sh_env) vt |= PSPEXP_3D_VT_TEXTURE;
     if ((G.lighting && !G.sh_active) || G.sh_lit || G.sh_env || G.tc == TC_ENV) vt |= PSPEXP_3D_VT_NORMAL;
     if (G.sh_lit) vt &= ~(uint32_t)PSPEXP_3D_VT_COLOR;   /* lit: the material's colour */
-    if (G.pk_scale > 0) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_POSITION) | PSPEXP_3D_VT_POSITION16;
+    if (G.pk_scale > 0 && !G.pk_float) vt = (vt & ~(uint32_t)PSPEXP_3D_VT_POSITION) | PSPEXP_3D_VT_POSITION16;
     if (tex && G.tc == TC_HOST && (G.texgen[0] || G.texgen[1])) {   /* generated coordinates, per vertex, here */
         const float *m = G.mv[G.mv_top];
         for (i = 0; i < n; i++) {
@@ -1541,7 +1574,7 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
             if (q != 0.0f && q != 1.0f) { v[i].t[0] /= q; v[i].t[1] /= q; }
         }
     }
-    if (G.pk_scale > 0 && (vt & 3u) == 3u) {   /* the coordinates too, when all lie in 0 .. 2 (the GE's unsigned 16 bits) */
+    if (G.pk_scale > 0 && !G.pk_float && (vt & 3u) == 3u) {   /* the coordinates too, when all lie in 0 .. 2 (the GE's unsigned 16 bits) */
         for (i = 0; i < n; i++) if (!(v[i].t[0] >= 0 && v[i].t[0] < 1.999f && v[i].t[1] >= 0 && v[i].t[1] < 1.999f)) break;
         if (i == n) vt = (vt & ~3u) | PSPEXP_3D_VT_TEXTURE16;
     }
@@ -1594,12 +1627,11 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
                     Vtx *tv = scratch(ns);
                     if (tv) {
                         for (i = 0; i < ns; i++) tv[i] = used_v[safe[i]];
-                        for (i = 0; i < ns; i += CHUNK_VERTICES / 3 * 3) send_prim(ctx, GU_TRIANGLES, vt, tv + i, ns - i < CHUNK_VERTICES / 3 * 3 ? ns - i : CHUNK_VERTICES / 3 * 3);
+                        send_chunked(ctx, GU_TRIANGLES, vt, tv, ns, 3);
                     }
                 }
             }
-            for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
-                send_prim(ctx, GU_TRIANGLES, vt, cut + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+            send_chunked(ctx, GU_TRIANGLES, vt, cut, k, 3);
             free(cut);
             return;
         }
@@ -1646,20 +1678,25 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
                 send_prim(ctx, prim, vt, v + i, n - i < CHUNK_VERTICES ? n - i : CHUNK_VERTICES);
             return;
         }
+        if (prim == GU_TRIANGLE_STRIP) {   /* pieces overlapping by two vertices, each an even number of
+            triangles on (the winding), as even in length as they can be (each kept as a mesh by content) */
+            int tris = n - 2, pieces = (tris + CHUNK_VERTICES - 3) / (CHUNK_VERTICES - 2), len = (tris + pieces - 1) / pieces;
+            len += len & 1;
+            for (i = 0; i < tris; i += len) send_prim(ctx, prim, vt, v + i, (tris - i < len ? tris - i : len) + 2);
+            return;
+        }
         {
             Vtx *t = (Vtx *)malloc((size_t)(n - 2) * 3 * sizeof(Vtx));
             int k;
             if (!t) return;
             k = to_triangles(mode, v, n, t);
-            for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
-                send_prim(ctx, GU_TRIANGLES, vt, t + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+            send_chunked(ctx, GU_TRIANGLES, vt, t, k, 3);
             free(t);
         }
         return;
     }
     n -= n % per;
-    for (i = 0; i < n; i += CHUNK_VERTICES / per * per)
-        send_prim(ctx, prim, vt, v + i, n - i < CHUNK_VERTICES / per * per ? n - i : CHUNK_VERTICES / per * per);
+    send_chunked(ctx, prim, vt, v, n, per);
 }
 
 static void meshes_frame_done(PspExpContext *ctx);
@@ -1677,6 +1714,7 @@ void pspexp_gl_frame_done(void)
     meshes_frame_done(shim_gl_frame());
     if (G.log && G.inited) gl_logf("frame: %u draws, %u vertices, %u clears", G.draws, G.vertices, G.clears);
     G.draws = G.vertices = G.clears = 0;
+    G.pk_last = 0;
     G.state_sent = G.matrices_sent = G.lights_sent = 0;   /* each frame says it all again: small, and nothing gets stale */
     G.target = NULL;   /* every frame starts on the screen */
     alias_drawn = 0;
@@ -1701,38 +1739,65 @@ static int replaying;
 /* A display list's run of glBegin/glEnd blocks with nothing but vertices between them, drawn as one
  * list of triangles (DreamChess: a piece is hundreds of short strips, 9400 draws a frame; as one
  * draw each, 512 vertices and more, the same every frame, it is kept on the PSP as a mesh) */
-static Vtx *merge_v;
-static int merge_n, merge_cap, merging;
+static Vtx *merge_v, *strip_v;
+static int merge_n, merge_cap, strip_n, strip_cap, merging;
 
 static void merge_flush(void)
 {
-    int n = merge_n;
-    merge_n = 0;
+    int n = merge_n, ns = strip_n;
+    merge_n = strip_n = 0;
+    merge_flushing = 1;
+    if (ns) draw_vertices(GL_TRIANGLE_STRIP, strip_v, ns);
     if (n) draw_vertices(GL_TRIANGLES, merge_v, n);
+    merge_flushing = 0;
 }
 
+static int grow(Vtx **buf, int *cap, int need)
+{
+    int c = *cap ? *cap : 1024;
+    Vtx *p;
+    if (need <= *cap) return 1;
+    while (c < need) c *= 2;
+    if (!(p = (Vtx *)realloc(*buf, (size_t)c * sizeof(Vtx)))) return 0;
+    *buf = p; *cap = c;
+    return 1;
+}
+
+/* Strips stay strips (the GE transforms and lights a strip's vertex once, a list's three times a
+ * triangle: DreamChess's pieces as lists took the GE 34 ms a frame), one after another in one strip,
+ * joined by repeating the last vertex and the next strip's first (triangles of no area, drawn as
+ * nothing), with one more when needed so that each strip starts at an even place and keeps its
+ * winding; the rest as a list of triangles. */
 static int merge_add(GLenum mode, const Vtx *v, int n)
 {
     int i, t = 0;
+    if (mode == GL_TRIANGLE_STRIP) {
+        int join = strip_n ? 2 + (strip_n & 1) : 0;
+        if (n < 3) return 1;
+        if (strip_n + join + n > (int)PSPEXP_3D_MAX_VERTICES - 2) { merge_flush(); join = 0; }
+        if (!grow(&strip_v, &strip_cap, strip_n + join + n)) return 0;
+        if (join) {
+            Vtx last = strip_v[strip_n - 1];
+            strip_v[strip_n++] = last;
+            if (join == 3) strip_v[strip_n++] = last;
+            strip_v[strip_n++] = v[0];
+        }
+        memcpy(strip_v + strip_n, v, (size_t)n * sizeof(Vtx));
+        strip_n += n;
+        return 1;
+    }
     switch (mode) {
     case GL_TRIANGLES: t = n / 3; break;
-    case GL_TRIANGLE_STRIP: case GL_TRIANGLE_FAN: case GL_POLYGON: t = n >= 3 ? n - 2 : 0; break;
+    case GL_TRIANGLE_FAN: case GL_POLYGON: t = n >= 3 ? n - 2 : 0; break;
     case GL_QUADS: t = n / 4 * 2; break;
     case GL_QUAD_STRIP: t = n >= 4 ? (n - 2) / 2 * 2 : 0; break;
     default: return 0;
     }
     if (merge_n + t * 3 > (int)PSPEXP_3D_MAX_VERTICES - 2) merge_flush();
-    if (merge_n + t * 3 > merge_cap) {
-        int c = merge_cap ? merge_cap : 1024;
-        Vtx *p;
-        while (c < merge_n + t * 3) c *= 2;
-        if (!(p = (Vtx *)realloc(merge_v, (size_t)c * sizeof(Vtx)))) return 0;
-        merge_v = p; merge_cap = c;
-    }
+    if (!grow(&merge_v, &merge_cap, merge_n + t * 3)) return 0;
 #define TRI(a, b, c) do { merge_v[merge_n++] = v[a]; merge_v[merge_n++] = v[b]; merge_v[merge_n++] = v[c]; } while (0)
     switch (mode) {
     case GL_TRIANGLES: for (i = 0; i + 2 < n; i += 3) TRI(i, i + 1, i + 2); break;
-    case GL_TRIANGLE_STRIP: for (i = 0; i + 2 < n; i++) { if (i & 1) TRI(i + 1, i, i + 2); else TRI(i, i + 1, i + 2); } break;
     case GL_TRIANGLE_FAN: case GL_POLYGON: for (i = 1; i + 1 < n; i++) TRI(0, i, i + 1); break;
     case GL_QUADS: for (i = 0; i + 3 < n; i += 4) { TRI(i, i + 1, i + 2); TRI(i, i + 2, i + 3); } break;
     case GL_QUAD_STRIP: for (i = 0; i + 3 < n; i += 2) { TRI(i, i + 1, i + 3); TRI(i, i + 3, i + 2); } break;
@@ -3647,8 +3712,7 @@ static int mesh_clipped(PspExpContext *ctx, Mesh *m, const Clip *c, GLenum mode,
         uint16_t *dst = pspexp_3d_draw_mesh(ctx, m->handle, PSPEXP_MESH_INLINE, GU_TRIANGLES, 0, (uint32_t)cnt);
         if (dst) memcpy(dst, safe + i, (size_t)cnt * 2u);
     }
-    for (i = 0; i < k; i += CHUNK_VERTICES / 3 * 3)
-        send_prim(ctx, GU_TRIANGLES, vt, out + i, k - i < CHUNK_VERTICES / 3 * 3 ? k - i : CHUNK_VERTICES / 3 * 3);
+    send_chunked(ctx, GU_TRIANGLES, vt, out, k, 3);
     G.draws++; G.vertices += (unsigned)(ns + k);
     free(list); free(safe); free(out);
     return 1;

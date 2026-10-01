@@ -445,14 +445,14 @@ or cross / square drive, circle the handbrake) and Teeworlds (`teeworlds`:
 online servers or a LAN, it has no bots; the nub aims, R fires, L hooks, the
 d-pad runs, cross jumps, square / triangle change weapon).
 
-DreamChess (`dreamchess`, 2026-10-01; seen playing in PPSSPP, not yet on the
-PSP): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
+DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
+keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
 selector, cross picks a piece and then its square, circle / start open the
 menu; the pointer cannot pick pieces (DreamChess reads the pixel under it
 back, which the PSP does not give). Its recipe sets `PSPEXP_GL_EXTENSIONS`.
 
-Emilia Pinball (`pinball`, 2026-10-01; seen playing in PPSSPP, not yet on the
-PSP): the Tux table to start (the Professor from its menu). L and R are the
+Emilia Pinball (`pinball`, 2026-10-01; 30 fps on the PSP-1000 with scripted
+keys, not yet played by hand): the Tux table to start (the Professor from its menu). L and R are the
 flippers, cross launches, square / circle / triangle nudge the table, start
 opens the menu.
 

@@ -67,7 +67,7 @@ struct PspExpContext {
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
 {
-    char buf[200];
+    char buf[1100];   /* the byte tally (PSPEXP_TRACE_BYTES) is one long line */
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
