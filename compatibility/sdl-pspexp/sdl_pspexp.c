@@ -477,6 +477,14 @@ static void begin_frame(void)
     if (!S.frame_open) {
         pspexp_begin_frame(S.ctx); S.frame_open = 1; S.clip_sent = 0;
         if (!S.no_batch) pspexp_batch_begin(S.ctx);   /* the frame's uploads and audio: one transfer (end_frame) */
+        if (S.ren && !S.gl_window && (S.ox > 0 || S.oy > 0)) {
+            /* letterboxed: the bars black every frame (a game that draws a full background and never
+             * clears, Blobby Volley, left them showing whatever the PSP had there) */
+            uint16_t black = pspexp_color_5650(0, 0, 0);
+            pspexp_set_clip(S.ctx, 0, 0, 480, 272);
+            if (S.ox > 0) { pspexp_fill_rect(S.ctx, 0, 0, (int16_t)S.ox, 272, black, 255); pspexp_fill_rect(S.ctx, (int16_t)(480 - S.ox), 0, (int16_t)S.ox, 272, black, 255); }
+            if (S.oy > 0) { pspexp_fill_rect(S.ctx, 0, 0, 480, (int16_t)S.oy, black, 255); pspexp_fill_rect(S.ctx, 0, (int16_t)(272 - S.oy), 480, (int16_t)S.oy, black, 255); }
+        }
     }
 }
 
@@ -2098,6 +2106,9 @@ static void end_frame(void)
     if (S.win) {   /* programs resize their window after creating it (scalers, settings) */
         int w = 0, h = 0;
         SDL_GetWindowSize(S.win, &w, &h);
+        /* full screen on a headless board: the PSP's screen, not the dummy driver's 1024x768 (Trigger
+         * Rally goes full screen at the desktop's size, 480x272, and drew into a third of it) */
+        if (headless_display() && (REAL(SDL_GetWindowFlags)(S.win) & SDL_WINDOW_FULLSCREEN)) { w = PSP_W; h = PSP_H; }
         if (w > 0 && h > 0 && (w != S.win_w || h != S.win_h)) { S.win_w = w; S.win_h = h; update_scale(); }
     }
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }

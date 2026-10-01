@@ -43,6 +43,8 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 | `SDL_SetTextureColorMod`, `SDL_SetTextureAlphaMod` | per-quad tint (5650 when opaque, 4444 when translucent) |
 | `SDL_RenderCopy`, `SDL_RenderCopyEx`, `SDL_RenderCopyF`, `SDL_RenderCopyExF` | scaled quads (`PSPEXP_BATCH_SCALED`); horizontal and vertical flips; **rotation is ignored** (drawn unrotated) |
 | `SDL_RenderClear` | a full-screen rect, including the letterbox bars |
+| a letterboxed frame (any) | the bars painted black at its start: a game that draws a full background and never clears (Blobby Volley) left them showing what the PSP had there |
+| a full-screen window on a headless board | the PSP's size, 480x272, whatever SDL's dummy driver makes it (1024x768): Trigger Rally goes full screen at the desktop's size and set its viewport for 480x272 |
 | `SDL_RenderFillRect(s)`, `SDL_RenderFillRectF`, `SDL_RenderDrawRect`, `SDL_RenderDrawPoint(s)` | `DRAW_RECT` with the draw colour and alpha (when the blend mode is not NONE) |
 | `SDL_RenderDrawLine(s)` | `DRAW_LINE` |
 | `SDL_RenderPresent` | flush, `PRESENT`, paced on the PSP's `PRESENT_DONE`; then input and audio |
