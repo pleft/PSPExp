@@ -1242,7 +1242,12 @@ static void send_prim(PspExpContext *ctx, uint8_t prim, uint32_t vt, const Vtx *
         if (max == -2) max = getenv("PSPEXP_GL_MAXDRAWS") ? atol(getenv("PSPEXP_GL_MAXDRAWS")) : -1;
         if (max >= 0 && (long)G.draws >= max) { G.draws++; return; }
     }
-    out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n);
+    /* One triangle as a strip or fan is a triangle list's; a list drawn right after another of the
+     * same state and vertex type (nothing sent between) goes on as the same 3D_DRAW: Emilia Pinball
+     * draws polygon by polygon, 7,800 draws a frame */
+    if (n == 3 && (prim == GU_TRIANGLE_STRIP || prim == GU_TRIANGLE_FAN)) prim = GU_TRIANGLES;
+    if (getenv("PSPEXP_GL_NOJOIN") || !(out = (uint8_t *)pspexp_3d_draw_more(ctx, prim, vt, (uint32_t)n)))
+        out = (uint8_t *)pspexp_3d_draw(ctx, prim, vt, (uint32_t)n);
     if (!out) return;
     pack(out, vt, v, n);
     (void)i;

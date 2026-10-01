@@ -102,6 +102,24 @@ void *pspexp_writer_reserve(PspExpWriter *w, size_t len)
     return p;
 }
 
+void *pspexp_writer_regrow(PspExpWriter *w, size_t at, size_t len)
+{
+    PspExpMessageHeader h;
+    size_t padded = PSPEXP_ALIGN_UP(len), old;
+    if (w->msg_start != NO_MESSAGE || at + PSPEXP_HEADER_SIZE > w->len || padded > PSPEXP_MAX_PAYLOAD) return NULL;
+    memcpy(&h, w->buf + at, sizeof(h));
+    if (h.magic != PSPEXP_MAGIC || h.sequence + 1u != w->sequence || at + PSPEXP_HEADER_SIZE + h.length != w->len) return NULL;
+    old = h.length;
+    if (padded > old) {
+        if (ensure(w, padded - old) < 0) return NULL;
+        memset(w->buf + w->len, 0, padded - old);
+    } else if (padded < old) return NULL;
+    w->len = at + PSPEXP_HEADER_SIZE + padded;
+    h.length = (uint32_t)padded;
+    memcpy(w->buf + at, &h, sizeof(h));
+    return w->buf + at + PSPEXP_HEADER_SIZE;
+}
+
 int pspexp_writer_end(PspExpWriter *w)
 {
     size_t payload, padded, pad;

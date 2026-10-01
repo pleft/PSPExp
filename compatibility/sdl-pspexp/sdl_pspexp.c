@@ -1663,7 +1663,17 @@ HOOK(SDL_Renderer *, SDL_CreateRenderer, (SDL_Window *win, int index, Uint32 fla
 
 HOOK(int, SDL_CreateWindowAndRenderer, (int w, int h, Uint32 flags, SDL_Window **win, SDL_Renderer **ren))
 {
-    int rc = REAL(SDL_CreateWindowAndRenderer)(w, h, flags, win, ren);
+    int rc;
+    if ((flags & SDL_WINDOW_OPENGL) && win && ren) {
+        /* an OpenGL window from SDL's renderer, its context the renderer's (Emilia Pinball draws with GL
+         * from there): a headless board has no GL renderer, so the window and a software renderer, and
+         * the layer's OpenGL as if the program had made its context */
+        if (!(*win = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, flags))) return -1;
+        *ren = SDL_CreateRenderer(*win, -1, SDL_RENDERER_SOFTWARE);
+        if (!SDL_GL_CreateContext(*win)) return -1;
+        return 0;
+    }
+    rc = REAL(SDL_CreateWindowAndRenderer)(w, h, flags, win, ren);
     if (rc == 0 && !S.ren && win && ren) {
         S.win = *win; S.ren = *ren; S.win_w = w; S.win_h = h;
         connect_once();
@@ -1977,6 +1987,7 @@ HOOK(int, SDL_RenderDrawPoints, (SDL_Renderer *r, const SDL_Point *points, int c
 /* Input and audio must not wait for the next present: a menu that redraws
  * once a second would lose every press and let the audio pile up. Games
  * poll events every loop iteration, so the link is serviced from there. */
+static void script_tick(void);
 static void service_link(void)
 {
     static Uint32 last;
@@ -1986,6 +1997,7 @@ static void service_link(void)
     pspexp_pump(S.ctx, 0);
     feed_input();
     audio_drain();
+    script_tick();   /* a game waiting for an event (Pinball's menu) gets its scripted keys too */
 }
 
 /* PSPEXP_NUB=mouse: the PSP shows no host cursor, so the pointer is drawn

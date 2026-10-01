@@ -174,6 +174,10 @@ void pspexp_3d_clear(PspExpContext *ctx, uint32_t flags, uint32_t color, uint16_
 /* Space for `count` vertices of `vertex_type` (pspexp_3d_vertex_size each)
  * in the frame, valid until the next call on ctx; NULL on error. */
 void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count);
+/* `count` more vertices onto the frame's last message when it is a 3D_DRAW of the same list
+ * primitive (points, lines, triangles) and vertex type, without indices: a pointer to fill, NULL
+ * when it is not (then pspexp_3d_draw). Draws of the same state one after another as one. */
+void *pspexp_3d_draw_more(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count);
 /* PSPEXP_FEATURE_3D_INDEXED: `count` vertices (returned) and `index_count` 16-bit indices (*indices) */
 int pspexp_3d_indexed_supported(const PspExpContext *ctx);
 void *pspexp_3d_draw_indexed(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count, uint32_t index_count,

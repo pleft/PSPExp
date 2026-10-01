@@ -38,6 +38,10 @@ int   pspexp_writer_append(PspExpWriter *w, const void *data, size_t len);
 /* Reserve `len` zeroed bytes of payload and return a pointer to fill in place
  * (valid until the next writer call). NULL on failure. */
 void *pspexp_writer_reserve(PspExpWriter *w, size_t len);
+/* The last message written, if it is the one whose header is at `at` and none
+ * is open, its payload made `len` bytes (padded to 16, new bytes zeroed):
+ * a pointer to its payload (valid until the next writer call), else NULL. */
+void *pspexp_writer_regrow(PspExpWriter *w, size_t at, size_t len);
 /* Pads the payload to 16 bytes and finalises the header. */
 int   pspexp_writer_end(PspExpWriter *w);
 

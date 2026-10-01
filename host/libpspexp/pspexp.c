@@ -36,6 +36,7 @@ struct PspExpContext {
     uint16_t pending_id;                /* between pspexp_upload_mesh_begin and _commit */
     PspExpStream in;
     PspExpWriter frame;
+    size_t last_draw;            /* where in `frame` the last 3D_DRAW's header is (pspexp_3d_draw_more) */
     PspExpWriter msg;
     uint8_t *rx;
     PspExpLinkState state;
@@ -1147,11 +1148,32 @@ void *pspexp_3d_draw(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type
     if (!size || !count || count > PSPEXP_3D_MAX_VERTICES || primitive > PSPEXP_3D_PRIM_MAX) return NULL;
     memset(&d, 0, sizeof(d));
     d.primitive = primitive; d.vertex_type = vertex_type; d.count = count;
+    ctx->last_draw = ctx->frame.len;
     if (pspexp_writer_begin(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_3D_DRAW, 0) < 0 ||
         pspexp_writer_append(&ctx->frame, &d, sizeof(d)) < 0 ||
         !(v = pspexp_writer_reserve(&ctx->frame, PSPEXP_ALIGN_UP((size_t)size * count)))) return NULL;
     pspexp_writer_end(&ctx->frame);   /* already padded: nothing moves the reserved bytes */
     return v;
+}
+
+void *pspexp_3d_draw_more(PspExpContext *ctx, uint8_t primitive, uint32_t vertex_type, uint32_t count)
+{
+    PspExpWriter *w = &ctx->frame;
+    PspExp3DDraw d;
+    uint32_t size = pspexp_3d_vertex_size(vertex_type);
+    uint8_t *p;
+    /* lists of separate points, lines or triangles only (GE 0, 1, 3): a strip or fan cannot go on */
+    if (!size || !count || (primitive != 0 && primitive != 1 && primitive != 3)) return NULL;
+    if (ctx->last_draw + PSPEXP_HEADER_SIZE + sizeof(d) > w->len) return NULL;
+    memcpy(&d, w->buf + ctx->last_draw + PSPEXP_HEADER_SIZE, sizeof(d));
+    if (((const PspExpMessageHeader *)(const void *)(w->buf + ctx->last_draw))->opcode != PSPEXP_OP_3D_DRAW ||
+        d.primitive != primitive || d.vertex_type != vertex_type || d.index_count ||
+        d.count + count > PSPEXP_3D_MAX_VERTICES || (size_t)size * (d.count + count) > 64u * 1024u) return NULL;
+    if (!(p = (uint8_t *)pspexp_writer_regrow(w, ctx->last_draw, sizeof(d) + (size_t)size * (d.count + count)))) return NULL;
+    p += sizeof(d) + (size_t)size * d.count;
+    d.count += count;
+    memcpy(w->buf + ctx->last_draw + PSPEXP_HEADER_SIZE, &d, sizeof(d));
+    return p;
 }
 
 int pspexp_3d_indexed_supported(const PspExpContext *ctx)

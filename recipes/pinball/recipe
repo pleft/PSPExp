@@ -1,0 +1,26 @@
+# Emilia Pinball: 3D pinball, Debian's package, the Tux table to start (the
+# Professor table from its menu). L and R are the flippers, cross launches the
+# ball, square / circle / triangle nudge the table left, right and up, start
+# opens the menu (the d-pad and cross in it). Its picture 4:3, letterboxed.
+# The game is setgid (high scores): pspexp-run starts it through the loader.
+
+[package]
+id=pinball
+title=Emilia Pinball
+description=3D pinball with two tables, Tux and the Professor
+category=game
+license=GPL-2 (Emilia Pinball)
+version=1
+
+[debian]
+apt=pinball
+
+[entry]
+title=Emilia Pinball
+type=game
+description=3D pinball with two tables, Tux and the Professor
+icon=gamepad-2
+exec=/usr/games/pinball
+keys=l=lshift,r=rshift,cross=return,square=lctrl,circle=rctrl,triangle=space,start=escape,select=escape
+env=PINBALL_TABLE=tux
+env=PSPEXP_JOYSTICK=0

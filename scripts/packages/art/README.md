@@ -26,3 +26,4 @@
 | `recipes/trigger-rally/cover.png` | Debian's trigger-rally package, its 128x128 pixmap | GPL-2.0+ (Trigger Rally) |
 | `recipes/teeworlds/cover.png` | Debian's teeworlds package, its 128x128 icon | Zlib (Teeworlds) |
 | `recipes/dreamchess/cover.png` | Debian's dreamchess package, its 256x256 icon, scaled | GPL-3+ (DreamChess) |
+| `recipes/pinball/cover.png` | a screenshot of Emilia Pinball in PPSSPP (the Tux table), cropped and scaled | GPL-2 (Emilia Pinball) |
