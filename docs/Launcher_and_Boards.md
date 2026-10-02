@@ -1319,7 +1319,9 @@ too). The console, whose views draw only on change, draws a frame when the
 bar comes and one when it goes. The launcher's top bar shows a headphones
 icon and the volume among the board's indicators while the sound is on
 Bluetooth (`/tmp/pspexp-audio-volume-UID`, written by pspexp-bt). The control
-port's `volume-bar N` shows the bar (tests).
+port's `volume-bar N` shows the bar (tests). Tried on the PSP-1000 from the Pi the same day:
+the bar in the launcher and in games, the top bar's volume ("works
+excellent").
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering
