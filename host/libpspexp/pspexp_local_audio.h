@@ -17,6 +17,9 @@ typedef struct PspExpLocalAudio {
     uint32_t dropped;
     /* the PSP's volume buttons, while the route is the board's: pspexp-bt volume */
     uint32_t vol_buttons; uint64_t vol_next_us; int vol_pending; pid_t vol_pid;
+    int vol_fd;             /* the running pspexp-bt volume's answer */
+    int vol_now;            /* the device's volume, as it answered; -1 not known */
+    int vol_report;         /* a new answer, for the PSP's volume bar */
 } PspExpLocalAudio;
 
 void pspexp_la_init(PspExpLocalAudio *la);

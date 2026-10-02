@@ -105,6 +105,9 @@ typedef struct PspExpRuntimeOps {
      * stereo, at most max_frames; returns the frames written, or < 0. With
      * it, HELLO advertises PSPEXP_FEATURE_AUDIO_MP3. */
     int (*audio_decode)(void *user, int codec, const uint8_t *frame, uint32_t bytes, int16_t *stereo, uint32_t max_frames);
+    /* Optional: a volume bar drawn over the frames for 1.5 s (OSD_VOLUME; < 0 hides
+     * it). With it, HELLO advertises PSPEXP_FEATURE_OSD. */
+    void (*osd_volume)(void *user, int percent);
     /* Optional: the memory stick for the host (the FILE channel). With
      * fs_list set, HELLO advertises PSPEXP_FEATURE_FILES. Paths arrive
      * checked: "ms0:/..." or "ef0:/...", no ".." parts. Results: >= 0, or a

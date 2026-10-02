@@ -131,6 +131,12 @@ int pspexp_audio_stream_reset(PspExpContext *ctx);
  * sound; compressed audio (below) still goes to the PSP, so a sender
  * decodes it itself meanwhile. */
 int pspexp_audio_local(PspExpContext *ctx);
+/* the PSP's volume bar (PSPEXP_FEATURE_OSD), shown for 1.5 s; libpspexp sends it
+ * itself after a volume button changed the Bluetooth volume */
+int pspexp_osd_volume(PspExpContext *ctx, int percent);
+/* when the bar last sent goes away (pspexp_time_us), 0 none: the PSP draws it at
+ * each PRESENT, so a program that draws only on change should draw once after */
+uint64_t pspexp_osd_until(const PspExpContext *ctx);
 int pspexp_audio_mp3_supported(const PspExpContext *ctx);
 int pspexp_audio_coded(PspExpContext *ctx, int codec, const void *frames, uint32_t bytes);
 const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx);

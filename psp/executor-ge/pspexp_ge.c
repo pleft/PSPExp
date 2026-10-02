@@ -564,11 +564,55 @@ static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1
     ge->stats.rects++;
 }
 
+/* ---- the volume bar (OSD_VOLUME): a panel, a speaker, the bar, the number ---- */
+
+#define OSD_US 1500000u
+
+static void op_osd_volume(void *u, int percent)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    ge->osd_percent = percent > 100 ? 100 : percent;
+    ge->osd_until = percent < 0 ? 0 : sceKernelGetSystemTimeLow() + OSD_US;
+}
+
+static void osd_digit(PspExpGeExecutor *ge, int d, int x, int y)
+{
+    static const char *const F[10] = { "111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001",
+                                       "111100111001111", "111100111101111", "111001001001001", "111101111101111", "111101111001111" };
+    int i;
+    for (i = 0; i < 15; i++) if (F[d][i] == '1') op_draw_rect(ge, (int16_t)(x + (i % 3) * 2), (int16_t)(y + (i / 3) * 2), 2, 2, 0xFFFF, 255);
+}
+
+static void draw_osd(PspExpGeExecutor *ge)
+{
+    const int w = 200, h = 26, x = (PSPEXP_DISPLAY_WIDTH - w) / 2, y = 10, bx = x + 34, bw = 120;
+    int p = ge->osd_percent, fill = bw * p / 100, k;
+    char num[4];
+    leave_3d(ge);
+    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    op_draw_rect(ge, (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, 0x0000, 190);
+    /* a speaker: its body and cone, then waves for the loudness */
+    op_draw_rect(ge, (int16_t)(x + 10), (int16_t)(y + 10), 4, 6, 0xFFFF, 255);
+    for (k = 0; k < 4; k++) op_draw_rect(ge, (int16_t)(x + 14 + k), (int16_t)(y + 9 - k), 1, (int16_t)(8 + 2 * k), 0xFFFF, 255);
+    if (p > 0) op_draw_rect(ge, (int16_t)(x + 21), (int16_t)(y + 11), 1, 4, 0xFFFF, 255);
+    if (p > 50) op_draw_rect(ge, (int16_t)(x + 24), (int16_t)(y + 9), 1, 8, 0xFFFF, 255);
+    op_draw_rect(ge, (int16_t)bx, (int16_t)(y + 10), (int16_t)bw, 6, 0x4208, 255);
+    if (fill > 0) op_draw_rect(ge, (int16_t)bx, (int16_t)(y + 10), (int16_t)fill, 6, 0xFCD1, 255);   /* the launcher's accent */
+    k = 0;
+    if (p >= 100) num[k++] = 1;
+    if (p >= 10) num[k++] = (char)(p / 10 % 10);
+    num[k++] = (char)(p % 10);
+    { int i; for (i = 0; i < k; i++) osd_digit(ge, num[i], bx + bw + 10 + i * 8, y + 8); }
+    ge->state_dirty = 1;
+}
+
 static uint32_t op_present(void *u)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     uint32_t t0;
     screen_target(ge);
+    if (ge->osd_until && (int32_t)(ge->osd_until - sceKernelGetSystemTimeLow()) > 0) draw_osd(ge);
+    else ge->osd_until = 0;
     sceKernelDcacheWritebackAll();
     sceGuFinish();
     t0 = sceKernelGetSystemTimeLow();
@@ -663,6 +707,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->vertex_alloc = op_vertex_alloc;
     ops->draw_sprites = op_draw_sprites;
     ops->draw_rect = op_draw_rect;
+    ops->osd_volume = op_osd_volume;
     ops->draw_line = op_draw_line;
     ops->present = op_present;
     ops->frame_ge_us = op_frame_ge_us;

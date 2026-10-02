@@ -96,13 +96,18 @@ volume)
 	"") ;;
 	*) wpctl set-volume -l 1.0 "$id" "$(echo "$2" | awk '{printf "%.2f", $1 / 100}')" >/dev/null 2>&1 ;;
 	esac
-	wpctl get-volume "$id" 2>/dev/null | awk '{printf "%d\n", $2 * 100 + 0.5}' ;;
+	v=$(wpctl get-volume "$id" 2>/dev/null | awk '{printf "%d", $2 * 100 + 0.5}')
+	echo "$v" > "/tmp/pspexp-audio-volume-$(id -u)"   # the launcher's top bar
+	echo "$v" ;;
 route)
 	A=$(chosen)
 	if [ "$A" != psp ]; then
 		name=$(bluetoothctl info "$A" 2>/dev/null | sed -n 's/^[[:space:]]*Alias: //p' | head -1)
 		node=$(wpctl status -n 2>/dev/null | grep -o "bluez_output\.$(echo "$A" | tr : _)[^ ]*" | head -1)
-		[ -n "$node" ] && { echo "pw $node ${name:-$A}"; exit 0; }
+		if [ -n "$node" ]; then
+			id=$(node_id) && wpctl get-volume "$id" 2>/dev/null | awk '{printf "%d\n", $2 * 100 + 0.5}' > "/tmp/pspexp-audio-volume-$(id -u)"
+			echo "pw $node ${name:-$A}"; exit 0
+		fi
 		echo "psp - ${name:-$A}"; exit 0
 	fi
 	echo psp ;;

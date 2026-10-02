@@ -36,6 +36,8 @@ void pspexp_la_init(PspExpLocalAudio *la)
     la->fd = -1;
     la->pid = -1;
     la->vol_pid = -1;
+    la->vol_fd = -1;
+    la->vol_now = -1;
 }
 
 void pspexp_la_close(PspExpLocalAudio *la)
@@ -144,11 +146,17 @@ static void vol_spawn(PspExpLocalAudio *la)
     char d[16];
     char *argv[] = { "pspexp-bt", "volume", d, NULL };
     posix_spawn_file_actions_t fa;
+    int pf[2];
     snprintf(d, sizeof(d), "%+d", la->vol_pending);
+    if (pipe(pf) < 0) return;
     posix_spawn_file_actions_init(&fa);
-    posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_adddup2(&fa, pf[1], 1);   /* it prints the new volume */
+    posix_spawn_file_actions_addclose(&fa, pf[0]);
+    posix_spawn_file_actions_addclose(&fa, pf[1]);
     posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
-    if (posix_spawnp(&la->vol_pid, "pspexp-bt", &fa, NULL, argv, environ) != 0) la->vol_pid = -1;
+    if (posix_spawnp(&la->vol_pid, "pspexp-bt", &fa, NULL, argv, environ) != 0) { la->vol_pid = -1; close(pf[0]); }
+    else { la->vol_fd = pf[0]; fcntl(la->vol_fd, F_SETFD, FD_CLOEXEC); }
+    close(pf[1]);
     posix_spawn_file_actions_destroy(&fa);
     la->vol_pending = 0;
 }
@@ -157,7 +165,14 @@ void pspexp_la_buttons(PspExpLocalAudio *la, uint32_t buttons, uint64_t now_us)
 {
     uint32_t vol = buttons & (VOL_UP | VOL_DOWN), pressed = vol & ~la->vol_buttons;
     la->vol_buttons = vol;
-    if (la->vol_pid > 0 && waitpid(la->vol_pid, NULL, WNOHANG) == la->vol_pid) la->vol_pid = -1;
+    if (la->vol_pid > 0 && waitpid(la->vol_pid, NULL, WNOHANG) == la->vol_pid) {   /* done: its answer, for the bar */
+        char b[16];
+        ssize_t n = la->vol_fd >= 0 ? read(la->vol_fd, b, sizeof(b) - 1) : -1;
+        if (n > 0) { b[n] = 0; if (b[0] >= '0' && b[0] <= '9') { la->vol_now = atoi(b); la->vol_report = 1; } }
+        if (la->vol_fd >= 0) close(la->vol_fd);
+        la->vol_fd = -1;
+        la->vol_pid = -1;
+    }
     if (pressed) la_route(la);   /* (a program that plays nothing has not looked at the route) */
     if (!la->want) { la->vol_pending = 0; return; }   /* the PSP's own sound: its own volume */
     if (pressed) la->vol_next_us = now_us + 400000u;   /* held: again after 0.4 s, then every 0.15 s */

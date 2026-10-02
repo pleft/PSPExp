@@ -57,6 +57,18 @@ void bt_route_label(char *out, size_t n)
     else snprintf(out, n, "PSP");
 }
 
+int bt_indicator(int *percent)
+{
+    char line[200], path[64];
+    FILE *f;
+    *percent = -1;
+    route_read(line, sizeof(line));
+    if (strncmp(line, "pw ", 3)) return 0;
+    snprintf(path, sizeof(path), "/tmp/pspexp-audio-volume-%u", (unsigned)getuid());   /* pspexp-bt's, at each change */
+    if ((f = fopen(path, "r")) != NULL) { if (fscanf(f, "%d", percent) != 1) *percent = -1; fclose(f); }
+    return 1;
+}
+
 void bt_route_soon(void) { g_soon = 1; }
 
 void bt_route_tick(uint64_t now)

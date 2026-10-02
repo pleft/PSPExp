@@ -94,7 +94,7 @@ cable pull, so pull the cable to read it after a session.
 | a stand-in PSP whose memory stick is a folder (file manager, `pspexp-ms`) | `PSPEXP_MS0=<folder> build/host/pspexp-sdl-server` |
 | PSPExp's apt repository and catalogue: build (signed) / push to the home server | `scripts/packages/apt-repo build build/debs` / `scripts/packages/apt-repo push` |
 | **integration tests on a real PSP** (on a board's console; report + the PSP's screenshots in `build/psp-tests/`) | `tests/psp/run.py --host <user@board> [link stick launcher files terminal]` |
-| drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` |
+| drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` / `--ctl "volume-bar 40"` |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |
 | Warcraft on the PSP, main menu / straight into a map | `cd ../WarCraft && PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` / `... -r maps/4-middle-ground.smp` |
 | Warcraft with the Mac window shown / without a PSP | `PSPEXP_WINDOW=show ...` / `PSPEXP=sdl ...` |

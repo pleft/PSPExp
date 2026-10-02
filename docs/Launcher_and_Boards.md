@@ -1311,6 +1311,16 @@ into `pspexp-bt volume +5` / `-5` (held: repeated every 0.15 s after 0.4 s)
 on the device's PipeWire node, in whichever program has the PSP; with the
 sound on the PSP, they set the PSP's own volume as always.
 
+**Seeing the volume.** After each change libpspexp reads the new level back
+(pspexp-bt prints it) and sends `OSD_VOLUME` (`PSPEXP_FEATURE_OSD`, runtimes
+from 2026-10-03): the PSP itself draws a bar for 1.5 s over whatever is on
+screen (a speaker, the bar, the number; at each `PRESENT`, so in games
+too). The console, whose views draw only on change, draws a frame when the
+bar comes and one when it goes. The launcher's top bar shows a headphones
+icon and the volume among the board's indicators while the sound is on
+Bluetooth (`/tmp/pspexp-audio-volume-UID`, written by pspexp-bt). The control
+port's `volume-bar N` shows the bar (tests).
+
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering
 (`loginctl enable-linger`), and `pspexp-bt` sets `XDG_RUNTIME_DIR` when

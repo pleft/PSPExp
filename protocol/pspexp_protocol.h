@@ -211,6 +211,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_3D_SPRITES 0x00000200u  /* 3D draws of GU_SPRITES (PSPEXP_3D_PRIM_SPRITES) */
 #define PSPEXP_FEATURE_3D_COPY    0x00000400u  /* 3D_COPY: part of the buffer being drawn into a render target */
 #define PSPEXP_FEATURE_POWER      0x00000800u  /* answers POWER_QUERY: the battery and power supply */
+#define PSPEXP_FEATURE_OSD        0x00002000u  /* OSD_VOLUME: the PSP draws a volume bar over the frames itself */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
@@ -257,6 +258,15 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpPowerStatus) == 16, power_status_size);
 #define PSPEXP_POWER_CHARGING  0x2u
 #define PSPEXP_POWER_EXTERNAL  0x4u   /* on the AC adapter (or USB charging) */
 #define PSPEXP_POWER_LOW       0x8u   /* the PSP's own low-battery warning */
+
+/* Host -> PSP: show a volume bar over whatever is drawn, for 1.5 s from now
+ * (the volume of a board's Bluetooth device, which only the board knows).
+ * Drawn at each PRESENT meanwhile, so it shows in every program. */
+typedef struct PspExpOsdVolume {
+    int8_t   percent;           /* 0..100; < 0 hides it */
+    uint8_t  reserved[15];
+} PspExpOsdVolume;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpOsdVolume) == 16, osd_volume_size);
 
 /* Host -> PSP, reply to HELLO. */
 typedef struct PspExpHelloAck {

@@ -19,6 +19,9 @@ void bt_route_tick(uint64_t now);
 void bt_route_soon(void);
 /* for System: "PSP", the device's name, or "PSP (NAME not connected)" */
 void bt_route_label(char *out, size_t n);
+/* for the top bar: 1 while the sound goes to a Bluetooth device, its volume
+ * in *percent (-1 not known yet) */
+int  bt_indicator(int *percent);
 /* the chosen device's address, or "" for the PSP */
 void bt_chosen(char *out, size_t n);
 

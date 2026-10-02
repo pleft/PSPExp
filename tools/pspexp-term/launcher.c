@@ -271,6 +271,7 @@ static LEntry g_running_e;
 static uint64_t g_confirm_until;
 static char g_confirm[32];
 static int g_bat = -2, g_chg, g_wifi = -2, g_minute = -1;
+static int g_snd_on, g_snd_vol = -1;   /* the sound on Bluetooth, its volume (btaudio.h) */
 static int g_wired;   /* the default route goes over a cable (Ethernet, USB networking) */
 static uint64_t g_status_at;
 static int g_nofetch;
@@ -1491,6 +1492,14 @@ static void status_poll(uint64_t now)
     struct tm tmv;
     localtime_r(&t, &tmv);
     if (tmv.tm_min != g_minute) { g_minute = tmv.tm_min; g_dirty = 1; }
+    {   /* the Bluetooth sound and its volume: two small files, a few times a second */
+        static uint64_t at;
+        if (!at || now - at > 300000u) {
+            int v, on = bt_indicator(&v);
+            at = now;
+            if (on != g_snd_on || v != g_snd_vol) { g_snd_on = on; g_snd_vol = v; g_dirty = 1; }
+        }
+    }
     {   /* the PSP's battery: a new charge or state (the charger in or out) redraws the bar; an idle
          * launcher draws nothing otherwise */
         static int shown_pct = -2, shown_flags = -1;
@@ -1689,6 +1698,17 @@ static void draw_status(void)
         gfx_icon("plug", 16, x, 6, C_SUB, 255);
     }
     x -= 10;
+    if (g_snd_on) {   /* the sound on a Bluetooth device: its volume (the PSP's volume buttons set it) */
+        if (g_snd_vol >= 0) {
+            snprintf(s, sizeof(s), "%d%%", g_snd_vol);
+            x -= gfx_text_width(FONT_SMALL, s);
+            gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
+            x -= 4;
+        }
+        x -= 16;
+        gfx_icon("headphones", 16, x, 6, C_SUB, 255);
+        x -= 10;
+    }
     if (g_wired) {
         x -= 16;
         gfx_icon("ethernet-port", 16, x, 6, C_SUB, 255);

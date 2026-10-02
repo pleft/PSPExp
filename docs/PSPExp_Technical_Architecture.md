@@ -461,7 +461,7 @@ A runtime with `PSPEXP_FEATURE_AUDIO_MP3` takes `AUDIO_CODED_STREAM` (0x0307): w
 
 ### Sound on the board's Bluetooth (2026-10-03)
 
-When the console has routed sound to a Bluetooth device paired with the board (`pspexp-bt`, System > Sound output), libpspexp writes the stream to a `pw-play` on the board instead of `AUDIO_STREAM`, in every program, and the link carries no sound; the PSP's volume buttons (`PSPEXP_BUTTON_VOLUP` / `VOLDOWN`, read by the runtime in kernel mode) set the device's volume. Details in docs/Launcher_and_Boards.md §11.
+When the console has routed sound to a Bluetooth device paired with the board (`pspexp-bt`, System > Sound output), libpspexp writes the stream to a `pw-play` on the board instead of `AUDIO_STREAM`, in every program, and the link carries no sound; the PSP's volume buttons (`PSPEXP_BUTTON_VOLUP` / `VOLDOWN`, read by the runtime in kernel mode) set the device's volume, and `OSD_VOLUME` (0x000C, `PSPEXP_FEATURE_OSD`) has the PSP draw a volume bar over its frames for 1.5 s. Details in docs/Launcher_and_Boards.md §11.
 
 Graphics, input, resources, and audio are separate logical protocol channels even when they share the same physical connection.
 
@@ -1110,7 +1110,7 @@ Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications
 - triangle-based batches for rotation/skew (static meshes and 3D commands: done for OpenGL 1.x, §12a);
 - offloading batch expansion or audio mixing to the Media Engine (our own code on it: first a small test on the real PSP, as PPSSPP does not run code there; does it coexist with the firmware's codec, which uses it for MP3 since 2026-10-03?);
 - **a video player** in the file manager: H.264 up to 480x272 decoded on the PSP (`sceMpeg` / `sceVideocodec`, on the Media Engine like MP3), 100–200 KB/s over the link instead of the 8 MB/s that finished frames need; other formats converted on the board by ffmpeg (the Pi);
-- sound to a Bluetooth device paired with the board: done 2026-10-03 (§8, docs/Launcher_and_Boards.md §11); open: the GameShell, a volume indicator on screen;
+- sound to a Bluetooth device paired with the board: done 2026-10-03, with its volume bar (§8, docs/Launcher_and_Boards.md §11); open: the GameShell;
 - compute/RPC services;
 - network/storage services;
 - transparent or semi-transparent engine adapters;

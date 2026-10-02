@@ -27,6 +27,7 @@ typedef struct PspExpGeExecutor {
     int ring_cur;
     uint32_t ring_used;
     int in_frame;
+    int osd_percent; uint32_t osd_until;   /* the volume bar (OSD_VOLUME) */
     int tex_enabled;
     PspExpCacheEntry *cur_atlas;
     PspExpCacheEntry *cur_palette;

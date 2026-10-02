@@ -2971,6 +2971,9 @@ static void ctl_step(uint64_t now, int connected)
         else { ctl_reply("error open launcher|terminal|files [PATH]|monitor|store"); return; }
         swallow();
         C.st = CS_SETTLE; C.until = now + 150000u;
+    } else if (!strncmp(cmd, "volume-bar ", 11)) {   /* the PSP's volume bar, as a volume button shows it (tests) */
+        if (pspexp_osd_volume(ctx, atoi(cmd + 11)) < 0) { ctl_reply("error the PSP's runtime has no volume bar"); return; }
+        C.st = CS_SETTLE; C.until = now + 100000u;
     } else if (!strncmp(cmd, "type ", 5)) {   /* straight into the shell; \n is Enter */
         const char *s = cmd + 5;
         for (; *s; s++) { if (s[0] == '\\' && s[1] == 'n') { pty_write("\r", 1); s++; } else pty_write(s, 1); }
@@ -3318,6 +3321,16 @@ int main(int argc, char **argv)
             player_pump(ctx);
         }
         bt_route_tick(now);   /* the sound's way: the PSP or a Bluetooth device (btaudio.h) */
+        {   /* the PSP's volume bar: a frame at once to show it, and one when it went away
+             * (the views draw only on change; the PSP adds the bar at each PRESENT) */
+            static uint64_t shown, cleared;
+            uint64_t until = pspexp_osd_until(ctx);
+            if (until && (until != shown || (until != cleared && now > until + 50000u))) {
+                if (until != shown) shown = until; else cleared = until;
+                T.dirty = 1; g_redraw_app = 1;
+                if (g_launcher_on) { launcher_invalidate(); files_invalidate(); }
+            }
+        }
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u && (now - g_input_at < 30000000u || !blink_on)) {   /* (still after 30 s: the cursor left on) */
             last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1;
