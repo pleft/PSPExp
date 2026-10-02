@@ -2159,9 +2159,10 @@ static void draw_about(float dt)
     snprintf(host, sizeof(host), "%s", b->host);
     gfx_icon("info", 20, 16, 12, C_ACCENT, a);
     gfx_text(FONT_TITLE, 44, 11, "About this console", C_TEXT, a, 0);
-    {   /* this console's version over the board's name */
+    {   /* this launcher's version (the board's side: the console, the launcher, the SDL layer) over
+         * the board's name; the PSP's side has its own row below */
         char v[96];
-        snprintf(v, sizeof(v), "PSPExp %s", PSPEXP_VERSION);
+        snprintf(v, sizeof(v), "Launcher %s", PSPEXP_VERSION);
         gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, v), 7, v, C_SUB, a, 0);
         gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 21, host, C_MUTED, a, 0);
     }
@@ -2214,7 +2215,7 @@ static void draw_about(float dt)
         int pct;
         snprintf(link, sizeof(link), "%s%s%s", g_link, rtt[0] ? ", " : "", rtt);
         y = about_row(cx2 + 12, y, cw - 24, "link", "LINK", link, a);
-        y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSP RUNTIME", psp, a);
+        y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSPEXP ON THE PSP", psp, a);
         pct = psp_battery(bat, sizeof(bat), &p) ? p.percent : -1;
         y = about_row(cx2 + 12, y, cw - 24, pct < 0 ? "battery" : (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) ? "battery-charging" : pct > 70 ? "battery-full" : pct > 35 ? "battery-medium" : pct > 12 ? "battery-low" : "battery-warning",
                       "PSP BATTERY", bat, a);
