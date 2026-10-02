@@ -334,7 +334,11 @@ stands still and its caret stops blinking, and so does the terminal's
 cursor; the clock's redraw, one frame a minute, does not count. Until
 2026-10-02 the runtime held the PSP awake always. A PSP put to sleep comes
 back to the launcher on waking (the PSP-1000, 2026-10-02: the waiting
-screen, then the launcher; the link is made again as after a cable pull). A line wider than its card scrolls
+screen, then the launcher; the link is made again as after a cable pull). The runtime's log on the stick
+(`pspexp-rt.log`) records "going to sleep", "woke up", the power switch,
+and how a session ended ("leaving: quit from the HOME menu", "HOME held:
+leaving", "leaving"); a log that stops with none of them is a crash or the
+battery. A line wider than its card scrolls
 (marquee: still, to its end, still, back) instead of ending in "...", and
 so do long titles in the list.
 

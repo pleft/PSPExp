@@ -125,11 +125,25 @@ static char g_log[4][100];
 static int g_log_n;
 static PspExpGeExecutor g_ge;
 
-static int exit_callback(int arg1, int arg2, void *common) { g_running = 0; return 0; }
+static volatile int g_quit_asked;                 /* the HOME menu's quit */
+static volatile unsigned g_suspends, g_resumes;     /* the power service's notices, logged by the main loop */
+static volatile int g_power_off_switch;             /* the switch held up: switching off, not sleeping */
+static int exit_callback(int arg1, int arg2, void *common) { g_quit_asked = 1; g_running = 0; return 0; }
+static int power_callback(int unknown, int info, void *common)
+{
+    if (info & PSP_POWER_CB_POWER_SWITCH) g_power_off_switch = 1;
+    if (info & PSP_POWER_CB_SUSPENDING) g_suspends++;
+    if (info & PSP_POWER_CB_RESUME_COMPLETE) g_resumes++;
+    return 0;
+}
 static int callback_thread(SceSize args, void *argp)
 {
     int cbid = sceKernelCreateCallback("Exit Callback", exit_callback, NULL);
     sceKernelRegisterExitCallback(cbid);
+    /* sleep, wake and the power switch, for the log: a session that ends silently is then told
+     * apart (a quit, the PSP switched off, or neither: a crash) */
+    cbid = sceKernelCreateCallback("Power Callback", power_callback, NULL);
+    scePowerRegisterCallback(-1, cbid);
     sceKernelSleepThreadCB();
     return 0;
 }
@@ -338,6 +352,13 @@ int main(int argc, char *argv[])
     while (g_running) {
         uint32_t now = sceKernelGetSystemTimeLow();
         static uint32_t last_tick;
+        {   /* the power service's notices (its callback runs on another thread: logged here) */
+            static unsigned suspends, resumes;
+            static int off_logged;
+            if (g_power_off_switch && !off_logged) { off_logged = 1; trace("power switch: the PSP is switching off or going to sleep"); }
+            if (g_suspends != suspends) { suspends = g_suspends; trace("going to sleep"); }
+            if (g_resumes != resumes) { resumes = g_resumes; off_logged = 0; g_power_off_switch = 0; trace("woke up"); }
+        }
 
         /* Keep Auto Sleep and the backlight timer from firing while something is happening: the PSP
          * counts only button presses as activity, and a game may run untouched (a cutscene, a demo).
@@ -424,6 +445,7 @@ int main(int argc, char *argv[])
         if (rt.stats.frames == 0 && now - last_status > 250000) { draw_status(&rt, gen, 1); last_status = now; }
     }
 
+    trace(g_quit_asked ? "leaving: quit from the HOME menu" : "leaving");
     pspexp_runtime_free(&rt);
     pspexp_ge_term(&g_ge);
     pspexpUsbStop();
