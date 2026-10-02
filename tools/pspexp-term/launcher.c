@@ -243,9 +243,18 @@ static void about_collect(void);
 static int g_dirty = 1, g_anim;
 static uint64_t g_now, g_open_at;   /* this frame's time; when the details card or About page opened */
 
-/* scrolling text: keeps frames coming while it moves */
+/* the last button press: 30 s after it the launcher goes still (scrolling text at its start, no
+ * blinking caret), so an idle PSP gets no frames and its own Power Save settings can take over
+ * (the runtime holds it awake only while frames or sound keep coming) */
+static uint64_t g_input_at;
+#define LAUNCHER_STILL_US 30000000u
+static int launcher_still(uint64_t now) { return now - g_input_at > LAUNCHER_STILL_US; }
+
+/* scrolling text: keeps frames coming while it moves (not once the launcher is still) */
 static int mtext(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int max_w, uint64_t since)
 {
+    int ignored = 0;
+    if (launcher_still(g_now)) return gfx_text_marquee(font, x, y, s, rgb, alpha, max_w, 0, &ignored);
     return gfx_text_marquee(font, x, y, s, rgb, alpha, max_w, g_now - since, &g_anim);
 }
 static uint64_t g_last_frame, g_sel_since;
@@ -1358,7 +1367,7 @@ static void move_sel(int d, int wrap, uint64_t now)
 void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
     LEntry *e;
-    (void)b;
+    if (b || pressed || up || down || left || right) { if (launcher_still(now)) g_dirty = 1; g_input_at = now; }   /* (scrolling starts again) */
     if (g_running || !g_ncat) return;
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
@@ -1406,6 +1415,14 @@ static void status_poll(uint64_t now)
     struct tm tmv;
     localtime_r(&t, &tmv);
     if (tmv.tm_min != g_minute) { g_minute = tmv.tm_min; g_dirty = 1; }
+    {   /* the PSP's battery: a new charge or state (the charger in or out) redraws the bar; an idle
+         * launcher draws nothing otherwise */
+        static int shown_pct = -2, shown_flags = -1;
+        PspExpPowerStatus ps;
+        int pct = -1, fl = -1;
+        if (g_ctx && pspexp_power_status(g_ctx, &ps, NULL) == 0) { pct = ps.percent; fl = ps.flags; }
+        if (pct != shown_pct || fl != shown_flags) { shown_pct = pct; shown_flags = fl; g_dirty = 1; }
+    }
     if (now - g_status_at < 3000000u && g_bat != -2) return;
     g_status_at = now;
 #ifdef __APPLE__
@@ -1530,7 +1547,7 @@ int launcher_needs_frame(uint64_t now)
     fetch_poll(now);
     status_poll(now);
     if (g_confirm[0] && now > g_confirm_until) g_confirm[0] = 0;
-    if ((g_mode == M_SEARCH || g_mode == M_TEXT) && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
+    if ((g_mode == M_SEARCH || g_mode == M_TEXT) && !launcher_still(now) && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
     if (g_mode == M_PICK && g_scanning && (int)((now / 300000u) & 3) != g_caret) { g_caret = (int)((now / 300000u) & 3); g_dirty = 1; }
     if (g_mode == M_ABOUT && now - g_about_at > 3000000u) { about_collect(); g_about_at = now; g_dirty = 1; }
     if (g_toast[0] && now >= g_toast_until && g_toast_a <= 0.01f) { g_toast[0] = 0; g_dirty = 1; }
@@ -1577,7 +1594,8 @@ static void draw_status(void)
     w = gfx_text(FONT_TITLE, 16, 4, s, C_TEXT, 255, 0);
     strftime(s, sizeof(s), "%a %d %b", &tmv);
     gfx_text(FONT_SMALL, 16 + w + 8, 8, s, C_MUTED, 255, 0);
-    /* right to left: the board (always last, so it never moves), power, network */
+    /* right to left: the board (always last, so it never moves), power, network; then, past a
+     * separator, the PSP's own battery */
     x = SCREEN_W - 16;
     board_detect();
     x -= 16;
@@ -1595,22 +1613,6 @@ static void draw_status(void)
         gfx_icon("plug", 16, x, 6, C_SUB, 255);
     }
     x -= 10;
-    {   /* the PSP's own battery, when its runtime reports it: "PSP", its icon, the charge */
-        PspExpPowerStatus p;
-        char b[160];
-        if (psp_battery(b, sizeof(b), &p)) {
-            int chg = (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) != 0;
-            const char *ic = (p.flags & PSPEXP_POWER_CHARGING) ? "battery-charging" : p.percent > 70 ? "battery-full" : p.percent > 35 ? "battery-medium" : p.percent > 12 ? "battery-low" : "battery-warning";
-            snprintf(s, sizeof(s), "%d%%", p.percent);
-            x -= gfx_text_width(FONT_SMALL, s);
-            gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
-            x -= 20;
-            gfx_icon(ic, 16, x, 6, p.percent <= 12 && !chg ? 0xf87171 : C_SUB, 255);
-            x -= 4 + gfx_text_width(FONT_BADGE, "PSP");
-            gfx_text(FONT_BADGE, x, 9, "PSP", C_MUTED, 255, 0);
-            x -= 10;
-        }
-    }
     if (g_wired) {
         x -= 16;
         gfx_icon("ethernet-port", 16, x, 6, C_SUB, 255);
@@ -1618,6 +1620,24 @@ static void draw_status(void)
         const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-off";
         x -= 16;
         gfx_icon(ic, 16, x, 6, C_SUB, 255);
+    }
+    {   /* the PSP's battery, once its runtime has reported it: "PSP", its icon, the charge */
+        PspExpPowerStatus p;
+        char b[160];
+        if (psp_battery(b, sizeof(b), &p)) {
+            int chg = (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) != 0;
+            const char *ic = chg ? "battery-charging" : p.percent > 70 ? "battery-full" : p.percent > 35 ? "battery-medium" : p.percent > 12 ? "battery-low" : "battery-warning";
+            x -= 9;
+            gfx_rect(x, 7, 1, 14, C_SUB, 200);   /* the separator: the board's to its right */
+            x -= 9;
+            snprintf(s, sizeof(s), "%d%%", p.percent);
+            x -= gfx_text_width(FONT_SMALL, s);
+            gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
+            x -= 20;
+            gfx_icon(ic, 16, x, 6, p.percent <= 12 && !chg ? 0xf87171 : C_SUB, 255);
+            x -= 4 + gfx_text_width(FONT_BADGE, "PSP");
+            gfx_text(FONT_BADGE, x, 9, "PSP", C_MUTED, 255, 0);
+        }
     }
 }
 
@@ -2196,7 +2216,7 @@ static void draw_about(float dt)
         y = about_row(cx2 + 12, y, cw - 24, "link", "LINK", link, a);
         y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSP RUNTIME", psp, a);
         pct = psp_battery(bat, sizeof(bat), &p) ? p.percent : -1;
-        y = about_row(cx2 + 12, y, cw - 24, pct < 0 ? "battery" : (p.flags & PSPEXP_POWER_CHARGING) ? "battery-charging" : pct > 70 ? "battery-full" : pct > 35 ? "battery-medium" : pct > 12 ? "battery-low" : "battery-warning",
+        y = about_row(cx2 + 12, y, cw - 24, pct < 0 ? "battery" : (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) ? "battery-charging" : pct > 70 ? "battery-full" : pct > 35 ? "battery-medium" : pct > 12 ? "battery-low" : "battery-warning",
                       "PSP BATTERY", bat, a);
     }
     y = about_row(cx2 + 12, y, cw - 24, "layers", "PSP MEMORY", mem, a);

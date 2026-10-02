@@ -339,10 +339,23 @@ int main(int argc, char *argv[])
         uint32_t now = sceKernelGetSystemTimeLow();
         static uint32_t last_tick;
 
-        /* Keep Auto Sleep and the backlight timer from firing: the PSP counts
-         * only button presses as activity, and it often sits untouched while
-         * the host drives it (or while it waits for one). */
-        if (now - last_tick > 1000000) { scePowerTick(PSP_POWER_TICK_ALL); last_tick = now; }
+        /* Keep Auto Sleep and the backlight timer from firing while something is happening: the PSP
+         * counts only button presses as activity, and a game may run untouched (a cutscene, a demo).
+         * Busy: at least 5 frames in the last 5 s window, or streamed sound (a launcher at rest draws
+         * one frame a minute, for its clock); waiting for a host: the first 5 minutes after the link
+         * went (a board booting finds the PSP awake). Otherwise the PSP's own Power Save settings
+         * apply. (Flags, not time differences alone: the 32-bit microsecond clock wraps every 71 min) */
+        {
+            static uint32_t win_at, win_seq, win_stream, wait_at;
+            static int busy = 1, waited = 0, was = -1;
+            if (connected != was) { was = connected; busy = 1; win_at = now; win_seq = rt.frame_seq; win_stream = rt.stats.stream_frames; wait_at = now; waited = 0; }
+            if (now - win_at >= 5000000u) {
+                busy = rt.frame_seq - win_seq >= 5 || rt.stats.stream_frames != win_stream;
+                win_at = now; win_seq = rt.frame_seq; win_stream = rt.stats.stream_frames;
+            }
+            if (!connected && !waited && now - wait_at > 300000000u) waited = 1;
+            if ((connected ? busy : !waited) && now - last_tick > 1000000) { scePowerTick(PSP_POWER_TICK_ALL); last_tick = now; }
+        }
 
         /* HOME held for 2 s leaves PSPExp, whatever state the link is in:
          * the system's quit dialog did not always come up (seen while a host

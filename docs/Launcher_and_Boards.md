@@ -318,8 +318,23 @@ older ones show "needs a newer PSP runtime"). On the PSP-1000 (2026-10-02):
 "21%, about 1 h 15 min left, 20 C"; it reports no current, so that part
 does not show; PSP memory; the board's network addresses and power
 (battery or mains, temperature, uptime). It refreshes every 3 s. The status
-bar shows the PSP's charge too, "PSP" and a battery icon beside the
-board's, once a reading has come. A line wider than its card scrolls
+bar shows the PSP's charge too, once a reading has come: "PSP", a battery
+icon (charging whenever the PSP is on external power) and the charge, left
+of the board's own indicators behind a `|`. A new reading that differs
+redraws the bar (an idle launcher draws nothing otherwise).
+
+**Sleep.** The PSP counts only button presses as activity, so the runtime
+holds it awake (`scePowerTick`) while something happens without them: at
+least 5 frames in a 5 s window, or sound streaming; and for the first 5
+minutes without a board, so a booting board finds it awake. Otherwise the
+PSP's own Power Save settings (Backlight Auto-Off, Auto Sleep) apply,
+counted from the last button press or the last busy moment. So the launcher
+at rest sends nothing: 30 s after the last button press its scrolling text
+stands still and its caret stops blinking, and so does the terminal's
+cursor; the clock's redraw, one frame a minute, does not count. Until
+2026-10-02 the runtime held the PSP awake always. A PSP put to sleep comes
+back to the launcher on waking (the PSP-1000, 2026-10-02: the waiting
+screen, then the launcher; the link is made again as after a cable pull). A line wider than its card scrolls
 (marquee: still, to its end, still, back) instead of ending in "...", and
 so do long titles in the list.
 

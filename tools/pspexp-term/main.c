@@ -1626,6 +1626,10 @@ static uint32_t test_keys_buttons(uint64_t now)
 static uint32_t g_ctl_mask;            /* buttons a test holds (the control port) */
 static int g_ctl_nub, g_ctl_ax, g_ctl_ay;
 
+/* the last time a PSP button was held or the nub pushed: the cursor stops blinking 30 s after it, so
+ * an idle terminal sends no frames and the PSP's own Power Save settings can take over */
+static uint64_t g_input_at;
+
 static void handle_input(void)
 {
     const PspExpInput *in = pspexp_input(ctx);
@@ -1640,6 +1644,7 @@ static void handle_input(void)
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
+    if (b || ax * ax + ay * ay > 40 * 40) g_input_at = now;
     /* select: a long hold switches between the terminal and the mirrored
      * screen; a tap is resolved on release (keyboard toggle / Space) */
     {
@@ -3306,7 +3311,9 @@ int main(int argc, char **argv)
         }
         audio_fifo_pump();
         if (g_bell) { g_bell = 0; beep(); }
-        if (now - last_blink > 500000u) { last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1; }
+        if (now - last_blink > 500000u && (now - g_input_at < 30000000u || !blink_on)) {   /* (still after 30 s: the cursor left on) */
+            last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1;
+        }
         if (g_app) {
             if ((g_app->needs_frame(now) || g_redraw_app) && pspexp_should_render(ctx)) {
                 g_redraw_app = 0;
