@@ -1323,6 +1323,7 @@ games, not in music. Ours on top was larger at first: pw-play's default
 (pw-top, Aladdin and OpenJazz playing: "very noticeable"); pw-play now asks
 for 20 ms, which takes the cycle to 512 (`PSPEXP_BT_LATENCY` tries another
 value). What remains is the game's own buffer (OpenJazz 2048 samples, the
-emulators about 50 ms), a frame, and the radio's. The volume buttons on the PSP-1000, same day: working
+emulators about 50 ms), a frame, and the radio's. Aladdin on the Mega Drive emulator
+afterwards: "sound fx are almost instant with the button presses". The volume buttons on the PSP-1000, same day: working
 ("it rocks!"). Not tried: the GameShell (its radio has Bluetooth).
 
