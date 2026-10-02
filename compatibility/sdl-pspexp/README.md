@@ -168,6 +168,7 @@ function; the tests check it is current).
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
 | `PSPEXP_NUB=keys` | the nub presses the four arrow keys of `PSPEXP_KEYS` (for keyboard-only games such as Doom) |
 | `PSPEXP_NUB_SPEED=N` | with `PSPEXP_NUB=mouse`: the pointer's speed in window pixels a second with the nub fully over (default 300; OpenTTD's recipe 180) |
+| `PSPEXP_BT_LATENCY=20ms` | (libpspexp, every program) with the sound routed to a Bluetooth device (System > Sound output): the latency pw-play asks PipeWire for (default 20ms; pw-play's own 100ms made games' sound lag) |
 | `PSPEXP_MOUSE_BUTTONS=left=r,right=none` | with the nub as the mouse: the PSP buttons that are its left and right buttons (default `left=cross,right=circle`); the others stay keys (OpenArena: R fires, the face buttons move) |
 | `PSPEXP_WINDOW=hide` | hide the program's own window once the PSP is connected |
 | `PSPEXP_FOCUS=host` | let the game see the host window's focus loss; by default the shim hides it (and fakes a focus gain), since games pause or mute when unfocused and the host window rarely is |

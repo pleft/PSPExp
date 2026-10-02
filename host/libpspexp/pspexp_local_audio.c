@@ -49,11 +49,15 @@ void pspexp_la_close(PspExpLocalAudio *la)
 static int la_open(PspExpLocalAudio *la, uint32_t rate)
 {
     int sv[2];
-    char r[16], uid_dir[64];
-    char *argv[] = { "pw-play", "--raw", "--format", "s16", "--rate", r, "--channels", "2", "--target", la->node, "-", NULL };
+    char r[16], uid_dir[64], lat[32];
+    /* --latency: pw-play's default 100 ms also set the Bluetooth sink's cycle
+     * (2048 samples at 48 kHz); 20 ms asks for 512 (measured with pw-top,
+     * 2026-10-03), the delay games noticed; PSPEXP_BT_LATENCY to try others */
+    char *argv[] = { "pw-play", "--raw", "--format", "s16", "--rate", r, "--channels", "2", "--latency", lat, "--target", la->node, "-", NULL };
     posix_spawn_file_actions_t fa;
     pid_t pid;
     snprintf(r, sizeof(r), "%u", (unsigned)rate);
+    snprintf(lat, sizeof(lat), "%s", getenv("PSPEXP_BT_LATENCY") ? getenv("PSPEXP_BT_LATENCY") : "20ms");
     if (!getenv("XDG_RUNTIME_DIR")) {   /* a system service has none: PipeWire's socket is the user's */
         snprintf(uid_dir, sizeof(uid_dir), "/run/user/%u", (unsigned)getuid());
         setenv("XDG_RUNTIME_DIR", uid_dir, 0);

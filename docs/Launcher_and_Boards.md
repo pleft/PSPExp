@@ -1318,6 +1318,11 @@ missing. The Pi 400's radio came soft-blocked; `pspexp-bt` unblocks it through
 the sudo rule. Tested on the Pi 400 with HUAWEI FreeBuds SE (2026-10-03): the
 music player, the Mega Drive emulator and OpenJazz, played by hand; SBC codec.
 Bluetooth adds its own delay (typically 150-250 ms), noticeable in action
-games, not in music. The volume buttons on the PSP-1000, same day: working
+games, not in music. Ours on top was larger at first: pw-play's default
+100 ms latency set the Bluetooth sink's cycle to 2048 samples at 48 kHz
+(pw-top, Aladdin and OpenJazz playing: "very noticeable"); pw-play now asks
+for 20 ms, which takes the cycle to 512 (`PSPEXP_BT_LATENCY` tries another
+value). What remains is the game's own buffer (OpenJazz 2048 samples, the
+emulators about 50 ms), a frame, and the radio's. The volume buttons on the PSP-1000, same day: working
 ("it rocks!"). Not tried: the GameShell (its radio has Bluetooth).
 
