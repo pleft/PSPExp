@@ -28,4 +28,3 @@
 | `recipes/dreamchess/cover.png` | Debian's dreamchess package, its 256x256 icon, scaled | GPL-3+ (DreamChess) |
 | `recipes/pinball/cover.png` | a screenshot of Emilia Pinball in PPSSPP (the Tux table), cropped and scaled | GPL-2 (Emilia Pinball) |
 | `recipes/openttd/cover.png` | Debian's openttd package, its 128x128 icon | GPL-2.0 (OpenTTD) |
-| `recipes/flare/cover.png` | Debian's flare-game package, its SVG icon rendered at 128x128 | CC-BY-SA 3.0 (Flare's art) |
