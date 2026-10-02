@@ -958,7 +958,9 @@ installed (the Pi has it; the Omega does not) and sent as PCM. Files on the
 PSP's memory stick are copied to the board first (up to 16 MB, as for
 pictures). Closing the file manager, or a program taking the PSP, stops the
 music. Tested in PPSSPP from the Mac (all the formats above but WMA and
-the modules; an MP3 with a cover and a Greek title); not yet on the PSP.
+the modules; an MP3 with a cover and a Greek title), then on the PSP-1000
+from the Pi 400 (2026-10-03): a real song as MP3 (decoded on the PSP) and
+as FLAC (ffmpeg on the Pi), played by hand.
 
 The launcher's text became UTF-8 the same day: the title, body and small
 fonts carry Latin-1, Latin Extended-A, Greek and Cyrillic (the glyph atlas
