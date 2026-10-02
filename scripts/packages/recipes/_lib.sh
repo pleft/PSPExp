@@ -9,6 +9,14 @@ fetch() {
 	fi
 	echo "$f"
 }
+# rf ID SECTION KEY   a field of recipes/ID/recipe (the section exactly as written, [entry],
+#                     [entry.phase2], [package]...): the launcher's text comes from the recipe on
+#                     every board, these builds' entries included
+rf() {
+	awk -v sec="$2" -v key="$3" '
+	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }
+	s == sec && index($0, key "=") == 1 { print substr($0, length(key) + 2); exit }' "$ROOT/recipes/$1/recipe"
+}
 # the Doom key map for the PSP (Chocolate Doom's defaults)
 DOOM_KEYS="cross=lctrl,circle=space,square=lshift,triangle=return+y,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right"
 
@@ -57,6 +65,7 @@ env=SDL_AUDIODRIVER=dummy
 env=PSPEXP_KEYS=$RETRO_KEYS
 env=PSPEXP_NUB=keys
 thumbs=$6
+graphics=sdl
 pspexp=1
 S
 	# a recipe may draw only every Nth frame on the Omega2+ (OMEGA_VIDEO_DIV=2:

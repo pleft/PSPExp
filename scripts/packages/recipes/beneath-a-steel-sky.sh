@@ -10,17 +10,18 @@ scummvm_game "$D" beneath-a-steel-sky sky . b/beneath-a-steel-sky/beneath-a-stee
 cat > "$D/package" <<P
 version=0.0372-9
 title=Beneath a Steel Sky
-description=Revolution's 1994 cyberpunk adventure, freeware since 2003
+description=$(rf beneath-a-steel-sky package description)
 license=Freeware (Revolution Software); ScummVM is GPL-3.0
 requires=pspexp-exec
 P
 cat > "$D/beneath-a-steel-sky.entry" <<E
 title=Beneath a Steel Sky
 type=game
-description=Revolution's 1994 cyberpunk adventure, freeware since 2003
+description=$(rf beneath-a-steel-sky entry description)
 icon=puzzle
 exec=$SCUMMVM_EXEC
 env=PSPEXP_KEYS=$SCUMMVM_KEYS
 env=PSPEXP_NUB=mouse
+graphics=$(rf beneath-a-steel-sky entry graphics)
 pspexp=1
 E

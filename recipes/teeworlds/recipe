@@ -7,10 +7,10 @@
 [package]
 id=teeworlds
 title=Teeworlds
-description=Fast 2D multiplayer shooter with grappling hooks (online and LAN)
+description=Fast 2D multiplayer shooter with grappling hooks: deathmatch and capture the flag, online or on a LAN.
 category=game
 license=Zlib (Teeworlds)
-version=1
+version=2
 
 [debian]
 apt=teeworlds
@@ -18,10 +18,11 @@ apt=teeworlds
 [entry]
 title=Teeworlds
 type=game
-description=Fast 2D multiplayer shooter with grappling hooks (online and LAN)
+description=Fast 2D multiplayer shooter with grappling hooks: deathmatch and capture the flag, online or on a LAN.
 icon=swords
 exec=/usr/games/teeworlds 'gfx_screen_width 480; gfx_screen_height 272; gfx_fullscreen 0; bind q +nextweapon; bind e +prevweapon'
 keys=left=a,right=d,up=space,cross=space,square=q,triangle=e,start=escape,select=tab
 nub=mouse
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_MOUSE_BUTTONS=left=r,right=l
+graphics=opengl

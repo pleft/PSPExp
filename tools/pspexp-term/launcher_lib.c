@@ -105,6 +105,7 @@ static void entry_kv(void *u, const char *k, const char *v)
     else if (!strcmp(k, "art")) snprintf(e->art, sizeof(e->art), "%s", v);
     else if (!strcmp(k, "tags")) snprintf(e->tags, sizeof(e->tags), "%s", v);
     else if (!strcmp(k, "description")) snprintf(e->desc, sizeof(e->desc), "%s", v);
+    else if (!strcmp(k, "graphics")) snprintf(e->graphics, sizeof(e->graphics), "%s", v);
     else if (!strcmp(k, "env") && strchr(v, '=') && strlen(e->env) + strlen(v) + 2 < sizeof(e->env)) {
         if (e->env[0]) strcat(e->env, " ");
         strcat(e->env, v);
@@ -123,6 +124,7 @@ static void system_kv(void *u, const char *k, const char *v)
     else if (!strcmp(k, "exec")) snprintf(s->exec, sizeof(s->exec), "%s", v);
     else if (!strcmp(k, "icon")) snprintf(s->icon, sizeof(s->icon), "%s", v);
     else if (!strcmp(k, "thumbs")) snprintf(s->thumbs, sizeof(s->thumbs), "%s", v);
+    else if (!strcmp(k, "graphics")) snprintf(s->graphics, sizeof(s->graphics), "%s", v);
     else if (!strcmp(k, "pkg") && !strchr(v, '/')) snprintf(s->pkg, sizeof(s->pkg), "%s", v);
     else if (!strcmp(k, "env") && strchr(v, '=') && strlen(s->env) + strlen(v) + 2 < sizeof(s->env)) {
         if (s->env[0]) strcat(s->env, " ");

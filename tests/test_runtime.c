@@ -46,6 +46,20 @@ int main(void)
     CHECK(pspexp_null_runtime(nul)->connected);
     CHECK_EQ(pspexp_null_runtime(nul)->ack.input_rate, 60);
 
+    /* The battery (POWER_QUERY): asked, answered with a later pump. */
+    {
+        PspExpPowerStatus p;
+        CHECK(pspexp_power_supported(ctx));
+        CHECK_EQ(pspexp_power_status(ctx, &p, NULL), -1);   /* none yet */
+        CHECK_EQ(pspexp_power_query(ctx), 0);
+        pspexp_pump(ctx, 0);
+        CHECK_EQ(pspexp_power_status(ctx, &p, NULL), 0);
+        CHECK_EQ(p.percent, 76);
+        CHECK_EQ(p.minutes_left, 125);
+        CHECK_EQ(p.current_ma, -250);
+        CHECK_EQ(p.flags, PSPEXP_POWER_BATTERY);
+    }
+
     /* Texture upload and residency. */
     memset(&desc, 0, sizeof(desc));
     desc.width = 64; desc.height = 64; desc.format = PSPEXP_TEX_5650; desc.layout = PSPEXP_LAYOUT_LINEAR; desc.priority = PSPEXP_PRIORITY_HIGH;

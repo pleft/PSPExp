@@ -33,7 +33,8 @@
 #define STORE_LOG "/tmp/pspexp-store.log"
 
 typedef struct Pkg {
-    char id[48], title[96], desc[200];
+    char id[48], title[96], desc[300];
+    char graphics[16];             /* how it draws: sdl | opengl | opengl-shaders ("" not said) */
     char avail[40], inst[40];      /* versions: offered, installed ("" none) */
     char cover[700];               /* its picture: a path ("" none) */
     char cat[12];                  /* catalogue: game | system | app | tool */
@@ -130,17 +131,18 @@ static void load_catalogue(void)
     g_n = 0;
     if ((f = popen("pspexp-pkg available 2>/dev/null", "r"))) {
         while (fgets(line, sizeof(line), f) && g_n < PKG_MAX) {
-            char *fld[6], *p = line;
+            char *fld[7], *p = line;
             int k;
             Pkg *pk;
             line[strcspn(line, "\r\n")] = 0;
-            for (k = 0; k < 6; k++) { fld[k] = p; p = p ? strchr(p, '|') : NULL; if (p) *p++ = 0; }
+            for (k = 0; k < 7; k++) { fld[k] = p; p = p ? strchr(p, '|') : NULL; if (p) *p++ = 0; }   /* (fld[6]: older pspexp-pkg has none) */
             if (!fld[0][0] || !fld[5] || !(pk = find(fld[0]))) continue;
             snprintf(pk->avail, sizeof(pk->avail), "%s", fld[1]);
             snprintf(pk->st, sizeof(pk->st), "%s", fld[2]);
             snprintf(pk->cat, sizeof(pk->cat), "%s", fld[3]);
             snprintf(pk->title, sizeof(pk->title), "%s", fld[4]);
             snprintf(pk->desc, sizeof(pk->desc), "%s", fld[5]);
+            snprintf(pk->graphics, sizeof(pk->graphics), "%s", fld[6] ? fld[6] : "");
             snprintf(line, sizeof(line), "%s/recipes/%s/cover.png", g_catdir, pk->id);
             if (access(line, R_OK) == 0) snprintf(pk->cover, sizeof(pk->cover), "%s", line);
         }
@@ -379,7 +381,7 @@ static void box(const char *title, const char *text, int h)
 
 static void st_render(PspExpContext *ctx, uint64_t now)
 {
-    const int LX = 164, LW = 308, ROWH = 30, ROWS = 7;
+    const int LX = 164, LW = 308, ROWH = 30, ROWS = 7, OPEN = 22;
     int i, x, upd = 0, inst = 0, broken = 0;
     char s[240], a[32];
     const Pkg *p = g_sel < g_nvis ? &g_pk[g_vis[g_sel]] : NULL;
@@ -436,17 +438,24 @@ static void st_render(PspExpContext *ctx, uint64_t now)
             gfx_text(FONT_BADGE, 60, y, v, UI_SUB, 255, 84);
             gfx_text(FONT_BADGE, 16, y + 28, "from", UI_MUTED, 255, 0);
             gfx_text(FONT_BADGE, 60, y + 28, !strcmp(p->st, "local") ? "an older package" : g_local ? "a PSPExp build" : "apt, by recipe", UI_SUB, 255, 84);
+            if (p->graphics[0]) {   /* how it draws */
+                gfx_text(FONT_BADGE, 16, y + 56, "draws", UI_MUTED, 255, 0);
+                gfx_text(FONT_BADGE, 60, y + 56, !strcmp(p->graphics, "sdl") ? "SDL" : !strcmp(p->graphics, "opengl") ? "OpenGL" : "OpenGL, shaders", UI_SUB, 255, 84);
+            }
         }
         /* the list: the section shown */
+        /* the selected row open (OPEN taller), its whole description over three lines; so one row fewer fits */
         if (g_sel < g_top) g_top = g_sel;
-        if (g_sel >= g_top + ROWS) g_top = g_sel - ROWS + 1;
+        if (g_sel >= g_top + ROWS - 1) g_top = g_sel - (ROWS - 1) + 1;
         for (i = 0; i < ROWS && g_top + i < g_nvis; i++) {
             const Pkg *k = &g_pk[g_vis[g_top + i]];
-            int y = 34 + i * ROWH, sel = g_top + i == g_sel, st = status_of(k);
-            if (sel) gfx_nine(NINE_R10, LX, y, LW, ROWH - 2, 0xffffff, 26);
-            if (sel) gfx_rect(LX, y + 6, 3, ROWH - 14, UI_ACCENT, 255);
+            int sel = g_top + i == g_sel, st = status_of(k), y = 34 + i * ROWH + (g_top + i > g_sel ? OPEN : 0), h = ROWH + (sel ? OPEN : 0);
+            if (y + h > 34 + ROWS * ROWH) break;
+            if (sel) gfx_nine(NINE_R10, LX, y, LW, h - 2, 0xffffff, 26);
+            if (sel) gfx_rect(LX, y + 6, 3, h - 14, UI_ACCENT, 255);
             gfx_text(FONT_BODY, LX + 12, y + 1, k->title, sel ? 0xffffff : UI_TEXT, 255, LW - 110);
-            gfx_text(FONT_BADGE, LX + 12, y + 16, k->desc, UI_MUTED, 255, LW - 24);
+            if (sel) gfx_text_wrapped(FONT_BADGE, LX + 12, y + 16, k->desc, UI_SUB, 255, LW - 24, 11, 3);
+            else gfx_text(FONT_BADGE, LX + 12, y + 16, k->desc, UI_MUTED, 255, LW - 24);
             if (st == ST_CURRENT) chip(LX + LW - 8, y + 2, "Installed", 0x1f5f4a, 0xd1fae5);
             else if (st == ST_UPDATE) chip(LX + LW - 8, y + 2, "Update", 0x7c5a12, 0xfff3c4);
             else if (st == ST_BROKEN) chip(LX + LW - 8, y + 2, "Broken", 0x7f1d1d, 0xfecaca);

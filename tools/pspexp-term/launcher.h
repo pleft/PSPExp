@@ -70,5 +70,9 @@ void launcher_notice(const char *icon, const char *text);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);
+/* the PSP's runtime, read from its stick on each connection (About): the slot
+ * running ('a' / 'b'; '-' an install without slots; 0 not known), a finished
+ * update waiting for a restart (its slot, 0 none), and the running slot's version */
+void launcher_set_psp_runtime(char slot, char pending, const char *version);
 
 #endif

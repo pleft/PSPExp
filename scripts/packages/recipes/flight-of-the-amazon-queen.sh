@@ -10,17 +10,18 @@ scummvm_game "$D" flight-of-the-amazon-queen queen . f/flight-of-the-amazon-quee
 cat > "$D/package" <<P
 version=1.0.0-11
 title=Flight of the Amazon Queen
-description=A 1995 jungle adventure with a pilot and a mad scientist, freeware since 2004
+description=$(rf flight-of-the-amazon-queen package description)
 license=Freeware (John Passfield, Steven Stamatiadis); ScummVM is GPL-3.0
 requires=pspexp-exec
 P
 cat > "$D/flight-of-the-amazon-queen.entry" <<E
 title=Flight of the Amazon Queen
 type=game
-description=A 1995 jungle adventure with a pilot and a mad scientist, freeware since 2004
+description=$(rf flight-of-the-amazon-queen entry description)
 icon=puzzle
 exec=$SCUMMVM_EXEC
 env=PSPEXP_KEYS=$SCUMMVM_KEYS
 env=PSPEXP_NUB=mouse
+graphics=$(rf flight-of-the-amazon-queen entry graphics)
 pspexp=1
 E

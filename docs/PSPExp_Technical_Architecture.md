@@ -492,7 +492,13 @@ FILE       the PSP's memory stick (host -> PSP requests, one reply each)
 *SYSTEM also carries CLOCK_SET / CLOCK_STATUS (2026-09-28, runtimes with
 `PSPEXP_FEATURE_CLOCK`). The host sets the PSP's clock and, with
 `PSPEXP_CLOCK_ZONE`, its time zone and summer time. See
-docs/Launcher_and_Boards.md §9.*
+docs/Launcher_and_Boards.md §9. And POWER_QUERY / POWER_STATUS (2026-10-02,
+runtimes with `PSPEXP_FEATURE_POWER`): the host asks, the PSP answers with
+its battery (`PspExpPowerStatus`: charge, the power service's estimate of the
+time left, the battery's current, temperature and voltage, and whether it is
+charging, on the adapter or low), read from `scePower*` at that moment. The
+host library asks without waiting (`pspexp_power_query`) and keeps the last
+answer (`pspexp_power_status`); the launcher asks every 10 s.*
 
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 

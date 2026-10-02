@@ -5,10 +5,10 @@
 [package]
 id=openmrac
 title=openMrac
-description=3D arcade racing on country tracks
+description=3D arcade racing: pick a car and race laps on country tracks, chasing your best time.
 category=game
 license=BSD-2-Clause (openMrac)
-version=1
+version=2
 
 [debian]
 apt=openmrac
@@ -16,9 +16,10 @@ apt=openmrac
 [entry]
 title=openMrac
 type=game
-description=3D arcade racing on country tracks
+description=3D arcade racing: pick a car and race laps on country tracks, chasing your best time.
 icon=gauge
 exec=/usr/games/openmrac --skip-settings
 keys=cross=up,square=down,start=return,select=escape,up=up,down=down,left=left,right=right
 nub=keys
 env=PSPEXP_JOYSTICK=0
+graphics=opengl-shaders

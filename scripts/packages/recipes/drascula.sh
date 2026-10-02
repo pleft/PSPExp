@@ -10,17 +10,18 @@ scummvm_game "$D" drascula drascula en d/drascula/drascula_1.0+ds4-2_all.deb@ed4
 cat > "$D/package" <<P
 version=1.0+ds4-2
 title=Drascula: The Vampire Strikes Back
-description=A 1996 comedy vampire adventure, freeware since 2006
+description=$(rf drascula package description)
 license=Freeware (Alcachofa Soft); ScummVM is GPL-3.0
 requires=pspexp-exec
 P
 cat > "$D/drascula.entry" <<E
 title=Drascula: The Vampire Strikes Back
 type=game
-description=A 1996 comedy vampire adventure, freeware since 2006
+description=$(rf drascula entry description)
 icon=puzzle
 exec=$SCUMMVM_EXEC
 env=PSPEXP_KEYS=$SCUMMVM_KEYS
 env=PSPEXP_NUB=mouse
+graphics=$(rf drascula entry graphics)
 pspexp=1
 E

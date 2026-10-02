@@ -27,17 +27,18 @@ cp "$ROOT/scripts/packages/art/jazz.png" "$D/jazz.png"   # the entry's cover
 cat > "$D/package" <<P
 version=$(sed -n 's/^[[:space:]]*VERSION \([0-9]*\).*/\1/p' "$ROOT/../jazz/openjazz/CMakeLists.txt" | head -1)
 title=Jazz Jackrabbit (shareware)
-description=Jazz Jackrabbit, shareware episode 1, by Epic MegaGames, on OpenJazz
+description=$(rf jazz package description)
 license=GPL-2.0 (OpenJazz); shareware (Jazz Jackrabbit, Epic MegaGames, 1994: data/LICENSE.DOC)
 requires=$REQ
 P
 cat > "$D/jazz.entry" <<E
 title=Jazz Jackrabbit
 type=game
-description=Shareware episode 1 (Epic MegaGames, 1994): Turtle Terror
+description=$(rf jazz entry description)
 icon=rabbit
 exec=$RUN ./data
 env=PSPEXP_KEYS=$JAZZ_KEYS
 env=PSPEXP_NUB=keys
+graphics=$(rf jazz entry graphics)
 pspexp=1
 E

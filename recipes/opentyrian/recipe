@@ -5,10 +5,10 @@
 [package]
 id=opentyrian
 title=OpenTyrian
-description=The vertical shooter Tyrian 2.1, freeware since 2004
+description=Tyrian 2.1, the 1995 vertical shooter: fight through a story campaign, earning money between levels to buy weapons and ship upgrades. Freeware since 2004.
 category=game
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
-version=1
+version=2
 
 [debian]
 apt=opentyrian tyrian-data
@@ -22,9 +22,10 @@ build=opentyrian
 [entry]
 title=OpenTyrian
 type=game
-description=Tyrian 2.1: a vertical shooter, freeware since 2004
+description=Tyrian 2.1, the 1995 vertical shooter: fight through a story campaign, earning money between levels to buy weapons and ship upgrades. Freeware since 2004.
 icon=rocket
 exec=/usr/games/opentyrian --no-joystick
 keys=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right
 nub=keys
 first-run=.config/opentyrian/opentyrian.cfg:section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n
+graphics=sdl

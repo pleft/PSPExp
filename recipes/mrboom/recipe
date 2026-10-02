@@ -4,10 +4,10 @@
 [package]
 id=mrboom
 title=Mr. Boom
-description=A Bomberman-style game: bomb your way through mazes, against the computer
+description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 category=game
 license=MIT (Mr. Boom)
-version=1
+version=2
 
 [debian]
 apt=mrboom
@@ -15,7 +15,8 @@ apt=mrboom
 [entry]
 title=Mr. Boom
 type=game
-description=A Bomberman-style game: bomb your way through mazes, against the computer
+description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 icon=gamepad-2
 exec=/usr/games/mrboom
 keys=start=return,select=escape
+graphics=sdl

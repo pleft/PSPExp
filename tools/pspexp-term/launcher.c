@@ -21,6 +21,7 @@
 #include "launcher_mac.h"
 #endif
 #include "launcher_gfx.h"
+#include "pspexp_version.h"   /* PSPEXP_VERSION: generated at build time (cmake/pspexp_version.cmake) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -747,6 +748,53 @@ void launcher_invalidate(void) { g_dirty = 1; }
 
 static char g_link[160] = "not connected";
 void launcher_set_link(const char *desc) { snprintf(g_link, sizeof(g_link), "%s", desc ? desc : ""); g_dirty = 1; }
+
+static char g_psp_slot, g_psp_pending, g_psp_ver[64];
+void launcher_set_psp_runtime(char slot, char pending, const char *version)
+{
+    g_psp_slot = slot; g_psp_pending = pending;
+    snprintf(g_psp_ver, sizeof(g_psp_ver), "%s", version ? version : "");
+    g_dirty = 1;
+}
+
+/* a runtime set's version, "2026.10.01.224358+g4330aa0" (scripts/packages/runtime-slot), shown as
+ * "2026.10.01 (4330aa0)"; anything else as it is */
+static void short_version(const char *v, char *out, size_t n)
+{
+    const char *g = strstr(v, "+g");
+    if (strlen(v) >= 10 && v[4] == '.' && v[7] == '.' && g) snprintf(out, n, "%.10s (%s)", v, g + 2);
+    else snprintf(out, n, "%s", v);
+}
+
+/* how an entry draws, as the details card says it ("" not said) */
+static const char *graphics_label(const char *g)
+{
+    if (!strcmp(g, "sdl")) return "SDL";
+    if (!strcmp(g, "opengl")) return "OpenGL";
+    if (!strcmp(g, "opengl-shaders")) return "OpenGL with shaders";
+    return "";
+}
+
+/* the PSP's battery as one line (About), "" when there is nothing to say; the reading's charge
+ * and state for the status bar's icon */
+static int psp_battery(char *out, size_t n, PspExpPowerStatus *p)
+{
+    char t[64];
+    out[0] = 0;
+    if (!g_ctx || pspexp_link_state(g_ctx) != PSPEXP_LINK_CONNECTED) return 0;
+    if (!pspexp_power_supported(g_ctx)) { snprintf(out, n, "needs a newer PSP runtime (System > Update the PSP)"); return 0; }
+    if (pspexp_power_status(g_ctx, p, NULL) < 0) { snprintf(out, n, "reading..."); return 0; }
+    if (!(p->flags & PSPEXP_POWER_BATTERY)) { snprintf(out, n, "no battery: on the adapter"); return 0; }
+    snprintf(out, n, p->percent >= 0 ? "%d%%" : "charge unknown", p->percent);
+    if (p->flags & PSPEXP_POWER_CHARGING) snprintf(t, sizeof(t), ", charging");
+    else if (p->flags & PSPEXP_POWER_EXTERNAL) snprintf(t, sizeof(t), ", on the adapter");
+    else if (p->minutes_left > 0) snprintf(t, sizeof(t), ", about %d h %02d min left", p->minutes_left / 60, p->minutes_left % 60);
+    else t[0] = 0;
+    strncat(out, t, n - strlen(out) - 1);
+    if (p->current_ma) { snprintf(t, sizeof(t), ", %d mA %s", abs(p->current_ma), p->current_ma < 0 ? "drawn" : "in"); strncat(out, t, n - strlen(out) - 1); }
+    if (p->temp_c >= 0) { snprintf(t, sizeof(t), ", %d C", p->temp_c); strncat(out, t, n - strlen(out) - 1); }
+    return p->percent >= 0;
+}
 
 typedef struct About {
     char board[96], soc[96], cpu[96], mem[64], os[96], kernel[96];
@@ -1547,6 +1595,22 @@ static void draw_status(void)
         gfx_icon("plug", 16, x, 6, C_SUB, 255);
     }
     x -= 10;
+    {   /* the PSP's own battery, when its runtime reports it: "PSP", its icon, the charge */
+        PspExpPowerStatus p;
+        char b[160];
+        if (psp_battery(b, sizeof(b), &p)) {
+            int chg = (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) != 0;
+            const char *ic = (p.flags & PSPEXP_POWER_CHARGING) ? "battery-charging" : p.percent > 70 ? "battery-full" : p.percent > 35 ? "battery-medium" : p.percent > 12 ? "battery-low" : "battery-warning";
+            snprintf(s, sizeof(s), "%d%%", p.percent);
+            x -= gfx_text_width(FONT_SMALL, s);
+            gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
+            x -= 20;
+            gfx_icon(ic, 16, x, 6, p.percent <= 12 && !chg ? 0xf87171 : C_SUB, 255);
+            x -= 4 + gfx_text_width(FONT_BADGE, "PSP");
+            gfx_text(FONT_BADGE, x, 9, "PSP", C_MUTED, 255, 0);
+            x -= 10;
+        }
+    }
     if (g_wired) {
         x -= 16;
         gfx_icon("ethernet-port", 16, x, 6, C_SUB, 255);
@@ -1896,8 +1960,13 @@ static void draw_details(float dt)
     case LT_TOOL: snprintf(s, sizeof(s), "Tool"); break;
     default: snprintf(s, sizeof(s), "Game"); break;
     }
-    mtext(FONT_BODY, tx, ty, e->desc[0] ? e->desc : s, C_SUB, a, tw, g_open_at);
-    ty += 26;
+    {   /* the description, over the lines left above the rows below it (three to five) */
+        int lh = gfx_line_height(FONT_BODY) + 1;
+        int rows = e->type == LT_ROM ? 3 + (e->tags[0] != 0) : 2 + (e->tags[0] != 0) + (e->pkg[0] == 0);
+        int lines = (cy + ch - 30 - 6 - ty - rows * 20) / lh;
+        lines = lines < 3 ? 3 : lines > 5 ? 5 : lines;
+        ty += gfx_text_wrapped(FONT_BODY, tx, ty, e->desc[0] ? e->desc : s, C_SUB, a, tw, lh, lines) * lh + 8;
+    }
     if (e->type == LT_ROM) {
         const char *base = strrchr(e->exec, '/');
         char sz[32];
@@ -1905,19 +1974,33 @@ static void draw_details(float dt)
         if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
         info_row(tx, ty, "hard-drive", sz, tw, a); ty += 20;
         info_row(tx, ty, "file-text", base ? base + 1 : e->exec, tw, a); ty += 20;
-        { const char *x = L.sys[e->sys].exec, *sp = strchr(x, ' '); snprintf(s, sizeof(s), "%.*s", sp ? (int)(sp - x) : (int)strlen(x), x); }
+        {   /* the player: pspexp-retro and its core, by the core's file name; else the command's first word */
+            const char *x = L.sys[e->sys].exec, *r = strstr(x, "pspexp-retro "), *sp;
+            const char *gl = graphics_label(L.sys[e->sys].graphics);
+            if (r) {
+                char core[200], *cb;
+                snprintf(core, sizeof(core), "%.*s", (int)strcspn(r + 13, " "), r + 13);
+                cb = strrchr(core, '/');
+                snprintf(s, sizeof(s), "%s%spspexp-retro, %s", gl, gl[0] ? ": " : "", cb ? cb + 1 : core);
+            } else { sp = strchr(x, ' '); snprintf(s, sizeof(s), "%s%s%.*s", gl, gl[0] ? ": " : "", sp ? (int)(sp - x) : (int)strlen(x), x); }
+        }
         info_row(tx, ty, "cpu", s, tw, a); ty += 20;
     } else {
-        info_row(tx, ty, e->pspexp ? "zap" : "monitor", e->pspexp ? "Drawn by the PSP; hold START + SELECT to quit" : "Shown through the mirror", tw, a); ty += 20;
+        if (!e->pspexp) snprintf(s, sizeof(s), "Shown through the mirror");
+        else if (!strncmp(e->graphics, "opengl", 6)) snprintf(s, sizeof(s), "%s, drawn in 3D by the PSP", graphics_label(e->graphics));
+        else if (!strcmp(e->graphics, "sdl")) snprintf(s, sizeof(s), "SDL, drawn by the PSP");
+        else snprintf(s, sizeof(s), "Drawn by the PSP; hold START + SELECT to quit");
+        info_row(tx, ty, !e->pspexp ? "monitor" : !strncmp(e->graphics, "opengl", 6) ? "box" : !strcmp(e->graphics, "sdl") ? "image" : "zap", s, tw, a); ty += 20;
         if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
-        info_row(tx, ty, "folder-open", e->dir[0] ? e->dir : "/", tw, a); ty += 20;
+        if (!e->pkg[0]) { info_row(tx, ty, "folder-open", e->dir[0] ? e->dir : "/", tw, a); ty += 20; }   /* (a package's: its own folder) */
         if (e->pkg[0]) snprintf(s, sizeof(s), "Package %s", e->pkg);
         else snprintf(s, sizeof(s), "library/%s.entry", e->id + 2);
         info_row(tx, ty, "package", s, tw, a); ty += 20;
     }
     for (i = 0; i < L.nrecent; i++) if (!strcmp(L.recent[i], e->id)) break;
-    if (i < L.nrecent) { snprintf(s, sizeof(s), i == 0 ? "Played last" : "Played recently (#%d)", i + 1); info_row(tx, ty, "history", s, tw, a); ty += 20; }
-    if (e->fav) { info_row(tx, ty, "star", "Favourite", tw, a); }
+    /* (rows that would reach the buttons along the foot are left out: a long description) */
+    if (i < L.nrecent && ty + 16 <= cy + ch - 34) { snprintf(s, sizeof(s), i == 0 ? "Played last" : "Played recently (#%d)", i + 1); info_row(tx, ty, "history", s, tw, a); ty += 20; }
+    if (e->fav && ty + 16 <= cy + ch - 34) { info_row(tx, ty, "star", "Favourite", tw, a); }
     /* buttons along the card's foot */
     {
         int bx = tx, by = cy + ch - 30;
@@ -2056,7 +2139,12 @@ static void draw_about(float dt)
     snprintf(host, sizeof(host), "%s", b->host);
     gfx_icon("info", 20, 16, 12, C_ACCENT, a);
     gfx_text(FONT_TITLE, 44, 11, "About this console", C_TEXT, a, 0);
-    gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 15, host, C_MUTED, a, 0);
+    {   /* this console's version over the board's name */
+        char v[96];
+        snprintf(v, sizeof(v), "PSPExp %s", PSPEXP_VERSION);
+        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, v), 7, v, C_SUB, a, 0);
+        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 21, host, C_MUTED, a, 0);
+    }
 
     gfx_shadow(NINE_SHADOW10, cx1, cy + 4, cw, ch, 0x000000, a * 120 / 255);
     gfx_nine(NINE_R10, cx1, cy, cw, ch, 0x1a2030, a * 240 / 255);
@@ -2088,20 +2176,35 @@ static void draw_about(float dt)
     gfx_nine(NINE_R10, cx2, cy, cw, ch, 0x1a2030, a * 240 / 255);
     gfx_text(FONT_BADGE, cx2 + 12, cy + 9, "PSP AND CONNECTION", C_ACCENT, a, 0);
     if (h && h->protocol) {
-        snprintf(psp, sizeof(psp), "runtime %u, %ux%u at %u Hz", h->runtime_version, h->display_width, h->display_height, h->refresh_hz);
+        char v[96];
+        short_version(g_psp_ver, v, sizeof(v));
+        /* the runtime: its slot and version (read from the stick on connecting), and an update waiting */
+        if (g_psp_slot == 'a' || g_psp_slot == 'b')
+            snprintf(psp, sizeof(psp), "slot %c, %s%s", g_psp_slot, v[0] ? v : "version unknown",
+                     g_psp_pending ? "; an update waits: restart PSPExp on the PSP" : "");
+        else if (g_psp_slot == '-') snprintf(psp, sizeof(psp), "runtime %u, installed without slots", h->runtime_version);
+        else snprintf(psp, sizeof(psp), "runtime %u", h->runtime_version);
         snprintf(mem, sizeof(mem), "%u KB VRAM, %u KB RAM", (unsigned)(h->vram_budget / 1024), (unsigned)(h->ram_budget / 1024));
     }
-    if (st && st->last_present_latency_us) snprintf(rtt, sizeof(rtt), "%.1f ms per frame, send to shown", st->last_present_latency_us / 1000.0);
+    if (st && st->last_present_latency_us) snprintf(rtt, sizeof(rtt), "%.1f ms a frame", st->last_present_latency_us / 1000.0);
     y = cy + 26;
-    y = about_row(cx2 + 12, y, cw - 24, "link", "LINK", g_link, a);
-    y = about_row(cx2 + 12, y, cw - 24, "clock", "LATENCY", rtt, a);
-    y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSP", psp, a);
+    {
+        char link[220], bat[160];
+        PspExpPowerStatus p;
+        int pct;
+        snprintf(link, sizeof(link), "%s%s%s", g_link, rtt[0] ? ", " : "", rtt);
+        y = about_row(cx2 + 12, y, cw - 24, "link", "LINK", link, a);
+        y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSP RUNTIME", psp, a);
+        pct = psp_battery(bat, sizeof(bat), &p) ? p.percent : -1;
+        y = about_row(cx2 + 12, y, cw - 24, pct < 0 ? "battery" : (p.flags & PSPEXP_POWER_CHARGING) ? "battery-charging" : pct > 70 ? "battery-full" : pct > 35 ? "battery-medium" : pct > 12 ? "battery-low" : "battery-warning",
+                      "PSP BATTERY", bat, a);
+    }
     y = about_row(cx2 + 12, y, cw - 24, "layers", "PSP MEMORY", mem, a);
     y = about_row(cx2 + 12, y, cw - 24, "globe", "NETWORK", b->net, a);
     {
         char pw[140];
         snprintf(pw, sizeof(pw), "%s%s%s%s%s", b->power, b->temp[0] ? ", " : "", b->temp, b->uptime[0] ? ", up " : "", b->uptime);
-        about_row(cx2 + 12, y, cw - 24, g_bat >= 0 ? "battery-full" : "zap", "POWER", pw, a);
+        about_row(cx2 + 12, y, cw - 24, g_bat >= 0 ? "battery-full" : "zap", "BOARD POWER", pw, a);
     }
 
     gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, b->library), HINT_Y - 1, b->library, C_MUTED, a, SCREEN_W - 100);

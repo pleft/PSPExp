@@ -72,6 +72,11 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 	# the tracked files as they are in this tree (uncommitted edits included), built on the Pi
 	(cd "$ROOT" && git ls-files -z --cached --others --exclude-standard | COPYFILE_DISABLE=1 xargs -0 tar --no-xattrs -cf - 2>/dev/null) |
 		ssh "$PI" 'mkdir -p ~/pspexp/src && tar -C ~/pspexp/src -xf -'
+	# the copy has no git: its version (About) goes with it, worked out here
+	VF=$(mktemp); rm -f "$VF"
+	cmake -DSRC="$ROOT" -DOUT="$VF" -P "$ROOT/cmake/pspexp_version.cmake" >/dev/null 2>&1
+	V=$(sed -n 's/^#define PSPEXP_VERSION "\(.*\)"$/\1/p' "$VF" 2>/dev/null); rm -f "$VF"
+	[ -n "$V" ] && echo "$V" | ssh "$PI" 'cat > ~/pspexp/src/.pspexp-version'
 	ssh "$PI" 'set -e; cd ~/pspexp/src
 		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
 		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true

@@ -55,7 +55,7 @@ int main(void)
     /* a package with two entries (Freedoom), one with a cover (Tyrian), a hidden entry */
     put("root/apps/freedoom/phase1.entry",
         "title=Freedoom: Phase 1\ntype=game\nexec=pspexp-run chocolate-doom -iwad ./freedoom1.wad\n"
-        "env=PSPEXP_KEYS=cross=lctrl,circle=space\nenv=PSPEXP_NUB=keys\npspexp=1\ndescription=Episodic Doom\n");
+        "env=PSPEXP_KEYS=cross=lctrl,circle=space\nenv=PSPEXP_NUB=keys\npspexp=1\ndescription=Episodic Doom\ngraphics=sdl\n");
     put("root/apps/freedoom/phase2.entry", "title=Freedoom: Phase 2\nexec=pspexp-run chocolate-doom -iwad ./freedoom2.wad\npspexp=1\n");
     put("root/apps/freedoom/phase2.png", "PNG");
     put("root/apps/opentyrian/opentyrian.entry", "title=OpenTyrian\nexec=./run.sh\npspexp=1\n");
@@ -64,7 +64,7 @@ int main(void)
     /* a hand-made entry */
     put("home/.config/pspexp-launcher/library/notes.entry", "title=Notes\ntype=app\nexec=nano\nicon=file-text\n");
     /* an emulated system with ROMs in ~/roms, and one without a ROM folder yet */
-    put("root/systems/gba.system", "name=Game Boy Advance\nshort=GBA\nroms=~/roms/gba\next=gba,gb\nexec=pspexp-retro /opt/pspexp/cores/mgba.so %ROM%\nthumbs=Nintendo - Game Boy Advance\npspexp=1\n");
+    put("root/systems/gba.system", "name=Game Boy Advance\nshort=GBA\nroms=~/roms/gba\next=gba,gb\nexec=pspexp-retro /opt/pspexp/cores/mgba.so %ROM%\nthumbs=Nintendo - Game Boy Advance\ngraphics=sdl\npspexp=1\n");
     put("root/systems/snes.system", "name=Super Nintendo\nshort=SNES\nroms=~/roms/snes\next=sfc\nexec=./pspexp-retro snes9x %ROM%\n"
         "pkg=snes\nenv=PSPEXP_RETRO_ASPECT=pixel\n");
     put("home/roms/snes/Super Game (Europe).sfc", "x");
@@ -83,6 +83,7 @@ int main(void)
         snprintf(p, sizeof(p), "%s/root/apps/freedoom", base);
         CHECK(!strcmp(e->dir, p));   /* runs in its package */
         CHECK(!strcmp(e->desc, "Episodic Doom"));
+        CHECK(!strcmp(e->graphics, "sdl"));
         CHECK(e->art[0] == 0);       /* no phase1.png, no cover.png */
         lib_command(&L, e, cmd, sizeof(cmd));
         CHECK(!strcmp(cmd, "PSPEXP_KEYS='cross=lctrl,circle=space' PSPEXP_NUB='keys' pspexp-run chocolate-doom -iwad ./freedoom1.wad"));
@@ -104,6 +105,7 @@ int main(void)
     if (s >= 0) {
         CHECK_EQ(L.sys[s].nroms, 2);
         CHECK(L.sys[s].pspexp == 1);
+        CHECK(!strcmp(L.sys[s].graphics, "sdl"));
         if (L.sys[s].nroms == 2) {
             CHECK(!strcmp(L.sys[s].roms_list[0].title, "Golden Sun"));
             CHECK(!strcmp(L.sys[s].roms_list[0].tags, "USA, Europe"));

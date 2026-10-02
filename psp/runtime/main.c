@@ -162,6 +162,27 @@ static void op_screenshot(void *u, uint16_t index)
     sceIoClose(fd);
     trace(g_ge.in_frame ? "screenshot written (in a frame: read by the CPU)" : "screenshot written");
 }
+/* the battery and power supply (POWER_QUERY), from the power service; its error codes are large
+ * negative numbers (0x8xxxxxxx), kept out as "unknown" */
+static int op_power_get(void *u, PspExpPowerStatus *p)
+{
+    int v;
+    (void)u;
+    p->flags = 0;
+    if (scePowerIsPowerOnline() > 0) p->flags |= PSPEXP_POWER_EXTERNAL;
+    if (scePowerIsBatteryExist() > 0) {
+        p->flags |= PSPEXP_POWER_BATTERY;
+        if (scePowerIsBatteryCharging() > 0) p->flags |= PSPEXP_POWER_CHARGING;
+        if (scePowerIsLowBattery() > 0) p->flags |= PSPEXP_POWER_LOW;
+        if ((v = scePowerGetBatteryLifePercent()) >= 0 && v <= 100) p->percent = (int16_t)v;
+        if ((v = scePowerGetBatteryLifeTime()) >= 0 && v < 32767) p->minutes_left = (int16_t)v;
+        if ((v = scePowerGetBatteryElec()) > -32768 && v < 32767) p->current_ma = (int16_t)v;
+        if ((v = scePowerGetBatteryTemp()) >= 0 && v < 100) p->temp_c = (int16_t)v;
+        if ((v = scePowerGetBatteryVolt()) > 0 && v < 65535) p->voltage_mv = (uint16_t)v;
+    }
+    return 0;
+}
+
 /* the clock (CLOCK_SET): read here, set through the USB driver (kernel mode) */
 #include <psprtc.h>
 #include <psputility_sysparam.h>
@@ -298,6 +319,7 @@ int main(int argc, char *argv[])
     ops.clock_get = op_clock_get;
     ops.clock_set = op_clock_set;
     ops.zone_set = op_zone_set;
+    ops.power_get = op_power_get;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 

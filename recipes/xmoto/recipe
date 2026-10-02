@@ -5,10 +5,10 @@
 [package]
 id=xmoto
 title=X-Moto
-description=Physics motocross: ride, lean and flip through hundreds of levels
+description=Physics motocross: ride, lean and flip your bike through hundreds of levels, collecting strawberries on the way to the flower.
 category=game
 license=GPL-2.0+ (X-Moto)
-version=1
+version=2
 
 [debian]
 apt=xmoto
@@ -16,9 +16,10 @@ apt=xmoto
 [entry]
 title=X-Moto
 type=game
-description=Physics motocross: ride, lean and flip through hundreds of levels
+description=Physics motocross: ride, lean and flip your bike through hundreds of levels, collecting strawberries on the way to the flower.
 icon=gamepad-2
 exec=/usr/games/xmoto
 keys=up=up,down=down,left=left,right=right,cross=return,circle=space,start=escape,select=escape
 nub=keys
 env=PSPEXP_JOYSTICK=0
+graphics=opengl

@@ -8,8 +8,10 @@ import os, re, sys
 SECTIONS = {"package", "debian", "omega", "entry", "system"}
 PACKAGE_KEYS = {"id", "title", "description", "category", "license", "version", "requires"}
 BOARD_KEYS = {"apt", "core", "build", "data", "warn"}
-ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover"}
-SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native"}
+ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover", "graphics"}
+SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native", "graphics"}
+GRAPHICS = {"sdl", "opengl", "opengl-shaders"}   # how it draws: the launcher's details card and Packages say so
+DESCRIPTION_MAX = 220                            # what the details card shows over its lines
 CATEGORIES = {"game", "system", "app", "tool"}
 KEY_NAME = re.compile(r"^[a-z0-9]+(\+[a-z0-9]+)*$")
 BUTTONS = {"cross", "circle", "square", "triangle", "l", "r", "start", "select", "up", "down", "left", "right"}
@@ -65,6 +67,10 @@ def check(dirpath):
             for p in v.split():
                 if not APT.match(p):
                     errs.append("%s: '%s' is not a package name" % (where, p))
+        if k == "graphics" and v not in GRAPHICS:
+            errs.append("%s: graphics=%s (one of %s)" % (where, v, ", ".join(sorted(GRAPHICS))))
+        if k == "description" and len(v) > DESCRIPTION_MAX:
+            errs.append("%s: description of %d characters (at most %d)" % (where, len(v), DESCRIPTION_MAX))
         if k == "data" and "sha256=" not in v:
             errs.append("%s: data without sha256=" % where)
         sections.setdefault(sec, {})[k] = v
@@ -89,14 +95,14 @@ def check(dirpath):
     if pk.get("category") == "system":
         if not systems: errs.append("%s: a system needs [system]" % rid)
         for sec in systems:
-            for need in ("name", "short", "ext", "roms"):
+            for need in ("name", "short", "ext", "roms", "graphics"):
                 if need not in sections[sec]: errs.append("%s: [%s] needs %s" % (rid, sec, need))
         if "debian" in sections and "core" not in sections["debian"]:
             errs.append("%s: a system's [debian] needs core=" % rid)
     elif pk.get("category"):
         if not entries: errs.append("%s: needs [entry]" % rid)
         for sec in entries:
-            for need in ("title", "exec"):
+            for need in ("title", "exec", "graphics"):
                 if need not in sections[sec]: errs.append("%s: [%s] needs %s" % (rid, sec, need))
     ids = [sections[s].get("id", rid) for s in systems + entries]
     if len(ids) != len(set(ids)):

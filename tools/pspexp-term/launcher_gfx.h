@@ -47,6 +47,9 @@ int  gfx_text_marquee(int font, int x, int y, const char *s, uint32_t rgb, int a
  * and put it back */
 void gfx_set_clip(int x, int y, int w, int h);
 int  gfx_text_width(int font, const char *s);
+/* s word-wrapped at spaces into lines of at most w pixels, line_h apart,
+ * at most max_lines (the last one cut, with "..."); the lines drawn */
+int  gfx_text_wrapped(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int w, int line_h, int max_lines);
 int  gfx_line_height(int font);
 
 void gfx_rect(int x, int y, int w, int h, uint32_t rgb, int alpha);

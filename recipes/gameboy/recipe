@@ -6,7 +6,7 @@ title=Game Boy
 description=Game Boy and Game Boy Color: Debian's Gambatte core; ROMs in ~/roms/gb and ~/roms/gbc
 category=system
 license=GPL-2.0 (Gambatte); pspexp-retro is part of PSPExp
-version=1
+version=2
 
 [package:omega]
 description=Game Boy and Game Boy Color: PSPExp's static player with the Gambatte core; ROMs in ~/roms/gb and ~/roms/gbc
@@ -31,6 +31,7 @@ roms=~/roms/gb
 thumbs=Nintendo - Game Boy
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl
 
 [system.gbc]
 id=gbc
@@ -42,3 +43,4 @@ roms=~/roms/gbc
 thumbs=Nintendo - Game Boy Color
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl

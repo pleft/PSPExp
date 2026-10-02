@@ -63,6 +63,9 @@ struct PspExpContext {
     /* CLOCK_STATUS, the answer to CLOCK_SET */
     int clock_have;
     PspExpClockStatus clock_status;
+    /* POWER_STATUS, the answer to POWER_QUERY: when it came (0 none on this connection) */
+    uint64_t power_at;
+    PspExpPowerStatus power;
 };
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
@@ -289,6 +292,27 @@ int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, int dst,
     return ctx->clock_status.result;
 }
 
+/* ---- the PSP's battery ---------------------------------------------------------------------- */
+
+int pspexp_power_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_POWER) != 0;
+}
+
+int pspexp_power_query(PspExpContext *ctx)
+{
+    if (!pspexp_power_supported(ctx)) return -1;
+    return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_POWER_QUERY, NULL, 0);
+}
+
+int pspexp_power_status(const PspExpContext *ctx, PspExpPowerStatus *out, uint64_t *age_us)
+{
+    if (!ctx->power_at || ctx->state != PSPEXP_LINK_CONNECTED) return -1;
+    if (out) *out = ctx->power;
+    if (age_us) *age_us = pspexp_time_us() - ctx->power_at;
+    return 0;
+}
+
 /* ---- FILE: the PSP's memory stick ------------------------------------------------------ */
 
 int pspexp_fs_supported(const PspExpContext *ctx)
@@ -501,7 +525,11 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
 
     switch (m->header->opcode) {
     case PSPEXP_OP_HELLO:
+        ctx->power_at = 0;   /* (another PSP, or the same after a restart) */
         on_hello(ctx, m);
+        break;
+    case PSPEXP_OP_POWER_STATUS:
+        if (m->length >= sizeof(PspExpPowerStatus)) { memcpy(&ctx->power, m->payload, sizeof(ctx->power)); ctx->power_at = pspexp_time_us(); }
         break;
     case PSPEXP_OP_CLOCK_STATUS:
         if (m->length >= sizeof(PspExpClockStatus)) { memcpy(&ctx->clock_status, m->payload, sizeof(ctx->clock_status)); ctx->clock_have = 1; }

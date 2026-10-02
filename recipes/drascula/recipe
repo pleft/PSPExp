@@ -4,10 +4,10 @@
 [package]
 id=drascula
 title=Drascula: The Vampire Strikes Back
-description=A 1996 comedy vampire adventure, freeware since 2006
+description=Alcachofa Soft's 1996 comedy vampire adventure: John Hacker sets out to rescue a kidnapped girl from Count Drascula. Point and click with the nub; freeware since 2006.
 category=game
 license=Freeware (Alcachofa Soft); ScummVM is GPL-3.0
-version=3
+version=4
 
 [debian]
 apt=scummvm drascula drascula-music
@@ -18,8 +18,9 @@ build=drascula
 [entry]
 title=Drascula: The Vampire Strikes Back
 type=game
-description=A 1996 comedy vampire adventure, freeware since 2006
+description=Alcachofa Soft's 1996 comedy vampire adventure: John Hacker sets out to rescue a kidnapped girl from Count Drascula. Point and click with the nub; freeware since 2006.
 icon=puzzle
 exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/drascula/en drascula
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
+graphics=sdl

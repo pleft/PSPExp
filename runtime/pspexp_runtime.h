@@ -98,6 +98,9 @@ typedef struct PspExpRuntimeOps {
     int (*clock_set)(void *user, uint64_t utc);
     /* optional: the time-zone setting (standard offset, minutes east) and summer time */
     int (*zone_set)(void *user, int tz_minutes, int dst);
+    /* Optional: the battery and power supply (POWER_QUERY); with it, HELLO
+     * advertises PSPEXP_FEATURE_POWER. Fills every field (-1 / 0 unknown). */
+    int (*power_get)(void *user, PspExpPowerStatus *out);
     /* Optional: the memory stick for the host (the FILE channel). With
      * fs_list set, HELLO advertises PSPEXP_FEATURE_FILES. Paths arrive
      * checked: "ms0:/..." or "ef0:/...", no ".." parts. Results: >= 0, or a

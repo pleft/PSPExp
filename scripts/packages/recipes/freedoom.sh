@@ -22,12 +22,12 @@ esac
 cat > "$D/package" <<P
 version=$V
 title=Freedoom
-description=Free Doom-compatible games: Phase 1 (episodes) and Phase 2 (a megawad)
+description=$(rf freedoom package description)
 license=BSD (freedoom.github.io)
 requires=$REQ
 P
 for n in 1 2; do
-	case $n in 1) t="Freedoom: Phase 1"; d="Four episodes of free Doom";; 2) t="Freedoom: Phase 2"; d="A 32-level megawad, Doom II style";; esac
+	case $n in 1) t="Freedoom: Phase 1"; d=$(rf freedoom entry description);; 2) t="Freedoom: Phase 2"; d=$(rf freedoom entry.phase2 description);; esac
 	cat > "$D/phase$n.entry" <<E
 title=$t
 type=game
@@ -38,6 +38,7 @@ env=PSPEXP_KEYS=$DOOM_KEYS
 env=PSPEXP_NUB=keys
 env=SDL_VIDEODRIVER=dummy
 env=SDL_AUDIODRIVER=dummy
+graphics=sdl
 pspexp=1
 E
 	cp "$ROOT/scripts/packages/art/freedoom-phase$n.png" "$D/phase$n.png"   # the entry's cover

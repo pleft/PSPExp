@@ -4,10 +4,10 @@
 [package]
 id=flight-of-the-amazon-queen
 title=Flight of the Amazon Queen
-description=A 1995 jungle adventure with a pilot and a mad scientist, freeware since 2004
+description=A 1995 jungle adventure: pilot Joe King crash-lands in the Amazon and stumbles on a mad scientist's plot. Point and click with the nub, with full speech; freeware since 2004.
 category=game
 license=Freeware (John Passfield, Steven Stamatiadis); ScummVM is GPL-3.0
-version=2
+version=3
 
 [debian]
 apt=scummvm flight-of-the-amazon-queen
@@ -18,8 +18,9 @@ build=flight-of-the-amazon-queen
 [entry]
 title=Flight of the Amazon Queen
 type=game
-description=A 1995 jungle adventure with a pilot and a mad scientist, freeware since 2004
+description=A 1995 jungle adventure: pilot Joe King crash-lands in the Amazon and stumbles on a mad scientist's plot. Point and click with the nub, with full speech; freeware since 2004.
 icon=puzzle
 exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/flight-of-the-amazon-queen queen
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
+graphics=sdl

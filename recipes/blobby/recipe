@@ -5,10 +5,10 @@
 [package]
 id=blobby
 title=Blobby Volley 2
-description=Beach volleyball between two blobs, against the computer or a friend
+description=Beach volleyball between two blobs with bouncy physics, against the computer: short, quick matches.
 category=game
 license=GPL-2.0+ (Blobby Volley 2)
-version=1
+version=2
 
 [debian]
 apt=blobby
@@ -16,10 +16,11 @@ apt=blobby
 [entry]
 title=Blobby Volley 2
 type=game
-description=Beach volleyball between two blobs, against the computer or a friend
+description=Beach volleyball between two blobs with bouncy physics, against the computer: short, quick matches.
 icon=gamepad-2
 exec=/usr/games/blobby
 keys=left=a,right=d,up=w,cross=w,start=escape,select=escape
 nub=mouse
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_MOUSE_BUTTONS=left=circle,right=none
+graphics=opengl

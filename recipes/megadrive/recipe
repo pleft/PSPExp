@@ -7,7 +7,7 @@ title=Mega Drive
 description=Sega Mega Drive / Genesis: Debian's Genesis Plus GX core; ROMs in ~/roms/md
 category=system
 license=Genesis Plus GX licence (non-commercial); pspexp-retro is part of PSPExp
-version=2
+version=3
 
 [package:gameshell]
 description=Sega Mega Drive / Genesis: PSPExp's PicoDrive core (lighter; Debian armhf has no Mega Drive core); ROMs in ~/roms/md
@@ -41,6 +41,7 @@ roms=~/roms/md
 thumbs=Sega - Mega Drive - Genesis
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl
 
 [system.sms]
 id=sms
@@ -52,6 +53,7 @@ roms=~/roms/sms
 thumbs=Sega - Master System - Mark III
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl
 
 [system.gg]
 id=gg
@@ -63,3 +65,4 @@ roms=~/roms/gg
 thumbs=Sega - Game Gear
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl

@@ -127,6 +127,15 @@ static long tr_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
     return (long)n;
 }
 
+/* a PSP on battery, for the tests: 76%, 2 h 5 min left, 250 mA drawn, 31 C, 4.1 V */
+static int op_power_get(void *u, PspExpPowerStatus *p)
+{
+    (void)u;
+    p->flags = PSPEXP_POWER_BATTERY;
+    p->percent = 76; p->minutes_left = 125; p->current_ma = -250; p->temp_c = 31; p->voltage_mv = 4100;
+    return 0;
+}
+
 static void tr_close(PspExpTransport *t) { (void)t; }
 
 PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
@@ -157,6 +166,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.lights3d = op_lights3d;
     ops.draw3d = op_draw3d;
     ops.clear3d = op_clear3d;
+    ops.power_get = op_power_get;
     ops.morph3d = op_morph3d;
     ops.draw3d_mesh = op_draw3d_mesh;
     ops.draw3d_indexed = op_draw3d_indexed;

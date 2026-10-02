@@ -5,10 +5,10 @@
 [package]
 id=rocksndiamonds
 title=Rocks'n'Diamonds
-description=Dig for diamonds and dodge falling rocks: a Boulder Dash-style puzzle game
+description=A Boulder Dash-style puzzle game: dig for diamonds, dodge falling rocks and reach the exit, across many level sets.
 category=game
 license=GPL-2.0 (Rocks'n'Diamonds)
-version=1
+version=2
 
 [debian]
 apt=rocksndiamonds
@@ -16,7 +16,8 @@ apt=rocksndiamonds
 [entry]
 title=Rocks'n'Diamonds
 type=game
-description=Dig for diamonds and dodge falling rocks: a Boulder Dash-style puzzle game
+description=A Boulder Dash-style puzzle game: dig for diamonds, dodge falling rocks and reach the exit, across many level sets.
 icon=gamepad-2
 exec=/usr/games/rocksndiamonds
 keys=start=return,select=escape
+graphics=sdl

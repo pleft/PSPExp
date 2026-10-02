@@ -8,10 +8,10 @@
 [package]
 id=dreamchess
 title=DreamChess
-description=3D chess against the computer, with several board and piece sets
+description=3D chess against the computer, with several board and piece sets and adjustable difficulty.
 category=game
 license=GPL-3+ (DreamChess)
-version=1
+version=2
 
 [debian]
 apt=dreamchess
@@ -19,9 +19,10 @@ apt=dreamchess
 [entry]
 title=DreamChess
 type=game
-description=3D chess against the computer, with several board and piece sets
+description=3D chess against the computer, with several board and piece sets and adjustable difficulty.
 icon=crown
 exec=/usr/games/dreamchess -W480 -H272
 keys=cross=return,circle=escape,start=escape,select=escape
 nub=keys
 env=PSPEXP_GL_EXTENSIONS=GL_ARB_framebuffer_object,GL_ARB_texture_non_power_of_two
+graphics=opengl

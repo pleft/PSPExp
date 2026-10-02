@@ -127,12 +127,17 @@ icon=rocket                        a Lucide icon
 exec=./run.sh                      a shell command, run in the package directory
 env=PSPEXP_KEYS=cross=space,...    NAME=value, as many lines as needed
 env=PSPEXP_NUB=keys
+graphics=sdl                       how it draws: sdl | opengl | opengl-shaders
 pspexp=1                           drawn by the PSP itself: no mirror
 ```
 
 Other entry keys: `dir` (where `exec` runs; default the package directory),
 `art` (a PNG, relative to the package; `<entry>.png` or `cover.png` are
-found by themselves), `tags`, `hidden=1`. A system, as the NES package
+found by themselves), `tags`, `hidden=1`. `graphics` (systems have it too)
+comes from the recipe, which must give it (`check-recipes`); the details
+card and the Packages app say "SDL", "OpenGL" or "OpenGL with shaders". The
+`description` (up to 220 characters in a recipe) fills up to five lines of
+the details card. A system, as the NES package
 installs it (section 6.2):
 
 ```
@@ -293,14 +298,26 @@ network.
 
 **About** (System > About): two cards, this board and the PSP. Board: model
 (device tree, else /proc/cpuinfo: OpenWrt's "machine"), chip and cores, memory, storage,
-system. Storage has one line per storage device: the root file system and
+system. The console's own version is at the top right, over the board's
+name: the source's last commit date and short hash ("2026.10.02
+(244e4bf)", ", modified" for a build from changed files), made at each build
+by `cmake/pspexp_version.cmake` (the Pi builds a copy without git, so
+`scripts/pi/install.sh` carries it in `.pspexp-version`). Storage has one line per storage device: the root file system and
 anything mounted under `/mnt`, `/media` or `/opt`, labelled by what the
 device is (SD card, Internal flash, USB disk, SSD; looked up by device
 number in sysfs, so the GameShell's `/dev/root` reads as its SD card),
 leaving out RAM file systems and partitions under 16 MB. PSP: the link (USB,
-or Wi-Fi with the PSP's address), latency, runtime and screen, PSP memory,
-the board's network addresses, power (battery or mains, temperature,
-uptime). It refreshes every 3 s. A line wider than its card scrolls
+or Wi-Fi with the PSP's address) and its time per frame; the PSP runtime,
+its slot and version as read from the stick on connecting ("slot b,
+2026.10.01 (2ab3d0d)", and "an update waits" until the PSP restarts into a
+newly installed one; "installed without slots" for an older install); the
+PSP's battery (charge; charging, on the adapter or the PSP's estimate of the
+time left; the battery's current, in or drawn; its temperature), asked every
+10 s (`POWER_QUERY`: runtimes from 2026-10-02; older ones show "needs a
+newer PSP runtime"); PSP memory; the board's network addresses and power
+(battery or mains, temperature, uptime). It refreshes every 3 s. The status
+bar shows the PSP's charge too, "PSP" and a battery icon beside the
+board's, once a reading has come. A line wider than its card scrolls
 (marquee: still, to its end, still, back) instead of ending in "...", and
 so do long titles in the list.
 

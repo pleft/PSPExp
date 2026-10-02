@@ -3,10 +3,10 @@
 [package]
 id=simutrans
 title=Simutrans
-description=The transport simulation, with the pak64 graphics
+description=Build a transport empire: rail, road, ships and planes carrying passengers, mail and goods between growing towns (pak64 graphics).
 category=game
 license=Artistic-1.0 (Simutrans and pak64)
-version=1
+version=2
 
 [debian]
 apt=simutrans simutrans-pak64
@@ -14,8 +14,9 @@ apt=simutrans simutrans-pak64
 [entry]
 title=Simutrans
 type=game
-description=Build a transport network: rail, road, ships, planes
+description=Build a transport empire: rail, road, ships and planes carrying passengers, mail and goods between growing towns.
 icon=train-front
 exec=/usr/games/simutrans -objects pak -screensize 480x272 -lang en
 keys=up=up,down=down,left=left,right=right,l=pgdn,r=pgup,triangle=escape,start=escape,select=p,square=none
 nub=mouse
+graphics=sdl

@@ -26,17 +26,18 @@ cp "$ROOT/scripts/packages/art/cavestory.png" "$D/cavestory.png"   # the entry's
 cat > "$D/package" <<P
 version=$(git -C "$ROOT/../cavestory/nxengine-evo" rev-parse --short HEAD 2>/dev/null || echo unknown)
 title=Cave Story
-description=The freeware platformer Cave Story (2004), on NXEngine-evo
+description=$(rf cavestory package description)
 license=GPL-3.0 (NXEngine-evo); freeware data (Cave Story, Studio Pixel; English translation by Aeon Genesis)
 requires=$REQ
 P
 cat > "$D/cavestory.entry" <<E
 title=Cave Story
 type=game
-description=Studio Pixel's 2004 platformer: explore a floating island
+description=$(rf cavestory entry description)
 icon=gamepad-2
 exec=$RUN
 env=PSPEXP_KEYS=$CAVESTORY_KEYS
 env=PSPEXP_NUB=keys
+graphics=$(rf cavestory entry graphics)
 pspexp=1
 E

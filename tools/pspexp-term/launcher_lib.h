@@ -42,7 +42,8 @@ typedef struct LEntry {
     char id[200];
     char title[96];
     char exec[512], dir[256];
-    char icon[32], art[320], tags[96], desc[160];
+    char icon[32], art[320], tags[96], desc[300];
+    char graphics[16];      /* how it draws: "sdl", "opengl", "opengl-shaders" ("" not said) */
     char env[400];          /* NAME=value pairs, space-separated, set for the command */
     char pkg[64];           /* the package it came from, "" for hand-made entries */
     int type, pspexp, sys;  /* sys: system index for LT_ROM, else -1 */
@@ -53,6 +54,7 @@ typedef struct LEntry {
 typedef struct LSystem {
     char id[48], name[64], shortname[8];
     char roms[256], ext[96], exec[512], icon[32], thumbs[96];
+    char graphics[16];                /* as an entry's: how its player draws */
     char pkg[64], dir[256];           /* pkg: its package; dir: where exec runs ("" = the ROM's folder) */
     char env[400];                    /* NAME=value pairs for exec */
     int pspexp;

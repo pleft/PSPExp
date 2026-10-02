@@ -2529,6 +2529,10 @@ static int psp_runtime_update(const char *dir, char *msg, size_t n)
     if (r == 0) snprintf(msg, n, "PSP updated: quit PSPExp on the PSP and start it again");
     else snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
     if (g_launcher_on) { launcher_notice(r == 0 ? "download" : "circle-x", msg); if (r == 0) launcher_set_psp_update(0); }
+    if (r == 0 && g_launcher_on) {   /* About: the update now waiting in the other slot */
+        PspExpSlots s;
+        if (pspexp_slots_read(ctx, &s) == 0) launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
+    }
     return r;
 }
 
@@ -2538,7 +2542,9 @@ static void psp_slots_check(void)
     static char reported[160];
     PspExpSlots s;
     char have[64], msg[300];
-    if (!pspexp_fs_supported(ctx) || pspexp_slots_read(ctx, &s) < 0) return;   /* no slots (an install before them) */
+    if (!pspexp_fs_supported(ctx)) return;
+    if (pspexp_slots_read(ctx, &s) < 0) { if (g_launcher_on) launcher_set_psp_runtime('-', 0, NULL); return; }   /* no slots (an install before them) */
+    if (g_launcher_on) launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
     if (s.fallback[0] && strcmp(s.fallback, reported)) {   /* the loader fell back: say so once */
         snprintf(reported, sizeof(reported), "%s", s.fallback);
         fprintf(stderr, "[pspexp-term] PSP runtime fallback: %s\n", s.fallback);
@@ -3277,6 +3283,12 @@ int main(int argc, char **argv)
             }
             if (launcher_take_console_restart()) { fprintf(stderr, "[pspexp-term] restarting for the new version\n"); g_quit = 1; }
             pkg_check_tick(now);
+            {   /* the PSP's battery, for the launcher: asked every 10 s (every second until a first answer);
+                 * the answer comes with a later pump. Runtimes before PSPEXP_FEATURE_POWER are not asked */
+                static uint64_t power_asked;
+                int none = pspexp_power_status(ctx, NULL, NULL) < 0;
+                if (pspexp_power_supported(ctx) && now - power_asked > (none ? 1000000u : 10000000u)) { power_asked = now; pspexp_power_query(ctx); }
+            }
         }
         monitor_set_program(g_launch_pid);
         if (g_view_files) {

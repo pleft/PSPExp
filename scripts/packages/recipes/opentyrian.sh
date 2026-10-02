@@ -33,18 +33,19 @@ cp "$ROOT/scripts/packages/art/opentyrian.png" "$D/opentyrian.png"   # the entry
 cat > "$D/package" <<P
 version=2.1
 title=OpenTyrian
-description=The vertical shooter Tyrian 2.1, freeware since 2004
+description=$(rf opentyrian package description)
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
 requires=$REQ
 P
 cat > "$D/opentyrian.entry" <<E
 title=OpenTyrian
 type=game
-description=Tyrian 2.1: a vertical shooter, freeware since 2004
+description=$(rf opentyrian entry description)
 icon=rocket
 exec=./run.sh
 env=PSPEXP_KEYS=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right
 env=PSPEXP_NUB=keys
 ${EXTRA_ENV:-}
+graphics=$(rf opentyrian entry graphics)
 pspexp=1
 E

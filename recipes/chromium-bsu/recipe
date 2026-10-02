@@ -4,10 +4,10 @@
 [package]
 id=chromium-bsu
 title=Chromium B.S.U.
-description=Fast-paced, arcade-style scrolling space shooter
+description=Fast arcade space shooter: fly the cargo ship Chromium B.S.U. through waves of enemies, picking up power-ups, shields and repairs.
 category=game
 license=Clarified Artistic (Chromium B.S.U.)
-version=1
+version=2
 
 [debian]
 apt=chromium-bsu
@@ -15,9 +15,10 @@ apt=chromium-bsu
 [entry]
 title=Chromium B.S.U.
 type=game
-description=Fast-paced, arcade-style scrolling space shooter
+description=Fast arcade space shooter: fly the cargo ship Chromium B.S.U. through waves of enemies, picking up power-ups, shields and repairs.
 icon=rocket
 exec=/usr/games/chromium-bsu -w -v 0
 keys=start=return,select=escape,square=space,triangle=space,up=up,down=down,left=left,right=right
 nub=mouse
 env=PSPEXP_JOYSTICK=0
+graphics=opengl

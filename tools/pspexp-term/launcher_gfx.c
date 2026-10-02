@@ -204,6 +204,34 @@ static int fonts_init(const char *dir)
 
 int gfx_line_height(int font) { return F[font].height; }
 
+int gfx_text_wrapped(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int w, int line_h, int max_lines)
+{
+    int n = 0;
+    while (*s && n < max_lines) {
+        char line[256];
+        size_t l = 0, cut = 0;
+        while (s[l] && l < sizeof(line) - 1) {
+            line[l] = s[l]; line[l + 1] = 0;
+            if (gfx_text_width(font, line) > w) break;
+            if (s[l] == ' ') cut = l;
+            l++;
+        }
+        if (s[l] && cut) l = cut;   /* at the last space that fits (a word longer than the line: cut in it) */
+        line[l] = 0;
+        if (n == max_lines - 1 && s[l]) {   /* more than fits: the last line ends in "..." */
+            if (l > sizeof(line) - 4) { l = sizeof(line) - 4; line[l] = 0; }
+            while (l && gfx_text_width(font, line) + gfx_text_width(font, "...") > w) line[--l] = 0;
+            while (l && line[l - 1] == ' ') line[--l] = 0;
+            strcat(line, "...");
+        }
+        gfx_text(font, x, y + n * line_h, line, rgb, alpha, w + 4);
+        n++;
+        s += l;
+        while (*s == ' ') s++;
+    }
+    return n;
+}
+
 int gfx_text_width(int font, const char *s)
 {
     int w = 0;
@@ -353,7 +381,7 @@ static const IconName ICONS[] = {
     { "gamepad-2", 0xe0df }, { "gamepad", 0xe0de }, { "joystick", 0xe355 }, { "history", 0xe1f5 }, { "star", 0xe176 },
     { "clock", 0xe087 }, { "rocket", 0xe286 }, { "settings", 0xe154 }, { "power", 0xe140 }, { "rotate-ccw", 0xe148 },
     { "refresh-cw", 0xe145 }, { "moon", 0xe11e }, { "music", 0xe122 }, { "wifi", 0xe1ae }, { "wifi-off", 0xe1af },
-    { "wifi-low", 0xe5f8 }, { "wifi-high", 0xe5f7 }, { "wifi-zero", 0xe5f9 }, { "battery", 0xe053 }, { "battery-full", 0xe055 },
+    { "wifi-low", 0xe5f8 }, { "wifi-high", 0xe5f7 }, { "wifi-zero", 0xe5f9 }, { "battery", 0xe053 }, { "box", 0xe061 }, { "battery-full", 0xe055 },
     { "battery-medium", 0xe057 }, { "battery-low", 0xe056 }, { "battery-charging", 0xe054 }, { "battery-warning", 0xe3ac },
     { "monitor", 0xe11d }, { "cpu", 0xe0a9 }, { "folder", 0xe0d7 }, { "terminal", 0xe181 }, { "disc", 0xe0af }, { "disc-3", 0xe494 },
     { "cassette-tape", 0xe4ca }, { "save", 0xe14d }, { "tv", 0xe195 }, { "smartphone", 0xe163 }, { "gamepad-directional", 0xe69b },

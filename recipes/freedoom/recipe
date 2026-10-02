@@ -4,10 +4,10 @@
 [package]
 id=freedoom
 title=Freedoom
-description=Free Doom-compatible games: Phase 1 (episodes) and Phase 2 (a megawad)
+description=Free Doom-compatible games on Chocolate Doom: Phase 1, four episodes, and Phase 2, a 32-level megawad, with their own levels, monsters and art.
 category=game
 license=BSD-3-Clause (Freedoom); GPL-2.0 (Chocolate Doom)
-version=1
+version=2
 
 [debian]
 apt=chocolate-doom freedoom
@@ -22,20 +22,22 @@ build=freedoom
 id=freedoom1
 title=Freedoom: Phase 1
 type=game
-description=Four episodes of Doom-compatible action
+description=Four episodes of fast Doom-compatible action: free levels, monsters and art, played on Chocolate Doom.
 icon=swords
 exec=/usr/games/chocolate-doom -iwad /usr/share/games/doom/freedoom1.wad
 keys=cross=lctrl,circle=space,square=lshift,triangle=return+y,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right
 nub=keys
 cover=phase1.png
+graphics=sdl
 
 [entry.phase2]
 id=freedoom2
 title=Freedoom: Phase 2
 type=game
-description=A 32-level megawad, Doom II-compatible
+description=A 32-level megawad, Doom II-compatible: free levels, monsters and art, played on Chocolate Doom.
 icon=swords
 exec=/usr/games/chocolate-doom -iwad /usr/share/games/doom/freedoom2.wad
 keys=cross=lctrl,circle=space,square=lshift,triangle=return+y,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right
 nub=keys
 cover=phase2.png
+graphics=sdl

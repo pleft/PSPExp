@@ -119,7 +119,10 @@ files, so no new parser or dependency is needed:
 - `[entry]` and `[system]`: what the launcher shows.
 
 Comments are whole lines starting with `#`: a `#` after a value is part of
-the value. `scripts/packages/check-recipes` checks every recipe in
+the value. Every `[entry]` and `[system]` says how it draws, `graphics=sdl`,
+`opengl` or `opengl-shaders` (the launcher's details card and the Packages
+app show it), and a `description` is at most 220 characters (the details
+card's lines). `scripts/packages/check-recipes` checks every recipe in
 `recipes/` (sections, keys, ids, button names); the three examples below are
 the repository's own recipes as they are, and pass it.
 
@@ -136,10 +139,10 @@ the Omega2+'s static build (§9):
 [package]
 id=opentyrian
 title=OpenTyrian
-description=The vertical shooter Tyrian 2.1, freeware since 2004
+description=Tyrian 2.1, the 1995 vertical shooter: fight through a story campaign, earning money between levels to buy weapons and ship upgrades. Freeware since 2004.
 category=game
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
-version=1
+version=2
 
 [debian]
 apt=opentyrian tyrian-data
@@ -153,12 +156,13 @@ build=opentyrian
 [entry]
 title=OpenTyrian
 type=game
-description=Tyrian 2.1: a vertical shooter, freeware since 2004
+description=Tyrian 2.1, the 1995 vertical shooter: fight through a story campaign, earning money between levels to buy weapons and ship upgrades. Freeware since 2004.
 icon=rocket
 exec=/usr/games/opentyrian --no-joystick
 keys=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p,select=escape,up=up,down=down,left=left,right=right
 nub=keys
 first-run=.config/opentyrian/opentyrian.cfg:section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n
+graphics=sdl
 ```
 
 Example 2, an emulated system: Debian's libretro core and our player
@@ -176,7 +180,7 @@ title=NES
 description=Nintendo Entertainment System: Debian's Nestopia core; ROMs in ~/roms/nes
 category=system
 license=GPL-2.0 (Nestopia); pspexp-retro is part of PSPExp
-version=1
+version=2
 
 [package:omega]
 description=Nintendo Entertainment System: PSPExp's static player with the QuickNES core; ROMs in ~/roms/nes
@@ -201,6 +205,7 @@ roms=~/roms/nes
 thumbs=Nintendo - Nintendo Entertainment System
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl
 ```
 
 Example 3, a game Debian lacks: our own `.deb` from PSPExp's apt repository
@@ -213,10 +218,10 @@ Example 3, a game Debian lacks: our own `.deb` from PSPExp's apt repository
 [package]
 id=cavestory
 title=Cave Story
-description=The freeware platformer Cave Story (2004), on NXEngine-evo
+description=Cave Story, Studio Pixel's freeware 2004 platformer, on NXEngine-evo: explore the caves of a floating island, find weapons and upgrades, and uncover its story.
 category=game
 license=GPL-3.0 (NXEngine-evo); freeware data (Cave Story, Studio Pixel; English translation by Aeon Genesis)
-version=1
+version=2
 
 [debian]
 apt=pspexp-cavestory
@@ -230,11 +235,12 @@ build=cavestory
 [entry]
 title=Cave Story
 type=game
-description=Studio Pixel's 2004 platformer: explore a floating island
+description=Studio Pixel's 2004 platformer: a robot wakes in the caves of a floating island and uncovers its secrets. Exploring, shooting and upgrades; freeware, with Aeon Genesis' English translation.
 icon=gamepad-2
 exec=/usr/games/pspexp-cavestory
 keys=cross=z,square=x,circle=x,l=a,r=s,triangle=q,select=w,start=escape,up=up,down=down,left=left,right=right
 nub=keys
+graphics=sdl
 ```
 
 `scripts/packages/debs/pspexp-cavestory/build OUTDIR ARCH` makes
@@ -281,7 +287,8 @@ its own contract below.
 
 ```text
 pspexp-pkg list                     installed recipes
-pspexp-pkg available                the catalogue, with state (installed / update / new / broken)
+pspexp-pkg available                the catalogue, with state (installed / update / new / broken):
+                                    id|version|state|category|title|description|graphics
 pspexp-pkg install <id>...          the recipe's packages (apt), then its launcher files
 pspexp-pkg remove <id>...           its launcher files, then the packages only it needed (apt)
 pspexp-pkg update                   the catalogue (signature checked), and apt's lists

@@ -7,10 +7,10 @@
 [package]
 id=pinball
 title=Emilia Pinball
-description=3D pinball with two tables, Tux and the Professor
+description=3D pinball (Emilia Pinball) with two tables, Tux and the Professor: flippers, ramps, bumpers and high scores.
 category=game
 license=GPL-2 (Emilia Pinball)
-version=1
+version=2
 
 [debian]
 apt=pinball
@@ -18,9 +18,10 @@ apt=pinball
 [entry]
 title=Emilia Pinball
 type=game
-description=3D pinball with two tables, Tux and the Professor
+description=3D pinball (Emilia Pinball) with two tables, Tux and the Professor: flippers, ramps, bumpers and high scores.
 icon=gamepad-2
 exec=/usr/games/pinball
 keys=l=lshift,r=rshift,cross=return,square=lctrl,circle=rctrl,triangle=space,start=escape,select=escape
 env=PINBALL_TABLE=tux
 env=PSPEXP_JOYSTICK=0
+graphics=opengl

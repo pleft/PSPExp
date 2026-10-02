@@ -208,6 +208,7 @@ enum PspExpExecutorKind {
                                                   targets (PSPEXP_3D_VT_NORMAL8, _MORPH) */
 #define PSPEXP_FEATURE_3D_SPRITES 0x00000200u  /* 3D draws of GU_SPRITES (PSPEXP_3D_PRIM_SPRITES) */
 #define PSPEXP_FEATURE_3D_COPY    0x00000400u  /* 3D_COPY: part of the buffer being drawn into a render target */
+#define PSPEXP_FEATURE_POWER      0x00000800u  /* answers POWER_QUERY: the battery and power supply */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
@@ -234,6 +235,25 @@ typedef struct PspExpClockStatus {
     int32_t  result;                 /* 1 set, 0 left as it was, < 0 could not */
     int32_t  zone_result;            /* the time zone: 1 set, 0 left, < 0 could not (0 from runtimes without it) */
 } PspExpClockStatus;
+
+/* PSP -> host (POWER_STATUS), the answer to POWER_QUERY: the PSP's battery
+ * and power supply as its power service reports them. -1 where it has no
+ * answer (no battery, or the value not known yet: the time left is unknown
+ * while charging). */
+typedef struct PspExpPowerStatus {
+    int16_t  percent;           /* charge, 0..100 */
+    int16_t  minutes_left;      /* the PSP's estimate of the time left on battery */
+    int16_t  current_ma;        /* the battery's current: negative while it discharges */
+    int16_t  temp_c;            /* the battery's temperature */
+    uint16_t voltage_mv;        /* the battery's voltage (0 unknown) */
+    uint16_t flags;             /* PSPEXP_POWER_* */
+    uint32_t reserved;
+} PspExpPowerStatus;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpPowerStatus) == 16, power_status_size);
+#define PSPEXP_POWER_BATTERY   0x1u   /* a battery is in */
+#define PSPEXP_POWER_CHARGING  0x2u
+#define PSPEXP_POWER_EXTERNAL  0x4u   /* on the AC adapter (or USB charging) */
+#define PSPEXP_POWER_LOW       0x8u   /* the PSP's own low-battery warning */
 
 /* Host -> PSP, reply to HELLO. */
 typedef struct PspExpHelloAck {

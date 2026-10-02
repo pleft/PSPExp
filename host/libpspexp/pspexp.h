@@ -237,6 +237,14 @@ int pspexp_request_screenshot(PspExpContext *ctx, uint16_t index);
 int pspexp_clock_supported(const PspExpContext *ctx);
 int pspexp_clock_sync(PspExpContext *ctx, uint64_t utc, int tz_minutes, int dst, uint32_t flags, uint32_t min_diff, PspExpClockStatus *out);
 
+/* The PSP's battery and power supply, when the runtime offers it
+ * (PSPEXP_FEATURE_POWER). pspexp_power_query asks and returns at once; the
+ * answer arrives with a later pump, and pspexp_power_status gives the last
+ * one on this connection and its age (0, or -1 when none came yet). */
+int pspexp_power_supported(const PspExpContext *ctx);
+int pspexp_power_query(PspExpContext *ctx);
+int pspexp_power_status(const PspExpContext *ctx, PspExpPowerStatus *out, uint64_t *age_us);
+
 /* The PSP's memory stick (the FILE channel), when the runtime offers it
  * (PSPEXP_FEATURE_FILES). Paths are the PSP's: "ms0:/PSP/GAME". Each call
  * waits for its reply (pumping the link meanwhile, up to 15 s) and returns

@@ -205,6 +205,7 @@ P
 			  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
 			  rall "$R" "$sec" env | sed 's/^/env=/'
 			  th=$(rget "$R" "$sec" thumbs); [ -n "$th" ] && echo "thumbs=$th"
+			  g=$(rget "$R" "$sec" graphics); [ -n "$g" ] && echo "graphics=$g"
 			  echo "pspexp=1"; } > "$A/systems/$sid.system"
 			cp "$A/systems/$sid.system" "$STAGE/systems/"
 		done
@@ -231,6 +232,7 @@ P
 			  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
 			  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
 			  rall "$R" "$sec" env | sed 's/^/env=/'
+			  g=$(rget "$R" "$sec" graphics); [ -n "$g" ] && echo "graphics=$g"
 			  echo "pspexp=1"; } > "$A/$eid.entry"
 			cov=$(rget "$R" "$sec" cover); cov=${cov:-cover.png}
 			[ -f "$CAT/$ID/$cov" ] && cp "$CAT/$ID/$cov" "$A/$eid.png"
@@ -452,7 +454,8 @@ state_of() {   # installed | update | new | broken
 	[ "$m" = "$(rget "$CAT/$1/recipe" package version)" ] && echo installed || echo update
 }
 
-# the catalogue for this board: id|recipe version|state|category|title|description
+# the catalogue for this board: id|recipe version|state|category|title|description|graphics
+# (graphics: how its first entry or system draws, "" not said)
 available() {
 	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
 	for r in "$CAT"/*/recipe; do
@@ -460,7 +463,8 @@ available() {
 		id=$(basename "$(dirname "$r")")
 		[ -n "$(rget "$r" "$FAMILY" apt)$(rget "$r" "$FAMILY" build)" ] || continue   # nothing for this board
 		w=$(rget "$r" "$FAMILY" warn)   # e.g. too heavy for this board: said first
-		printf '%s|%s|%s|%s|%s|%s%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)"
+		g=$(rget "$r" entry graphics); [ -n "$g" ] || g=$(rget "$r" system graphics)
+		printf '%s|%s|%s|%s|%s|%s%s|%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)" "$g"
 	done
 }
 

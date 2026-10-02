@@ -4,10 +4,10 @@
 [package]
 id=neverball
 title=Neverball
-description=Tilt the floor to roll the ball to the goal
+description=Tilt the floor to roll a ball through obstacle courses to the goal, collecting coins against the clock, over many level sets.
 category=game
 license=GPL-2.0+ (Neverball)
-version=1
+version=2
 
 [debian]
 apt=neverball
@@ -15,6 +15,7 @@ apt=neverball
 [entry]
 title=Neverball
 type=game
-description=Tilt the floor to roll the ball to the goal
+description=Tilt the floor to roll a ball through obstacle courses to the goal, collecting coins against the clock, over many level sets.
 icon=trophy
 exec=/usr/games/neverball
+graphics=opengl
