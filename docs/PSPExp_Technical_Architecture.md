@@ -107,7 +107,7 @@ These figures are the fixed points the protocol must be designed around. Each ro
 | Main RAM (PSP-1000) | 32 MiB; user partition 24 MiB, of which 4 MiB is "volatile" memory that must be explicitly locked; plan on ≈ 20 MiB, confirm with `sceKernelMaxFreeMemSize()` at startup | [doc] / [assume] for exact free figure | Resource cache, not application memory; the runtime reports the measured figure in `HELLO` |
 | VRAM (all PSP models) | 2 MiB of eDRAM for the GE (a further 2 MiB belongs to the Media Engine and is not GE-addressable) | [doc] | Two 512×272×16-bit framebuffers plus a 16-bit depth buffer consume 816 KiB; VRAM texture budget ≈ 1.2 MiB, or ≈ 1.45 MiB without a depth buffer (2D does not need one) |
 | CPU | Allegrex MIPS32 R4k-class, 222 MHz default, 333 MHz max; homebrew may run at 333 MHz | [doc] | Fixed per-element expansion is affordable (§5.4); anything with per-element branching or lookup chains is not |
-| Media Engine | Second MIPS32 core, same clock, own 2 MiB eDRAM | [doc] | Not used in v0.1; candidate for command expansion or audio mixing later (§18) |
+| Media Engine | Second MIPS32 core, same clock, own 2 MiB eDRAM | [doc] | Used since 2026-10-03 through the firmware's audio codec, which runs on it: MP3 decoded on the PSP (§8, compressed audio). Our own code on it: still a candidate for command expansion or audio mixing (§18) |
 | GE texture sizes | Power-of-two width and height; hardware corrupts textures wider or taller than 512 even though the register accepts larger values (PPSSPP renders them correctly, hardware does not) | [doc] | Host must atlas and pad to ≤ 512; **every** executor, including PPSSPP-hosted, enforces the 512 limit at upload |
 | GE texture formats | `GU_PSM_5650`, `5551`, `4444`, `8888`, `T4`, `T8`, `T16`, `T32`, `DXT1/3/5` | [doc] | Advertised in the capability handshake; anything else is rejected at upload |
 | GE vertex data | Every vertex member must be 16-bit aligned; vertex arrays are read **in place** by the GE from the address in the display list (not copied); data must be written back from the data cache and remain valid until the GE has consumed it | [doc] | Expansion writes go to a double-buffered ring the GE reads directly (§5.4) |
@@ -454,6 +454,10 @@ The PSP plays cached sounds on its hardware audio channels, so frequent sound ef
 Music or arbitrary application audio can be decoded (and, if the host prefers, pre-mixed) on the host and transferred as a buffered PCM stream. At 44.1 kHz stereo 16-bit this is ≈ 176 KB/s, about 2% of the planning USB budget. The stream may be delivered at any rate the PSP's SRC channel accepts (8–48 kHz), which lets a constrained host send lower-rate music and have the hardware resample it.
 
 The PSP maintains a **jitter buffer** for the stream with a configurable target depth (initially ≈ 100 ms). The host is informed of buffer fill via `AUDIO_STATUS` so it can pace delivery; underruns are reported and result in silence rather than a stall of the graphics pipeline.
+
+### Compressed audio (2026-10-03)
+
+A runtime with `PSPEXP_FEATURE_AUDIO_MP3` takes `AUDIO_CODED_STREAM` (0x0307): whole MP3 frames (MPEG-1, 2 or 2.5 layer III), any number a message. The PSP decodes each with the firmware's audio codec (`sceAudiocodec`, which runs on the Media Engine: the main CPU waits for each frame and does nothing else), resamples it linearly to the stream's rate when the file's differs, and writes it into the same stream as `AUDIO_STREAM`, so `AUDIO_STATUS`, `AUDIO_STREAM_RESET` and the jitter buffer apply unchanged. A frame that does not decode is skipped. The codec is set up again when the frames' version, rate or channel mode change (the next track): PPSSPP's decoder crashed on such a change. Music costs a few KB a second on the link instead of 176 KB (128 kbps MP3: 16 KB/s) and next to no board CPU, which matters on the Omega. The console's music player uses it (docs/Launcher_and_Boards.md §7.2); `protocol/pspexp_mp3.c` parses frame headers on both sides. Tested in PPSSPP (MPEG-1 stereo 44.1 kHz CBR, MPEG-2 mono 22.05 kHz VBR, with a change of format between tracks: no drops, no underruns); not yet on the PSP itself.
 
 Graphics, input, resources, and audio are separate logical protocol channels even when they share the same physical connection.
 
@@ -1100,7 +1104,9 @@ Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications
 ### Later research
 
 - triangle-based batches for rotation/skew (static meshes and 3D commands: done for OpenGL 1.x, §12a);
-- offloading batch expansion or audio mixing to the Media Engine;
+- offloading batch expansion or audio mixing to the Media Engine (our own code on it: first a small test on the real PSP, as PPSSPP does not run code there; does it coexist with the firmware's codec, which uses it for MP3 since 2026-10-03?);
+- **a video player** in the file manager: H.264 up to 480x272 decoded on the PSP (`sceMpeg` / `sceVideocodec`, on the Media Engine like MP3), 100–200 KB/s over the link instead of the 8 MB/s that finished frames need; other formats converted on the board by ffmpeg (the Pi);
+- **sound to a Bluetooth speaker or headphones paired with the board**, when the board has Bluetooth (the Pi 400): a game's or the player's sound would leave the USB link and the PSP's audio thread altogether. Open: where the console sends it (the audio FIFO's ALSA device, PipeWire/BlueALSA), latency for games, and the PSP's own speaker staying silent;
 - compute/RPC services;
 - network/storage services;
 - transparent or semi-transparent engine adapters;

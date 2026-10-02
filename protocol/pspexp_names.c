@@ -64,6 +64,7 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_AUDIO_STREAM: return "AUDIO_STREAM";
     case PSPEXP_OP_AUDIO_STATUS: return "AUDIO_STATUS";
     case PSPEXP_OP_AUDIO_STREAM_RESET: return "AUDIO_STREAM_RESET";
+    case PSPEXP_OP_AUDIO_CODED_STREAM: return "AUDIO_CODED_STREAM";
     case PSPEXP_OP_BENCH_START: return "BENCH_START";
     case PSPEXP_OP_BENCH_DATA: return "BENCH_DATA";
     case PSPEXP_OP_BENCH_END: return "BENCH_END";

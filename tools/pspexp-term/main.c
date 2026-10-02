@@ -62,6 +62,7 @@
 #include "term_fonts.h"
 #include "term_themes.h"
 #include "files.h"
+#include "player.h"
 #include "files_psp.h"
 #include "control.h"
 #include "../../host/libpspexp/pspexp_slots.h"
@@ -3310,6 +3311,11 @@ int main(int argc, char **argv)
             }
         }
         audio_fifo_pump();
+        {   /* the file manager's music: fed here, stopped when a program takes the PSP */
+            PlayerInfo pi;
+            if (player_info(&pi) && launcher_running_title()) player_stop();
+            player_pump(ctx);
+        }
         if (g_bell) { g_bell = 0; beep(); }
         if (now - last_blink > 500000u && (now - g_input_at < 30000000u || !blink_on)) {   /* (still after 30 s: the cursor left on) */
             last_blink = now; blink_on = !blink_on; if (T.cursor_visible && !T.view) T.dirty = 1;

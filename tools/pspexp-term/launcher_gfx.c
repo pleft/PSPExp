@@ -129,12 +129,18 @@ static float cover_of(float d) { return clampf(0.5f - d, 0, 1); }
 
 /* ---- fonts ------------------------------------------------------------------------------ */
 
-#define G_FIRST 32
-#define G_COUNT 95
+/* the characters baked: ASCII in every font; for the fonts that show names
+ * (file names, tags, titles) also Latin-1, Latin Extended-A, Greek and
+ * Cyrillic. Text is UTF-8; anything else is drawn as '?'. */
+static const struct { uint16_t first, count; } G_RANGES[] = {
+    { 32, 95 }, { 0xA0, 96 }, { 0x100, 128 }, { 0x384, 75 }, { 0x400, 96 },
+};
+#define G_ASCII 95
+#define G_COUNT (95 + 96 + 128 + 75 + 96)
 #define ATLAS_W 512
-#define ATLAS_H 256
+#define ATLAS_H 512
 typedef struct Glyph { int16_t xoff, yoff, adv; uint16_t frame; } Glyph;
-typedef struct Font { Glyph g[G_COUNT]; int ascent, height; stbtt_fontinfo *info; float scale; } Font;
+typedef struct Font { Glyph g[G_COUNT]; int count, ascent, height; stbtt_fontinfo *info; float scale; } Font;
 static Font F[FONT_COUNT];
 static stbtt_fontinfo TTF_REG, TTF_SEMI, TTF_ICONS;
 static uint8_t *TTF_DATA[3];
@@ -143,19 +149,63 @@ static uint8_t atlas[ATLAS_W * ATLAS_H];
 static PspExpFrame frames[FONT_COUNT * G_COUNT];
 static int nframes, pen_x, pen_y, row_h;
 
-static int bake(Font *f, stbtt_fontinfo *info, float px)
+/* a character's glyph index in a font, or -1 */
+static int glyph_of(const Font *f, unsigned cp)
+{
+    int base = 0;
+    size_t r;
+    for (r = 0; r < sizeof(G_RANGES) / sizeof(G_RANGES[0]); r++) {
+        if (cp >= G_RANGES[r].first && cp < (unsigned)G_RANGES[r].first + G_RANGES[r].count)
+            return base + (int)(cp - G_RANGES[r].first) < f->count ? base + (int)(cp - G_RANGES[r].first) : -1;
+        base += G_RANGES[r].count;
+    }
+    return -1;
+}
+
+static unsigned glyph_cp(int i)
+{
+    size_t r;
+    for (r = 0; r < sizeof(G_RANGES) / sizeof(G_RANGES[0]); r++) {
+        if (i < G_RANGES[r].count) return G_RANGES[r].first + (unsigned)i;
+        i -= G_RANGES[r].count;
+    }
+    return '?';
+}
+
+/* the next character of UTF-8 text; a byte that is not UTF-8 stands for itself (Latin-1) */
+static unsigned utf8_next(const char **ps)
+{
+    const unsigned char *s = (const unsigned char *)*ps;
+    unsigned c = s[0];
+    if (c >= 0xC2 && c < 0xE0 && (s[1] & 0xC0) == 0x80) { *ps += 2; return (c & 0x1F) << 6 | (s[1] & 0x3F); }
+    if (c >= 0xE0 && c < 0xF0 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80) { *ps += 3; return (c & 0x0F) << 12 | (unsigned)(s[1] & 0x3F) << 6 | (s[2] & 0x3F); }
+    if (c >= 0xF0 && c < 0xF5 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80 && (s[3] & 0xC0) == 0x80) { *ps += 4; return 0xFFFD; }
+    *ps += 1;
+    return c;
+}
+
+static const Glyph *glyph_for(const Font *f, unsigned cp)
+{
+    int i = glyph_of(f, cp);
+    if (i < 0) i = glyph_of(f, '?');
+    return &f->g[i];
+}
+
+static int bake(Font *f, stbtt_fontinfo *info, float px, int names)
 {
     int c, a, d, lg;
     f->info = info;
+    f->count = names ? G_COUNT : G_ASCII;
     f->scale = stbtt_ScaleForPixelHeight(info, px);
     stbtt_GetFontVMetrics(info, &a, &d, &lg);
     f->ascent = (int)ceilf(a * f->scale);
     f->height = (int)ceilf((a - d) * f->scale);
-    for (c = 0; c < G_COUNT; c++) {
-        int x0, y0, x1, y1, adv, lsb, w, h;
+    for (c = 0; c < f->count; c++) {
+        int x0, y0, x1, y1, adv, lsb, w, h, cp = (int)glyph_cp(c);
         Glyph *g = &f->g[c];
-        stbtt_GetCodepointHMetrics(info, G_FIRST + c, &adv, &lsb);
-        stbtt_GetCodepointBitmapBox(info, G_FIRST + c, f->scale, f->scale, &x0, &y0, &x1, &y1);
+        if (c >= G_ASCII && !stbtt_FindGlyphIndex(info, cp)) cp = '?';   /* not in the font */
+        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
+        stbtt_GetCodepointBitmapBox(info, cp, f->scale, f->scale, &x0, &y0, &x1, &y1);
         w = x1 - x0; h = y1 - y0;
         g->adv = (int16_t)lroundf(adv * f->scale);
         g->xoff = (int16_t)x0; g->yoff = (int16_t)y0;
@@ -163,7 +213,7 @@ static int bake(Font *f, stbtt_fontinfo *info, float px)
         if (w <= 0 || h <= 0 || w > 64) continue;
         if (pen_x + w + 1 > ATLAS_W) { pen_x = 0; pen_y += row_h + 1; row_h = 0; }
         if (pen_y + h > ATLAS_H) return -1;
-        stbtt_MakeCodepointBitmap(info, atlas + pen_y * ATLAS_W + pen_x, w, h, ATLAS_W, f->scale, f->scale, G_FIRST + c);
+        stbtt_MakeCodepointBitmap(info, atlas + pen_y * ATLAS_W + pen_x, w, h, ATLAS_W, f->scale, f->scale, cp);
         frames[nframes].u0 = (uint16_t)pen_x; frames[nframes].v0 = (uint16_t)pen_y;
         frames[nframes].w = (uint16_t)w; frames[nframes].h = (uint16_t)h;
         g->frame = (uint16_t)nframes++;
@@ -189,9 +239,9 @@ static int fonts_init(const char *dir)
     int i;
     if (load_ttf(dir, "Inter-Regular.ttf", &TTF_REG, &TTF_DATA[0]) < 0) return -1;
     if (load_ttf(dir, "Inter-SemiBold.ttf", &TTF_SEMI, &TTF_DATA[1]) < 0) TTF_SEMI = TTF_REG;
-    if (bake(&F[FONT_H1], &TTF_SEMI, 24.0f) < 0 || bake(&F[FONT_TITLE], &TTF_SEMI, 16.0f) < 0 ||
-        bake(&F[FONT_BODY], &TTF_REG, 13.0f) < 0 || bake(&F[FONT_SMALL], &TTF_REG, 11.5f) < 0 ||
-        bake(&F[FONT_BADGE], &TTF_SEMI, 10.0f) < 0) { fprintf(stderr, "[launcher] glyph atlas full\n"); return -1; }
+    if (bake(&F[FONT_H1], &TTF_SEMI, 24.0f, 0) < 0 || bake(&F[FONT_TITLE], &TTF_SEMI, 16.0f, 1) < 0 ||
+        bake(&F[FONT_BODY], &TTF_REG, 13.0f, 1) < 0 || bake(&F[FONT_SMALL], &TTF_REG, 11.5f, 1) < 0 ||
+        bake(&F[FONT_BADGE], &TTF_SEMI, 10.0f, 0) < 0) { fprintf(stderr, "[launcher] glyph atlas full\n"); return -1; }
     for (i = 0; i < 256; i++) { pal[i * 4] = pal[i * 4 + 1] = pal[i * 4 + 2] = 255; pal[i * 4 + 3] = (uint8_t)i; }
     if (pspexp_upload_palette(G, ID_FONT_PAL, PSPEXP_TEX_8888, 256, pal, sizeof(pal)) < 0) return -1;
     memset(&d, 0, sizeof(d));
@@ -210,17 +260,22 @@ int gfx_text_wrapped(int font, int x, int y, const char *s, uint32_t rgb, int al
     while (*s && n < max_lines) {
         char line[256];
         size_t l = 0, cut = 0;
-        while (s[l] && l < sizeof(line) - 1) {
-            line[l] = s[l]; line[l + 1] = 0;
+        while (s[l] && l < sizeof(line) - 5) {   /* a character at a time (UTF-8: 1 to 4 bytes) */
+            const char *nx = s + l;
+            size_t k, cl;
+            utf8_next(&nx);
+            cl = (size_t)(nx - (s + l));
+            for (k = 0; k < cl; k++) line[l + k] = s[l + k];
+            line[l + cl] = 0;
             if (gfx_text_width(font, line) > w) break;
             if (s[l] == ' ') cut = l;
-            l++;
+            l += cl;
         }
         if (s[l] && cut) l = cut;   /* at the last space that fits (a word longer than the line: cut in it) */
         line[l] = 0;
         if (n == max_lines - 1 && s[l]) {   /* more than fits: the last line ends in "..." */
             if (l > sizeof(line) - 4) { l = sizeof(line) - 4; line[l] = 0; }
-            while (l && gfx_text_width(font, line) + gfx_text_width(font, "...") > w) line[--l] = 0;
+            while (l && gfx_text_width(font, line) + gfx_text_width(font, "...") > w) { do line[--l] = 0; while (l && ((unsigned char)line[l] & 0xC0) == 0x80); }
             while (l && line[l - 1] == ' ') line[--l] = 0;
             strcat(line, "...");
         }
@@ -235,11 +290,7 @@ int gfx_text_wrapped(int font, int x, int y, const char *s, uint32_t rgb, int al
 int gfx_text_width(int font, const char *s)
 {
     int w = 0;
-    for (; *s; s++) {
-        int c = (unsigned char)*s;
-        if (c < G_FIRST || c >= G_FIRST + G_COUNT) c = '?';
-        w += F[font].g[c - G_FIRST].adv;
-    }
+    while (*s) w += glyph_for(&F[font], utf8_next(&s))->adv;
     return w;
 }
 
@@ -247,22 +298,29 @@ int gfx_text(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int
 {
     PspExpSpriteRec r[160];
     const Font *f = &F[font];
-    int n = (int)strlen(s), i, pen = x, cnt = 0, ell = 0;
+    int n = (int)strlen(s), pen = x, cnt = 0, ell = 0, dots_left;
+    const char *p, *end;
     uint16_t col = c4444(rgb, alpha);
     if (!have_text || alpha <= 0) return 0;
     if (max_w > 0 && gfx_text_width(font, s) > max_w) {
-        int dots = f->g['.' - G_FIRST].adv * 3;
+        int dots = glyph_for(f, '.')->adv * 3;
         char tmp[256];
         snprintf(tmp, sizeof(tmp), "%s", s);
-        while (n > 0) { tmp[n] = 0; if (gfx_text_width(font, tmp) + dots <= max_w) break; n--; }
+        if (n > (int)sizeof(tmp) - 1) n = (int)sizeof(tmp) - 1;
+        while (n > 0) {
+            while (n > 0 && ((unsigned char)tmp[n] & 0xC0) == 0x80) n--;   /* on a character's first byte */
+            tmp[n] = 0;
+            if (gfx_text_width(font, tmp) + dots <= max_w) break;
+            n--;
+        }
         while (n > 0 && s[n - 1] == ' ') n--;
         ell = 1;
     }
-    for (i = 0; i < n + (ell ? 3 : 0) && cnt < 160; i++) {
-        int c = i < n ? (unsigned char)s[i] : '.';
+    p = s; end = s + n; dots_left = ell ? 3 : 0;
+    while ((p < end || dots_left) && cnt < 160) {
         const Glyph *g;
-        if (c < G_FIRST || c >= G_FIRST + G_COUNT) c = '?';
-        g = &f->g[c - G_FIRST];
+        if (p < end) g = glyph_for(f, utf8_next(&p));
+        else { g = glyph_for(f, '.'); dots_left--; }
         if (g->frame != 0xFFFF) {
             r[cnt].x = (int16_t)(pen + g->xoff); r[cnt].y = (int16_t)(y + f->ascent + g->yoff);
             r[cnt].frame = g->frame; r[cnt].color = col;

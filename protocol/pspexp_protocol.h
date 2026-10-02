@@ -209,6 +209,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_3D_SPRITES 0x00000200u  /* 3D draws of GU_SPRITES (PSPEXP_3D_PRIM_SPRITES) */
 #define PSPEXP_FEATURE_3D_COPY    0x00000400u  /* 3D_COPY: part of the buffer being drawn into a render target */
 #define PSPEXP_FEATURE_POWER      0x00000800u  /* answers POWER_QUERY: the battery and power supply */
+#define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
@@ -734,6 +735,21 @@ typedef struct PspExpAudioStatus {
     uint32_t dropped_frames;    /* cumulative, buffer overflow */
 } PspExpAudioStatus;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpAudioStatus) == 16, audio_status_size);
+
+/* Compressed audio for the PSP to decode into the stream (AUDIO_CODED_STREAM):
+ * followed by `bytes` of whole frames, each starting with its own header
+ * (MP3: MPEG-1, 2 or 2.5 layer III). Decoded at the frames' own rate and
+ * resampled to the negotiated one; the result joins the PCM stream, so
+ * AUDIO_STATUS, AUDIO_STREAM_RESET and the jitter buffer work as for
+ * AUDIO_STREAM. A frame that does not decode is skipped. */
+#define PSPEXP_CODEC_MP3 1
+typedef struct PspExpAudioCoded {
+    uint8_t  codec;             /* PSPEXP_CODEC_* */
+    uint8_t  reserved0[3];
+    uint32_t bytes;             /* frame data after this header */
+    uint8_t  reserved[8];
+} PspExpAudioCoded;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpAudioCoded) == 16, audio_coded_size);
 
 #define PSPEXP_AUDIO_MAX_VOICES 8
 

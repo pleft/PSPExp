@@ -4,6 +4,7 @@
 #include "../host/libpspexp/pspexp.h"
 #include "../host/libpspexp/pspexp_font.h"
 #include "../host/executor-null/pspexp_null.h"
+#include "../protocol/pspexp_mp3.h"
 #include <string.h>
 
 static uint16_t g_pixels[64 * 64];
@@ -379,6 +380,36 @@ int main(void)
         pspexp_pump(ctx, 0);
         CHECK_EQ(pspexp_audio_status(ctx)->buffered_frames, 0);
         CHECK(pspexp_audio_status(ctx)->received_frames >= 4410);
+        /* Compressed audio (AUDIO_CODED_STREAM): whole MP3 frames, decoded on
+         * the PSP at their own rate and resampled into the stream. */
+        {
+            static uint8_t mp3[4 * 417 + 2 * 208];
+            const PspExpAudioStatus *as = pspexp_audio_status(ctx);
+            uint32_t before = as->received_frames;
+            PspExpMp3Frame f;
+            memset(mp3, 0, sizeof(mp3));
+            for (i = 0; i < 4; i++) { uint8_t *h = mp3 + i * 417; h[0] = 0xFF; h[1] = 0xFB; h[2] = 0x90; h[3] = 0x64; }   /* MPEG-1, 128 kbps, 44.1 kHz, joint stereo */
+            for (i = 0; i < 2; i++) { uint8_t *h = mp3 + 4 * 417 + i * 208; h[0] = 0xFF; h[1] = 0xF3; h[2] = 0x80; h[3] = 0xC0; }   /* MPEG-2, 64 kbps, 22.05 kHz, mono */
+            CHECK_EQ(pspexp_mp3_header(mp3, sizeof(mp3), &f), 0);
+            CHECK_EQ(f.bytes, 417); CHECK_EQ(f.samples, 1152); CHECK_EQ(f.sample_rate, 44100); CHECK_EQ(f.channels, 2); CHECK_EQ(f.bitrate_kbps, 128);
+            CHECK_EQ(pspexp_mp3_header(mp3 + 4 * 417, 208, &f), 0);
+            CHECK_EQ(f.bytes, 208); CHECK_EQ(f.samples, 576); CHECK_EQ(f.sample_rate, 22050); CHECK_EQ(f.channels, 1); CHECK_EQ(f.version, 20);
+            CHECK_EQ(pspexp_mp3_header(mp3 + 1, 16, &f), -1);
+            CHECK(pspexp_audio_mp3_supported(ctx));
+            CHECK_EQ(pspexp_audio_coded(ctx, PSPEXP_CODEC_MP3, mp3, 4 * 417), 0);
+            pspexp_audio_stream_reset(ctx);   /* (status sent back with it) */
+            pspexp_pump(ctx, 0);
+            CHECK_EQ(as->received_frames - before, 4 * 1152);
+            before = as->received_frames;
+            CHECK_EQ(pspexp_audio_coded(ctx, PSPEXP_CODEC_MP3, mp3 + 4 * 417, 2 * 208), 0);   /* 576 at 22.05 kHz: 1152 at 44.1 */
+            pspexp_audio_stream_reset(ctx);
+            pspexp_pump(ctx, 0);
+            CHECK_EQ(as->received_frames - before, 2 * 1152);
+            CHECK_EQ(pspexp_audio_coded(ctx, 9, mp3, 417), 0);   /* an unknown codec: refused by the PSP, nothing played */
+            pspexp_audio_stream_reset(ctx);
+            pspexp_pump(ctx, 0);
+            CHECK_EQ(as->received_frames - before, 2 * 1152);
+        }
         /* Rate adaptation: a slow source keeps the buffer under half the
          * target, so rendering consumes fewer frames than it outputs. */
         {

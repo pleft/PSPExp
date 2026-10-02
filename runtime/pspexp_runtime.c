@@ -1,4 +1,5 @@
 #include "pspexp_runtime.h"
+#include "../protocol/pspexp_mp3.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -143,6 +144,7 @@ static void send_hello(PspExpRuntime *rt)
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
                  (rt->ops.power_get ? PSPEXP_FEATURE_POWER : 0) |
+                 (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
                  (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
@@ -739,6 +741,33 @@ static void handle_fs(PspExpRuntime *rt, const PspExpMessage *m)
     pspexp_writer_message(&rt->out, PSPEXP_CH_FILE, PSPEXP_OP_FS_REPLY, 0, r, len);
 }
 
+/* decoded audio: one frame's PCM (stereo, at most 1152) and it resampled
+ * (up to 48 kHz from 8 kHz: 1152 x 6) */
+static int16_t rt_pcm[1152 * 2];
+static int16_t rt_rs[1152 * 6 * 2 + 16];
+
+/* rt_pcm's n frames at rate into rt_rs at the stream's rate, linearly,
+ * carrying the position and the last frame across calls */
+static uint32_t coded_resample(PspExpRuntime *rt, const int16_t *in, uint32_t n, uint32_t rate)
+{
+    uint32_t to = rt->ack.audio_rate ? rt->ack.audio_rate : 44100u, step, pos, out = 0;
+    if (rate == to) { memcpy(rt_rs, in, (size_t)n * 4u); return n; }
+    step = (uint32_t)(((uint64_t)rate << 16) / to);
+    pos = rt->coded_pos;   /* 16.16 from coded_prev: 0 = prev, 1.0 = in[0] */
+    while ((pos >> 16) < n && out < sizeof(rt_rs) / 4u) {
+        uint32_t i = pos >> 16, f = pos & 0xFFFFu, c;
+        for (c = 0; c < 2; c++) {
+            int a = i == 0 ? rt->coded_prev[c] : in[(i - 1) * 2 + c], b = in[i * 2 + c];
+            rt_rs[out * 2 + c] = (int16_t)(a + (((b - a) * (int)f) >> 16));
+        }
+        out++;
+        pos += step;
+    }
+    rt->coded_pos = pos - (n << 16);
+    rt->coded_prev[0] = in[(n - 1) * 2]; rt->coded_prev[1] = in[(n - 1) * 2 + 1];
+    return out;
+}
+
 static void send_audio_status(PspExpRuntime *rt)
 {
     PspExpAudioStatus st;
@@ -811,8 +840,34 @@ static void handle_audio(PspExpRuntime *rt, const PspExpMessage *m)
         if (now_us(rt) - rt->audio_status_us >= 250000u) send_audio_status(rt);
         break;
     }
+    case PSPEXP_OP_AUDIO_CODED_STREAM: {
+        const PspExpAudioCoded *ac;
+        const uint8_t *d;
+        uint32_t left;
+        if (pspexp_message_expect(m, sizeof(*ac)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        ac = (const PspExpAudioCoded *)m->payload;
+        if (m->length < sizeof(*ac) + ac->bytes) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        if (!rt->ops.audio_decode || ac->codec != PSPEXP_CODEC_MP3) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
+        d = m->payload + sizeof(*ac);
+        left = ac->bytes;
+        while (left >= 4) {
+            PspExpMp3Frame f;
+            int n;
+            if (pspexp_mp3_header(d, left, &f) < 0 || (uint32_t)f.bytes > left) break;
+            n = rt->ops.audio_decode(rt->ops.user, PSPEXP_CODEC_MP3, d, (uint32_t)f.bytes, rt_pcm, 1152);
+            if (n > 0) {
+                uint32_t out = coded_resample(rt, rt_pcm, (uint32_t)n, (uint32_t)f.sample_rate);
+                rt->stats.stream_frames += out;
+                if (rt->audio_active) { audio_lock(rt); pspexp_mixer_stream_write(&rt->mixer, rt_rs, out); audio_unlock(rt); }
+            }
+            d += f.bytes; left -= (uint32_t)f.bytes;
+        }
+        if (now_us(rt) - rt->audio_status_us >= 250000u) send_audio_status(rt);
+        break;
+    }
     case PSPEXP_OP_AUDIO_STREAM_RESET:
         if (rt->audio_active) { audio_lock(rt); pspexp_mixer_stream_reset(&rt->mixer); audio_unlock(rt); }
+        rt->coded_pos = 0; rt->coded_prev[0] = rt->coded_prev[1] = 0;
         send_audio_status(rt);
         break;
     default:
@@ -915,7 +970,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         handle_palette_upload(rt, m);
         break;
     case PSPEXP_OP_RESOURCE_UPLOAD_SOUND: case PSPEXP_OP_PLAY_SOUND: case PSPEXP_OP_STOP_SOUND:
-    case PSPEXP_OP_AUDIO_STREAM: case PSPEXP_OP_AUDIO_STREAM_RESET:
+    case PSPEXP_OP_AUDIO_STREAM: case PSPEXP_OP_AUDIO_STREAM_RESET: case PSPEXP_OP_AUDIO_CODED_STREAM:
         handle_audio(rt, m);
         break;
     case PSPEXP_OP_FS_LIST: case PSPEXP_OP_FS_READ: case PSPEXP_OP_FS_WRITE: case PSPEXP_OP_FS_MKDIR:

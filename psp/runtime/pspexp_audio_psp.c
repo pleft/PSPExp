@@ -1,6 +1,8 @@
 #include "pspexp_audio_psp.h"
 #include <pspkernel.h>
 #include <pspaudio.h>
+#include <pspaudiocodec.h>
+#include <psputility.h>
 #include <string.h>
 
 #define BLOCK_FRAMES 1024
@@ -60,8 +62,59 @@ static void op_audio_stop(void *u)
 static void op_audio_lock(void *u) { (void)u; if (g_sema >= 0) sceKernelWaitSema(g_sema, 1, NULL); }
 static void op_audio_unlock(void *u) { (void)u; if (g_sema >= 0) sceKernelSignalSema(g_sema, 1); }
 
+/* ---- MP3 frames decoded by the firmware's codec, which runs on the Media
+ * Engine: the main CPU only waits for each frame (AUDIO_CODED_STREAM) ---- */
+
+static unsigned long g_codec[65] __attribute__((aligned(64)));   /* the codec's control block */
+static int g_codec_state;   /* 0 not tried, 1 ready, -1 unavailable */
+static int g_codec_format;  /* the header bits the codec was set up for: version, rate, mode */
+static uint8_t g_src[2048] __attribute__((aligned(64)));         /* a frame: 1441 bytes at most */
+static int16_t g_dec[1152 * 2] __attribute__((aligned(64)));
+
+static int codec_init(void)
+{
+    static int loaded;
+    if (!loaded) {   /* once: again, it answers "already loaded" (0x80111102) */
+        int r = sceUtilityLoadModule(PSP_MODULE_AV_AVCODEC);
+        if (r < 0 && r != (int)0x80020139 && r != (int)0x80111102) return -1;
+        loaded = 1;
+    }
+    memset(g_codec, 0, sizeof(g_codec));
+    if (sceAudiocodecCheckNeedMem(g_codec, PSP_CODEC_MP3) < 0) return -1;
+    if (sceAudiocodecGetEDRAM(g_codec, PSP_CODEC_MP3) < 0) return -1;
+    if (sceAudiocodecInit(g_codec, PSP_CODEC_MP3) < 0) { sceAudiocodecReleaseEDRAM(g_codec); return -1; }
+    return 0;
+}
+
+static int op_audio_decode(void *u, int codec, const uint8_t *frame, uint32_t bytes, int16_t *stereo, uint32_t max_frames)
+{
+    uint32_t samples;
+    (void)u;
+    if (codec != PSPEXP_CODEC_MP3 || bytes < 4 || bytes > sizeof(g_src)) return -1;
+    {   /* a new format (the next track): the codec set up again; PPSSPP's crashed on a change of rate or channels */
+        int fmt = (frame[1] & 0x18) << 8 | (frame[2] & 0x0C) << 4 | (frame[3] >> 6);
+        if (g_codec_state > 0 && fmt != g_codec_format) { sceAudiocodecReleaseEDRAM(g_codec); g_codec_state = 0; }
+        if (!g_codec_state) { g_codec_state = codec_init() == 0 ? 1 : -1; g_codec_format = fmt; }
+    }
+    if (g_codec_state < 0) return -1;
+    samples = ((frame[1] >> 3) & 3) == 3 ? 1152u : 576u;   /* MPEG-1, or 2 / 2.5 */
+    if (samples > max_frames) return -1;
+    memcpy(g_src, frame, bytes);
+    sceKernelDcacheWritebackInvalidateRange(g_src, sizeof(g_src));
+    g_codec[6] = (unsigned long)g_src;
+    g_codec[7] = bytes;
+    g_codec[8] = (unsigned long)g_dec;
+    g_codec[9] = sizeof(g_dec);
+    g_codec[10] = bytes;
+    if (sceAudiocodecDecode(g_codec, PSP_CODEC_MP3) < 0) return -1;
+    sceKernelDcacheWritebackInvalidateRange(g_dec, sizeof(g_dec));
+    memcpy(stereo, g_dec, samples * 4u);
+    return (int)samples;
+}
+
 void pspexp_audio_psp_ops(PspExpRuntimeOps *ops)
 {
+    ops->audio_decode = op_audio_decode;
     ops->audio_start = op_audio_start;
     ops->audio_stop = op_audio_stop;
     ops->audio_lock = op_audio_lock;

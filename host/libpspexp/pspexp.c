@@ -868,6 +868,31 @@ int pspexp_audio_stream(PspExpContext *ctx, const int16_t *stereo, uint32_t fram
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
 }
 
+int pspexp_audio_mp3_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && (ctx->hello.features & PSPEXP_FEATURE_AUDIO_MP3) != 0;
+}
+
+int pspexp_audio_coded(PspExpContext *ctx, int codec, const void *frames, uint32_t bytes)
+{
+    PspExpAudioCoded ac;
+    uint8_t *p;
+    if (bytes == 0) return 0;
+    if (ctx->state != PSPEXP_LINK_CONNECTED) return -1;
+    memset(&ac, 0, sizeof(ac));
+    ac.codec = (uint8_t)codec;
+    ac.bytes = bytes;
+    pspexp_writer_reset(&ctx->msg);
+    if (pspexp_writer_begin(&ctx->msg, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_CODED_STREAM, 0) < 0) return -1;
+    p = (uint8_t *)pspexp_writer_reserve(&ctx->msg, sizeof(ac) + PSPEXP_ALIGN_UP(bytes));
+    if (!p) return -1;
+    memcpy(p, &ac, sizeof(ac));
+    memcpy(p + sizeof(ac), frames, bytes);
+    memset(p + sizeof(ac) + bytes, 0, PSPEXP_ALIGN_UP(bytes) - bytes);
+    if (pspexp_writer_end(&ctx->msg) < 0) return -1;
+    return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
+}
+
 int pspexp_audio_stream_reset(PspExpContext *ctx)
 {
     return pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STREAM_RESET, NULL, 0);

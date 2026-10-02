@@ -121,6 +121,12 @@ int pspexp_stop_sound(PspExpContext *ctx, uint16_t id);   /* 0xFFFF = every voic
  * starts playing once ~100 ms is buffered and reports AUDIO_STATUS. */
 int pspexp_audio_stream(PspExpContext *ctx, const int16_t *stereo, uint32_t frames);
 int pspexp_audio_stream_reset(PspExpContext *ctx);
+/* Compressed audio the PSP decodes into the same stream (its Media Engine),
+ * when the runtime offers it (PSPEXP_FEATURE_AUDIO_MP3): whole MP3 frames,
+ * any number, at their own rate (the PSP resamples). A tenth of a second of
+ * MP3 is a few kilobytes where PCM is 17 KB. */
+int pspexp_audio_mp3_supported(const PspExpContext *ctx);
+int pspexp_audio_coded(PspExpContext *ctx, int codec, const void *frames, uint32_t bytes);
 const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx);
 int pspexp_release(PspExpContext *ctx, uint16_t id);
 /* Gather sends (uploads, palettes, audio, releases) into one buffer from

@@ -136,6 +136,16 @@ static int op_power_get(void *u, PspExpPowerStatus *p)
     return 0;
 }
 
+/* compressed audio, for the tests: an MP3 frame "decodes" to its sample count of 1000s */
+static int op_audio_decode(void *u, int codec, const uint8_t *frame, uint32_t bytes, int16_t *stereo, uint32_t max_frames)
+{
+    uint32_t n = ((frame[1] >> 3) & 3) == 3 ? 1152u : 576u, i;
+    (void)u; (void)bytes;
+    if (codec != PSPEXP_CODEC_MP3 || n > max_frames) return -1;
+    for (i = 0; i < n * 2; i++) stereo[i] = 1000;
+    return (int)n;
+}
+
 static void tr_close(PspExpTransport *t) { (void)t; }
 
 PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
@@ -167,6 +177,7 @@ PspExpNullExecutor *pspexp_null_create(const PspExpRuntimeConfig *cfg)
     ops.draw3d = op_draw3d;
     ops.clear3d = op_clear3d;
     ops.power_get = op_power_get;
+    ops.audio_decode = op_audio_decode;
     ops.morph3d = op_morph3d;
     ops.draw3d_mesh = op_draw3d_mesh;
     ops.draw3d_indexed = op_draw3d_indexed;

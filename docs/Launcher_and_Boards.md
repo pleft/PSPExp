@@ -914,7 +914,7 @@ Files here at the shell's folder; select closes it.
 |---|---|
 | d-pad | move (left / right: a page); up from the top row: the drive button |
 | L / R | the left / right panel |
-| cross | open: a folder; a picture full screen (left / right the others); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
+| cross | open: a folder; a picture full screen (left / right the others); music in the player; a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
 | circle | the folder above |
 | square | mark and move down |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
@@ -933,6 +933,37 @@ match (`lib_rom_entry`, `launcher_open_file`), started as from the
 launcher's lists; a Starting box shows until the game has the PSP, and the
 console comes back to the file manager afterwards. A package runs
 `pspexp-pkg install` in the background, its message shown after.
+
+**The music player** (2026-10-03, `player.c` for the sound, `files.c` for
+its screen): cross on MP3, WAV, Ogg, FLAC, Opus, M4A/AAC, WMA or a tracker
+module (MOD, XM, IT, S3M) plays it, then the folder's other playable files
+in order. The screen shows the title, artist and album from the tags
+(ID3v1, ID3v2.2-2.4; ffprobe's for the rest), the cover (the picture in the
+tags, else `cover.jpg` / `folder.jpg` beside the file), the format, where
+it is decoded, and the time.
+
+| | |
+|---|---|
+| cross | pause / play (at the end: again) |
+| left / right | 10 s back / on |
+| L / R | the previous / next track (round the folder) |
+| triangle | stop and close |
+| circle | back to the files; the music goes on (cross on the file: the player again) |
+
+MP3 goes to the PSP as it is and the PSP decodes it on its Media Engine
+(architecture §8, compressed audio): 16 KB/s at 128 kbps, next to no board
+CPU. 16-bit 44.1 kHz WAV goes as PCM. Everything else, and MP3 for a PSP
+whose PSPExp is older, is decoded on the board by ffmpeg when it is
+installed (the Pi has it; the Omega does not) and sent as PCM. Files on the
+PSP's memory stick are copied to the board first (up to 16 MB, as for
+pictures). Closing the file manager, or a program taking the PSP, stops the
+music. Tested in PPSSPP from the Mac (all the formats above but WMA and
+the modules; an MP3 with a cover and a Greek title); not yet on the PSP.
+
+The launcher's text became UTF-8 the same day: the title, body and small
+fonts carry Latin-1, Latin Extended-A, Greek and Cyrillic (the glyph atlas
+grew to 512x512), so accented, Greek and Cyrillic file names and tags
+show; before, every byte past ASCII was a '?'.
 
 ### 7.3 The PSP's memory stick as a drive (2026-09-28)
 

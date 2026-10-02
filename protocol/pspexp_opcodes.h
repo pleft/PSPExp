@@ -59,6 +59,7 @@ enum PspExpOpcode {
     PSPEXP_OP_AUDIO_STREAM          = 0x0304,  /* host -> PSP, PspExpAudioStream + s16 stereo PCM */
     PSPEXP_OP_AUDIO_STATUS          = 0x0305,  /* PSP -> host, PspExpAudioStatus */
     PSPEXP_OP_AUDIO_STREAM_RESET    = 0x0306,  /* host -> PSP, no payload: drop buffered stream */
+    PSPEXP_OP_AUDIO_CODED_STREAM    = 0x0307,  /* host -> PSP, PspExpAudioCoded + compressed frames (PSPEXP_FEATURE_AUDIO_MP3) */
 
     /* INPUT (0x04xx) */
     PSPEXP_OP_INPUT_SAMPLE   = 0x0401,  /* PSP -> host, PspExpInput */
