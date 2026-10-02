@@ -544,8 +544,9 @@ square jumps, triangle adds a bot, START starts a game, SELECT quits, L / R
 pause. Recipe 2 mapped only START and SELECT (an entry's `keys=` replaces
 the whole default map) and left the game controller on, which Mr. Boom
 takes as one more player: in a game no button reached the player.
-Checked on the PSP with scripted keys (moved, laid a bomb). In play it
-draws 15-20 fps from the Pi: 170-240 KB a frame over USB, the link the limit.
+Checked on the PSP with scripted keys (moved, laid a bomb), then played by
+hand from the Pi: 40-54 fps, 160-230 KB a frame. (A scripted run that saved
+a PSP screenshot every second measured 15-20: the screenshots, not the game.)
 
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
