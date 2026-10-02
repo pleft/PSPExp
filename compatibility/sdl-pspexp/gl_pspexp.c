@@ -2541,7 +2541,8 @@ GLAPI(void, glArrayElement, (GLint i))
 typedef struct GlShader { GLuint name; GLenum type; char *src; GlslShader *sh; char log[256]; int deleted; struct GlShader *next; } GlShader;
 typedef struct GlProgram {
     GLuint name;
-    GLuint att[4]; int natt;
+    GLuint att[8]; int natt;
+    GlslShader *joined[2];   /* a stage given in several shader objects, read as one (owned; NULL: one object) */
     GlslProgram *p;
     char log[256];
     char *bnames[16]; int blocs[16]; int nb;   /* glBindAttribLocation, for the next link */
@@ -2598,6 +2599,12 @@ GLAPI(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar *const *
         off += n;
     }
     s->src[off] = 0;
+    if (GENV("PSPEXP_GL_DUMP")) {   /* the source as the program gave it (after its own preprocessing) */
+        char path[600];
+        FILE *f;
+        snprintf(path, sizeof(path), "%s/shader-%u.glsl", GENV("PSPEXP_GL_DUMP"), shader);
+        if ((f = fopen(path, "w"))) { fputs(s->src, f); fclose(f); }
+    }
 }
 
 GLAPI(void, glCompileShader, (GLuint shader))
@@ -2689,6 +2696,7 @@ GLAPI(void, glDeleteProgram, (GLuint program))
         GlProgram *p = *pp;
         *pp = p->next;
         glsl_program_free(p->p);
+        glsl_shader_free(p->joined[0]); glsl_shader_free(p->joined[1]);
         for (i = 0; i < p->nb; i++) free(p->bnames[i]);
         free(p);
     }
@@ -2699,7 +2707,7 @@ GLAPI(void, glAttachShader, (GLuint program, GLuint shader))
 {
     GlProgram *p = find_program(program);
     if (!p || !find_shader(shader)) { set_error(GL_INVALID_VALUE); return; }
-    if (p->natt < 4) p->att[p->natt++] = shader;
+    if (p->natt < 8) p->att[p->natt++] = shader;
 }
 
 GLAPI(void, glDetachShader, (GLuint program, GLuint shader))
@@ -2720,22 +2728,61 @@ GLAPI(void, glBindAttribLocation, (GLuint program, GLuint index, const GLchar *n
     if (p->nb < 16) { p->bnames[p->nb] = strdup(name); p->blocs[p->nb++] = (int)index; }
 }
 
+/* A stage given in several shader objects (OpenMW: libraries of functions, without main(), beside the
+ * shader that has it): their sources joined, the libraries first, and read as one shader (#version and
+ * #line in the middle are ignored by the reader). NULL when the stage has one object (its own is used) */
+static GlslShader *join_stage(GlProgram *p, GLenum type)
+{
+    GlShader *parts[8];
+    int n = 0, i, k;
+    size_t len = 1;
+    char *src;
+    GlslShader *sh;
+    char log[256] = "";
+    for (i = 0; i < p->natt; i++) {
+        GlShader *s = find_shader(p->att[i]);
+        if (s && s->type == type && s->src) parts[n++] = s;
+    }
+    if (n < 2) return NULL;
+    for (i = 0; i < n; i++) len += strlen(parts[i]->src) + 2;
+    if (!(src = (char *)malloc(len))) return NULL;
+    src[0] = 0;
+    for (k = 0; k < 2; k++)   /* libraries first, then whichever has main() */
+        for (i = 0; i < n; i++)
+            if ((strstr(parts[i]->src, "void main") != NULL) == (k == 1)) { strcat(src, parts[i]->src); strcat(src, "\n"); }
+    sh = glsl_compile(type == GL_VERTEX_SHADER ? GLSL_VERTEX : GLSL_FRAGMENT, src, log, sizeof(log));
+    if (log[0]) gl_logf("program %u: its %d %s shaders as one: %s (drawn as near as the GE can)", p->name, n, type == GL_VERTEX_SHADER ? "vertex" : "fragment", log);
+    free(src);
+    return sh;
+}
+
 GLAPI(void, glLinkProgram, (GLuint program))
 {
     GlProgram *p = find_program(program);
     GlShader *vs = NULL, *fs = NULL;
+    GlslShader *vsh, *fsh;
     int i;
     if (!p) { set_error(GL_INVALID_VALUE); return; }
     for (i = 0; i < p->natt; i++) {
         GlShader *s = find_shader(p->att[i]);
-        if (s && s->type == GL_VERTEX_SHADER) vs = s;
-        if (s && s->type == GL_FRAGMENT_SHADER) fs = s;
+        if (s && s->type == GL_VERTEX_SHADER && (!vs || strstr(s->src ? s->src : "", "void main"))) vs = s;
+        if (s && s->type == GL_FRAGMENT_SHADER && (!fs || strstr(s->src ? s->src : "", "void main"))) fs = s;
     }
     glsl_program_free(p->p);
-    p->p = vs && fs ? glsl_link(vs->sh, fs->sh, (const char *const *)p->bnames, p->blocs, p->nb, p->log, sizeof(p->log)) : NULL;
+    for (i = 0; i < 2; i++) { glsl_shader_free(p->joined[i]); p->joined[i] = NULL; }
+    p->joined[0] = join_stage(p, GL_VERTEX_SHADER);
+    p->joined[1] = join_stage(p, GL_FRAGMENT_SHADER);
+    vsh = p->joined[0] ? p->joined[0] : vs ? vs->sh : NULL;
+    fsh = p->joined[1] ? p->joined[1] : fs ? fs->sh : NULL;
+    p->p = vsh && fsh ? glsl_link(vsh, fsh, (const char *const *)p->bnames, p->blocs, p->nb, p->log, sizeof(p->log)) : NULL;
     if (!p->p) gl_logf("program %u: not linked (%s)", program, p->log[0] ? p->log : "a shader missing");
-    p->builtins = (vs && vs->src && (strstr(vs->src, "gl_ModelView") || strstr(vs->src, "gl_Projection") ||
-                  strstr(vs->src, "ftransform") || strstr(vs->src, "gl_TextureMatrix") || strstr(vs->src, "gl_NormalMatrix")));
+    p->builtins = 0;   /* GL's own matrices read, in any of the vertex stage's objects */
+    for (i = 0; i < p->natt; i++) {
+        GlShader *s = find_shader(p->att[i]);
+        if (s && s->type == GL_VERTEX_SHADER && s->src &&
+            (strstr(s->src, "gl_ModelView") || strstr(s->src, "gl_Projection") || strstr(s->src, "ftransform") ||
+             strstr(s->src, "gl_TextureMatrix") || strstr(s->src, "gl_NormalMatrix"))) p->builtins = 1;
+    }
     p->planned = 0; p->reported = 0;
     p->uver++;
     glsl_set_builtins(builtin_matrix);
@@ -5220,10 +5267,85 @@ GLAPI(void, glCopyTexSubImage2D, (GLenum target, GLint level, GLint xo, GLint yo
     if (target != GL_TEXTURE_2D || level != 0) { unsupported("glCopyTexSubImage2D"); return; }
     copy_to_texture(xo, yo, x, y, w, h);
 }
+/* S3TC (DXT1, 3, 5: GL_EXT_texture_compression_s3tc, offered only when a recipe asks, through
+ * PSPEXP_GL_EXTENSIONS): decoded here into RGBA, which then goes as any texture (16 bits, CLUT8 when it
+ * has at most 256 colours). The GE reads DXT itself; sending it so would take a quarter to an eighth of
+ * the bytes and of the PSP's memory (OpenMW: Morrowind's textures are all DXT) */
+#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT  0x83F0
+#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
+#define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
+#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+
+static void dxt_colours(const uint8_t *b, uint32_t c[4], int dxt1)
+{
+    unsigned c0 = (unsigned)b[0] | (unsigned)b[1] << 8, c1 = (unsigned)b[2] | (unsigned)b[3] << 8;
+    int r0 = (int)((c0 >> 11) & 31) * 255 / 31, g0 = (int)((c0 >> 5) & 63) * 255 / 63, b0 = (int)(c0 & 31) * 255 / 31;
+    int r1 = (int)((c1 >> 11) & 31) * 255 / 31, g1 = (int)((c1 >> 5) & 63) * 255 / 63, b1 = (int)(c1 & 31) * 255 / 31;
+    c[0] = 0xFF000000u | (uint32_t)b0 << 16 | (uint32_t)g0 << 8 | (uint32_t)r0;   /* ABGR in memory: R first */
+    c[1] = 0xFF000000u | (uint32_t)b1 << 16 | (uint32_t)g1 << 8 | (uint32_t)r1;
+    if (c0 > c1 || !dxt1) {
+        c[2] = 0xFF000000u | (uint32_t)((2 * b0 + b1) / 3) << 16 | (uint32_t)((2 * g0 + g1) / 3) << 8 | (uint32_t)((2 * r0 + r1) / 3);
+        c[3] = 0xFF000000u | (uint32_t)((b0 + 2 * b1) / 3) << 16 | (uint32_t)((g0 + 2 * g1) / 3) << 8 | (uint32_t)((r0 + 2 * r1) / 3);
+    } else {
+        c[2] = 0xFF000000u | (uint32_t)((b0 + b1) / 2) << 16 | (uint32_t)((g0 + g1) / 2) << 8 | (uint32_t)((r0 + r1) / 2);
+        c[3] = 0;   /* DXT1's transparent black */
+    }
+}
+
+/* w x h of DXT blocks into RGBA (w, h the image's; blocks past its edge cut); 0, or -1 for another format */
+static int dxt_decode(GLenum fmt, const uint8_t *src, size_t size, int w, int h, uint32_t *out)
+{
+    int bx, by, bw = (w + 3) / 4, bh = (h + 3) / 4, step = fmt == GL_COMPRESSED_RGB_S3TC_DXT1_EXT || fmt == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT ? 8 : 16;
+    if (fmt < GL_COMPRESSED_RGB_S3TC_DXT1_EXT || fmt > GL_COMPRESSED_RGBA_S3TC_DXT5_EXT) return -1;
+    if ((size_t)bw * (size_t)bh * (size_t)step > size) return -1;
+    for (by = 0; by < bh; by++)
+        for (bx = 0; bx < bw; bx++) {
+            const uint8_t *b = src + ((size_t)by * (size_t)bw + (size_t)bx) * (size_t)step, *cb = step == 16 ? b + 8 : b;
+            uint32_t c[4], idx = (uint32_t)cb[4] | (uint32_t)cb[5] << 8 | (uint32_t)cb[6] << 16 | (uint32_t)cb[7] << 24;
+            uint8_t a[8] = { 0 };
+            uint64_t abits = 0;
+            int px, py;
+            dxt_colours(cb, c, step == 8);
+            if (fmt == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT) {   /* two alphas, six or four between them */
+                int k;
+                a[0] = b[0]; a[1] = b[1];
+                for (k = 2; k < 8; k++)
+                    a[k] = a[0] > a[1] ? (uint8_t)(((8 - k) * a[0] + (k - 1) * a[1]) / 7)
+                                       : k < 6 ? (uint8_t)(((6 - k) * a[0] + (k - 1) * a[1]) / 5) : (k == 6 ? 0 : 255);
+                for (k = 0; k < 6; k++) abits |= (uint64_t)b[2 + k] << (8 * k);
+            }
+            for (py = 0; py < 4; py++)
+                for (px = 0; px < 4; px++) {
+                    int x = bx * 4 + px, y = by * 4 + py, i = py * 4 + px;
+                    uint32_t p;
+                    if (x >= w || y >= h) continue;
+                    p = c[(idx >> (2 * i)) & 3];
+                    if (fmt == GL_COMPRESSED_RGBA_S3TC_DXT3_EXT) p = (p & 0x00FFFFFFu) | (uint32_t)(((b[i / 2] >> (4 * (i & 1))) & 15) * 17) << 24;
+                    else if (fmt == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT) p = (p & 0x00FFFFFFu) | (uint32_t)a[(abits >> (3 * i)) & 7] << 24;
+                    else if (fmt == GL_COMPRESSED_RGB_S3TC_DXT1_EXT) p |= 0xFF000000u;   /* no alpha: the transparent one opaque */
+                    out[(size_t)y * (size_t)w + (size_t)x] = p;
+                }
+        }
+    return 0;
+}
+
 GLAPI(void, glCompressedTexImage2D, (GLenum target, GLint level, GLenum internal, GLsizei w, GLsizei h, GLint border, GLsizei size, const GLvoid *data))
-{ (void)target; (void)level; (void)internal; (void)w; (void)h; (void)border; (void)size; (void)data; unsupported("compressed textures"); }
+{
+    uint32_t *px;
+    (void)border;
+    if (w <= 0 || h <= 0 || !data || !(px = (uint32_t *)malloc((size_t)w * (size_t)h * 4))) { set_error(GL_INVALID_VALUE); return; }
+    if (dxt_decode(internal, (const uint8_t *)data, (size_t)size, w, h, px) < 0) { free(px); unsupported("compressed textures other than S3TC"); set_error(GL_INVALID_ENUM); return; }
+    GLFN(glTexImage2D)(target, level, internal == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ? GL_RGB : GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    free(px);
+}
 GLAPI(void, glCompressedTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsizei w, GLsizei h, GLenum format, GLsizei size, const GLvoid *data))
-{ (void)target; (void)level; (void)x; (void)y; (void)w; (void)h; (void)format; (void)size; (void)data; unsupported("compressed textures"); }
+{
+    uint32_t *px;
+    if (w <= 0 || h <= 0 || !data || !(px = (uint32_t *)malloc((size_t)w * (size_t)h * 4))) { set_error(GL_INVALID_VALUE); return; }
+    if (dxt_decode(format, (const uint8_t *)data, (size_t)size, w, h, px) < 0) { free(px); unsupported("compressed textures other than S3TC"); set_error(GL_INVALID_ENUM); return; }
+    GLFN(glTexSubImage2D)(target, level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    free(px);
+}
 GLAPI(void, glGenerateMipmap, (GLenum target)) { (void)target; }
 
 GLAPI(void, glTexParameteri, (GLenum target, GLenum p, GLint v))

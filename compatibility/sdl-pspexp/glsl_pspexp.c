@@ -1708,6 +1708,7 @@ static void builtins(Ev *e)
     int i, k;
     declare(e, "gl_Position", val_new(e, vec_type(T_FLOAT, 4)));
     declare(e, "gl_PointSize", val_new(e, scalar_type(T_FLOAT)));
+    declare(e, "gl_ClipVertex", val_new(e, vec_type(T_FLOAT, 4)));   /* written, not read: the GE clips to the screen itself */
     declare(e, "gl_FragColor", val_new(e, vec_type(T_FLOAT, 4)));
     { Type t = vec_type(T_FLOAT, 4); t.array = 4; declare(e, "gl_FragData", val_new(e, t)); }
     v = val_new(e, vec_type(T_FLOAT, 4));
@@ -1743,9 +1744,18 @@ static void builtins(Ev *e)
         memset(m, 0, sizeof(m));
         m[0] = m[5] = m[10] = m[15] = 1;
         if (g_builtins) g_builtins(mats[k], m);
+        if (k == 3) {   /* gl_TextureMatrix: an array, one per unit; unit 0's the texture matrix, unit 1's identity
+                         * (a single mat4 here made gl_TextureMatrix[0] its first column: OpenMW's menu drew in streaks) */
+            Type ta = mat_type(4);
+            ta.array = 2;
+            v = val_new(e, ta);
+            for (j = 0; j < 16; j++) { v.c[j] = K(e, m[j]); v.c[16 + j] = K(e, (j % 5) == 0 ? 1.0f : 0.0f); }
+            declare(e, "gl_TextureMatrix", v);
+            continue;
+        }
         v = val_new(e, mat_type(4));
         for (j = 0; j < 16; j++) v.c[j] = K(e, m[j]);
-        declare(e, k == 3 ? "gl_TextureMatrix" : mats[k], v);
+        declare(e, mats[k], v);
         if (k == 1) {   /* gl_NormalMatrix: the modelview's upper 3x3 (its inverse transpose for a rotation) */
             Val n3 = val_new(e, mat_type(3));
             int r, c;
