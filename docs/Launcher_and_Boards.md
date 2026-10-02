@@ -1318,6 +1318,6 @@ missing. The Pi 400's radio came soft-blocked; `pspexp-bt` unblocks it through
 the sudo rule. Tested on the Pi 400 with HUAWEI FreeBuds SE (2026-10-03): the
 music player, the Mega Drive emulator and OpenJazz, played by hand; SBC codec.
 Bluetooth adds its own delay (typically 150-250 ms), noticeable in action
-games, not in music. Not tried: the GameShell (its radio has Bluetooth), the
-volume buttons on the PSP itself.
+games, not in music. The volume buttons on the PSP-1000, same day: working
+("it rocks!"). Not tried: the GameShell (its radio has Bluetooth).
 
