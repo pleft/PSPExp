@@ -1,0 +1,88 @@
+# PSPExp on a Raspberry Pi
+
+The Pi is the roomiest home for PSPExp: every package runs on it, the 3D
+games included, and it has Bluetooth for headphones. PSPExp is tested on a
+**Raspberry Pi 400**; a Pi 4 or 5 with the same system should behave the
+same. The Pi needs no screen of its own: the PSP is its screen.
+
+## What you need
+
+- A Raspberry Pi 400 (or 4 / 5) with its power supply.
+- A microSD card with **Raspberry Pi OS (64-bit), the Debian 13 "trixie"
+  release**. The Lite version is enough.
+- A network connection for the setup (Wi-Fi or Ethernet), and SSH turned
+  on: Raspberry Pi Imager can set both, and your user name, before it
+  writes the card.
+- The PSP, [prepared](psp.md), and its mini-USB data cable.
+
+## Installing PSPExp
+
+1. Write the card with Raspberry Pi Imager (64-bit Raspberry Pi OS, with
+   SSH, Wi-Fi and your user set in its settings), put it in the Pi and
+   power it on. Wait for it to appear on your network.
+2. Install PSPExp:
+   - *With the release: one command on the Pi adds PSPExp's package
+     repository and installs it (coming with the release).*
+   - From this repository, on a Mac or Linux computer:
+
+     ```sh
+     HOST=<user>@<pi-address> scripts/pi/install.sh
+     ```
+
+     It sets the Pi up for PSPExp (the PSP's USB rule, the console as a
+     service that starts at boot, the settings it needs) and installs
+     PSPExp: from the package repository when one is configured
+     (`~/.pspexp/repo-url`), otherwise built on the Pi itself.
+3. Plug the PSP into any of the Pi's USB ports and start PSPExp on it. The
+   launcher appears.
+
+From then on the Pi starts the console at every boot and waits for the PSP;
+you never need to log in to it again.
+
+## Your first games
+
+On the PSP: **Apps > Packages**. Pick a game (Freedoom, OpenTyrian, Cave
+Story, SuperTux, Quake...) and press cross to install it; it appears under
+**Games** when done. Emulators install the same way (NES, SNES, Mega Drive,
+Game Boy, Game Boy Advance, Lynx, WonderSwan) and appear as their own tiles
+once you have ROMs for them.
+
+**ROMs** go in folders in your home folder on the Pi: `roms/nes`,
+`roms/snes`, `roms/md`, `roms/gb` and `roms/gbc`, `roms/gba`, `roms/lynx`,
+`roms/ws`. Copy them with the file manager (**Apps > Files**) from a USB
+stick or from the PSP's memory stick, or over the network as you would to
+any Linux machine. Only use ROMs of games you own.
+
+## What it plays like
+
+Measured on the PSP-1000 with a Pi 400:
+
+| | |
+|---|---|
+| Freedoom, OpenTyrian | 35 fps, the games' own full speed |
+| Mr. Boom, the 2D emulators | 60 fps |
+| Quake (shareware) | 45–60 fps, about 30 in the biggest fights |
+| OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
+| Music player | MP3 decoded by the PSP; the Pi does almost nothing |
+
+## Bluetooth headphones
+
+The Pi has Bluetooth. Put your headphones or speaker in pairing mode, then
+**System > Sound output**, wait for the scan, pick them with cross. From
+then on every game's sound plays in them, the PSP's volume buttons set
+their volume (a bar shows on screen), and when they go back in their case
+the sound returns to the PSP by itself. Choose **The PSP** in Sound output
+to let them go, for your phone or tablet. Details:
+[Using PSPExp](using-pspexp.md#bluetooth-headphones).
+
+## Good to know
+
+- **The Pi 400's keyboard** types into the PSP's terminal while the PSP is
+  connected.
+- **Music in other formats** (Ogg, FLAC, Opus, M4A) is decoded on the Pi by
+  ffmpeg: `sudo apt install ffmpeg` if the player says it is missing.
+- **Updates** come through **Apps > Packages** (PSPExp itself is a package
+  too); after one, the launcher offers **System > Restart PSPExp**.
+- **Wi-Fi and the time zone** can be changed from the PSP: System > Wi-Fi
+  network, System > Time zone.
+- Packages live in `/opt/pspexp`; your settings in `~/.config/pspexp*`.

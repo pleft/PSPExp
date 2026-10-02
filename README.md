@@ -5,6 +5,11 @@ input processor for an application running on another computer. The host
 streams *rendering intent* (compact sprite batches), the PSP renders it with
 its own GE. Architecture: [docs/PSPExp_Technical_Architecture.md](docs/PSPExp_Technical_Architecture.md).
 
+**Want to play?** The [user manual](docs/manual/README.md) walks through
+preparing the PSP and setting up a Raspberry Pi, a ClockworkPi GameShell or
+an Onion Omega2+, and everything the launcher does. The rest of this file
+is for developers.
+
 ## Status (v0.1, in progress)
 
 | piece | state |
