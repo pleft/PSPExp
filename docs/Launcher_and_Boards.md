@@ -327,8 +327,14 @@ redraws the bar (an idle launcher draws nothing otherwise).
 holds it awake (`scePowerTick`) while something happens without them: at
 least 5 frames in a 5 s window, or sound streaming; and for the first 5
 minutes without a board, so a booting board finds it awake. Otherwise the
-PSP's own Power Save settings (Backlight Auto-Off, Auto Sleep) apply,
-counted from the last button press or the last busy moment. So the launcher
+PSP's own Power Save settings apply, counted from the last button press or
+the last busy moment: Backlight Auto-Off turns the screen off (the PSP-1000,
+2026-10-02: off 2 minutes after the launcher went still, on again at a
+button press). Auto Sleep does not come while the USB link is up (nothing
+held it awake for 15 minutes, on battery and on the charger; the PSP seems
+to count an active USB connection as use, as in its own USB mode); putting
+it to sleep from the runtime after a set idle time was considered and left
+out: the screen going off saves most of the battery. So the launcher
 at rest sends nothing: 30 s after the last button press its scrolling text
 stands still and its caret stops blinking, and so does the terminal's
 cursor; the clock's redraw, one frame a minute, does not count. Until
