@@ -1,5 +1,9 @@
 # Mr. Boom: a Bomberman clone for up to eight players (on the PSP: one, against
-# the computer), Debian's package; plays with the PSP as its gamepad.
+# the computer), Debian's package. Played as its first keyboard player (its
+# manual's keys): the d-pad or nub moves, cross lays a bomb, circle ignites,
+# square jumps, triangle adds a bot, START starts, L / R pause. No game
+# controller: Mr. Boom makes every pad one more player, and the PSP's buttons
+# then reached no player in the game (2026-10-02).
 
 [package]
 id=mrboom
@@ -7,7 +11,7 @@ title=Mr. Boom
 description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 category=game
 license=MIT (Mr. Boom)
-version=2
+version=3
 
 [debian]
 apt=mrboom
@@ -18,5 +22,7 @@ type=game
 description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 icon=gamepad-2
 exec=/usr/games/mrboom
-keys=start=return,select=escape
+keys=up=up,down=down,left=left,right=right,cross=rctrl,circle=ralt,square=rshift,triangle=space,start=return,select=escape,l=p,r=p
+nub=keys
+env=PSPEXP_JOYSTICK=0
 graphics=sdl

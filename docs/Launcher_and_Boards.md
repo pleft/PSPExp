@@ -538,6 +538,15 @@ or cross / square drive, circle the handbrake) and Teeworlds (`teeworlds`:
 online servers or a LAN, it has no bots; the nub aims, R fires, L hooks, the
 d-pad runs, cross jumps, square / triangle change weapon).
 
+Mr. Boom (`mrboom`, recipe 3, 2026-10-02): its first keyboard player, by its
+manual's keys: the d-pad or nub moves, cross lays a bomb, circle ignites,
+square jumps, triangle adds a bot, START starts a game, SELECT quits, L / R
+pause. Recipe 2 mapped only START and SELECT (an entry's `keys=` replaces
+the whole default map) and left the game controller on, which Mr. Boom
+takes as one more player: in a game no button reached the player.
+Checked on the PSP with scripted keys (moved, laid a bomb). In play it
+draws 15-20 fps from the Pi: 170-240 KB a frame over USB, the link the limit.
+
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
 selector, cross picks a piece and then its square, circle / start open the
