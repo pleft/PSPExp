@@ -312,9 +312,11 @@ its slot and version as read from the stick on connecting ("slot b,
 2026.10.01 (2ab3d0d)", and "an update waits" until the PSP restarts into a
 newly installed one; "installed without slots" for an older install); the
 PSP's battery (charge; charging, on the adapter or the PSP's estimate of the
-time left; the battery's current, in or drawn; its temperature), asked every
-10 s (`POWER_QUERY`: runtimes from 2026-10-02; older ones show "needs a
-newer PSP runtime"); PSP memory; the board's network addresses and power
+time left; the battery's current, in or drawn, when the PSP reports it; its
+temperature), asked every 10 s (`POWER_QUERY`: runtimes from 2026-10-02;
+older ones show "needs a newer PSP runtime"). On the PSP-1000 (2026-10-02):
+"21%, about 1 h 15 min left, 20 C"; it reports no current, so that part
+does not show; PSP memory; the board's network addresses and power
 (battery or mains, temperature, uptime). It refreshes every 3 s. The status
 bar shows the PSP's charge too, "PSP" and a battery icon beside the
 board's, once a reading has come. A line wider than its card scrolls
