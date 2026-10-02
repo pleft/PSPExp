@@ -1286,7 +1286,10 @@ new (it must be in pairing mode), trusts and connects it, waits for its
 PipeWire node and remembers it in `~/.config/pspexp/audio-out`; the first
 time, its volume is set to 40 % (at the device's own 100 % earbuds were far
 too loud). Square forgets a paired device, triangle scans again; cross on The
-PSP sends the sound back (the device stays paired). The row shows where the
+PSP sends the sound back and lets the device go: it stays paired but is
+disconnected and no longer trusted, since trusted earbuds reconnected to the
+Pi by themselves whenever they left their case (and were not free for an
+iPad); using it again trusts it again. The row shows where the
 sound goes: the PSP, the device's name, or "PSP (NAME away)" while the chosen
 device is not connected.
 

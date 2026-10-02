@@ -9,7 +9,8 @@
 #   pspexp-bt devices [SECS]   scan SECS seconds (default 8), then one line per device:
 #                              ADDRESS|NAME|paired|connected|audio (0/1 each)
 #   pspexp-bt use ADDRESS      pair (when new), trust and connect it; sound goes to it
-#   pspexp-bt psp              sound back to the PSP (the device stays paired)
+#   pspexp-bt psp              sound back to the PSP; the device stays paired but is let go
+#                              (disconnected, not trusted: free for a phone or tablet)
 #   pspexp-bt forget ADDRESS   unpair it (and sound back to the PSP if it was the one)
 #   pspexp-bt volume [+N|-N|N] the chosen device's volume, in percent (0-100): changed, then printed
 #   pspexp-bt route            what sound does now: "pw NODE NAME" (the chosen device,
@@ -81,7 +82,13 @@ use)
 	echo "$A did not connect as an audio device" >&2
 	exit 1 ;;
 psp)
-	choose psp ;;
+	A=$(chosen)
+	choose psp
+	if [ "$A" != psp ]; then   # trusted earbuds reconnect to the board as soon as they leave their case
+		bluetoothctl untrust "$A" >/dev/null 2>&1
+		bluetoothctl disconnect "$A" >/dev/null 2>&1
+	fi
+	exit 0 ;;
 forget)
 	A="${2:?address}"
 	bluetoothctl remove "$A" >/dev/null 2>&1
