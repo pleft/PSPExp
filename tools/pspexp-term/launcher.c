@@ -2063,13 +2063,14 @@ static void draw_running(void)
 
 /* ---- the about page --------------------------------------------------------------------------------- */
 
+static int g_about_pitch = 28;   /* a row's height: 26 when the board's card has more storage lines */
 static int about_row(int x, int y, int w, const char *icon, const char *label, const char *value, int a)
 {
     if (!value || !value[0]) return y;
     gfx_icon(icon, 14, x, y + 3, C_MUTED, a);
     gfx_text(FONT_BADGE, x + 22, y, label, C_MUTED, a, w - 22);
     mtext(FONT_BODY, x + 22, y + 11, value, C_TEXT, a, w - 22, g_open_at);
-    return y + 28;
+    return y + g_about_pitch;
 }
 
 /* the picker: time zones or networks, a list over the backdrop */
@@ -2159,18 +2160,13 @@ static void draw_about(float dt)
     snprintf(host, sizeof(host), "%s", b->host);
     gfx_icon("info", 20, 16, 12, C_ACCENT, a);
     gfx_text(FONT_TITLE, 44, 11, "About this console", C_TEXT, a, 0);
-    {   /* this launcher's version (the board's side: the console, the launcher, the SDL layer) over
-         * the board's name; the PSP's side has its own row below */
-        char v[96];
-        snprintf(v, sizeof(v), "Launcher %s", PSPEXP_VERSION);
-        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, v), 7, v, C_SUB, a, 0);
-        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 21, host, C_MUTED, a, 0);
-    }
+    gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 15, host, C_MUTED, a, 0);
 
     gfx_shadow(NINE_SHADOW10, cx1, cy + 4, cw, ch, 0x000000, a * 120 / 255);
     gfx_nine(NINE_R10, cx1, cy, cw, ch, 0x1a2030, a * 240 / 255);
     gfx_text(FONT_BADGE, cx1 + 12, cy + 9, "THIS BOARD", C_ACCENT, a, 0);
     y = cy + 26;
+    g_about_pitch = b->ndisks > 1 ? 26 : 28;   /* (six rows and the storage lines in the card's 200) */
     board_detect();
     y = about_row(cx1 + 12, y, cw - 24, g_board.icon, "BOARD", b->board, a);
     {
@@ -2185,13 +2181,17 @@ static void draw_about(float dt)
         gfx_text(FONT_BADGE, cx1 + 34, y, "STORAGE", C_MUTED, a, cw - 46);
         for (k = 0; k < b->ndisks; k++)
             mtext(FONT_BODY, cx1 + 34, y + 11 + k * 17, b->disks[k], C_TEXT, a, cw - 46, g_open_at);
-        y += 28 + (b->ndisks - 1) * 17;
+        y += g_about_pitch + (b->ndisks - 1) * 17;
     }
     {
         char sys[200];
         snprintf(sys, sizeof(sys), "%s, %s", b->os[0] ? b->os : "Linux", b->kernel);
-        about_row(cx1 + 12, y, cw - 24, "square-terminal", "SYSTEM", sys, a);
+        y = about_row(cx1 + 12, y, cw - 24, "square-terminal", "SYSTEM", sys, a);
     }
+    /* this launcher's version: the board's side (the console, the launcher, the SDL layer); the PSP's
+     * side has its own row in the other card */
+    y = about_row(cx1 + 12, y, cw - 24, "package", "LAUNCHER", PSPEXP_VERSION, a);
+    g_about_pitch = 28;
 
     gfx_shadow(NINE_SHADOW10, cx2, cy + 4, cw, ch, 0x000000, a * 120 / 255);
     gfx_nine(NINE_R10, cx2, cy, cw, ch, 0x1a2030, a * 240 / 255);

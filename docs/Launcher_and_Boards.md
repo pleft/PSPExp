@@ -299,8 +299,8 @@ network.
 **About** (System > About): two cards, this board and the PSP. Board: model
 (device tree, else /proc/cpuinfo: OpenWrt's "machine"), chip and cores, memory, storage,
 system. The launcher's own version (the board's side: the console, the
-launcher, the SDL layer, the `pspexp-core` package) is at the top right,
-"Launcher ...", over the board's name: the source's last commit date and short hash ("2026.10.02
+launcher, the SDL layer, the `pspexp-core` package) is the board card's
+last row, LAUNCHER: the source's last commit date and short hash ("2026.10.02
 (244e4bf)", ", modified" for a build from changed files), made at each build
 by `cmake/pspexp_version.cmake` (the Pi builds a copy without git, so
 `scripts/pi/install.sh` carries it in `.pspexp-version`). Storage has one line per storage device: the root file system and
