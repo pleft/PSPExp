@@ -3,7 +3,10 @@
 # manual's keys): the d-pad or nub moves, cross lays a bomb, circle ignites,
 # square jumps, triangle adds a bot, START starts, L / R pause. No game
 # controller: Mr. Boom makes every pad one more player, and the PSP's buttons
-# then reached no player in the game (2026-10-02).
+# then reached no player in the game (2026-10-02). -x 1: without its xBRZ
+# smoothing (on by default on 64-bit ARM: a 640x400 picture of thousands of
+# colours a frame, 150-170 KB over the link; its own 320x200 in 256 colours is
+# 40 KB, and the PSP scales it to the screen).
 
 [package]
 id=mrboom
@@ -11,7 +14,7 @@ title=Mr. Boom
 description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 category=game
 license=MIT (Mr. Boom)
-version=3
+version=4
 
 [debian]
 apt=mrboom
@@ -21,7 +24,7 @@ title=Mr. Boom
 type=game
 description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 icon=gamepad-2
-exec=/usr/games/mrboom
+exec=/usr/games/mrboom -x 1
 keys=up=up,down=down,left=left,right=right,cross=rctrl,circle=ralt,square=rshift,triangle=space,start=return,select=escape,l=p,r=p
 nub=keys
 env=PSPEXP_JOYSTICK=0

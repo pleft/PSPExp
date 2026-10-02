@@ -547,6 +547,12 @@ takes as one more player: in a game no button reached the player.
 Checked on the PSP with scripted keys (moved, laid a bomb), then played by
 hand from the Pi: 40-54 fps, 160-230 KB a frame. (A scripted run that saved
 a PSP screenshot every second measured 15-20: the screenshots, not the game.)
+The bytes were Mr. Boom's xBRZ smoothing, on by default on 64-bit ARM (the
+Pi; not on the GameShell's 32-bit ARM): each frame its 320x200 picture
+upscaled to 640x400, thousands of colours, sent as 16-bit pages and shrunk
+again on the PSP. Recipe 4 starts it with `-x 1`: its own picture, 256
+colours, 8-bit pages; 39-44 KB a frame on the Pi with the null executor
+(was 150-170), texture work 0.65 ms a frame (was 1.6).
 
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
