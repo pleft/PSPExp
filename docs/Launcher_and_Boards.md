@@ -345,7 +345,7 @@ into five languages). All four start, draw and quit back on the real PSP
 Beneath a Steel Sky 7 (6-20), Amazon Queen 8, Drascula 9, Lure 27, the
 games' own pace (Beneath a Steel Sky's engine runs about 12 a second; its
 first try took the board 7-11 ms of CPU a frame). Seen on the PSP: Beneath a
-Steel Sky in play, pointer on the nub. Not played by hand yet. A package over
+Steel Sky in play, pointer on the nub. Played by hand on 2026-10-01: playable, as far as tried. A package over
 60 MB does not fit the Omega's /tmp, so `pspexp-pkg-build install` fails for
 it: after `publish`, `pspexp-pkg install ID` on the Omega installs from the
 card.
