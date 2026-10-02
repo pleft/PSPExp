@@ -21,6 +21,7 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
   pspexp-run         an SDL2 program with the SDL layer preloaded (glibc boards)
   pspexp-pkg         install, remove and list packages on the board
   pspexp-pkg-apt     the root helper pspexp-pkg calls through sudo (recipes through apt)
+  pspexp-bt          Bluetooth headphones or speakers for the sound: scan, pair, choose, volume
   pspexp-apt-setup   set a Debian board up for the repository: board kind, key, apt source, sudo rule
 
 packages/          what the launcher offers, for any board

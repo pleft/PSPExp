@@ -92,6 +92,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		sudo install -m 0755 $S/scripts/board/pspexp-exec /usr/local/bin/pspexp-exec
 		sudo install -m 0755 $S/scripts/board/pspexp-run /usr/local/bin/pspexp-run
 		sudo install -m 0755 $S/scripts/board/pspexp-pkg /usr/local/bin/pspexp-pkg
+		sudo install -m 0755 $S/scripts/board/pspexp-bt /usr/local/bin/pspexp-bt
 		sudo install -m 0644 $S/build/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp.so.new && sudo mv /usr/local/lib/libsdl-pspexp.so.new /usr/local/lib/libsdl-pspexp.so
 		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 			sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
@@ -106,7 +107,7 @@ else
 		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends pspexp-core >/dev/null
 		rm -f /tmp/keyring.gpg /tmp/pspexp-apt-setup /tmp/pspexp-pkg-apt
 		# copies from the older way would come first in PATH and shadow the package's
-		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
+		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
 		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/share/pspexp/launcher
 		dpkg-query -W pspexp-core pspexp-runtime"
 	CONSOLE=/usr/bin/pspexp-term
@@ -120,7 +121,9 @@ U=$(id -un); H=$HOME
 sudo install -d -m 0755 /etc/pspexp
 sudo install -d -m 0755 -o $U -g $U /opt/pspexp /opt/pspexp/apps /opt/pspexp/systems
 # nmcli joins Wi-Fi with the password among its arguments: sudo must not log those
-printf '%s\n' "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli" 'Defaults!/usr/bin/nmcli !log_allowed' | sudo tee /etc/sudoers.d/pspexp >/dev/null
+printf '%s\n' "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli, /usr/sbin/rfkill unblock bluetooth" 'Defaults!/usr/bin/nmcli !log_allowed' | sudo tee /etc/sudoers.d/pspexp >/dev/null
+# the user's PipeWire runs without a login (Bluetooth sound, pspexp-bt: the console is a system service)
+sudo loginctl enable-linger $U 2>/dev/null || true
 sudo chmod 0440 /etc/sudoers.d/pspexp
 echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"054c\", ATTR{idProduct}==\"01ca\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
 sudo udevadm control --reload-rules || true

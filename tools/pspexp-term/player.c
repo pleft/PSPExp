@@ -35,6 +35,7 @@ static struct {
     /* the clock: pos = base + (now - t0), never past what was sent */
     double base, t0, sent, paused_at;
     int eof, reset_due;
+    int local;                 /* started while the sound went to the board's output (Bluetooth) */
 } P;
 
 static double now_s(void) { return (double)pspexp_time_us() / 1e6; }
@@ -483,7 +484,7 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
     snprintf(P.path, sizeof(P.path), "%s", path);
     if (dot && !strcasecmp(dot, ".mp3")) {
         if (mp3_open(path, err, en) < 0) { player_stop(); return -1; }
-        if (pspexp_audio_mp3_supported(ctx)) { P.kind = K_MP3; snprintf(P.info.decoder, sizeof(P.info.decoder), "Decoded on the PSP (Media Engine)"); r = 0; }
+        if (pspexp_audio_mp3_supported(ctx) && !pspexp_audio_local(ctx)) { P.kind = K_MP3; snprintf(P.info.decoder, sizeof(P.info.decoder), "Decoded on the PSP (Media Engine)"); r = 0; }
         else { free(P.buf); P.buf = NULL; }   /* an older runtime: ffmpeg's, below */
     } else if (dot && !strcasecmp(dot, ".wav")) {
         r = wav_open(path, err, en);
@@ -502,6 +503,8 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
         P.kind = K_PIPE; P.fd = -1; P.pid = -1;
         snprintf(P.info.decoder, sizeof(P.info.decoder), "Decoded on the board (ffmpeg)");
     }
+    P.local = pspexp_audio_local(ctx);
+    if (P.local && P.kind != K_MP3) snprintf(P.info.decoder, sizeof(P.info.decoder), "%s", P.kind == K_WAV ? "On the board's Bluetooth device" : "Decoded on the board, to Bluetooth");
     if (!P.info.title[0]) {   /* the file's name, without its extension */
         const char *base = sl ? sl + 1 : path;
         int len = dot && dot > base ? (int)(dot - base) : (int)strlen(base);
@@ -546,7 +549,18 @@ void player_seek(double delta_s)
 void player_pump(PspExpContext *ctx)
 {
     double now, until;
-    if (!ctx || pspexp_link_state(ctx) != PSPEXP_LINK_CONNECTED) return;
+    if (!ctx) return;
+    if (P.kind && !P.info.ended && pspexp_audio_local(ctx) != P.local) {   /* the earbuds came or went: the track again from here, the right way */
+        char path[sizeof(P.path)], err[200];
+        double at = P.info.paused ? P.paused_at : clock_pos();
+        int paused = P.info.paused;
+        snprintf(path, sizeof(path), "%s", P.path);
+        if (player_start(ctx, path, err, sizeof(err)) == 0) {
+            restart_at(at);
+            if (paused) player_toggle_pause();
+        }
+    }
+    if (!P.local && pspexp_link_state(ctx) != PSPEXP_LINK_CONNECTED) return;
     if (P.reset_due) { pspexp_audio_stream_reset(ctx); P.reset_due = 0; }
     if (!P.kind || P.info.paused || P.info.ended) return;
     now = now_s();

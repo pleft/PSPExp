@@ -21,6 +21,7 @@ PSP_EXPORT_FUNC(pspexpUsbHomeHeld)
 PSP_EXPORT_FUNC(pspexpUsbSetClock)
 PSP_EXPORT_FUNC(pspexpUsbSetZone)
 PSP_EXPORT_FUNC(pspexpUsbGetZone)
+PSP_EXPORT_FUNC(pspexpUsbButtons)
 PSP_EXPORT_END
 
 PSP_END_EXPORTS

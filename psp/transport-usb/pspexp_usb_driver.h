@@ -38,6 +38,7 @@ int pspexpUsbWrite(const void *data, int len);
 int pspexpUsbGetStats(PspExpUsbStats *out);
 /* 1 while HOME is pressed (read in kernel mode). */
 int pspexpUsbHomeHeld(void);
+unsigned int pspexpUsbButtons(void);   /* kernel mode's view: volume buttons, HOME, NOTE too */
 /* Set the system clock (UTC): microseconds since 0001-01-01, in two halves. 0 or < 0. */
 int pspexpUsbSetClock(unsigned int tick_lo, unsigned int tick_hi);
 /* The time-zone settings (Settings > Date & Time): minutes east of UTC without

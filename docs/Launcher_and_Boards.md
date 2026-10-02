@@ -18,6 +18,7 @@ GameShell, hence sections 1-5; section 6 is the emulators. Scripts:
 8. Integration tests on a real PSP
 9. The PSP's clock from the board
 10. System Monitor and Packages
+11. Sound on Bluetooth
 
 ---
 
@@ -257,11 +258,11 @@ PSP-drawn or mirrored, folder and entry file for games and apps; when it was
 played and whether it is a favourite. Cross plays, square favourites.
 
 **System** runs Refresh library; Wi-Fi (PSP direct / home network, through
-`pspexp-wifi-mode`, shown when installed); Wi-Fi network; Time zone; Box art
+`pspexp-wifi-mode`, shown when installed); Wi-Fi network; Sound output (§11); Time zone; Box art
 on/off (kept in `settings`); Console; Restart and Power off (asking for a
 second press); About. Root commands go through `sudo -n` with the rule
 `/etc/sudoers.d/pspexp` (GameShell: the staging list; Pi: `install.sh`),
-which allows `timedatectl set-timezone` and `nmcli`. The fonts and icons are
+which allows `timedatectl set-timezone`, `nmcli` and `rfkill unblock bluetooth`. The fonts and icons are
 installed to `/usr/local/share/pspexp/launcher/`.
 
 The board's own settings (`launcher_board.c`), with each board's tools:
@@ -1268,4 +1269,55 @@ The integration tests have an `apps` suite:
 
 `--store-writes` adds a remove and reinstall of the smallest package. The
 control port gained `category NAME`.
+
+---
+
+## 11. Sound on Bluetooth (2026-10-03)
+
+With Bluetooth headphones or a speaker paired with the board, the sound of
+everything on the PSP (games, emulators, the music player, the terminal's
+programs) plays there instead of on the PSP, and the USB link carries none.
+
+**System > Sound output** (shown where `pspexp-bt available` says the board
+can: `bluetoothctl`, PipeWire's `pw-play`, a controller) scans for 8 s and
+lists The PSP first, then the devices found, sound devices first, each
+"connected", "paired" or new. Cross uses one: `pspexp-bt use` pairs it when
+new (it must be in pairing mode), trusts and connects it, waits for its
+PipeWire node and remembers it in `~/.config/pspexp/audio-out`; the first
+time, its volume is set to 40 % (at the device's own 100 % earbuds were far
+too loud). Square forgets a paired device, triangle scans again; cross on The
+PSP sends the sound back (the device stays paired). The row shows where the
+sound goes: the PSP, the device's name, or "PSP (NAME away)" while the chosen
+device is not connected.
+
+**The route.** The console checks every 3 s (`pspexp-bt route`, written to
+`/tmp/pspexp-audio-route-UID` whole and renamed: "pw NODE NAME", "psp - NAME"
+or "psp"). Every program's libpspexp looks at that file at most twice a
+second (a `stat`); while it says "pw", `pspexp_audio_stream` writes to a
+`pw-play` on the board (`host/libpspexp/pspexp_local_audio.c`, through a
+socket so a dead pw-play is an error, not a SIGPIPE) and the PSP's stream is
+reset once. So the sound moves to the earbuds a few seconds after they
+connect, and back to the PSP when they go into their case. The music player
+plays MP3 on the board then (ffmpeg), since the PSP's decoder cannot reach
+the earbuds, and starts the track again at the same place when the route
+changes. Cached sound effects (`PLAY_SOUND`, the native WarCraft port) stay
+on the PSP.
+
+**Volume.** The PSP's own volume buttons: the runtime reads them in kernel
+mode (`pspexpUsbButtons` in the USB driver; user mode never sees them) and
+sends them with the other buttons (`PSPEXP_BUTTON_VOLUP` / `VOLDOWN`, runtimes
+from 2026-10-03). While the sound is on Bluetooth, libpspexp turns each press
+into `pspexp-bt volume +5` / `-5` (held: repeated every 0.15 s after 0.4 s)
+on the device's PipeWire node, in whichever program has the PSP; with the
+sound on the PSP, they set the PSP's own volume as always.
+
+**The board's side.** The console is a system service, so the user's
+PipeWire must run without a login: `install.sh` turns on lingering
+(`loginctl enable-linger`), and `pspexp-bt` sets `XDG_RUNTIME_DIR` when
+missing. The Pi 400's radio came soft-blocked; `pspexp-bt` unblocks it through
+the sudo rule. Tested on the Pi 400 with HUAWEI FreeBuds SE (2026-10-03): the
+music player, the Mega Drive emulator and OpenJazz, played by hand; SBC codec.
+Bluetooth adds its own delay (typically 150-250 ms), noticeable in action
+games, not in music. Not tried: the GameShell (its radio has Bluetooth), the
+volume buttons on the PSP itself.
 

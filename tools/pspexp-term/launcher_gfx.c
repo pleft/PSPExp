@@ -450,7 +450,7 @@ static const IconName ICONS[] = {
     { "layers", 0xe529 }, { "house", 0xe0f5 }, { "circle-power", 0xe550 }, { "list", 0xe106 }, { "wand-sparkles", 0xe357 },
     { "code", 0xe093 }, { "paintbrush", 0xe2e7 }, { "cloud", 0xe088 }, { "globe", 0xe0e8 }, { "link", 0xe102 }, { "unplug", 0xe45d },
     { "gem", 0xe242 }, { "tablet-smartphone", 0xe50a }, { "monitor-play", 0xe485 }, { "keyboard", 0xe284 },
-    { "delete", 0xe0ae }, { "space", 0xe3dd }, { "corner-down-left", 0xe0a1 }, { "check", 0xe06c }, { "x", 0xe1b2 },
+    { "delete", 0xe0ae }, { "space", 0xe3dd }, { "corner-down-left", 0xe0a1 }, { "check", 0xe06c }, { "headphones", 0xe0f1 }, { "bluetooth", 0xe05c }, { "bluetooth-connected", 0xe1b8 }, { "bluetooth-off", 0xe1b9 }, { "speaker", 0xe166 }, { "x", 0xe1b2 },
     { "toggle-left", 0xe18b }, { "toggle-right", 0xe18c }, { "image", 0xe0f6 }, { "image-off", 0xe1c0 }, { "router", 0xe3bf },
     { "microchip", 0xe61a }, { "circuit-board", 0xe403 }, { "laptop", 0xe1cd }, { "computer", 0xe4e4 },
     { "plug", 0xe37f }, { "ethernet-port", 0xe620 },

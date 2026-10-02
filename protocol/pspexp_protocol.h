@@ -141,6 +141,8 @@ enum PspExpVertexFormat {
 #define PSPEXP_BUTTON_HOME      0x010000u
 #define PSPEXP_BUTTON_HOLD      0x020000u
 #define PSPEXP_BUTTON_NOTE      0x800000u
+#define PSPEXP_BUTTON_VOLUP     0x100000u   /* runtimes from 2026-10-03 (read in kernel mode) */
+#define PSPEXP_BUTTON_VOLDOWN   0x200000u
 #define PSPEXP_ANALOG_CENTER    128
 
 /* Resource error reasons (RESOURCE_ERROR.reason). */

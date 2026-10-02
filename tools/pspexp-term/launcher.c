@@ -14,6 +14,7 @@
  * folders. Every movement is eased by time; a still screen sends nothing.
  */
 #include "launcher.h"
+#include "btaudio.h"
 #include "launcher_lib.h"
 #include "launcher_board.h"
 #include "launcher_ui.h"
@@ -201,6 +202,7 @@ static void cats_build(void)
     if (g_wifi_cmd) ACTION("wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
     if (board_wifi_kind() != BOARD_WIFI_NONE)
         ACTION("wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
+    if (bt_available()) ACTION("sound", "Sound output", "headphones", "The PSP, or Bluetooth headphones or a speaker paired with this board");
     ACTION("tz", "Time zone", "clock", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
@@ -513,7 +515,8 @@ static void bg_poll(uint64_t now)
     int st;
     if (g_bg_pid <= 0 || waitpid(g_bg_pid, &st, WNOHANG) != g_bg_pid) return;
     g_bg_pid = 0;
-    board_refresh();   /* a setting may have changed: the rows show the new values */
+    board_refresh();
+    bt_route_soon();   /* a sound device may have been chosen */   /* a setting may have changed: the rows show the new values */
     toast(g_bg_icon, WIFEXITED(st) && WEXITSTATUS(st) == 0 ? g_bg_ok : g_bg_fail, now);
 }
 
@@ -553,13 +556,14 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "tz")) { int k = board_zone_find(g_cur_tz); return k >= 0 ? board_zone(k)->label : g_cur_tz[0] ? g_cur_tz : "UTC"; }
     if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
+    if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
     return NULL;
 }
 
 /* ---- launching and actions ------------------------------------------------------------------- */
 
-enum { PICK_TZ, PICK_WIFI };
+enum { PICK_TZ, PICK_WIFI, PICK_BT };
 static void pick_open(int kind, uint64_t now);
 
 static int g_test_mode;
@@ -632,6 +636,8 @@ static void run_action(LEntry *e, uint64_t now)
     } else if (!strcmp(a, "wifinet")) {
         if (wifi_mode_psp()) toast("wifi", "The Wi-Fi is the PSP's access point: switch it to the home network first", now);
         else pick_open(PICK_WIFI, now);
+    } else if (!strcmp(a, "sound")) {
+        pick_open(PICK_BT, now);
     } else if (!strcmp(a, "about")) {
         about_collect();
         g_about_at = now;
@@ -1229,12 +1235,53 @@ static BoardNet g_nets[40];
 static BoardNet g_join;               /* the network the password is for */
 static UiKbd g_kbd;                   /* the password being typed: wiped after use */
 
+/* Bluetooth devices (pspexp-bt devices): row 0 of the picker is the PSP itself */
+typedef struct BtDev { char addr[20], name[64]; int paired, connected, audio; } BtDev;
+static BtDev g_bt[24];
+static char g_bt_chosen[24];
+
+static int bt_cmp(const void *a, const void *b)
+{
+    const BtDev *x = a, *y = b;
+    if (x->audio != y->audio) return y->audio - x->audio;     /* sound devices first */
+    if (x->paired != y->paired) return y->paired - x->paired;
+    return strcmp(x->name, y->name);
+}
+
+static int bt_parse(const char *text)
+{
+    int n = 0;
+    const char *p = text;
+    while (*p && n < (int)(sizeof(g_bt) / sizeof(g_bt[0]))) {
+        const char *e = strchr(p, '\n');
+        char line[200];
+        size_t l = e ? (size_t)(e - p) : strlen(p);
+        if (l < sizeof(line)) {
+            BtDev *d = &g_bt[n];
+            char *f[5], *q;
+            int k = 0;
+            memcpy(line, p, l); line[l] = 0;
+            for (q = line, f[k++] = q; *q && k < 5; q++) if (*q == '|') { *q = 0; f[k++] = q + 1; }
+            if (k == 5) {
+                snprintf(d->addr, sizeof(d->addr), "%s", f[0]);
+                snprintf(d->name, sizeof(d->name), "%s", f[1]);
+                d->paired = atoi(f[2]); d->connected = atoi(f[3]); d->audio = atoi(f[4]);
+                n++;
+            }
+        }
+        p = e ? e + 1 : p + l;
+    }
+    qsort(g_bt, (size_t)n, sizeof(BtDev), bt_cmp);
+    return n;
+}
+
 static void scan_start(void)
 {
     char cmd[1024];
     pid_t pid;
     if (g_scan_pid > 0) return;
-    board_wifi_scan_command(board_wifi_kind(), cmd, sizeof(cmd));
+    if (g_pick_kind == PICK_BT) snprintf(cmd, sizeof(cmd), "pspexp-bt devices 8");
+    else board_wifi_scan_command(board_wifi_kind(), cmd, sizeof(cmd));
     pid = fork();
     if (pid == 0) {
         int fd = open("/tmp/pspexp-wifi-scan.txt", O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -1260,10 +1307,12 @@ static void scan_poll(void)
         if (f) { n = fread(buf, 1, sizeof(buf) - 1, f); fclose(f); }
         buf[n] = 0;
         unlink("/tmp/pspexp-wifi-scan.txt");
-        g_pick_n = board_wifi_parse(board_wifi_kind(), buf, g_nets, (int)(sizeof(g_nets) / sizeof(g_nets[0])));
+        if (g_pick_kind == PICK_BT) g_pick_n = 1 + bt_parse(buf);
+        else g_pick_n = board_wifi_parse(board_wifi_kind(), buf, g_nets, (int)(sizeof(g_nets) / sizeof(g_nets[0])));
     }
     g_pick_sel = 0;
-    { int i; for (i = 0; i < g_pick_n; i++) if (!strcmp(g_nets[i].ssid, g_cur_ssid)) g_pick_sel = i; }
+    if (g_pick_kind == PICK_BT) { int i; for (i = 1; i < g_pick_n; i++) if (!strcmp(g_bt[i - 1].addr, g_bt_chosen)) g_pick_sel = i; }
+    else { int i; for (i = 0; i < g_pick_n; i++) if (!strcmp(g_nets[i].ssid, g_cur_ssid)) g_pick_sel = i; }
     g_dirty = 1;
 }
 
@@ -1278,6 +1327,7 @@ static void pick_open(int kind, uint64_t now)
         g_pick_sel = k >= 0 ? k : 0;
     } else {
         g_pick_sel = 0;
+        if (kind == PICK_BT) bt_chosen(g_bt_chosen, sizeof(g_bt_chosen));
         scan_start();
     }
     g_mode = M_PICK; g_overlay_a = 0; g_open_at = now; g_sel_since = now;
@@ -1306,7 +1356,33 @@ static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_pick_sel = g_pick_sel > 6 ? g_pick_sel - 6 : 0;
     if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_pick_n) g_pick_sel = g_pick_sel + 6 < g_pick_n ? g_pick_sel + 6 : g_pick_n - 1;
     if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; g_dirty = 1; return; }
-    if (g_pick_kind == PICK_WIFI && (pressed & PSPEXP_BUTTON_TRIANGLE)) scan_start();
+    if ((g_pick_kind == PICK_WIFI || g_pick_kind == PICK_BT) && (pressed & PSPEXP_BUTTON_TRIANGLE)) scan_start();
+    if (g_pick_kind == PICK_BT && g_pick_n && !g_scanning && (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_SQUARE))) {
+        char cmd[160], ok[128], fail[160];
+        if (g_pick_sel == 0) {   /* the PSP */
+            if (!(pressed & PSPEXP_BUTTON_CROSS)) return;
+            bg_run("pspexp-bt psp", "volume-2", "Sound: the PSP", "Could not switch the sound");
+            g_bt_chosen[0] = 0;
+        } else {
+            const BtDev *d = &g_bt[g_pick_sel - 1];
+            if (pressed & PSPEXP_BUTTON_SQUARE) {
+                if (!d->paired) return;
+                snprintf(cmd, sizeof(cmd), "pspexp-bt forget '%s'", d->addr);
+                snprintf(ok, sizeof(ok), "Forgot %s", d->name);
+                bg_run(cmd, "bluetooth-off", ok, "Could not forget it");
+                if (!strcmp(d->addr, g_bt_chosen)) g_bt_chosen[0] = 0;
+            } else {
+                snprintf(cmd, sizeof(cmd), "pspexp-bt use '%s'", d->addr);
+                snprintf(ok, sizeof(ok), "Sound: %s", d->name);
+                snprintf(fail, sizeof(fail), "Could not connect %s%s", d->name, d->paired ? "" : " (in pairing mode?)");
+                bg_run(cmd, "bluetooth-connected", ok, fail);
+                toast("bluetooth", d->paired ? "Connecting..." : "Pairing...", now);
+            }
+        }
+        g_mode = M_BROWSE;
+        g_dirty = 1;
+        return;
+    }
     if ((pressed & PSPEXP_BUTTON_CROSS) && g_pick_n && !g_scanning) {
         if (g_pick_kind == PICK_TZ) {
             const BoardZone *z = board_zone(g_pick_sel);
@@ -2080,19 +2156,19 @@ static void draw_pick(float dt)
 {
     int a, i, fx = 16, fw = SCREEN_W - 32, x;
     float target;
-    const char *title = g_pick_kind == PICK_TZ ? "Time zone" : "Wi-Fi networks";
+    const char *title = g_pick_kind == PICK_TZ ? "Time zone" : g_pick_kind == PICK_BT ? "Sound output" : "Wi-Fi networks";
     g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
     a = (int)(g_overlay_a * 255);
-    gfx_icon(g_pick_kind == PICK_TZ ? "clock" : "wifi", 20, 16, 12, C_ACCENT, a);
+    gfx_icon(g_pick_kind == PICK_TZ ? "clock" : g_pick_kind == PICK_BT ? "headphones" : "wifi", 20, 16, 12, C_ACCENT, a);
     gfx_text(FONT_TITLE, 44, 11, title, C_TEXT, a, 0);
     if (g_pick_kind == PICK_WIFI && g_cur_ssid[0]) {
         char s[96];
         snprintf(s, sizeof(s), "on %s", g_cur_ssid);
         gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), 15, s, C_MUTED, a, 0);
     }
-    if (g_pick_kind == PICK_WIFI && g_scanning) {
+    if (g_pick_kind != PICK_TZ && g_scanning) {
         static const char *dots[] = { "Scanning", "Scanning.", "Scanning..", "Scanning..." };
-        gfx_icon("wifi", 24, SCREEN_W / 2 - 12, 110, C_MUTED, a * 200 / 255);
+        gfx_icon(g_pick_kind == PICK_BT ? "bluetooth" : "wifi", 24, SCREEN_W / 2 - 12, 110, C_MUTED, a * 200 / 255);
         gfx_text(FONT_BODY, SCREEN_W / 2 - gfx_text_width(FONT_BODY, "Scanning...") / 2, 144, dots[g_caret & 3], C_SUB, a, 0);
     } else if (!g_pick_n) {
         const char *m = "No networks found";
@@ -2112,6 +2188,14 @@ static void draw_pick(float dt)
             if (g_pick_kind == PICK_TZ) {
                 const BoardZone *z = board_zone(i);
                 label = z->label; value = z->offset; current = !strcmp(z->iana, g_cur_tz); icon = current ? "check" : "clock";
+            } else if (g_pick_kind == PICK_BT) {
+                if (i == 0) { label = "The PSP"; current = !g_bt_chosen[0]; icon = current ? "check" : "volume-2"; value = "its speaker or headphone socket"; }
+                else {
+                    const BtDev *d = &g_bt[i - 1];
+                    label = d->name; current = !strcmp(d->addr, g_bt_chosen);
+                    icon = current ? "check" : d->connected ? "bluetooth-connected" : d->audio ? "headphones" : "bluetooth";
+                    value = d->connected ? "connected" : d->paired ? "paired" : !d->audio ? "not audio?" : NULL;
+                }
             } else {
                 const BoardNet *nw = &g_nets[i];
                 label = nw->ssid; current = !strcmp(nw->ssid, g_cur_ssid);
@@ -2131,10 +2215,11 @@ static void draw_pick(float dt)
         gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     }
     x = 16;
-    x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : "Join");
+    x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : g_pick_kind == PICK_BT ? "Use" : "Join");
+    if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired && !g_scanning) x = hint_btn(x, 's', "Forget");
     if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
         x = hint_btn(x, 's', "New password");
-    if (g_pick_kind == PICK_WIFI) x = hint_btn(x, 't', "Scan again");
+    if (g_pick_kind != PICK_TZ) x = hint_btn(x, 't', "Scan again");
     x = hint_btn(x, 'o', "Back");
     (void)x;
 }

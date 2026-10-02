@@ -459,6 +459,10 @@ The PSP maintains a **jitter buffer** for the stream with a configurable target 
 
 A runtime with `PSPEXP_FEATURE_AUDIO_MP3` takes `AUDIO_CODED_STREAM` (0x0307): whole MP3 frames (MPEG-1, 2 or 2.5 layer III), any number a message. The PSP decodes each with the firmware's audio codec (`sceAudiocodec`, which runs on the Media Engine: the main CPU waits for each frame and does nothing else), resamples it linearly to the stream's rate when the file's differs, and writes it into the same stream as `AUDIO_STREAM`, so `AUDIO_STATUS`, `AUDIO_STREAM_RESET` and the jitter buffer apply unchanged. A frame that does not decode is skipped. The codec is set up again when the frames' version, rate or channel mode change (the next track): PPSSPP's decoder crashed on such a change. Music costs a few KB a second on the link instead of 176 KB (128 kbps MP3: 16 KB/s) and next to no board CPU, which matters on the Omega. The console's music player uses it (docs/Launcher_and_Boards.md §7.2); `protocol/pspexp_mp3.c` parses frame headers on both sides. Tested in PPSSPP (MPEG-1 stereo 44.1 kHz CBR, MPEG-2 mono 22.05 kHz VBR, with a change of format between tracks: no drops, no underruns), then on the PSP-1000 from the Pi 400 (2026-10-03): a real song, MP3 VBR ~197 kbps, played by hand ("cool!"), with pauses and seeks: no dropped frames, 7 underruns in about two minutes, ≈ 25 KB/s on the link.
 
+### Sound on the board's Bluetooth (2026-10-03)
+
+When the console has routed sound to a Bluetooth device paired with the board (`pspexp-bt`, System > Sound output), libpspexp writes the stream to a `pw-play` on the board instead of `AUDIO_STREAM`, in every program, and the link carries no sound; the PSP's volume buttons (`PSPEXP_BUTTON_VOLUP` / `VOLDOWN`, read by the runtime in kernel mode) set the device's volume. Details in docs/Launcher_and_Boards.md §11.
+
 Graphics, input, resources, and audio are separate logical protocol channels even when they share the same physical connection.
 
 ---
@@ -1106,7 +1110,7 @@ Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications
 - triangle-based batches for rotation/skew (static meshes and 3D commands: done for OpenGL 1.x, §12a);
 - offloading batch expansion or audio mixing to the Media Engine (our own code on it: first a small test on the real PSP, as PPSSPP does not run code there; does it coexist with the firmware's codec, which uses it for MP3 since 2026-10-03?);
 - **a video player** in the file manager: H.264 up to 480x272 decoded on the PSP (`sceMpeg` / `sceVideocodec`, on the Media Engine like MP3), 100–200 KB/s over the link instead of the 8 MB/s that finished frames need; other formats converted on the board by ffmpeg (the Pi);
-- **sound to a Bluetooth speaker or headphones paired with the board**, when the board has Bluetooth (the Pi 400): a game's or the player's sound would leave the USB link and the PSP's audio thread altogether. Open: where the console sends it (the audio FIFO's ALSA device, PipeWire/BlueALSA), latency for games, and the PSP's own speaker staying silent;
+- sound to a Bluetooth device paired with the board: done 2026-10-03 (§8, docs/Launcher_and_Boards.md §11); open: the GameShell, a volume indicator on screen;
 - compute/RPC services;
 - network/storage services;
 - transparent or semi-transparent engine adapters;

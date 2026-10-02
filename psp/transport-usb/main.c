@@ -498,6 +498,19 @@ int pspexpUsbHomeHeld(void)
     return held;
 }
 
+/* The buttons as kernel mode sees them: with the volume buttons (and HOME,
+ * NOTE), which user mode's reads leave out. The volume buttons set the
+ * sound on a board's Bluetooth device (libpspexp, pspexp-bt). */
+unsigned int pspexpUsbButtons(void)
+{
+    int k1 = pspSdkSetK1(0);
+    SceCtrlData pad;
+    unsigned int b = 0;
+    if (sceCtrlPeekBufferPositive(&pad, 1) > 0) b = pad.Buttons;
+    pspSdkSetK1(k1);
+    return b;
+}
+
 /* The system clock (UTC), in microseconds since 0001-01-01: setting it is
  * kernel-only. For CLOCK_SET: a PSP whose clock battery ran flat starts years
  * behind, and the board it plays for knows the time. */

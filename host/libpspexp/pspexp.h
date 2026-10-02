@@ -125,6 +125,12 @@ int pspexp_audio_stream_reset(PspExpContext *ctx);
  * when the runtime offers it (PSPEXP_FEATURE_AUDIO_MP3): whole MP3 frames,
  * any number, at their own rate (the PSP resamples). A tenth of a second of
  * MP3 is a few kilobytes where PCM is 17 KB. */
+/* 1 while the stream plays on the board's own output instead of the PSP:
+ * the console routed it to a Bluetooth device (pspexp-bt) and it is
+ * connected. pspexp_audio_stream then writes there and the link carries no
+ * sound; compressed audio (below) still goes to the PSP, so a sender
+ * decodes it itself meanwhile. */
+int pspexp_audio_local(PspExpContext *ctx);
 int pspexp_audio_mp3_supported(const PspExpContext *ctx);
 int pspexp_audio_coded(PspExpContext *ctx, int codec, const void *frames, uint32_t bytes);
 const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx);

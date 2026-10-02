@@ -1,4 +1,6 @@
 #include "pspexp.h"
+#include "pspexp_local_audio.h"
+#include "pspexp_time.h"
 #include "../../protocol/serialization/pspexp_writer.h"
 #include "../../runtime/pspexp_cache.h"   /* PSPEXP_KIND_* for replay ordering */
 #include <stdlib.h>
@@ -53,6 +55,8 @@ struct PspExpContext {
     FrameRecord ring[SEND_RING];
     PspExpMemoryStatus mem;
     PspExpAudioStatus audio;
+    PspExpLocalAudio la;                /* sound on the board's output (Bluetooth): pspexp_local_audio.c */
+    int la_was;
     PspExpStats stats;
     PspExpLogFn log; void *log_user;
     PspExpMessageHook hook; void *hook_user;
@@ -95,6 +99,7 @@ PspExpContext *pspexp_create(PspExpTransport *transport, const PspExpConfig *cfg
     PspExpContext *ctx = (PspExpContext *)calloc(1, sizeof(*ctx));
     if (!ctx) return NULL;
     ctx->t = transport;
+    pspexp_la_init(&ctx->la);
     if (cfg) ctx->cfg = *cfg; else pspexp_config_default(&ctx->cfg);
     if (ctx->cfg.max_in_flight < 1) ctx->cfg.max_in_flight = 1;
     if (ctx->cfg.max_batch_records == 0 || ctx->cfg.max_batch_records > PSPEXP_BATCH_MAX_RECORDS)
@@ -114,6 +119,7 @@ void pspexp_destroy(PspExpContext *ctx)
 {
     size_t i;
     if (!ctx) return;
+    pspexp_la_close(&ctx->la);
     if (ctx->t && ctx->t->close) ctx->t->close(ctx->t);
     for (i = 0; i < ctx->nres; i++) free(ctx->res[i].retained);
     free(ctx->res);
@@ -568,6 +574,7 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
         if (pspexp_message_expect(m, sizeof(PspExpInput)) < 0) break;
         memcpy(&ctx->input, m->payload, sizeof(ctx->input));
         ctx->have_input = 1;
+        pspexp_la_buttons(&ctx->la, ctx->input.buttons, pspexp_time_us());   /* volume, while the sound is on Bluetooth */
         ctx->stats.inputs_received++;
         break;
     case PSPEXP_OP_RESOURCE_READY:
@@ -854,6 +861,10 @@ int pspexp_audio_stream(PspExpContext *ctx, const int16_t *stereo, uint32_t fram
     PspExpAudioStream as;
     uint8_t *p;
     if (frames == 0) return 0;
+    if (pspexp_audio_local(ctx)) {
+        ctx->stats.audio_frames_sent += frames;
+        return pspexp_la_write(&ctx->la, stereo, frames);
+    }
     if (ctx->state != PSPEXP_LINK_CONNECTED) return -1;
     memset(&as, 0, sizeof(as));
     as.frames = frames;
@@ -893,8 +904,18 @@ int pspexp_audio_coded(PspExpContext *ctx, int codec, const void *frames, uint32
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
 }
 
+int pspexp_audio_local(PspExpContext *ctx)
+{
+    int on = pspexp_la_active(&ctx->la, ctx->cfg.audio_rate, pspexp_time_us());
+    if (on && !ctx->la_was && ctx->state == PSPEXP_LINK_CONNECTED)
+        pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STREAM_RESET, NULL, 0);   /* what the PSP still holds: not twice */
+    ctx->la_was = on;
+    return on;
+}
+
 int pspexp_audio_stream_reset(PspExpContext *ctx)
 {
+    if (pspexp_audio_local(ctx)) pspexp_la_reset(&ctx->la);
     return pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STREAM_RESET, NULL, 0);
 }
 

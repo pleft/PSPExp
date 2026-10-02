@@ -1,0 +1,111 @@
+#!/bin/sh
+# pspexp-bt: Bluetooth headphones and speakers for PSPExp's sound (BlueZ and
+# PipeWire on the board; docs/Launcher_and_Boards.md §11). Runs as the
+# console's user. The chosen device is kept in ~/.config/pspexp/audio-out
+# ("psp", or a device's address); while it is connected, programs' sound
+# plays on it through PipeWire instead of going to the PSP (libpspexp reads
+# the route file the console writes from `route`).
+#
+#   pspexp-bt devices [SECS]   scan SECS seconds (default 8), then one line per device:
+#                              ADDRESS|NAME|paired|connected|audio (0/1 each)
+#   pspexp-bt use ADDRESS      pair (when new), trust and connect it; sound goes to it
+#   pspexp-bt psp              sound back to the PSP (the device stays paired)
+#   pspexp-bt forget ADDRESS   unpair it (and sound back to the PSP if it was the one)
+#   pspexp-bt volume [+N|-N|N] the chosen device's volume, in percent (0-100): changed, then printed
+#   pspexp-bt route            what sound does now: "pw NODE NAME" (the chosen device,
+#                              connected: its PipeWire node and name), "psp - NAME" (chosen,
+#                              not connected: the PSP meanwhile) or "psp"
+#   pspexp-bt available        exit 0 when this board can do it
+set -u
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/pspexp/audio-out"
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+export XDG_RUNTIME_DIR
+
+chosen() { cat "$CONF" 2>/dev/null || echo psp; }
+choose() { mkdir -p "$(dirname "$CONF")" && echo "$1" > "$CONF"; }
+
+# the radio on: unblocked (a sudoers rule allows exactly this), then powered
+power_on() {
+	if command -v rfkill >/dev/null 2>&1 && rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; then
+		sudo -n /usr/sbin/rfkill unblock bluetooth 2>/dev/null || true
+		sleep 1
+	fi
+	bluetoothctl power on >/dev/null 2>&1
+}
+
+# the chosen device's PipeWire node id (wpctl takes ids), or nothing
+node_id() {
+	A=$(chosen); [ "$A" != psp ] || return 1
+	wpctl status -n 2>/dev/null | grep "bluez_output\.$(echo "$A" | tr : _)" | grep -o '[0-9][0-9]*\.' | head -1 | tr -d .
+}
+
+flag() { bluetoothctl info "$1" 2>/dev/null | grep -q "^[[:space:]]*$2: yes" && echo 1 || echo 0; }
+
+case "${1:-}" in
+available)
+	command -v bluetoothctl >/dev/null 2>&1 && command -v pw-play >/dev/null 2>&1 && bluetoothctl list 2>/dev/null | grep -q Controller ;;
+devices)
+	power_on
+	timeout $((${2:-8} + 3)) bluetoothctl --timeout "${2:-8}" scan on >/dev/null 2>&1
+	bluetoothctl devices | while read -r _ addr name; do
+		[ -n "$addr" ] || continue
+		info=$(bluetoothctl info "$addr" 2>/dev/null)
+		# only what can play sound: an audio sink, or a name (a nameless address is noise)
+		audio=0; echo "$info" | grep -qiE "Audio Sink|Headset|Handsfree|Icon: audio" && audio=1
+		[ "$name" = "$(echo "$addr" | tr : -)" ] && [ $audio = 0 ] && continue
+		p=0; echo "$info" | grep -q "Paired: yes" && p=1
+		c=0; echo "$info" | grep -q "Connected: yes" && c=1
+		echo "$addr|$name|$p|$c|$audio"
+	done ;;
+use)
+	A="${2:?address}"
+	power_on
+	if [ "$(flag "$A" Paired)" = 0 ]; then
+		timeout 12 bluetoothctl --timeout 8 scan on >/dev/null 2>&1   # it must be seen before it pairs
+		bluetoothctl --timeout 25 pair "$A" >/dev/null 2>&1 || { echo "could not pair $A (is it in pairing mode?)" >&2; exit 1; }
+	fi
+	bluetoothctl trust "$A" >/dev/null 2>&1
+	if [ "$(flag "$A" Connected)" = 0 ]; then
+		bluetoothctl --timeout 15 connect "$A" >/dev/null 2>&1
+	fi
+	for i in 1 2 3 4 5 6 7 8 9 10; do   # its PipeWire node follows the connection by a moment
+		if [ "$(flag "$A" Connected)" = 1 ] && wpctl status -n 2>/dev/null | grep -q "bluez_output.$(echo "$A" | tr : _)"; then
+			new=0; [ "$(chosen)" = "$A" ] || [ -f "$CONF.$A" ] || new=1
+			choose "$A"
+			# the first time: 40 %, not the device's full volume (earbuds at 100 % hurt)
+			[ $new = 1 ] && { id=$(node_id) && wpctl set-volume "$id" 0.40 >/dev/null 2>&1; touch "$CONF.$A"; }
+			exit 0
+		fi
+		sleep 1
+	done
+	echo "$A did not connect as an audio device" >&2
+	exit 1 ;;
+psp)
+	choose psp ;;
+forget)
+	A="${2:?address}"
+	bluetoothctl remove "$A" >/dev/null 2>&1
+	rm -f "$CONF.$A"
+	[ "$(chosen)" = "$A" ] && choose psp
+	exit 0 ;;
+volume)
+	id=$(node_id) || { echo "no Bluetooth device chosen" >&2; exit 1; }
+	[ -n "$id" ] || { echo "not connected" >&2; exit 1; }
+	case "${2:-}" in
+	+*|-*) d=${2#[+-]}; s=${2%%[0-9]*}; wpctl set-volume -l 1.0 "$id" "$d%$s" >/dev/null 2>&1 ;;
+	"") ;;
+	*) wpctl set-volume -l 1.0 "$id" "$(echo "$2" | awk '{printf "%.2f", $1 / 100}')" >/dev/null 2>&1 ;;
+	esac
+	wpctl get-volume "$id" 2>/dev/null | awk '{printf "%d\n", $2 * 100 + 0.5}' ;;
+route)
+	A=$(chosen)
+	if [ "$A" != psp ]; then
+		name=$(bluetoothctl info "$A" 2>/dev/null | sed -n 's/^[[:space:]]*Alias: //p' | head -1)
+		node=$(wpctl status -n 2>/dev/null | grep -o "bluez_output\.$(echo "$A" | tr : _)[^ ]*" | head -1)
+		[ -n "$node" ] && { echo "pw $node ${name:-$A}"; exit 0; }
+		echo "psp - ${name:-$A}"; exit 0
+	fi
+	echo psp ;;
+*)
+	sed -n '2,20p' "$0" >&2; exit 2 ;;
+esac
