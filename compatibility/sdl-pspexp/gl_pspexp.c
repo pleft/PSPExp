@@ -2571,6 +2571,12 @@ static void builtin_matrix(const char *name, float out[16])   /* old shaders' gl
     else if (!strcmp(name, "gl_Fog.start")) out[0] = G.fog_start;
     else if (!strcmp(name, "gl_Fog.end")) out[0] = G.fog_end;
     else if (!strcmp(name, "gl_Fog.scale")) out[0] = G.fog_end != G.fog_start ? 1.0f / (G.fog_end - G.fog_start) : 0.0f;
+    else if (!strcmp(name, "gl_FrontMaterial.emission")) memcpy(out, G.mat.emission, 16);
+    else if (!strcmp(name, "gl_FrontMaterial.ambient")) memcpy(out, G.mat.ambient, 16);
+    else if (!strcmp(name, "gl_FrontMaterial.diffuse")) memcpy(out, G.mat.diffuse, 16);
+    else if (!strcmp(name, "gl_FrontMaterial.specular")) memcpy(out, G.mat.specular, 16);
+    else if (!strcmp(name, "gl_FrontMaterial.shininess")) out[0] = G.mat.shininess;
+    else if (!strcmp(name, "gl_LightModel.ambient")) memcpy(out, G.scene_ambient, 16);
 }
 
 GLAPI(GLuint, glCreateShader, (GLenum type))

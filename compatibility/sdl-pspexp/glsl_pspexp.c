@@ -1471,14 +1471,18 @@ static Val eval(Ev *e, Node *n)
     case N_FIELD: {
         Val a;
         int len = (int)strlen(n->name);
-        if (n->a && n->a->kind == N_IDENT && !strcmp(n->a->name, "gl_Fog") && !lookup(e, "gl_Fog")) {
-            /* old shaders' fog parameters (a struct): asked of the GL layer, as the matrices are */
+        if (n->a && n->a->kind == N_IDENT && !lookup(e, n->a->name) &&
+            (!strcmp(n->a->name, "gl_Fog") || !strcmp(n->a->name, "gl_FrontMaterial") ||
+             !strcmp(n->a->name, "gl_BackMaterial") || !strcmp(n->a->name, "gl_LightModel"))) {
+            /* old shaders' fog, material and light-model parameters (structs): asked of the GL layer, as
+             * the matrices are (gl_BackMaterial as the front: one-sided lighting) */
             float f[16];
             char name[64];
             memset(f, 0, sizeof(f));
-            snprintf(name, sizeof(name), "gl_Fog.%s", n->name);
+            snprintf(name, sizeof(name), "%s.%s", !strcmp(n->a->name, "gl_BackMaterial") ? "gl_FrontMaterial" : n->a->name, n->name);
             if (g_builtins) g_builtins(name, f);
-            if (!strcmp(n->name, "color")) {
+            if (!strcmp(n->name, "color") || !strcmp(n->name, "emission") || !strcmp(n->name, "ambient") ||
+                !strcmp(n->name, "diffuse") || !strcmp(n->name, "specular")) {
                 r = val_new(e, vec_type(T_FLOAT, 4));
                 for (i = 0; i < 4; i++) r.c[i] = K(e, f[i]);
                 return r;
