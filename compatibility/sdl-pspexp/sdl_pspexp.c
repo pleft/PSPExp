@@ -2192,7 +2192,74 @@ HOOK(void, SDL_RenderPresent, (SDL_Renderer *r))
 
 /* ---- hooks: OpenGL (gl_pspexp.c draws; here the context and the frames) ---------- */
 
-#ifndef PSPEXP_STATIC_RENAME
+/* a whole frame of pixels for stream_frame (below) */
+typedef struct { int w, h; Uint32 format; void *pixels; int pitch; } Frame;
+static void stream_frame(SDL_Window *win, const Frame *surf);
+
+#ifdef PSPEXP_HOST_GL
+/* The host's own GPU draws (libsdl-pspexp-hostgl, PSPEXP_HOST_GL): no OpenGL of ours, the program's GL
+ * is the real one; at each swap the finished frame is read back and goes to the PSP as a picture, as a
+ * window surface does (stream_frame: shrunk to the PSP's screen, the pages that changed). For programs
+ * too heavy for the GE (OpenMW: 400,000 vertices a frame); the PSP shows, plays and takes the input */
+static void (*hg_ReadPixels)(int, int, int, int, unsigned, unsigned, void *);
+static void (*hg_ReadBuffer)(unsigned);
+static void (*hg_PixelStorei)(unsigned, int);
+static void (*hg_BindFramebuffer)(unsigned, unsigned);
+static void (*hg_GetIntegerv)(unsigned, int *);
+
+HOOK(SDL_GLContext, SDL_GL_CreateContext, (SDL_Window *win))
+{
+    SDL_GLContext c = REAL(SDL_GL_CreateContext)(win);
+    if (c) {
+        if (!S.win) S.win = win;
+        hg_ReadPixels = (void (*)(int, int, int, int, unsigned, unsigned, void *))SDL_GL_GetProcAddress("glReadPixels");
+        hg_ReadBuffer = (void (*)(unsigned))SDL_GL_GetProcAddress("glReadBuffer");
+        hg_PixelStorei = (void (*)(unsigned, int))SDL_GL_GetProcAddress("glPixelStorei");
+        hg_BindFramebuffer = (void (*)(unsigned, unsigned))SDL_GL_GetProcAddress("glBindFramebuffer");
+        hg_GetIntegerv = (void (*)(unsigned, int *))SDL_GL_GetProcAddress("glGetIntegerv");
+        connect_once();
+        logf_("host GL: the frames drawn here go to the PSP as pictures");
+    }
+    return c;
+}
+
+HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
+{
+    static uint8_t *buf;
+    static size_t cap;
+    int w = 0, h = 0;
+    SDL_GL_GetDrawableSize(win, &w, &h);
+    if (hg_ReadPixels && w > 0 && h > 0) {
+        size_t row = (size_t)w * 4, n = row * (size_t)h;
+        int fb = 0, y;
+        if (n > cap) { uint8_t *b = (uint8_t *)realloc(buf, n); if (b) { buf = b; cap = n; } }
+        if (n <= cap) {
+            if (hg_GetIntegerv) hg_GetIntegerv(0x8CAA, &fb);                  /* GL_READ_FRAMEBUFFER_BINDING */
+            if (hg_BindFramebuffer) hg_BindFramebuffer(0x8CA8, 0);            /* the window's own framebuffer */
+            if (hg_ReadBuffer) hg_ReadBuffer(0x0405);                         /* GL_BACK: the frame just drawn */
+            if (hg_PixelStorei) hg_PixelStorei(0x0D05, 4);                    /* GL_PACK_ALIGNMENT */
+            hg_ReadPixels(0, 0, w, h, 0x1908, 0x1401, buf);                  /* GL_RGBA, GL_UNSIGNED_BYTE */
+            if (hg_BindFramebuffer) hg_BindFramebuffer(0x8CA8, (unsigned)fb);
+            for (y = 0; y < h / 2; y++) {   /* GL's rows run upwards */
+                uint8_t *a = buf + (size_t)y * row, *b = buf + (size_t)(h - 1 - y) * row, t[4096];
+                size_t k;
+                for (k = 0; k < row; k += sizeof(t)) {
+                    size_t m = row - k < sizeof(t) ? row - k : sizeof(t);
+                    memcpy(t, a + k, m); memcpy(a + k, b + k, m); memcpy(b + k, t, m);
+                }
+            }
+            {
+                Frame f;
+                f.w = w; f.h = h; f.format = SDL_PIXELFORMAT_ABGR8888; f.pixels = buf; f.pitch = w * 4;
+                stream_frame(win, &f);
+            }
+        }
+    }
+    REAL(SDL_GL_SwapWindow)(win);
+}
+#endif
+
+#if !defined(PSPEXP_STATIC_RENAME) && !defined(PSPEXP_HOST_GL)
 #include "gl_pspexp.h"
 
 PspExpContext *shim_gl_frame(void)
@@ -2373,11 +2440,11 @@ HOOK(int, SDL_WaitEvent, (SDL_Event *ev)) { return wait_event_impl(ev, -1); }
 
 /* ---- hooks: window surface (programs without a renderer) --------------------- */
 
-static void stream_surface(SDL_Window *win)
+/* A whole frame of pixels to the PSP (a window surface; with PSPEXP_HOST_GL, the frame the host's own
+ * GPU drew): converted, shrunk to the PSP's screen when larger, the pages that changed sent */
+static void stream_frame(SDL_Window *win, const Frame *surf)
 {
-    SDL_Surface *surf = SDL_GetWindowSurface(win);
     Tex *x;
-    if (!surf) return;
     if (!S.inited) { S.win = win; S.win_w = surf->w; S.win_h = surf->h; connect_once(); update_scale(); }
     if (!link_up()) { end_frame(); return; }
     if (S.surface_tex && (S.win_w != surf->w || S.win_h != surf->h)) {
@@ -2397,16 +2464,14 @@ static void stream_surface(SDL_Window *win)
     x = S.surface_tex;
     /* Convert, then shrink to the PSP size with nearest-neighbour sampling so
      * the upload is at most 480 x 272 (~270 KB), whatever the window size. */
-    if (SDL_MUSTLOCK(surf)) SDL_LockSurface(surf);
     if (S.sx >= 1.0f) {   /* full size: only the pages that changed */
         SDL_Rect all = { 0, 0, surf->w, surf->h };
         x->w = surf->w; x->h = surf->h;
-        shadow_update(x, &all, surf->format->format, surf->pixels, surf->pitch);
+        shadow_update(x, &all, surf->format, surf->pixels, surf->pitch);
     } else {
         x->argb = 0; x->shadow16 = 0;
-        SDL_ConvertPixels(surf->w, surf->h, surf->format->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ABGR8888, x->rgba, surf->w * 4);
+        SDL_ConvertPixels(surf->w, surf->h, surf->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ABGR8888, x->rgba, surf->w * 4);
     }
-    if (SDL_MUSTLOCK(surf)) SDL_UnlockSurface(surf);
     if (S.sx < 1.0f) {
         int dw = (int)(surf->w * S.sx + 0.5f), dh = (int)(surf->h * S.sy + 0.5f), yy, xx;
         if (dw < 1) dw = 1;
@@ -2442,6 +2507,17 @@ static void stream_surface(SDL_Window *win)
         }
     }
     end_frame();
+}
+
+static void stream_surface(SDL_Window *win)
+{
+    SDL_Surface *surf = SDL_GetWindowSurface(win);
+    Frame f;
+    if (!surf) return;
+    if (SDL_MUSTLOCK(surf)) SDL_LockSurface(surf);
+    f.w = surf->w; f.h = surf->h; f.format = surf->format->format; f.pixels = surf->pixels; f.pitch = surf->pitch;
+    stream_frame(win, &f);
+    if (SDL_MUSTLOCK(surf)) SDL_UnlockSurface(surf);
 }
 
 HOOK(int, SDL_UpdateWindowSurface, (SDL_Window *win))

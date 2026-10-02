@@ -175,6 +175,7 @@ function; the tests check it is current).
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_GL_TEXMAX=256` | OpenGL: the largest texture side sent to the PSP (a power of two up to 512) |
 | `PSPEXP_GL_LOG=1` | OpenGL: each frame's draws, meshes made, unknown queries; `2`: every draw, and why a draw was not a mesh |
+| `libsdl-pspexp-hostgl` (a second build, not a variable) | the layer without its OpenGL: the program draws with the host's GPU and each finished frame goes to the PSP as a picture (`glReadPixels` at `SDL_GL_SwapWindow`), for programs too heavy for the GE (OpenMW: 60 fps from a Mac); keep OpenSceneGraph single-threaded (`OSG_THREADING=SingleThreaded`) and the host window visible |
 | `PSPEXP_USB_VERBOSE=1` | why a USB transfer failed (a "link lost"), in the log |
 | `PSPEXP_GL_DUMP=DIR` | OpenGL: every texture as sent, `DIR/tex-<name>-<w>x<h>.rgba`, and every shader source as the program gave it, `DIR/shader-<id>.glsl` |
 | `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |

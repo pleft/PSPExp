@@ -2548,6 +2548,11 @@ typedef struct GlProgram {
     char *bnames[16]; int blocs[16]; int nb;   /* glBindAttribLocation, for the next link */
     unsigned uver, planned_ver; int planned, builtins, reported, described;
     GlslPlan plan;
+    /* the built-in values the plan was made with (builtins: a shader that reads GL's own matrices and
+     * the like); planned again only when they differ, not on every draw. reuse_ok: the plan's matrix is
+     * left x modelview, so a draw whose only change is the modelview takes left x its own (PSPEXP_GL_PLAN_REUSE) */
+    struct { float mv[16], proj[16], tex[16], fog[7], mat[17], lm[4]; } snap;
+    float reuse_left[16]; int reuse_ok;
     int morph_checked, morph_ok, morph_vert[2], morph_norm[2], morph_shade;   /* a Quake engine's model shader (morph_draw) */
     struct GlProgram *next;
 } GlProgram;
@@ -2885,13 +2890,19 @@ static void set_uniform(GLint loc, int comps, GLsizei count, const float *f, con
     if (loc < 0) return;
     if (!p || !p->p || !(slot = glsl_uniform_slot(p->p, loc, &uc, &rem, &isint))) { set_error(GL_INVALID_OPERATION); return; }
     if (count > rem) count = rem;
-    for (e = 0; e < count; e++)
-        for (k = 0; k < comps && k < uc; k++) {
-            int src = k;
-            if (transpose) { int d = comps == 16 ? 4 : comps == 9 ? 3 : 2; src = (k % d) * d + k / d; }
-            slot[e * uc + k] = f ? f[e * comps + src] : (float)iv[e * comps + src];
-        }
-    p->uver++;
+    {   /* the plan is made again only when a value changes: a program that sets its uniforms before each
+         * draw, mostly to what they were (OpenMW, per object), keeps it */
+        int changed = 0;
+        for (e = 0; e < count; e++)
+            for (k = 0; k < comps && k < uc; k++) {
+                int src = k;
+                float v;
+                if (transpose) { int d = comps == 16 ? 4 : comps == 9 ? 3 : 2; src = (k % d) * d + k / d; }
+                v = f ? f[e * comps + src] : (float)iv[e * comps + src];
+                if (slot[e * uc + k] != v) { slot[e * uc + k] = v; changed = 1; }
+            }
+        if (changed) p->uver++;
+    }
 }
 
 GLAPI(void, glUniform1f, (GLint l, GLfloat a)) { float v[1] = { a }; set_uniform(l, 1, 1, v, NULL, 0); }
@@ -3364,6 +3375,52 @@ static void sh_pass_end(void)
 static int shader_mesh(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
 static int morph_draw(GlProgram *pr, GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype);
 
+static void builtin_snap(GlProgram *p)
+{
+    memcpy(p->snap.mv, G.mv[G.mv_top], 64); memcpy(p->snap.proj, G.proj[G.proj_top], 64); memcpy(p->snap.tex, G.texm[G.tex_top], 64);
+    memcpy(p->snap.fog, G.fog_color, 16); p->snap.fog[4] = G.fog_start; p->snap.fog[5] = G.fog_end; p->snap.fog[6] = G.fog_density;
+    memcpy(p->snap.mat, G.mat.ambient, 16); memcpy(p->snap.mat + 4, G.mat.diffuse, 16); memcpy(p->snap.mat + 8, G.mat.specular, 16);
+    memcpy(p->snap.mat + 12, G.mat.emission, 16); p->snap.mat[16] = G.mat.shininess;
+    memcpy(p->snap.lm, G.scene_ambient, 16);
+}
+
+/* the program's plan, current: planned again only when a uniform changed, or the built-in values it read
+ * changed (OpenMW reads gl_ModelViewMatrix: planned on each of 1,600 draws a frame, 18 s of the Pi's CPU) */
+static void shader_plan(GlProgram *p)
+{
+    int replan = !p->planned || p->planned_ver != p->uver;
+    if (!replan && p->builtins) {
+        float old_mv[16];
+        int rest_same;
+        memcpy(old_mv, p->snap.mv, 64);
+        {   /* the current values against the plan's: the modelview apart from the rest */
+            float rest[16 + 16 + 7 + 17 + 4];
+            memcpy(rest, p->snap.proj, sizeof(rest));
+            builtin_snap(p);
+            rest_same = !differs(rest, p->snap.proj, sizeof(rest));
+        }
+        if (!rest_same) replan = 1;
+        else if (differs(old_mv, p->snap.mv, 64)) {
+            static int reuse = -1;
+            if (reuse < 0) reuse = GENV("PSPEXP_GL_PLAN_REUSE") != NULL;
+            /* only the modelview, when asked: the same plan, its matrix the new modelview's (lighting the
+             * shader works out per vertex keeps the old one's: an approximation, so asked for by a recipe) */
+            if (reuse && p->reuse_ok) mat_mul(p->plan.matrix, p->reuse_left, p->snap.mv);
+            else replan = 1;
+        }
+    }
+    if (!replan) return;
+    glsl_plan(p->p, &p->plan);
+    p->planned = 1; p->planned_ver = p->uver;
+    builtin_snap(p);
+    {
+        float inv[16];
+        p->reuse_ok = p->plan.matrix_ok && mat_invert(p->snap.mv, inv) == 0;
+        if (p->reuse_ok) mat_mul(p->reuse_left, p->plan.matrix, inv);
+    }
+    if (!p->plan.exact && !p->reported) { p->reported = 1; gl_logf("program %u: drawn as near as the GE can (%s)", G.program, p->plan.why); }
+}
+
 static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuint ibo, uintptr_t ioffset, GLenum itype)
 {
     GlProgram *p = find_program(G.program);
@@ -3372,11 +3429,7 @@ static void shader_draw(GLenum mode, const int *idx, int first, int count, GLuin
     float attrs[GLSL_ATTR_ALL][4], *uvs = NULL;
     int i, a, fixed = G.va.enabled || G.ca.enabled || G.na.enabled || G.ta.enabled, set = 0;
     if (!p || !p->p || count <= 0) return;
-    if (!p->planned || p->planned_ver != p->uver || p->builtins) {
-        glsl_plan(p->p, &p->plan);
-        p->planned = 1; p->planned_ver = p->uver;
-        if (!p->plan.exact && !p->reported) { p->reported = 1; gl_logf("program %u: drawn as near as the GE can (%s)", G.program, p->plan.why); }
-    }
+    shader_plan(p);
     pl = &p->plan;
     if (G.log >= 2 && !p->described) {
         p->described = 1;
