@@ -194,6 +194,7 @@ static struct {
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
     /* input */
     int nub_mouse, nub_keys, hide_window, cursor_hidden, relative;
+    float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
      * pushed events, and games that poll it (Chromium B.S.U.) would not */
@@ -307,6 +308,7 @@ static void connect_once(void)
     S.next_handle = 1;
     S.local_audio = !(getenv("PSPEXP_LOCAL_AUDIO") && !strcmp(getenv("PSPEXP_LOCAL_AUDIO"), "0"));
     S.nub_mouse = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "mouse");
+    S.nub_speed = getenv("PSPEXP_NUB_SPEED") && atof(getenv("PSPEXP_NUB_SPEED")) > 0 ? (float)atof(getenv("PSPEXP_NUB_SPEED")) : 300.0f;
     S.mouse_left = B_CROSS; S.mouse_right = B_CIRCLE;
     if (getenv("PSPEXP_MOUSE_BUTTONS")) {   /* "left=r,right=none": which PSP buttons are the mouse's */
         char buf[64], *tok, *save = NULL;
@@ -1509,7 +1511,7 @@ static void setup_vjoy(void)
 #if SDL_VERSION_ATLEAST(2, 0, 14)
     char guid[64], mapping[256];
     static int failed;   /* once: an SDL built without virtual joysticks (the Omega's) stays so */
-    if (S.vjoy >= 0 || failed) return;
+    if (S.vjoy_handle || failed) return;   /* not S.vjoy: it is -1 only once connected, and games may count joysticks before */
     if (!SDL_WasInit(SDL_INIT_JOYSTICK)) return;   /* the game did not ask for joysticks */
     if (getenv("PSPEXP_JOYSTICK") && !strcmp(getenv("PSPEXP_JOYSTICK"), "0")) { failed = 1; return; }   /* keys only: games that take both would get each press twice */
     S.vjoy = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 2, 12, 1);
@@ -1603,7 +1605,7 @@ static void feed_input(void)
         int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
         S.ptick = now;
         if (abs(ax) > 35 || abs(ay) > 35) {
-            float fx = ax / 127.0f, fy = ay / 127.0f, speed = 300.0f * dt, ox = S.px, oy = S.py;
+            float fx = ax / 127.0f, fy = ay / 127.0f, speed = S.nub_speed * dt, ox = S.px, oy = S.py;
             SDL_Event ev;
             float dx = fx * fabsf(fx) * speed, dy = fy * fabsf(fy) * speed;
             if (S.relative) {   /* the game draws its own cursor from the motion alone: never stopped at an edge */
@@ -1641,6 +1643,15 @@ HOOK(const Uint8 *, SDL_GetKeyboardState, (int *numkeys))
     if (!S.active) return real;
     for (i = 0; i < n && i < SDL_NUM_SCANCODES; i++) merged[i] = (Uint8)(real[i] | S.kheld[i]);
     return merged;
+}
+
+/* Games that count joysticks once at start, before any window (Flare), would
+ * otherwise find none: the controller is attached when input first arrives. */
+HOOK(int, SDL_NumJoysticks, (void))
+{
+    static int inside;   /* attaching may count joysticks itself */
+    if (!inside) { inside = 1; setup_vjoy(); inside = 0; }
+    return REAL(SDL_NumJoysticks)();
 }
 
 HOOK(Uint32, SDL_GetMouseState, (int *x, int *y))

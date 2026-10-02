@@ -568,6 +568,12 @@ first question, the input method). Flare draws its menu text into render
 targets from textures it then destroys; the SDL layer now bakes such a
 target on the board first (see the SDL layer's README), without
 which the menus had no text.
+On the PSP from the Pi (played, 2026-10-02): OpenTTD plays well; its pointer
+was a bit fast, so recipe 3 sets `PSPEXP_NUB_SPEED=180` (the layer's default
+300). Flare is unplayable: its smallest screen is 640x480, shrunk to 57% its
+text cannot be read, and no button worked: it counts gamepads once at start,
+before the layer had attached its controller (attached now when a game first
+counts joysticks: Flare finds "PSP (PSPExp)").
 
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
