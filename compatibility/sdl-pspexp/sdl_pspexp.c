@@ -369,6 +369,7 @@ static void connect_once(void)
     } else {
 #ifdef PSPEXP_HAVE_USB
         pspexp_usb_options_default(&S.usb);
+        S.usb.verbose = getenv("PSPEXP_USB_VERBOSE") != NULL;   /* why a USB transfer failed, in the log */
         logf_("waiting up to 15 s for a PSP over USB...");
         S.transport = pspexp_usb_wait(&S.usb, 15000, err, sizeof(err));
         S.mode = 0;

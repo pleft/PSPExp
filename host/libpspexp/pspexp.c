@@ -161,7 +161,7 @@ static int send_now(PspExpContext *ctx, const void *data, size_t len)
 {
     if (!ctx->t) return -1;
     record(data, len);
-    if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
+    if (ctx->t->send(ctx->t, data, len) < 0) { ctx_log(ctx, "send failed (%u bytes)", (unsigned)len); link_lost(ctx); return -1; }
     return 0;
 }
 
@@ -242,7 +242,7 @@ static int send_bytes(PspExpContext *ctx, const void *data, size_t len)
         }
     }
     record(data, len);
-    if (ctx->t->send(ctx->t, data, len) < 0) { link_lost(ctx); return -1; }
+    if (ctx->t->send(ctx->t, data, len) < 0) { ctx_log(ctx, "send failed (%u bytes)", (unsigned)len); link_lost(ctx); return -1; }
     ctx->stats.bytes_sent += len;
     return 0;
 }
@@ -634,7 +634,7 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms)
         PspExpMessage m;
         int r;
         long n = ctx->t->recv(ctx->t, ctx->rx, RX_BUFFER_SIZE, wait);
-        if (n < 0) { link_lost(ctx); return -1; }
+        if (n < 0) { ctx_log(ctx, "receive failed"); link_lost(ctx); return -1; }
         if (n == 0) break;
         if (pspexp_stream_feed(&ctx->in, ctx->rx, (size_t)n) < 0) { link_lost(ctx); return -1; }
         while ((r = pspexp_stream_next(&ctx->in, &m)) == 1) { handle(ctx, &m); count++; }

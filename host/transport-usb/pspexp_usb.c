@@ -3,6 +3,7 @@
 #include "../../protocol/pspexp_usb_link.h"
 #include <libusb.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -140,7 +141,14 @@ static int out_async(Usb *u, const uint8_t *data, int len)
     memcpy(s->buf, data, (size_t)len);
     libusb_fill_bulk_transfer(s->x, u->h, PSPEXP_USB_EP_OUT, s->buf, len, out_done, s, (unsigned)u->timeout_ms);
     s->busy = 1;
-    if (libusb_submit_transfer(s->x) != 0) { s->busy = 0; u->dead = 1; return -1; }
+    {
+        /* BUSY: out_done marks the slot free from inside libusb's callback, and libusb counts the
+         * transfer as in flight until that callback returns; a frame sent right behind it can find
+         * it so (OpenMW's 28-180 KB frames did, and the link went down). Briefly again, then given up */
+        int r, tries = 0;
+        while ((r = libusb_submit_transfer(s->x)) == LIBUSB_ERROR_BUSY && tries++ < 2000) usleep(50);
+        if (r != 0) { if (u->verbose) fprintf(stderr, "usb: bulk out not queued: %s\n", libusb_error_name(r)); s->busy = 0; mark_dead(u); return -1; }
+    }
     u->out_next = (u->out_next + 1) % u->depth;
     return 0;
 }
@@ -194,7 +202,14 @@ static void LIBUSB_CALL in_done(struct libusb_transfer *x)
             u->st.transfers_in++;
             queue_push(u, x->buffer, (size_t)x->actual_length);
         }
-        if (!u->stop && !u->dead && libusb_submit_transfer(x) == 0) return;
+        if (!u->stop && !u->dead) {
+            int r = libusb_submit_transfer(x);
+            if (r == 0) return;
+            /* a slot that cannot be queued again stops receiving: said, and the link given up
+             * (silently, the PSP's replies went unread and the link died seconds later) */
+            if (u->verbose) fprintf(stderr, "usb: bulk in not queued again: %s\n", libusb_error_name(r));
+            mark_dead(u);
+        }
     } else if (x->status != LIBUSB_TRANSFER_CANCELLED) {
         if (u->verbose) fprintf(stderr, "usb: bulk in failed: status %d\n", x->status);
         mark_dead(u);
