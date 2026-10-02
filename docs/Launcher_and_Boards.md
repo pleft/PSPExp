@@ -552,7 +552,9 @@ Pi; not on the GameShell's 32-bit ARM): each frame its 320x200 picture
 upscaled to 640x400, thousands of colours, sent as 16-bit pages and shrunk
 again on the PSP. Recipe 4 starts it with `-x 1`: its own picture, 256
 colours, 8-bit pages; 39-44 KB a frame on the Pi with the null executor
-(was 150-170), texture work 0.65 ms a frame (was 1.6).
+(was 150-170), texture work 0.65 ms a frame (was 1.6). Played by hand on the
+PSP-1000 from the Pi: a steady 59.9 fps, 39-57 KB a frame, no audio
+underruns ("smooth and quick").
 
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
