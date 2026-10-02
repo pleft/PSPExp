@@ -1,0 +1,28 @@
+# Flare: Empyrean Campaign, Debian's game (flare-game on flare-engine), played
+# with the PSP as a gamepad (the SDL layer's virtual controller: the nub is its
+# stick); no keyboard keys at all, so a button does one thing. It runs at its
+# smallest size, 640x480, which the SDL layer scales to the PSP's screen. Its
+# first run's question (keyboard, mouse or gamepad) answered by first-run: the
+# gamepad, no mouse. Debian's package lacks one of its fonts (MarckScript, two
+# decorative title styles): its log says so, the game does not need it.
+
+[package]
+id=flare
+title=Flare: Empyrean Campaign
+description=A fantasy action RPG in the style of Diablo: explore, fight monsters, gather loot and level up across the Empyrean Campaign.
+category=game
+license=GPL-3.0 (Flare engine and game); CC-BY-SA 3.0 (its art)
+version=1
+
+[debian]
+apt=flare-game
+
+[entry]
+title=Flare: Empyrean Campaign
+type=game
+description=A fantasy action RPG in the style of Diablo: explore, fight monsters, gather loot and level up across the Empyrean Campaign.
+icon=swords
+exec=/usr/games/flare
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+first-run=.config/flare/settings.txt:move_type_dimissed=1\nenable_joystick=1\njoystick_device=0\nno_mouse=1\nmouse_aim=0\nmouse_move=0\nresolution_w=640\nresolution_h=480\nfullscreen=0\n
+graphics=sdl

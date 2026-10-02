@@ -130,6 +130,8 @@ typedef struct TargetOp {
     SDL_Rect src, dst;
     int flip;
     Uint8 r, g, b, a;
+    Uint8 clear_a;             /* a clear's own alpha (a above is 255 for the replay; bake_target composes with this) */
+    Uint8 is_clear;
 } TargetOp;
 #define TARGET_OPS_MAX 256
 
@@ -141,6 +143,7 @@ typedef struct Tex {
     int shadow16;              /* the shadow is the game's RGB565, 2 bytes a pixel (emulators' usual output) */
     int dirty, unsupported, streaming;   /* streaming: re-uploaded often, small pages */
     int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
+    int baked;                 /* a target composed into its pixels (bake_target): an ordinary texture since */
     TargetOp *ops; int nops;
     SDL_BlendMode blend;       /* NONE: uploaded as 5650 (full colour), else 4444 */
     Page pages[16];
@@ -507,11 +510,103 @@ static Tex *find_tex(SDL_Texture *t);
 static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy, float dw, float dh, int flip);
 static Tex *target_tex(void) { return S.target ? find_tex(S.target) : NULL; }
 
+/* ---- targets composed on the board ----------------------------------------------------
+ * A target's draws are recorded and replayed where it is drawn (cheap, the PSP does the work). A program
+ * that draws a texture into a target and then destroys it (Flare: a line of text into a label's image)
+ * leaves nothing to replay: the target is then composed here into pixels, as SDL would have (bake_target),
+ * and stays an ordinary texture; what is drawn into it afterwards is composed into it too (compose_op). */
+static void bake_target(Tex *t);
+
+static uint32_t tex_pixel(const Tex *s, int x, int y)   /* ABGR (R in the low byte) */
+{
+    if (s->shadow16) {
+        uint16_t c = ((const uint16_t *)s->rgba)[(size_t)y * s->w + x];
+        uint32_t r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
+        return 0xFF000000u | (b * 255 / 31) << 16 | (g * 255 / 63) << 8 | (r * 255 / 31);
+    }
+    {
+        uint32_t c = s->rgba[(size_t)y * s->w + x];
+        if (s->argb) c = (c & 0xFF00FF00u) | (c & 0xFFu) << 16 | ((c >> 16) & 0xFFu);
+        return c;
+    }
+}
+
+static void compose_op(Tex *t, const TargetOp *op)
+{
+    SDL_Rect d = op->dst;
+    int x, y;
+    if (d.w <= 0 || d.h <= 0) return;
+    if (!op->tex) {   /* a fill (a clear: replaced, its own alpha too) */
+        uint32_t c = (uint32_t)(op->is_clear ? op->clear_a : op->a) << 24 | (uint32_t)op->b << 16 | (uint32_t)op->g << 8 | op->r;
+        for (y = d.y < 0 ? 0 : d.y; y < d.y + d.h && y < t->h; y++)
+            for (x = d.x < 0 ? 0 : d.x; x < d.x + d.w && x < t->w; x++) t->rgba[(size_t)y * t->w + x] = c;
+        return;
+    }
+    {
+        Tex *s = find_tex(op->tex);
+        SDL_Rect sr = op->src;
+        if (!s || !s->rgba) return;
+        if (s->is_target && s != t) bake_target(s);
+        if (sr.w <= 0 || sr.h <= 0) { sr.x = 0; sr.y = 0; sr.w = s->w; sr.h = s->h; }
+        for (y = 0; y < d.h; y++) {
+            int ty = d.y + y, sy = sr.y + (op->flip & SDL_FLIP_VERTICAL ? d.h - 1 - y : y) * sr.h / d.h;
+            if (ty < 0 || ty >= t->h || sy < 0 || sy >= s->h) continue;
+            for (x = 0; x < d.w; x++) {
+                int tx = d.x + x, sx = sr.x + (op->flip & SDL_FLIP_HORIZONTAL ? d.w - 1 - x : x) * sr.w / d.w;
+                uint32_t c, o, *dp;
+                unsigned a, r, g, b;
+                if (tx < 0 || tx >= t->w || sx < 0 || sx >= s->w) continue;
+                c = tex_pixel(s, sx, sy);
+                r = (c & 0xFF) * s->r / 255; g = ((c >> 8) & 0xFF) * s->g / 255; b = ((c >> 16) & 0xFF) * s->b / 255;
+                a = (c >> 24) * s->a / 255;
+                dp = &t->rgba[(size_t)ty * t->w + tx];
+                o = *dp;
+                if (s->blend == SDL_BLENDMODE_NONE) { *dp = a << 24 | b << 16 | g << 8 | r; continue; }
+                if (s->blend == SDL_BLENDMODE_ADD) {   /* dst + src x alpha, dst alpha kept */
+                    unsigned nr = (o & 0xFF) + r * a / 255, ng = ((o >> 8) & 0xFF) + g * a / 255, nb = ((o >> 16) & 0xFF) + b * a / 255;
+                    *dp = (o & 0xFF000000u) | (nb > 255 ? 255 : nb) << 16 | (ng > 255 ? 255 : ng) << 8 | (nr > 255 ? 255 : nr);
+                    continue;
+                }
+                {   /* SDL_BLENDMODE_BLEND: src x a + dst x (1 - a); alpha a + dst alpha x (1 - a) */
+                    unsigned oa = o >> 24, na = a + oa * (255 - a) / 255;
+                    unsigned nr = (r * a + (o & 0xFF) * (255 - a)) / 255, ng = (g * a + ((o >> 8) & 0xFF) * (255 - a)) / 255,
+                             nb = (b * a + ((o >> 16) & 0xFF) * (255 - a)) / 255;
+                    *dp = na << 24 | nb << 16 | ng << 8 | nr;
+                }
+            }
+        }
+    }
+}
+
+static void bake_target(Tex *t)
+{
+    int i;
+    if (!t->is_target || !t->rgba) return;
+    t->is_target = 0;   /* (first: a target drawing itself is not composed again) */
+    t->argb = 0; t->shadow16 = 0;
+    memset(t->rgba, 0, (size_t)t->w * t->h * 4);
+    for (i = 0; i < t->nops; i++) compose_op(t, &t->ops[i]);
+    t->nops = 0;
+    t->baked = 1;
+    t->dirty = 1;
+}
+
 static void record_op(SDL_Texture *tex, const SDL_Rect *src, const SDL_Rect *dst, int flip, Uint8 r, Uint8 g, Uint8 b, Uint8 a)
 {
     Tex *t = target_tex();
     TargetOp *op;
-    if (!t || !t->is_target) return;
+    if (!t) return;
+    if (t->baked) {   /* composed here from now on */
+        TargetOp now;
+        now.tex = tex; now.src = src ? *src : (SDL_Rect){ 0, 0, 0, 0 };
+        now.dst = dst ? *dst : (SDL_Rect){ 0, 0, t->w, t->h };
+        now.flip = flip; now.r = r; now.g = g; now.b = b; now.a = a;
+        now.is_clear = !tex && !dst; now.clear_a = a;
+        compose_op(t, &now);
+        t->dirty = 1;
+        return;
+    }
+    if (!t->is_target) return;
     if (!t->ops) t->ops = (TargetOp *)calloc(TARGET_OPS_MAX, sizeof(TargetOp));
     if (!t->ops || t->nops == TARGET_OPS_MAX) return;
     op = &t->ops[t->nops++];
@@ -519,6 +614,7 @@ static void record_op(SDL_Texture *tex, const SDL_Rect *src, const SDL_Rect *dst
     op->src = src ? *src : (SDL_Rect){ 0, 0, 0, 0 };
     op->dst = dst ? *dst : (SDL_Rect){ 0, 0, t->w, t->h };
     op->flip = flip; op->r = r; op->g = g; op->b = b; op->a = a;
+    op->is_clear = 0; op->clear_a = a;
 }
 
 static int drawing(void)
@@ -1791,7 +1887,12 @@ HOOK(int, SDL_SetTextureBlendMode, (SDL_Texture *t, SDL_BlendMode mode))
 
 HOOK(void, SDL_DestroyTexture, (SDL_Texture *t))
 {
-    Tex **pp = &S.textures;
+    Tex **pp = &S.textures, *y;
+    for (y = S.textures; y; y = y->next) {   /* targets that still draw it: composed now, while it is here */
+        int i;
+        if (!y->is_target || y->sdl == t) continue;
+        for (i = 0; i < y->nops; i++) if (y->ops[i].tex == t) { bake_target(y); break; }
+    }
     while (*pp) {
         if ((*pp)->sdl == t) {
             Tex *x = *pp;
@@ -1863,7 +1964,11 @@ HOOK(int, SDL_RenderClear, (SDL_Renderer *r))
 {
     if (r == S.ren && S.target) {
         Tex *x = target_tex();
-        if (x && x->is_target) { x->nops = 0; record_op(NULL, NULL, NULL, 0, S.dr, S.dg, S.db, 255); }
+        if (x && x->is_target) {
+            x->nops = 0; record_op(NULL, NULL, NULL, 0, S.dr, S.dg, S.db, 255);
+            if (x->nops) { x->ops[x->nops - 1].is_clear = 1; x->ops[x->nops - 1].clear_a = S.da; }
+        }
+        else if (x && x->baked) record_op(NULL, NULL, NULL, 0, S.dr, S.dg, S.db, S.da);   /* (its alpha: a clear to transparent) */
     } else if (r == S.ren && link_up() && !S.target && !S.skip_clear) {
         begin_frame();
         flush_quads();

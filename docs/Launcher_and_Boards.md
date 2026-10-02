@@ -556,6 +556,19 @@ colours, 8-bit pages; 39-44 KB a frame on the Pi with the null executor
 PSP-1000 from the Pi: a steady 59.9 fps, 39-57 KB a frame, no audio
 underruns ("smooth and quick").
 
+Two more from Debian (recipes, 2026-10-02; installed on the Pi, seen in
+PPSSPP, not yet played on the PSP): OpenTTD (`openttd`, with OpenGFX,
+OpenSFX and OpenMSX; at 480x272 its windows crowd the screen: the nub is the
+pointer, cross / circle click, the d-pad scrolls, L / R zoom out / in,
+triangle closes all windows, square closes news and errors, START is Escape;
+its first run's survey question answered by `first-run=`) and Flare:
+Empyrean Campaign (`flare`: its own gamepad controls, so `keys=` maps
+nothing; `first-run=` turns the gamepad on, the mouse off and skips its
+first question, the input method). Flare draws its menu text into render
+targets from textures it then destroys; the SDL layer now bakes such a
+target on the board first (see the SDL layer's README), without
+which the menus had no text.
+
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
 selector, cross picks a piece and then its square, circle / start open the

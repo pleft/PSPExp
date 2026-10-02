@@ -1,0 +1,27 @@
+# OpenTTD: Debian's game with its free base sets (OpenGFX graphics, OpenSFX sounds,
+# OpenMSX music), at the PSP's own 480x272. Mouse-driven, as Simutrans: the nub
+# is the mouse (cross and circle its buttons), the d-pad scrolls the map, L / R
+# zoom out / in (minus, equals), triangle closes the top window (Delete), START
+# is Escape, square closes news and errors (Space). Its first run's survey question answered (no) by first-run.
+
+[package]
+id=openttd
+title=OpenTTD
+description=Build a transport empire in Transport Tycoon Deluxe's world: trains, road vehicles, ships and aircraft, with free graphics, sounds and music.
+category=game
+license=GPL-2.0 (OpenTTD, OpenGFX, OpenMSX); CC Sampling Plus 1.0 (OpenSFX)
+version=2
+
+[debian]
+apt=openttd openttd-opengfx openttd-opensfx openttd-openmsx
+
+[entry]
+title=OpenTTD
+type=game
+description=Build a transport empire in Transport Tycoon Deluxe's world: trains, road vehicles, ships and aircraft, with free graphics, sounds and music.
+icon=train-front
+exec=/usr/games/openttd -r 480x272
+keys=up=up,down=down,left=left,right=right,l=minus,r=equals,triangle=del,start=escape,select=none,square=space
+nub=mouse
+first-run=.config/openttd/openttd.cfg:[network]\nparticipate_survey = no\n
+graphics=sdl
