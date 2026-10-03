@@ -58,7 +58,9 @@ Games, Emulators and Apps (L / R switch).
 | circle | close |
 
 Installing runs in the background: the progress shows, and the game
-appears in the launcher when done. PSPExp itself is updated the same way;
+appears in the launcher when done. A few games (the RPG Maker ones) are
+downloaded from their developers' own pages while they install, so those
+need the board online and take a few minutes (Theia: about 6 on a Pi). PSPExp itself is updated the same way;
 after such an update, **System > Restart PSPExp** starts the new version,
 and **System > Update the PSP** puts the PSP's side up to date too.
 

@@ -1,0 +1,17 @@
+#!/bin/sh
+# theia: an installer for Theia: The Crimson Eclipse (MissingSeven, 2019; RPG
+# Maker 2003; free), English Orihalcon edition V2-08, on EasyRPG Player: the
+# board downloads it from the developer's itch.io page when it is installed
+# (_installer.sh). It uses DynRPG plugins (battle ATB and display, condition
+# icons, a text plugin), which EasyRPG imitates only in part. No RTP needed
+# (FullPackageFlag=1). Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=theia TITLE="Theia: The Crimson Eclipse" VERSION=2.08-pspexp1
+ITCH=missingseven/theia/13796643
+SHA=d0e69762c4d69eee16eae2c396f54d7fc5a8f017a5de6279164a2f3f339634e1 SIZE="575 MB" TOP="Theia ENG Orihalcon V2-08"
+RUN='exec /usr/games/easyrpg-player --project-path "$G" --save-path "$D" "$@"'
+DEPENDS=pspexp-easyrpg
+ABOUT=" A free 40-hour JRPG made in RPG Maker 2003 by MissingSeven: Theia's
+ English Orihalcon edition, for EasyRPG Player."
+build_installer "$1"

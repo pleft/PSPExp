@@ -1,0 +1,29 @@
+# Theia: The Crimson Eclipse: MissingSeven's free RPG Maker 2003 JRPG (2019),
+# its English Orihalcon edition, on EasyRPG Player. The board downloads the
+# game from the developer's itch.io page when it is installed (package theia:
+# PSPExp passes none of it on). It uses DynRPG plugins (its battle system's
+# timing and display, status icons), which EasyRPG imitates only in part:
+# battles may differ from the original. 320x240, shown 4:3. Keys as in the
+# other RPG Maker games: Z confirms, X is the menu and cancels, Shift runs.
+
+[package]
+id=theia
+title=Theia: The Crimson Eclipse
+description=A free 40-hour JRPG made in RPG Maker 2003: Valiant, a soldier of a fallen kingdom, against an empire, with a large cast and long story. On EasyRPG.
+category=game
+license=GPL-3.0 (EasyRPG Player); free game (Theia, MissingSeven, 2019), downloaded from its developer
+version=1
+
+[debian]
+apt=theia
+
+[entry]
+title=Theia: The Crimson Eclipse
+type=game
+description=A free 40-hour JRPG made in RPG Maker 2003: a soldier of a fallen kingdom against an empire, a large cast and a long story. On EasyRPG; its battle plugins only in part.
+icon=swords
+exec=/usr/games/theia --window
+keys=cross=z,circle=x,triangle=x,square=lshift,start=x,select=none,up=up,down=down,left=left,right=right,l=none,r=none
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl

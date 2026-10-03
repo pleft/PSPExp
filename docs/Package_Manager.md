@@ -256,7 +256,10 @@ launch script, its `postinst` downloads the developer's release from where
 the developer publishes it, checks a pinned SHA-256 and unpacks it, its
 `postrm` removes it; the repository never holds a file of the game.
 `mkdeb.py` takes `preinst` / `postinst` / `prerm` / `postrm` from beside the
-control file. Data a
+control file. One builder makes them all, `scripts/packages/debs/_installer.sh`:
+a direct download (`URL=`) or an itch.io upload (`ITCH=user/game/upload`,
+whose short-lived link is asked for at each install); unpacked with unar
+(RAR, ZIP). `theia` came next the same way. Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 

@@ -603,7 +603,19 @@ it, not yet on the PSP):
   RAR) into `/usr/share/games/alter-aila-genesis`, every file as released;
   postrm removes it. It needs no RTP (FullPackageFlag=1). On the Pi: the
   upgrade from the first, file-carrying package took 108 s, a fresh install
-  46 s, removal deletes the game; the downloaded game runs. `/usr/games/alter-aila-genesis` keeps the saves in the
+  46 s, removal deletes the game; the downloaded game runs.
+- **Theia: The Crimson Eclipse** (`theia`, 2026-10-03): MissingSeven's free
+  RPG Maker 2003 JRPG (2019), its English Orihalcon edition V2-08, the same
+  way: the installer asks the developer's itch.io page for a download link
+  at each install (itch.io's links last a minute: a POST to the upload's
+  `file/` address answers with one), fetches the 575 MB release, checks it
+  and unpacks it (656 MB). On the Pi the install took 369 s. It uses DynRPG
+  plugins (ATB battle overhaul, battle display, condition icons, a text
+  plugin); EasyRPG says it may not run them properly. Title, new game and
+  the opening scene with its dialogue right in PPSSPP at 24-26 fps; battles
+  not reached by script. Both games' installers come from one builder now,
+  `scripts/packages/debs/_installer.sh` (a game's build script names its
+  download, checksum, the folder inside the archive and the launch command). `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in

@@ -29,4 +29,5 @@
 | `recipes/pinball/cover.png` | a screenshot of Emilia Pinball in PPSSPP (the Tux table), cropped and scaled | GPL-2 (Emilia Pinball) |
 | `recipes/openttd/cover.png` | Debian's openttd package, its 128x128 icon | GPL-2.0 (OpenTTD) |
 | `recipes/freedink/cover.png` | Debian's freedink package, its SVG icon rendered at 128x128 | GPL-3.0+ (FreeDink) |
+| `recipes/theia/cover.png` | a screenshot of the game's title in PPSSPP, cropped and scaled | free game (Theia: The Crimson Eclipse, MissingSeven) |
 | `recipes/alter-aila-genesis/cover.png` | a screenshot of the game's title in PPSSPP, cropped and scaled | freeware (Alter A.I.L.A. Genesis, Neok) |
