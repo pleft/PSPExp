@@ -586,7 +586,7 @@ def suite_apps(r):
             for _ in range(len(pk) + 1):
                 if r.state()["store.selected"] == pid: break
                 r.press("down", idle=False)
-            r.press("triangle", idle=False); r.ctl("wait 500")
+            r.press("square", idle=False); r.ctl("wait 500")
             r.expect(r.state()["store.mode"] == "confirm", "no question before removing")
             r.press("cross", idle=False)
             end = time.time() + 60

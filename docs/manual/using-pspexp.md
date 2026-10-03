@@ -3,6 +3,18 @@
 The same on every board. Everything here is done with the PSP's own
 buttons; the board needs no screen, keyboard or mouse.
 
+## The same buttons everywhere
+
+| Button | What it does, on every screen |
+|---|---|
+| cross | choose: open, play, confirm, type the highlighted key |
+| circle | back: close, cancel, the folder above (in the terminal it types a Space) |
+| triangle | show more: details, the actions menu, a hidden password |
+| square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
+| START | search, refresh or rescan, options |
+| SELECT | close an app; held, the terminal |
+| L / R | the other tab, panel or page |
+
 ## The launcher
 
 It opens on the **home screen**: five big tiles, **Favourites**, **Games**,
@@ -77,7 +89,7 @@ Games, Emulators and Apps (L / R switch).
 |---|---|
 | up / down | a package |
 | cross | install it (or update it, when a newer version is there) |
-| triangle | remove it (asks first) |
+| square | remove it (asks first) |
 | START | look for new packages |
 | circle | close |
 
@@ -131,7 +143,7 @@ Only use ROMs of games you own.
 | up from the top | the drive button: cross lists every drive |
 | L / R | the left / right panel |
 | cross | open: a folder, a picture, a text file, music, a ROM (plays it), a package (installs it) |
-| circle | the folder above |
+| circle | the folder above; at the top of a drive, close Files |
 | square | mark several files |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
 | START | options: hidden files, sorting, the same folder in both panels, a terminal here |
@@ -152,7 +164,7 @@ Cross on a music file in **Files** plays it, then the rest of the folder.
 | cross | pause / play |
 | left / right | 10 seconds back / on |
 | L / R | the previous / next track |
-| triangle | stop |
+| square | stop |
 | circle | back to the files; the music goes on |
 
 The player shows the title, artist, album and the cover (from the file, or
@@ -181,7 +193,7 @@ From then on:
   seconds; out again, it moves back to them.
 - **The PSP** in Sound output brings the sound back for good and lets the
   headphones go, so your phone or tablet can have them.
-- Square on a device in the list forgets it; triangle scans again.
+- Square on a device in the list forgets it; START scans again.
 
 Bluetooth always adds a little delay. PSPExp keeps its own part small;
 what remains depends on the headphones.

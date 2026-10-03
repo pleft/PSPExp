@@ -1225,7 +1225,6 @@ static void search_input(uint32_t pressed, int up, int down, int left, int right
             else search_type(k);
         }
         if (pressed & PSPEXP_BUTTON_SQUARE) search_type("DEL");
-        if (pressed & PSPEXP_BUTTON_TRIANGLE) search_type("SPC");
         if ((pressed & PSPEXP_BUTTON_START) && g_nres) g_sfocus = 1;
         if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; }
     } else {
@@ -1396,7 +1395,7 @@ static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_pick_sel = g_pick_sel > 6 ? g_pick_sel - 6 : 0;
     if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_pick_n) g_pick_sel = g_pick_sel + 6 < g_pick_n ? g_pick_sel + 6 : g_pick_n - 1;
     if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; g_dirty = 1; return; }
-    if ((g_pick_kind == PICK_WIFI || g_pick_kind == PICK_BT) && (pressed & PSPEXP_BUTTON_TRIANGLE)) scan_start();
+    if ((g_pick_kind == PICK_WIFI || g_pick_kind == PICK_BT) && (pressed & PSPEXP_BUTTON_START)) scan_start();   /* START refreshes, as in Packages */
     if (g_pick_kind == PICK_BT && g_pick_n && !g_scanning && (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_SQUARE))) {
         char cmd[160], ok[128], fail[160];
         if (g_pick_sel == 0) {   /* the PSP */
@@ -2215,7 +2214,6 @@ static void draw_search(float dt)
     if (!g_sfocus) {
         x = hint_btn(x, 'x', "Type");
         x = hint_btn(x, 's', "Delete");
-        x = hint_btn(x, 't', "Space");
         x = hint_btn(x, 'o', "Close");
         if (g_nres) hint_cap(SCREEN_W - 16 - gfx_text_width(FONT_BADGE, "START") - 15 - gfx_text_width(FONT_SMALL, "Results"), "START", "Results", C_SUB);
     } else {
@@ -2421,7 +2419,7 @@ static void draw_pick(float dt)
     if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired && !g_scanning) x = hint_btn(x, 's', "Forget");
     if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
         x = hint_btn(x, 's', "New password");
-    if (g_pick_kind != PICK_TZ) x = hint_btn(x, 't', "Scan again");
+    if (g_pick_kind != PICK_TZ) x = hint_cap(x, "START", "Scan again", C_SUB);
     x = hint_btn(x, 'o', "Back");
     (void)x;
 }

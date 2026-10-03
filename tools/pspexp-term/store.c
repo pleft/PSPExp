@@ -303,7 +303,8 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         return;
     }
     if ((pressed & PSPEXP_BUTTON_CROSS) && p && (p->avail[0] || !strcmp(p->st, "broken")) && strcmp(p->st, "local")) start_install(p);
-    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local"))) g_mode = S_CONFIRM;
+    /* square removes (square deletes everywhere: a letter, a Bluetooth pairing); triangle stays for showing more */
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local"))) g_mode = S_CONFIRM;
     if (pressed & PSPEXP_BUTTON_START) { if (g_local) load_catalogue(); else catalogue_job("update", NULL); }
     if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_SELECT)) g_exit = 1;
 }
@@ -469,7 +470,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         int st = status_of(p);
         if (st == ST_BROKEN) x = ui_hint_btn(x, 'x', "Retry");
         else if (st != ST_LOCAL && p->avail[0]) x = ui_hint_btn(x, 'x', st == ST_NEW ? "Install" : st == ST_UPDATE ? "Update" : "Reinstall");
-        if (p->inst[0] || st == ST_BROKEN || st == ST_LOCAL) x = ui_hint_btn(x, 't', "Remove");
+        if (p->inst[0] || st == ST_BROKEN || st == ST_LOCAL) x = ui_hint_btn(x, 's', "Remove");
     }
     x = ui_hint_cap(x, "L/R", "Section", UI_SUB);
     x = ui_hint_cap(x, "START", "Refresh", UI_SUB);

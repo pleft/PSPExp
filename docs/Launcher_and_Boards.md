@@ -229,6 +229,17 @@ renderer" (the PSP's GE: the SDL layer, its OpenGL) or "Board GPU renderer"
 (`graphics=board-gpu`); it replaced "PSP native", which only meant the
 program spoke PSPExp, as every package does now.
 
+**The buttons, made the same on every screen** (2026-10-03, after an
+audit of each view's handling): cross chooses, circle goes back (closes,
+cancels, the folder above; at a drive's top it closes Files, as it closes
+Packages and the Monitor), triangle shows more (details, the actions menu,
+a password), square marks or removes (favourite, mark, delete a letter,
+remove a package, forget a device, stop the music), START searches,
+refreshes or rescans. Moved: Packages' remove from triangle to square, the
+music player's stop from triangle to square, the Wi-Fi and Bluetooth
+lists' scan again from triangle to START, search's space off triangle.
+The terminal keeps circle as Space (the user's earlier choice).
+
 **Step 2** (2026-10-03): a home screen, and the rail cut to five sections,
 the same on both: Favourites, Games, Emulators, Apps, Settings (System
 renamed; Recent gone, the home screen's **Play again** row starts the
@@ -300,7 +311,7 @@ samples with nearest filtering (`launcher_gfx.c`):
 under live results from the whole library, games, apps and every ROM;
 matches at the start of the title rank first, then at the start of a word,
 then anywhere, favourites a little higher. Cross types, square deletes,
-triangle adds a space, START or the go key moves to the results (cross
+a space from the keyboard's own key (triangle typed one until the buttons were made the same on every screen), START or the go key moves to the results (cross
 plays, square favourites, circle returns to the keyboard), circle closes.
 
 **Details** (triangle): a card over the list with the cover, the title, the
@@ -334,7 +345,7 @@ Onion's wifisetup; in PSP direct mode it says to switch to the home network
 first) scans in the background and lists the networks by name, strongest
 first, with their signal, a lock for the secured ones and "saved" for the
 ones the board already knows (NetworkManager's Wi-Fi profiles; the Omega's
-`wifi-config` entries); triangle scans again. Cross on a saved network joins
+`wifi-config` entries); START scans again. Cross on a saved network joins
 it with what the board keeps (`nmcli connection up uuid`, or `wifisetup
 priority -move top`, which restarts the Omega's Wi-Fi); square asks for a new
 password, and a failed new password keeps the saved profile. A new secured
@@ -1169,7 +1180,7 @@ it is decoded, and the time.
 | cross | pause / play (at the end: again) |
 | left / right | 10 s back / on |
 | L / R | the previous / next track (round the folder) |
-| triangle | stop and close |
+| square | stop and close |
 | circle | back to the files; the music goes on (cross on the file: the player again) |
 
 MP3 goes to the PSP as it is and the PSP decodes it on its Media Engine
@@ -1445,7 +1456,7 @@ once a second, so it costs the link very little.
 `store.c` reads the repositories and compares them with what is installed
 (`<root>/apps/*/package`). Each package shows as Installed, Update, or Get.
 
-- **Buttons:** cross installs, updates or reinstalls; triangle removes, after
+- **Buttons:** cross installs, updates or reinstalls; square removes, after
   a question; start reads the repositories again.
 - **How it installs:** it runs `pspexp-pkg` in the background (log:
   `/tmp/pspexp-store.log`), and the launcher notices the change by itself.
@@ -1506,7 +1517,7 @@ lists The PSP first, then the devices found, sound devices first, each
 new (it must be in pairing mode), trusts and connects it, waits for its
 PipeWire node and remembers it in `~/.config/pspexp/audio-out`; the first
 time, its volume is set to 40 % (at the device's own 100 % earbuds were far
-too loud). Square forgets a paired device, triangle scans again; cross on The
+too loud). Square forgets a paired device, START scans again; cross on The
 PSP sends the sound back and lets the device go: it stays paired but is
 disconnected and no longer trusted, since trusted earbuds reconnected to the
 Pi by themselves whenever they left their case (and were not free for an

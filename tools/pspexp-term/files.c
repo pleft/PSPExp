@@ -518,7 +518,7 @@ static void play_draw(uint64_t now)
     x = ui_hint_btn(x, 'x', pi.paused || pi.ended ? "Play" : "Pause");
     x = ui_hint_cap(x, "LEFT/RIGHT", "10 s", UI_SUB);
     if (g_trk_n > 1) x = ui_hint_cap(x, "L/R", "Track", UI_SUB);
-    x = ui_hint_btn(x, 't', "Stop");
+    x = ui_hint_btn(x, 's', "Stop");
     x = ui_hint_btn(x, 'o', "Back");
 }
 
@@ -786,7 +786,7 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         if (right) player_seek(10);
         if ((pressed & PSPEXP_BUTTON_LTRIGGER) && g_trk_n > 1) play_step(-1, 1);
         if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_trk_n > 1) play_step(1, 1);
-        if (pressed & PSPEXP_BUTTON_TRIANGLE) { player_stop(); g_trk_n = 0; g_over = O_NONE; }
+        if (pressed & PSPEXP_BUTTON_SQUARE) { player_stop(); g_trk_n = 0; g_over = O_NONE; }   /* square: stop, its symbol */
         if (pressed & PSPEXP_BUTTON_CIRCLE) g_over = O_NONE;   /* the music goes on */
         g_dirty = 1;
         return;
@@ -825,7 +825,10 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         else if (e->is_dir) { char path[FOPS_PATH]; fops_join(path, sizeof(path), p->path, e->name); panel_cd(p, path, NULL); }
         else open_file(p, e);
     }
-    if (pressed & PSPEXP_BUTTON_CIRCLE) panel_up(p);
+    if (pressed & PSPEXP_BUTTON_CIRCLE) {   /* back: up a folder; from the top of a drive, out of Files (as circle leaves Packages and the Monitor) */
+        if (fops_is_root(p->path)) { g_exit = 1; return; }
+        panel_up(p);
+    }
     if ((pressed & PSPEXP_BUTTON_SQUARE) && p->sel < p->list.n) {
         if (!p->list.e[p->sel].is_up) p->list.e[p->sel].marked = !p->list.e[p->sel].marked;
         move_sel(p, 1);
@@ -1127,7 +1130,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 'x', "Drives");
         x = ui_hint_cap(x, "DOWN", "The files", UI_SUB);
     } else {
-        x = ui_hint_btn(x, 'o', "Up");
+        x = ui_hint_btn(x, 'o', fops_is_root(act()->path) ? "Close" : "Up");
         x = ui_hint_btn(x, 's', "Mark");
         x = ui_hint_btn(x, 't', "Actions");
     }
