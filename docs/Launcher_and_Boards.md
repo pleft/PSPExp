@@ -240,7 +240,11 @@ music player's stop from triangle to square, the Wi-Fi and Bluetooth
 lists' scan again from triangle to START, search's space off triangle.
 The terminal follows too, at the user's choice: circle Esc (was Space),
 triangle Space (was Enter), START Enter (was Tab), L + triangle Tab (was
-Esc).
+Esc). SELECT: a tap closes Files, Packages and the Monitor (as circle
+does) and shows or hides the terminal's keyboard; held 0.7 s it switches to
+the terminal; START + SELECT held quits a game. The views now get SELECT
+as a tap, on its release: Files, Packages and the Monitor had closed on the
+press, so holding SELECT in them for the terminal closed them too.
 
 **Step 2** (2026-10-03): a home screen, and the rail cut to five sections,
 the same on both: Favourites, Games, Emulators, Apps, Settings (System

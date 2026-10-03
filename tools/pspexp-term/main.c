@@ -1663,6 +1663,9 @@ static void handle_input(void)
         if (!mirror_available() && !g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
     }
     if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
+    /* the views get SELECT as a tap, on its release: a press closing Files, Packages or the Monitor
+     * also closed them when the user was holding it for the terminal */
+    if (g_app || g_view_files || g_view_launcher) pressed = (pressed & ~(uint32_t)PSPEXP_BUTTON_SELECT) | (g_select_tap ? PSPEXP_BUTTON_SELECT : 0);
     if (g_app) { g_app->input(b, pressed, up, down, left, right, now); return; }
     if (g_view_files) { files_input(b, pressed, up, down, left, right, now); return; }
     if (g_view_launcher) { launcher_input(b, pressed, up, down, left, right, now); return; }
