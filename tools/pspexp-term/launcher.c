@@ -1908,7 +1908,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
 }
 
 /* games and ROMs are discs; apps, tools and settings tiles */
-static int is_disc(const LEntry *e) { return e->type == LT_GAME || e->type == LT_ROM || is_system_item(e); }
+static int is_disc(const LEntry *e) { return e->type == LT_GAME || e->type == LT_ROM; }
 
 static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
 {
@@ -1918,7 +1918,6 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         memset(&cs, 0, sizeof(cs));
         cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
         cs.round = 1;
-        if (is_system_item(e)) { cs.title = L.sys[e->sys].shortname; cs.icon = e->icon; }   /* until the consoles are drawn */
         if (e->art[0]) cs.art = e->art;
         else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
         /* the small disc fades into the large one, which is lifted */
@@ -1932,7 +1931,11 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         gfx_shadow(NINE_SHADOW10, x, y + 4, size, size, 0x000000, 110 * alpha / 255);
         gfx_nine(NINE_R14, x, y, size, size, 0x16223c, alpha);
         if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * alpha));
-        gfx_icon(ic, ip, cx - ip / 2, y + (size - ip) / 2, lift > 0.5f ? 0xffffff : 0xb9c8e0, alpha);
+        if (is_system_item(e)) {   /* a system: its short name, set like a logo in its colour */
+            const char *t = L.sys[e->sys].shortname;
+            int f = gfx_text_width(FONT_H1, t) <= size - 10 ? FONT_H1 : FONT_TITLE, tw = gfx_text_width(f, t);
+            gfx_text(f, cx - tw / 2, y + (size - gfx_line_height(f)) / 2, t, lift > 0.5f ? 0xffffff : system_colour(L.sys[e->sys].id), alpha, 0);
+        } else gfx_icon(ic, ip, cx - ip / 2, y + (size - ip) / 2, lift > 0.5f ? 0xffffff : 0xb9c8e0, alpha);
     }
     if (e->fav) {
         int sx = cx + 22, sy = cy - 40 - (int)lroundf(lift * 4);

@@ -232,8 +232,9 @@ renamed; Recent gone, the home screen's **Continue** row plays the last
 one played). The launcher opens on the home screen: the five as 60 px
 tiles (72 focused, lifted and glowing), what the focused one holds
 underneath, Continue below (down, then cross). Each emulated system is no
-longer a rail tile: **Emulators** is a shelf of systems (entries `s:<id>`,
-a disc each with the system's short name, until the consoles are drawn),
+longer a rail tile: **Emulators** is a shelf of systems (entries `s:<id>`;
+tiles like the home screen's, the system's short name as the logo in its
+colour: discs are for games and ROMs only, the user's call),
 and cross on one opens its ROMs, a section off the rail (`hidden`), headed
 "Emulators > Nintendo 64", the rail showing Emulators. Circle goes back:
 from a system's ROMs to Emulators on that system, from a section to the

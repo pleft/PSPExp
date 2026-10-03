@@ -25,7 +25,8 @@ Inside a section, the same five run down the left as the **rail**, and the
 section's **shelf** runs to its right: games and ROMs as discs with their
 cover in the window, apps and settings as icon tiles. The one you are on
 is larger and glows; its description shows underneath. **Emulators** has
-one disc per system you have ROMs for (N64, SNES, Game Boy...); cross on
+one tile per system you have ROMs for (N64, SNES, GB...), like the home
+screen's; cross on
 one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
 
 ```
