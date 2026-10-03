@@ -57,6 +57,10 @@ Games, Emulators and Apps (L / R switch).
 | START | look for new packages |
 | circle | close |
 
+Each game's entry says how it is drawn: **SDL** and **OpenGL** games are
+drawn by the PSP, **board GPU** games by the board's own graphics chip and
+sent to the PSP as pictures (only on boards that can, the Raspberry Pi).
+
 Installing runs in the background: the progress shows, and the game
 appears in the launcher when done. A few games (the RPG Maker ones) are
 downloaded from their developers' own pages while they install, so those
