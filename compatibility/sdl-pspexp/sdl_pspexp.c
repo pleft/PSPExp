@@ -2413,6 +2413,29 @@ HOOK(SDL_GLContext, SDL_GL_CreateContext, (SDL_Window *win))
     return c;
 }
 
+#ifndef __APPLE__
+/* GLEW built for GLX (Debian's) on SDL's offscreen driver: glewInit loads the GL functions, then
+ * fails on its GLX part without an X display (GLEW_ERROR_NO_GLX_DISPLAY, 4, "Unknown error"; OpenClonk
+ * then had no context). Under offscreen that one failure is success (the GL part is done; nothing
+ * of GLX is used), and GLX's function lookups are SDL's, which are EGL's here */
+static int hg_offscreen(void) { const char *d = SDL_GetCurrentVideoDriver(); return d && !strcmp(d, "offscreen"); }
+__attribute__((visibility("default"))) unsigned glewInit(void)
+{
+    unsigned (*real)(void) = (unsigned (*)(void))(uintptr_t)dlsym(RTLD_NEXT, "glewInit");
+    unsigned r = real ? real() : 1;
+    return r == 4 && hg_offscreen() ? 0 : r;
+}
+__attribute__((visibility("default"))) void *glXGetProcAddressARB(const unsigned char *name)
+{
+    if (hg_offscreen()) return SDL_GL_GetProcAddress((const char *)name);
+    {
+        void *(*real)(const unsigned char *) = (void *(*)(const unsigned char *))(uintptr_t)dlsym(RTLD_NEXT, "glXGetProcAddressARB");
+        return real ? real(name) : NULL;
+    }
+}
+__attribute__((visibility("default"))) void *glXGetProcAddress(const unsigned char *name) { return glXGetProcAddressARB(name); }
+#endif
+
 /* SDL's offscreen driver (a board with no display: the GPU through EGL alone) has no window manager
  * and so no WM info; SuperTuxKart's Irrlicht asks for it and stops without it. Answered here: none in
  * particular, with success */
@@ -2734,7 +2757,10 @@ static void stream_frame(SDL_Window *win, const Frame *surf)
             PspExpQuadExRec q;
             memset(&q, 0, sizeof(q));
             if (shrunk) { q.x = (int16_t)(S.ox + p->x0); q.y = (int16_t)(S.oy + p->y0); q.w = (int16_t)p->w; q.h = (int16_t)p->h; }
-            else { q.x = X((float)p->x0); q.y = Y((float)p->y0); q.w = W((float)p->w); q.h = H((float)p->h); }
+            else {   /* edges from the rounded positions: each page's own rounded width left one-pixel gaps when enlarging (Open Surge's 426 wide on 480: a line) */
+                q.x = X((float)p->x0); q.y = Y((float)p->y0);
+                q.w = (int16_t)(X((float)(p->x0 + p->w)) - q.x); q.h = (int16_t)(Y((float)(p->y0 + p->h)) - q.y);
+            }
             q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)p->w; q.v1 = (uint16_t)p->h; q.color = color;
             if (S.nquads && S.qtex != p->tex) flush_quads();
             S.qtex = p->tex; S.qfmt = fmt;

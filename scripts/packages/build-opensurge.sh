@@ -21,10 +21,10 @@ docker run --rm --platform "$PLAT" -v "$OUT:/out" -v "$ROOT/scripts/packages:/st
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends build-essential cmake git ca-certificates pkg-config dpkg-dev \
-	libsdl2-dev libgl-dev libpng-dev libjpeg-dev libwebp-dev libfreetype-dev libogg-dev libvorbis-dev libopusfile-dev libphysfs-dev >/dev/null
+	libsdl2-dev libgl-dev libglu1-mesa-dev libpng-dev libjpeg-dev libwebp-dev libfreetype-dev libogg-dev libvorbis-dev libopusfile-dev libphysfs-dev >/dev/null
 cd /tmp
 git clone -q --depth 1 -b $AL_VER https://github.com/liballeg/allegro5.git allegro
-cmake -S allegro -B al -DCMAKE_BUILD_TYPE=Release -DALLEGRO_SDL=ON -DSHARED=ON -DWANT_DOCS=OFF -DWANT_EXAMPLES=OFF \
+cmake -S allegro -B al -DCMAKE_BUILD_TYPE=Release -DALLEGRO_SDL=ON -DGL_BUILD_TYPE=gl -DSHARED=ON -DWANT_DOCS=OFF -DWANT_EXAMPLES=OFF \
 	-DWANT_TESTS=OFF -DWANT_DEMO=OFF -DWANT_VIDEO=OFF -DWANT_NATIVE_DIALOG=OFF -DWANT_OPENAL=OFF -DWANT_PULSEAUDIO=OFF \
 	-DWANT_ALSA=OFF -DWANT_FLAC=OFF -DWANT_MODAUDIO=OFF -DWANT_OPUS=ON -DCMAKE_INSTALL_PREFIX=/opt/al >/dev/null
 cmake --build al -j\$(nproc) >/dev/null && cmake --install al >/dev/null
