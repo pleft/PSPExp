@@ -260,8 +260,17 @@ samples with nearest filtering (`launcher_gfx.c`):
   short name.
 - **Cards and shadows**: anti-aliased rounded rectangles and Gaussian
   shadows as 9-slices (corners 1:1, uniform edges stretched).
-- **Backdrop**: 480x272 dark gradient with three soft colour glows, Bayer
-  dithered to 5650, six textures.
+- **Backdrop**: 480x272 blue gradient with two soft glows and three bands
+  of light as waves across its lower half (step 5 of the redesign), Bayer
+  dithered to 5650, six textures. Over it two light ribbons (512x64 8888,
+  periodic over their width) drift sideways, at 9 and -6 px/s, while the
+  launcher is in use (`gfx_waves`): two to four quads a frame, but the
+  board redraws and sends every frame while they move (about 6 KB each).
+  They stop where they are once the launcher is still (30 s), so an idle
+  PSP still gets no frames, and they never move on the Omega2+. Next: the
+  PSP drawing them itself (a backdrop message, the launcher's commands kept
+  as a list and replayed at the PSP's own 60 Hz), the board then sending
+  nothing for them.
 - **Covers** (128x128 8888, an LRU of 10 on the PSP; on the shelf inside
   discs, `gfx_disc`): box art when there is
   some, else generated: a gradient chosen by the title, a large faint icon,

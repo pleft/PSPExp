@@ -33,6 +33,7 @@
 #define ID_NINE       40   /* + style */
 #define ID_BUTTON     50   /* + 0..3 */
 #define ID_BACKDROP   60   /* + 0..5 */
+#define ID_WAVE       70   /* + 0..1: the two light ribbons drifting over the backdrop */
 #define ID_ICON       3000 /* + slot */
 #define ICON_SLOTS    96
 #define ID_COVER      4000 /* + pool index */
@@ -648,14 +649,65 @@ static void backdrop_make(void)
             for (y = 0; y < h; y++)
                 for (x = 0; x < w; x++) {
                     float X = (float)(BD_X[tx] + x), Y = (float)(BD_Y[ty] + y), t = Y / SCREEN_H;
-                    float r = (0x14 * (1 - t) + 0x07 * t) / 255.0f, g = (0x17 * (1 - t) + 0x08 * t) / 255.0f, b = (0x26 * (1 - t) + 0x0e * t) / 255.0f;
-                    glow(&r, &g, &b, X, Y, 90, -60, 330, 0x5b6cff, 0.30f);
-                    glow(&r, &g, &b, X, Y, 500, 300, 300, 0x14b8c8, 0.13f);
-                    glow(&r, &g, &b, X, Y, 300, 40, 220, 0x9b5cff, 0.08f);
+                    float r = (0x0e * (1 - t) + 0x03 * t) / 255.0f, g = (0x22 * (1 - t) + 0x08 * t) / 255.0f, b = (0x4c * (1 - t) + 0x18 * t) / 255.0f;
+                    int k;
+                    glow(&r, &g, &b, X, Y, 90, -60, 330, 0x3d7bff, 0.26f);
+                    glow(&r, &g, &b, X, Y, 500, 300, 300, 0x1aa0e0, 0.12f);
+                    /* soft bands of light across the lower half, as waves */
+                    for (k = 0; k < 3; k++) {
+                        static const float base[3] = { 150, 176, 204 }, amp[3] = { 18, 12, 24 }, ph[3] = { 0.0f, 1.7f, 3.1f }, wid[3] = { 26, 10, 40 }, str[3] = { 0.10f, 0.13f, 0.06f };
+                        float cy = base[k] + amp[k] * sinf(X / SCREEN_W * 2.4f * 3.14159f + ph[k]) + 8 * sinf(X / SCREEN_W * 5.0f * 3.14159f + ph[k] * 2);
+                        float dd = fabsf(Y - cy) / wid[k], lw = dd < 1 ? (1 - dd) * (1 - dd) * str[k] : 0;
+                        r += 0.36f * lw; g += 0.60f * lw; b += 0.95f * lw;
+                    }
                     dst[y * 256 + x] = dither5650(r, g, b, (int)X, (int)Y);
                 }
             pspexp_upload_texture_commit(G, 1);
         }
+}
+
+/* the two ribbons: thin bright sine curves on transparency, 512 wide and periodic over it, so
+ * that drawn twice side by side they slide sideways without a seam */
+#define WAVE_W 512
+#define WAVE_H 64
+static int have_waves;
+
+static void waves_make(void)
+{
+    int k, x, y;
+    uint8_t *px = (uint8_t *)malloc((size_t)WAVE_W * WAVE_H * 4);
+    if (!px) return;
+    for (k = 0; k < 2; k++) {
+        for (y = 0; y < WAVE_H; y++)
+            for (x = 0; x < WAVE_W; x++) {
+                float a = 0, ph = k ? 2.2f : 0.0f;
+                float cy = WAVE_H / 2.0f + (k ? 14 : 18) * sinf(x / (float)WAVE_W * 2 * 3.14159f + ph) + 6 * sinf(x / (float)WAVE_W * 6 * 3.14159f + ph);
+                float d = fabsf(y + 0.5f - cy);
+                a += clampf(1.2f - d, 0, 1) * 0.55f;                     /* the bright line */
+                a += expf(-d * d / (k ? 30.0f : 60.0f)) * 0.30f;          /* its glow */
+                uint8_t *p = px + (y * WAVE_W + x) * 4;
+                p[0] = 190; p[1] = 220; p[2] = 255; p[3] = (uint8_t)lroundf(clampf(a, 0, 1) * 255);
+            }
+        if (upload_rgba((uint16_t)(ID_WAVE + k), px, WAVE_W, WAVE_H) == 0) have_waves = 1;
+    }
+    free(px);
+}
+
+void gfx_waves(float t)
+{
+    static const int y0[2] = { 128, 158 };
+    static const float speed[2] = { 9.0f, -6.0f }, alpha[2] = { 0.55f, 0.40f };
+    int k, i;
+    if (!have_waves) return;
+    for (k = 0; k < 2; k++) {
+        int off = (int)fmodf(t * speed[k], (float)WAVE_W);
+        if (off < 0) off += WAVE_W;
+        for (i = 0; i < 2; i++) {   /* the texture twice, side by side, slid by off */
+            int x = -off + i * WAVE_W;
+            if (x >= SCREEN_W || x + WAVE_W <= 0) continue;
+            quad((uint16_t)(ID_WAVE + k), x, y0[k], WAVE_W, WAVE_H, 0, 0, WAVE_W, WAVE_H, c4444(0xffffff, (int)(alpha[k] * 255)));
+        }
+    }
 }
 
 void gfx_backdrop(void)
@@ -1172,5 +1224,6 @@ int gfx_init(PspExpContext *ctx, const char *assets)
     nine_make(NINE_SHADOW14, 14, 12);
     buttons_make();
     backdrop_make();
+    waves_make();
     return 0;
 }
