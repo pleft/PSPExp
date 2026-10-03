@@ -51,7 +51,7 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 | `SDL_UpdateWindowSurface(Rects)` (programs without a renderer) | the window surface is shrunk to the PSP size and streamed as a texture every present (≈270 KB per frame at 480x272) |
 | `SDL_OpenAudio`, `SDL_OpenAudioDevice` (callback or `SDL_QueueAudio`) | the mixed output is converted to 44.1 kHz stereo and streamed (`AUDIO_STREAM`); the host device keeps playing unless `PSPEXP_LOCAL_AUDIO=0` |
 | PSP controls | a virtual game controller ("PSP (PSPExp)": a/b/x/y = cross/circle/square/triangle, shoulders, start/back, d-pad, left stick = nub) when the program initialised joysticks, plus keyboard events per `PSPEXP_KEYS` |
-| `SDL_GetKeyboardState`, `SDL_GetMouseState`, `SDL_GetRelativeMouseState` | answered by the layer with what the PSP's buttons and nub hold (events pushed from the PSP never reach SDL's own state: games that poll it saw a held button as one press) |
+| `SDL_GetKeyboardState`, `SDL_GetMouseState`, `SDL_GetRelativeMouseState` | answered by the layer with what the PSP's buttons and nub hold (events pushed from the PSP never reach SDL's own state: games that poll it saw a held button as one press). One table, handed out from the first call even before the layer is up and kept current at every key and every `SDL_PumpEvents` (hooked for that): Hurrican asks once at start and keeps reading the pointer |
 | `SDL_WarpMouseInWindow` | the nub's pointer moves there (games that recentre the mouse every frame and read the distance); mouse motion events carry `xrel` / `yrel` |
 | `SDL_SetRelativeMouseMode`, `SDL_GetRelativeMouseMode` (with `PSPEXP_NUB=mouse`) | kept by the layer (a headless board's dummy driver refuses it): while on, the game gets the nub's whole motion, never stopped at an edge, and no pointer is drawn (the game draws its own: OpenArena showed two, and its cursor stuck where the layer's met the edge) |
 | held buttons, as keys | repeat as a keyboard does: after 400 ms, every 40 ms |
@@ -137,7 +137,8 @@ vertex attributes and the texture samples. The plan for the GE:
 
 `glGetString(GL_VERSION)` is "2.1 PSPExp" (`PSPEXP_GL_VERSION` to change it:
 "1.3" makes such games take a fixed-function path they have); contexts of
-3.x or a core profile are refused, as a driver without them would (with a
+3.x are refused (a core profile asked for without a version of 3.2 or more
+is not one, as drivers have it: Hurrican asks for "core" for its OpenGL 1.x), as a driver without them would (with a
 GL error pending: programs that check that way fall back). Framebuffer
 objects with a colour texture are **render targets** on the PSP: the GE draws
 into the texture in VRAM (at most 512 x 512, 16 or 32 bits), and it is then

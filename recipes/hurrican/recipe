@@ -1,0 +1,30 @@
+# Hurrican: Poke53280's freeware run-and-gun (2007) on the HurricanGame fork's
+# engine (PSPExp's build: SDL2, the OpenGL 1.x renderer, low resolution). The
+# board downloads the game's data from that repository when it is installed
+# (package hurrican; PSPExp passes none of it on). In play the keyboard, by
+# Hurrican's defaults: Alt jumps, Ctrl shoots, Shift fires the lightning,
+# Space the power line, Right Ctrl a grenade, Right Shift the smart bomb,
+# Return cycles weapons, Escape pauses. The controller stays on for its menus,
+# which take button 0 (cross) to confirm and 1 (circle) to go back; in play
+# Hurrican follows the keyboard only (its default).
+
+[package]
+id=hurrican
+title=Hurrican
+description=A run-and-gun shooter in the spirit of Turrican: blast through huge levels with a spread gun, laser and bouncers, a lightning whip and smart bombs.
+category=game
+license=MIT (the HurricanGame engine); freeware (Hurrican, Poke53280), downloaded from its repository
+version=1
+
+[debian]
+apt=hurrican
+
+[entry]
+title=Hurrican
+type=game
+description=A run-and-gun shooter in the spirit of Turrican: huge levels, a spread gun, laser and bouncers, a lightning whip and smart bombs. Freeware by Poke53280.
+icon=rocket
+exec=/usr/games/hurrican
+keys=cross=lalt,square=lctrl,circle=lshift,triangle=space,r=rctrl,l=rshift,select=return,start=esc,up=up,down=down,left=left,right=right
+nub=keys
+graphics=opengl

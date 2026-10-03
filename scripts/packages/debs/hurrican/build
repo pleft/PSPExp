@@ -1,0 +1,16 @@
+#!/bin/sh
+# hurrican: an installer for Hurrican's data (Poke53280's freeware game, 2007):
+# the board downloads the HurricanGame repository at the commit
+# pspexp-hurrican's engine was built from, and keeps its Hurrican/ folder (data,
+# lang, readme) (_installer.sh). Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+C=0d91d1f2d40f38d21e7f41afc01369ee55649fb6
+ID=hurrican TITLE="Hurrican" VERSION=2026.0d91d1f-pspexp2
+URL="https://github.com/HurricanGame/Hurrican/archive/$C.tar.gz"
+SHA=33520e93eef63461f7082381e0f6046ae0c90e84b8a132df9dbc06a2ca2d69ea SIZE="96 MB" TOP="Hurrican-$C/Hurrican"
+RUN='exec /usr/lib/pspexp/hurrican/hurrican -W -L --pathdata "$G/" --pathsave "$D/" "$@"'
+DEPENDS=pspexp-hurrican
+ABOUT=" Poke53280's freeware run-and-gun game in the spirit of Turrican, its
+ data from the game's own repository, for Hurrican's engine."
+build_installer "$1"

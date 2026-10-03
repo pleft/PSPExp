@@ -1463,6 +1463,20 @@ static int setup_stream(int slot, const SDL_AudioSpec *have)
 
 /* ---- input ------------------------------------------------------------------ */
 
+/* SDL's keyboard state with the PSP's keys in: one table, handed out from the
+ * first SDL_GetKeyboardState and kept current at every change. Hurrican asks
+ * once, before the layer is up, and keeps reading the same pointer: SDL's own
+ * table never sees the keys we push, and a copy made only when asked went
+ * stale (no key reached its intro or menus). */
+static Uint8 kb_merged[SDL_NUM_SCANCODES];
+
+static void kb_refresh(void)
+{
+    int n = 0, i;
+    const Uint8 *real = REAL(SDL_GetKeyboardState)(&n);
+    for (i = 0; i < SDL_NUM_SCANCODES; i++) kb_merged[i] = (Uint8)((i < n ? real[i] : 0) | S.kheld[i]);
+}
+
 static void push_key(SDL_Keycode sym, int down)
 {
     SDL_Event ev;
@@ -1475,6 +1489,7 @@ static void push_key(SDL_Keycode sym, int down)
     ev.key.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
     if (ev.key.keysym.scancode < SDL_NUM_SCANCODES) S.kheld[ev.key.keysym.scancode] = (Uint8)(down != 0);
     SDL_PushEvent(&ev);
+    kb_refresh();
 }
 
 /* a held key's repeats, as a keyboard sends them (games that move a step per KEYDOWN) */
@@ -1636,13 +1651,11 @@ static void feed_input(void)
 
 HOOK(const Uint8 *, SDL_GetKeyboardState, (int *numkeys))
 {
-    static Uint8 merged[SDL_NUM_SCANCODES];
-    int n = 0, i;
-    const Uint8 *real = REAL(SDL_GetKeyboardState)(&n);
-    if (numkeys) *numkeys = n;
-    if (!S.active) return real;
-    for (i = 0; i < n && i < SDL_NUM_SCANCODES; i++) merged[i] = (Uint8)(real[i] | S.kheld[i]);
-    return merged;
+    int n = 0;
+    (void)REAL(SDL_GetKeyboardState)(&n);
+    if (numkeys) *numkeys = n < SDL_NUM_SCANCODES ? n : SDL_NUM_SCANCODES;
+    kb_refresh();
+    return kb_merged;   /* always ours, even before the layer is up: a game may keep the pointer */
 }
 
 /* Games that count joysticks once at start, before any window (Flare), would
@@ -2418,9 +2431,11 @@ static int gl_context_token;   /* its address is the context handed out */
 HOOK(SDL_GLContext, SDL_GL_CreateContext, (SDL_Window *win))
 {
     /* ours is OpenGL 2.1 (and ES 2 through it): a program that asks for 3.x
-     * or a core profile is refused, as a real driver without them would,
-     * and tries again with less */
-    if (S.gl_major >= 3 || (S.gl_profile & SDL_GL_CONTEXT_PROFILE_CORE)) {
+     * is refused, as a real driver without it would, and tries again with
+     * less. A core profile without a version of 3.2 or more is not one (core
+     * profiles begin there; drivers give a compatibility context): Hurrican
+     * asks for "core" with no version for its OpenGL 1.x drawing */
+    if (S.gl_major >= 3) {
         logf_("gl: an OpenGL %d.%d%s context asked for: refused (2.1 here)", S.gl_major, S.gl_minor,
               S.gl_profile & SDL_GL_CONTEXT_PROFILE_CORE ? " core" : "");
         SDL_SetError("OpenGL %d.%d is not available (2.1)", S.gl_major, S.gl_minor);
@@ -2524,6 +2539,14 @@ static void fake_focus_once(void)
     SDL_zero(ev);
     ev.type = SDL_WINDOWEVENT; ev.window.event = SDL_WINDOWEVENT_FOCUS_GAINED; ev.window.windowID = SDL_GetWindowID(S.win);
     SDL_PushEvent(&ev);
+}
+
+/* the board's own keyboard (the Pi 400's) into the shared table too, for games
+ * that read it after pumping (Hurrican) */
+HOOK(void, SDL_PumpEvents, (void))
+{
+    REAL(SDL_PumpEvents)();
+    kb_refresh();
 }
 
 HOOK(int, SDL_PollEvent, (SDL_Event *ev))

@@ -1,7 +1,8 @@
 # Installer packages for games PSPExp may not pass on (docs/Package_Manager.md
 # §4.2): the package holds a launch script and nothing of the game; its
 # postinst fetches the developer's own release from where the developer
-# publishes it, checks a pinned SHA-256, unpacks it (unar: RAR and ZIP) into
+# publishes it, checks a pinned SHA-256, unpacks it (unar: RAR and ZIP; tar for
+# a .tar.gz, which unar only ungzips) into
 # /usr/share/games/ID, and postrm removes it. Sourced by a game's build script,
 # which sets:
 #   ID TITLE VERSION       package name, the game's title, the package's version
@@ -40,6 +41,10 @@ S
 		_src="$URL"
 		_fetch="u='$URL'"
 	fi
+	case "$URL" in
+	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;
+	*) _unpack='unar -q -o "$C/x" "$C/game.part" >/dev/null' ;;
+	esac
 	cat > "$_w/root/usr/share/doc/$ID/README" <<D
 $TITLE. This package holds no part of the game: installing it downloads the
 developer's release from
@@ -63,7 +68,7 @@ curl -fL --retry 3 --connect-timeout 20 -o "\$C/game.part" "\$u" || { rm -rf "\$
 echo "$SHA  \$C/game.part" | sha256sum -c --quiet - || { rm -rf "\$C"; echo "the download is not the expected file (a new release?)" >&2; exit 1; }
 echo "Unpacking..."
 mkdir -p "\$C/x"
-unar -q -o "\$C/x" "\$C/game.part" >/dev/null
+$_unpack
 rm -rf "\$G.new"; mv "\$C/x/$TOP" "\$G.new"
 chmod -R u=rwX,go=rX "\$G.new"
 echo "$SHA" > "\$G.new/.pspexp-sha256"

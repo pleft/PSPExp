@@ -1,0 +1,28 @@
+# The Ur-Quan Masters: Debian's UQM (contrib) with its content, music and voice
+# packages, at its own 320x240 (shown 4:3, a little enlarged). Keys only, UQM's
+# own: Right Ctrl fires and selects, Right Shift is the special and cancels,
+# Escape the game menu, Alt the menus' special action, Page Up / Down zoom
+# the star map. Its intro slides redraw only when they change, so few frames
+# there is normal.
+
+[package]
+id=uqm
+title=The Ur-Quan Masters
+description=Star Control II: explore a galaxy of hundreds of stars, meet strange alien races, build a fleet and free Earth from the Ur-Quan. With its music and voices.
+category=game
+license=GPL-2.0 (UQM); CC BY-NC-SA 2.5 (its content)
+version=1
+
+[debian]
+apt=uqm uqm-music uqm-voice
+
+[entry]
+title=The Ur-Quan Masters
+type=game
+description=Star Control II: explore a galaxy of hundreds of stars, meet strange alien races, build a fleet and free Earth from the Ur-Quan. With its music and voices.
+icon=rocket
+exec=/usr/games/uqm -r 320x240
+keys=cross=rctrl,circle=rshift,triangle=esc,start=esc,square=lalt,select=none,l=pgup,r=pgdn,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl

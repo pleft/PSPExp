@@ -615,7 +615,39 @@ it, not yet on the PSP):
   the opening scene with its dialogue right in PPSSPP at 24-26 fps; battles
   not reached by script. Both games' installers come from one builder now,
   `scripts/packages/debs/_installer.sh` (a game's build script names its
-  download, checksum, the folder inside the archive and the launch command). `/usr/games/alter-aila-genesis` keeps the saves in the
+  download, checksum, the folder inside the archive and the launch command).
+
+More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
+
+- **The Ur-Quan Masters** (`uqm`, Debian contrib, with its music and voice
+  packages): at its own 320x240 (`-r 320x240`), shown 4:3. UQM's own keys:
+  cross Right Ctrl (fire, select), circle Right Shift (special, cancel),
+  triangle / START Escape, square Alt, L / R Page Up / Down (the star map's
+  zoom). Main menu and the intro's slides right; few frames while those
+  slides stand still is UQM redrawing only on a change.
+- **Hurrican** (`hurrican`): the HurricanGame fork's engine built by PSPExp
+  (`scripts/packages/build-hurrican.sh`, `pspexp-hurrican`: SDL2, the OpenGL
+  1.x renderer, from the fork's main branch at 0d91d1f, its v1.0.9.3 tag
+  still having SDL 1.2-only code; libepoxy stood in for by a header of the
+  plain GL prototypes, epoxy's own lookups would pass the layer by), and the
+  game's data downloaded at install from that repository's archive at the
+  same commit (`hurrican`, an installer; the builder now unpacks a .tar.gz
+  with tar, unar only ungzipped it). Run windowed at low resolution (`-W -L`).
+  It needed two layer fixes: a versionless "core" context accepted, and the
+  keyboard table it reads kept current (no key reached its intro). The
+  intro, menus and level 1 right at 25 fps in PPSSPP, 42 KB a frame in play.
+  Its menus take the controller's cross / circle; in play the keyboard by
+  its defaults (cross Alt jumps, square Ctrl shoots, circle Shift the
+  lightning, triangle Space the power line, R / L Right Ctrl / Shift grenade
+  and smart bomb, SELECT Return cycles weapons, START Escape).
+- **Open Surge**: not yet. Built (`scripts/packages/build-opensurge.sh`:
+  Allegro 5 with its SDL2 backend, so its window, input, sound and GL are
+  the layer's; Allegro's GTK dialogs replaced by `allegro-dialog-stub.c`,
+  messages to the log), but it draws each frame through several 426x240
+  render targets and the PSP's VRAM has no room for them (OUT_OF_MEMORY, a
+  black screen): the GL layer would have to share or shrink targets.
+- **Wyrmsun**: not attempted; its engine is now Qt-based, out of the SDL
+  layer's reach. `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in

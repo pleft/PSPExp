@@ -1,0 +1,29 @@
+#!/bin/sh
+# pspexp-hurrican: Hurrican's engine (the HurricanGame fork, MIT), which Debian
+# does not carry, built by scripts/packages/build-hurrican.sh ARCH (OpenGL 1.x
+# renderer, SDL2). The game's data is not in it: package hurrican downloads it.
+# Installs /usr/lib/pspexp/hurrican/hurrican. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/hurrican"
+[ -x "$B/hurrican" ] && [ -s "$B/depends.txt" ] || { echo "no $B/hurrican: scripts/packages/build-hurrican.sh $ARCH first" >&2; exit 1; }
+V=2026.0d91d1f-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/hurrican" "$W/root/usr/share/doc/pspexp-hurrican"
+install -m 755 "$B/hurrican" "$W/root/usr/lib/pspexp/hurrican/hurrican"
+echo "Hurrican's engine, the HurricanGame fork (https://github.com/HurricanGame/Hurrican, commit 0d91d1f), MIT; built with SDL2 and the OpenGL 1.x renderer by PSPExp. The game's data comes with package hurrican (downloaded)." > "$W/root/usr/share/doc/pspexp-hurrican/README"
+cat > "$W/control" <<C
+Package: pspexp-hurrican
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Hurrican's engine, for PSPExp
+ The engine of Hurrican, a freeware run-and-gun game in the spirit of
+ Turrican, which Debian does not carry. Its data comes with the package
+ hurrican. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-hurrican_${V}_$ARCH.deb"
