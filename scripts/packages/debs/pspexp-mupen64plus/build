@@ -1,0 +1,58 @@
+#!/bin/sh
+# pspexp-mupen64plus: Mupen64Plus (GPL-2.0) with GLideN64 (GPL-2.0), which
+# Debian 13 does not build for arm64, built by scripts/packages/build-mupen64plus.sh
+# ARCH. Installs /usr/lib/pspexp/mupen64plus/ (front end, core, plugins/, data/)
+# and /usr/games/pspexp-n64, which starts it on one ROM for the PSP: 480x272,
+# GLideN64, controller 1 the PSP's. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/mupen64plus"
+[ -x "$B/mupen64plus" ] && [ -s "$B/depends.txt" ] || { echo "no $B/mupen64plus: scripts/packages/build-mupen64plus.sh $ARCH first" >&2; exit 1; }
+V=2.6.0+git2026-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L=/usr/lib/pspexp/mupen64plus
+mkdir -p "$W/root$L" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-mupen64plus"
+cp -R "$B/mupen64plus" "$B/libmupen64plus.so.2" "$B/plugins" "$B/data" "$W/root$L/"
+cat > "$W/root/usr/games/pspexp-n64" <<S
+#!/bin/sh
+# Mupen64Plus on one ROM, for the PSP (package pspexp-mupen64plus). The PSP's
+# controller (SDL joystick 0; raw buttons: cross 0, circle 1, square 2,
+# triangle 3, L 4, R 5, START 6, SELECT 7, d-pad up/right/down/left 12-15) as
+# the N64's: nub the stick, cross A, square B, L Z, R R, START Start, the
+# d-pad the four C buttons, triangle L, circle the N64's d-pad down (some
+# games' menus). Controllers 2-4 unplugged. Unknown microcode (homebrew) goes
+# to the low-level RSP.
+M=$L
+C="Input-SDL-Control1"
+exec "\$M/mupen64plus" --corelib "\$M/libmupen64plus.so.2" --plugindir "\$M/plugins" --datadir "\$M/data" \\
+	--gfx mupen64plus-video-GLideN64.so --windowed --resolution 480x272 \\
+	--set "Rsp-HLE[RspFallback]=\$M/plugins/mupen64plus-rsp-cxd4.so" \\
+	--set "\$C[mode]=0" --set "\$C[device]=0" --set "\$C[plugged]=True" --set "\$C[plugin]=2" --set "\$C[mouse]=False" \\
+	--set "\$C[AnalogDeadzone]=4096,4096" --set "\$C[AnalogPeak]=30000,30000" \\
+	--set "\$C[A Button]=button(0)" --set "\$C[B Button]=button(2)" --set "\$C[Z Trig]=button(4)" \\
+	--set "\$C[R Trig]=button(5)" --set "\$C[L Trig]=button(3)" --set "\$C[Start]=button(6)" \\
+	--set "\$C[C Button U]=button(12)" --set "\$C[C Button R]=button(13)" --set "\$C[C Button D]=button(14)" --set "\$C[C Button L]=button(15)" \\
+	--set "\$C[DPad U]=" --set "\$C[DPad R]=" --set "\$C[DPad D]=button(1)" --set "\$C[DPad L]=" \\
+	--set "\$C[X Axis]=axis(0-,0+)" --set "\$C[Y Axis]=axis(1-,1+)" --set "\$C[Mempak switch]=" --set "\$C[Rumblepak switch]=" \\
+	--set "Input-SDL-Control2[plugged]=False" --set "Input-SDL-Control2[mode]=0" --set "Input-SDL-Control2[device]=-1" \\
+	--set "Input-SDL-Control3[plugged]=False" --set "Input-SDL-Control3[mode]=0" --set "Input-SDL-Control3[device]=-1" \\
+	--set "Input-SDL-Control4[plugged]=False" --set "Input-SDL-Control4[mode]=0" --set "Input-SDL-Control4[device]=-1" \\
+	"\$@"
+S
+chmod 755 "$W/root/usr/games/pspexp-n64"
+cp "$B/COPYING" "$W/root/usr/share/doc/pspexp-mupen64plus/" 2>/dev/null || true
+echo "Mupen64Plus (https://github.com/mupen64plus, its main branch in 2026), GPL-2.0, with GLideN64 (https://github.com/gonetz/GLideN64), GPL-2.0, built by PSPExp; GLideN64 asks for OpenGL ES 3.0 (patched). No games: N64 ROMs are the user's own, in ~/roms/n64." > "$W/root/usr/share/doc/pspexp-mupen64plus/README"
+cat > "$W/control" <<C
+Package: pspexp-mupen64plus
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Mupen64Plus, the Nintendo 64 emulator, for PSPExp
+ Mupen64Plus with the GLideN64 graphics plugin, which Debian does not build
+ for arm64, and a launch script for the PSP (pspexp-n64). Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-mupen64plus_${V}_$ARCH.deb"

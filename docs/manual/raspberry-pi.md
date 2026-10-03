@@ -44,12 +44,12 @@ you never need to log in to it again.
 On the PSP: **Apps > Packages**. Pick a game (Freedoom, OpenTyrian, Cave
 Story, Dink Smallwood, Alter A.I.L.A. Genesis, Theia, SuperTux, Quake...) and press cross to install it; it appears under
 **Games** when done. Emulators install the same way (NES, SNES, Mega Drive,
-Game Boy, Game Boy Advance, Lynx, WonderSwan) and appear as their own tiles
-once you have ROMs for them.
+Game Boy, Game Boy Advance, Lynx, WonderSwan, and on a Pi the Nintendo 64)
+and appear as their own tiles once you have ROMs for them.
 
 **ROMs** go in folders in your home folder on the Pi: `roms/nes`,
 `roms/snes`, `roms/md`, `roms/gb` and `roms/gbc`, `roms/gba`, `roms/lynx`,
-`roms/ws`. Copy them with the file manager (**Apps > Files**) from a USB
+`roms/ws`, `roms/n64`. Copy them with the file manager (**Apps > Files**) from a USB
 stick or from the PSP's memory stick, or over the network as you would to
 any Linux machine. Only use ROMs of games you own.
 
@@ -65,6 +65,7 @@ Measured on the PSP-1000 with a Pi 400:
 | OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
+| Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's first mission at about 20 fps in the emulator, the game at full speed; not yet measured on the PSP |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); about 30 fps in the emulator, not yet measured on the PSP |
 
 ## Games drawn by the Pi's graphics chip

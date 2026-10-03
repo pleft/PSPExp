@@ -9,7 +9,7 @@ SECTIONS = {"package", "debian", "omega", "entry", "system"}
 PACKAGE_KEYS = {"id", "title", "description", "category", "license", "version", "requires"}
 BOARD_KEYS = {"apt", "core", "build", "data", "warn"}
 ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover", "graphics"}
-SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native", "graphics"}
+SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native", "graphics", "exec"}
 GRAPHICS = {"sdl", "opengl", "opengl-shaders", "board-gpu"}   # how it draws: the launcher's details card and Packages say so
 DESCRIPTION_MAX = 220                            # what the details card shows over its lines
 CATEGORIES = {"game", "system", "app", "tool"}
@@ -97,8 +97,9 @@ def check(dirpath):
         for sec in systems:
             for need in ("name", "short", "ext", "roms", "graphics"):
                 if need not in sections[sec]: errs.append("%s: [%s] needs %s" % (rid, sec, need))
-        if "debian" in sections and "core" not in sections["debian"]:
-            errs.append("%s: a system's [debian] needs core=" % rid)
+        own = all("exec" in sections[sec] and "%ROM%" in sections[sec]["exec"] for sec in systems)
+        if "debian" in sections and "core" not in sections["debian"] and not own:
+            errs.append("%s: a system's [debian] needs core= (or each [system] an exec= with %%ROM%%)" % rid)
     elif pk.get("category"):
         if not entries: errs.append("%s: needs [entry]" % rid)
         for sec in entries:

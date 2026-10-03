@@ -1,0 +1,34 @@
+# The Nintendo 64: Mupen64Plus with GLideN64 (package pspexp-mupen64plus),
+# drawn by the board's own GPU (PSPEXP_HOSTGL: the Pi 400's V3D, OpenGL ES),
+# each frame sent to the PSP as a picture. Its own program, not a libretro core
+# (exec=, %ROM% the ROM). The PSP's controller is the N64's (pspexp-n64): nub
+# the stick, cross A, square B, L Z, R R, START Start, d-pad the C buttons,
+# triangle L. No keyboard keys: Mupen64Plus quits on Escape. The GameShell's
+# GPU (OpenGL ES 2) is too small: not offered there.
+
+[package]
+id=n64
+title=Nintendo 64
+description=Nintendo 64: Mupen64Plus with GLideN64, drawn by the board's GPU (Raspberry Pi); ROMs in ~/roms/n64
+category=system
+license=GPL-2.0 (Mupen64Plus, GLideN64); pspexp-n64 is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-mupen64plus
+
+[debian:gameshell]
+apt=
+
+[system]
+id=n64
+name=Nintendo 64
+short=N64
+icon=gamepad
+ext=z64,n64,v64
+roms=~/roms/n64
+thumbs=Nintendo - Nintendo 64
+exec=/usr/games/pspexp-n64 %ROM%
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+env=PSPEXP_HOSTGL=1
+graphics=board-gpu

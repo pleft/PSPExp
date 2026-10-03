@@ -72,7 +72,7 @@ and **System > Update the PSP** puts the PSP's side up to date too.
 
 An emulator package adds a **system**: NES, SNES, Mega Drive (with Master
 System and Game Gear), Game Boy and Game Boy Color, Game Boy Advance,
-Atari Lynx, WonderSwan. Its tile appears on the rail once there are ROMs in
+Atari Lynx, WonderSwan, and on a Raspberry Pi the Nintendo 64. Its tile appears on the rail once there are ROMs in
 its folder in the board's home folder:
 
 | System | Folder |
@@ -84,6 +84,11 @@ its folder in the board's home folder:
 | Game Boy Advance | `roms/gba` |
 | Atari Lynx | `roms/lynx` |
 | WonderSwan / Color | `roms/ws`, `roms/wsc` |
+| Nintendo 64 (Raspberry Pi) | `roms/n64` (.z64, .n64, .v64) |
+
+On the Nintendo 64 the nub is the stick, cross A, square B, L the Z
+trigger, R the R button, START Start, and the d-pad the four C buttons
+(triangle is the N64's L).
 
 New ROMs show up within seconds (or **System > Refresh library**), with
 their titles cleaned up ("Legend of Zelda, The (USA)" becomes "The Legend

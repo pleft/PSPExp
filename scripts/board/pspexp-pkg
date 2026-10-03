@@ -192,15 +192,19 @@ P
 				[ "$own" = "$ID" ] || die "$ID: the system $sid belongs to $own"
 			fi
 			core=$(rget "$R" "$sec" core); [ -n "$core" ] || core=$(rget "$R" "$FAMILY" core)
+			# a system with a program of its own (exec=, %ROM% in it) instead of a libretro core
+			# for pspexp-retro: Mupen64Plus; its video driver is left to pspexp-run (PSPEXP_HOSTGL)
+			sexec=$(rget "$R" "$sec" exec)
 			keys=$(rget "$R" "$sec" keys); nub=$(rget "$R" "$sec" nub)
 			{ echo "name=$(rget "$R" "$sec" name)"
 			  echo "short=$(rget "$R" "$sec" short)"
 			  icon=$(rget "$R" "$sec" icon); [ -n "$icon" ] && echo "icon=$icon"
 			  echo "roms=$(rget "$R" "$sec" roms)"
 			  echo "ext=$(rget "$R" "$sec" ext)"
-			  echo "exec=pspexp-run pspexp-retro $(libretro_dir)/$core %ROM%"
+			  if [ -n "$sexec" ]; then echo "exec=pspexp-run $sexec"
+			  else echo "exec=pspexp-run pspexp-retro $(libretro_dir)/$core %ROM%"; fi
 			  echo "pkg=$ID"
-			  echo "env=SDL_VIDEODRIVER=dummy"; echo "env=SDL_AUDIODRIVER=dummy"
+			  [ -n "$sexec" ] || echo "env=SDL_VIDEODRIVER=dummy"; echo "env=SDL_AUDIODRIVER=dummy"
 			  [ -n "$keys" ] && echo "env=PSPEXP_KEYS=$keys"
 			  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
 			  rall "$R" "$sec" env | sed 's/^/env=/'

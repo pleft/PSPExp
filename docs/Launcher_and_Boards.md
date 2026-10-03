@@ -1015,6 +1015,24 @@ scrolling NES frame costs it about 3 ms to send, and compressing it would
 cost about as much. Next: the GameShell and the Pi, where SNES and Mega
 Drive belong. (The SNES and Mega Drive were taken off the Omega on the morning of 2026-09-27 and are back on it since the evening's SDL layer.)
 
+### 6.5 The Nintendo 64 (2026-10-03, Pi only)
+
+Not through pspexp-retro: Mupen64Plus is its own program, and a system recipe
+may now name one (`exec=/usr/games/pspexp-n64 %ROM%` in `[system]`, no
+`core=`; `pspexp-pkg` writes it into the `.system` file and leaves the video
+driver to `pspexp-run`). `recipes/n64`, package `pspexp-mupen64plus`
+(`scripts/packages/build-mupen64plus.sh`): Mupen64Plus from its main branch
+with GLideN64 asking for OpenGL ES 3.0, drawn by the Pi's GPU
+(`PSPEXP_HOSTGL=1`, `graphics=board-gpu`). ROMs in `~/roms/n64` (.z64, .n64,
+.v64), box art from libretro-thumbnails' "Nintendo - Nintendo 64".
+`pspexp-n64` sets the controller: SDL joystick 0 with the PSP's raw buttons
+(cross 0, circle 1, square 2, triangle 3, L 4, R 5, START 6, SELECT 7, d-pad
+12-15): nub the stick, cross A, square B, L Z, R R, START Start, d-pad the C
+buttons, triangle L, circle the N64's d-pad down; controllers 2-4 unplugged.
+No keyboard keys (`keys=` all none): Escape quits Mupen64Plus. GoldenEye's
+Dam mission about 20 fps into PPSSPP, the sound never short; Super Mario 64
+right (architecture §12a).
+
 ## 7. The terminal and the file manager (2026-09-27)
 
 Both are built-in apps: the first two entries of the launcher's **Apps**
