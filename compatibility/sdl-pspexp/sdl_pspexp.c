@@ -141,6 +141,7 @@ typedef struct Tex {
     uint32_t *rgba;            /* shadow: ABGR8888 (R in the low byte), or ARGB8888 when argb */
     int argb;                  /* the shadow is in the game's ARGB8888: no conversion to compare */
     int shadow16;              /* the shadow is the game's RGB565, 2 bytes a pixel (emulators' usual output) */
+    int half;                  /* a large streaming texture kept at half size (tex_half) */
     int dirty, unsupported, streaming;   /* streaming: re-uploaded often, small pages */
     int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
     int baked;                 /* a target composed into its pixels (bake_target): an ordinary texture since */
@@ -715,9 +716,12 @@ static void page_grid(Tex *x)
     x->ncol = cut_pow2(x->w, cap_w, 16, x->cx, 16);
     x->nrow = cut_pow2(x->h, cap_h, 8, x->ry, 16);
     if ((S.no_delta && S.no_clut) || x->ncol < 1 || x->nrow < 1 || x->ncol * x->nrow > 16) {
-        /* too many pieces (or measuring the old way): an even grid of full pages */
+        /* too many pieces (or measuring the old way): an even grid of full pages;
+         * a large streaming texture in its small pages would still be too many
+         * (Project: Starfighter's 800x600 frame: 20), so it gets the full size */
         int i;
         x->ncol = (x->w + cap_w - 1) / cap_w; x->nrow = (x->h + cap_h - 1) / cap_h;
+        if (x->ncol * x->nrow > 16) { cap_w = cap_h = 512; x->ncol = (x->w + 511) / 512; x->nrow = (x->h + 511) / 512; }
         if (x->ncol > 16) x->ncol = 16;
         if (x->nrow > 16) x->nrow = 16;
         for (i = 0; i < x->ncol; i++) x->cx[i] = i * cap_w;
@@ -981,7 +985,7 @@ static int upload_tex(Tex *x)
     if (full) {
         int r, c;
         release_pages(x);
-        if (x->ncol * x->nrow > 16) { x->unsupported = 1; return -1; }
+        if (x->ncol * x->nrow > 16) { x->unsupported = 1; logf_("texture %dx%d: too large (over 16 pages of 512): not drawn", x->w, x->h); return -1; }
         for (r = 0; r < x->nrow; r++) {
             for (c = 0; c < x->ncol; c++) {
                 Page *p = &x->pages[x->npages++];
@@ -1078,11 +1082,39 @@ static void shadow_store16(Tex *x, const SDL_Rect *r, const uint16_t *px, int sp
 
 static uint32_t *g_conv; static size_t g_conv_n;
 static void shadow_update_(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch);
+/* a half-size texture's update halved first: every other pixel of every other row */
+static void *g_half; static size_t g_half_n;
+static int halve(const Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch, SDL_Rect *out, int *opitch)
+{
+    SDL_Rect r = rect ? *rect : (SDL_Rect){ 0, 0, x->w * 2, x->h * 2 };
+    int bpp = SDL_BYTESPERPIXEL(format), X0 = r.x / 2, Y0 = r.y / 2, X1 = (r.x + r.w + 1) / 2, Y1 = (r.y + r.h + 1) / 2, X, Y;
+    size_t need;
+    if (bpp < 1 || bpp > 4 || X1 > x->w || Y1 > x->h || X1 <= X0 || Y1 <= Y0) return -1;
+    need = (size_t)(X1 - X0) * (size_t)(Y1 - Y0) * (size_t)bpp;
+    if (need > g_half_n) { void *b = realloc(g_half, need); if (!b) return -1; g_half = b; g_half_n = need; }
+    for (Y = Y0; Y < Y1; Y++) {
+        int sy = 2 * Y < r.y ? r.y : 2 * Y;
+        const Uint8 *row = (const Uint8 *)pixels + (size_t)(sy - r.y) * (size_t)pitch;
+        Uint8 *o = (Uint8 *)g_half + (size_t)(Y - Y0) * (size_t)(X1 - X0) * (size_t)bpp;
+        for (X = X0; X < X1; X++) {
+            int sx = 2 * X < r.x ? r.x : 2 * X;
+            memcpy(o + (size_t)(X - X0) * (size_t)bpp, row + (size_t)(sx - r.x) * (size_t)bpp, (size_t)bpp);
+        }
+    }
+    out->x = X0; out->y = Y0; out->w = X1 - X0; out->h = Y1 - Y0;
+    *opitch = (X1 - X0) * bpp;
+    return 0;
+}
+
 /* the game's new pixels into the shadow; its CPU time counts as texture work */
 static void shadow_update(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch)
 {
     uint64_t t0 = cpu_ns(), w0 = wall_ns();
-    shadow_update_(x, rect, format, pixels, pitch);
+    if (x->half) {
+        SDL_Rect h;
+        int hp;
+        if (halve(x, rect, format, pixels, pitch, &h, &hp) == 0) shadow_update_(x, &h, format, g_half, hp);
+    } else shadow_update_(x, rect, format, pixels, pitch);
     S.up_ticks += cpu_ns() - t0;
     S.prof_shadow += wall_ns() - w0;
 }
@@ -1209,6 +1241,7 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
     if (!drawing()) return;
     if ((x->dirty || x->pdirty) && upload_tex(x) < 0) return;
     s = src ? *src : (SDL_Rect){ 0, 0, x->w, x->h };
+    if (x->half && src) { int x1 = (s.x + s.w + 1) / 2, y1 = (s.y + s.h + 1) / 2; s.x /= 2; s.y /= 2; s.w = x1 - s.x; s.h = y1 - s.y; }   /* (a half-size texture) */
     color = tint_for(x, &fmt);
     /* the source may span pages: split it */
     for (i = 0; i < x->npages; i++) {
@@ -1875,7 +1908,16 @@ HOOK(SDL_Texture *, SDL_CreateTexture, (SDL_Renderer *r, Uint32 format, int acce
     if (t && r == S.ren) {
         Tex *x = add_tex(t, w, h);
         if (x && access == SDL_TEXTUREACCESS_TARGET) x->is_target = 1;
-        if (x && access == SDL_TEXTUREACCESS_STREAMING) x->streaming = 1;
+        if (x && access == SDL_TEXTUREACCESS_STREAMING) {
+            x->streaming = 1;
+            /* a whole frame larger than 512 on a side (Project: Starfighter's
+             * 800x600): the PSP shows it at under half size, so it is kept and
+             * sent at half (1.2 MB a frame was 13 fps); PSPEXP_TEX_HALF=0: not */
+            if ((w > 512 || h > 512) && !(getenv("PSPEXP_TEX_HALF") && !strcmp(getenv("PSPEXP_TEX_HALF"), "0"))) {
+                x->half = 1; x->w = (w + 1) / 2; x->h = (h + 1) / 2;
+                logf_("streaming texture %dx%d kept at half size (%dx%d)", w, h, x->w, x->h);
+            }
+        }
         if (x) x->blend = SDL_BLENDMODE_NONE;   /* SDL's default for SDL_CreateTexture */
     }
     return t;
@@ -1951,7 +1993,8 @@ HOOK(int, SDL_LockTexture, (SDL_Texture *t, const SDL_Rect *rect, void **pixels,
     if (rc == 0 && x) {
         x->locked = 1;
         x->lock_pixels = *pixels; x->lock_pitch = *pitch;
-        x->lock_rect = rect ? *rect : (SDL_Rect){ 0, 0, x->w, x->h };
+        if (rect) x->lock_rect = *rect;
+        else { int tw = x->w, th = x->h; SDL_QueryTexture(t, NULL, NULL, &tw, &th); x->lock_rect = (SDL_Rect){ 0, 0, tw, th }; }   /* the real size (a half-size texture's is twice ours) */
     }
     return rc;
 }

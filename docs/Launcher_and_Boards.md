@@ -647,7 +647,20 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   render targets and the PSP's VRAM has no room for them (OUT_OF_MEMORY, a
   black screen): the GL layer would have to share or shrink targets.
 - **Wyrmsun**: not attempted; its engine is now Qt-based, out of the SDL
-  layer's reach. `/usr/games/alter-aila-genesis` keeps the saves in the
+  layer's reach.
+- **SuperTuxKart** (1.4), **OpenClonk** (8.1), **Trackballs** (1.3.4), from
+  Debian: none starts; they ask for OpenGL 3.1, 3.2 and 3.3 core contexts,
+  and the layer is OpenGL 2.1 (SuperTuxKart's 3D would be far beyond the GE
+  besides). Removed from the Pi.
+- **Project: Starfighter** (2.4, Debian): drew nothing at first: its whole
+  800x600 frame, one streaming texture, needed 20 of the small pages a
+  streaming texture is cut into, over the 16 a texture may have, and the
+  layer dropped it without a word. Now such a texture falls back to full
+  512 pages (logged when even that is too many), and a streaming texture
+  over 512 on a side is kept at half size on the board (`PSPEXP_TEX_HALF`):
+  1.2 MB a frame and 13.6 fps in PPSSPP became 197 KB and 30.7 fps. It plays,
+  but its menus' text, an 800x600 game shown at 0.45, cannot be read (as
+  Flare's); not packaged. `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in
