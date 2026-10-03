@@ -1352,7 +1352,12 @@ group no login sets). Now `user@.service` gets `LimitRTPRIO=95` (and nice,
 memlock) through a drop-in, and so does `pspexp-term.service`, whose
 pw-play children inherit it (`stage.sh`, `install.sh`): PipeWire's data
 threads ran at FIFO 83-88 and the Bluetooth sink's errors stopped (2 in all);
-and pw-play asks for 60 ms instead of 20 on a processor under 1.5 GHz.
+and pw-play asks for 60 ms instead of 20 on a processor under 1.5 GHz. The song had also played "clearly fast
+forward" there: measured with clicks one second apart, played through the
+player and recorded from the sink's monitor, 12 ms pieces vanished (clicks
+0.977-0.988 s apart) while the pitch stayed right; with 60 ms, 0.998 s
+each, nothing lost. A frame dropped on the board's side is now logged
+("Bluetooth sound: N frames dropped").
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering

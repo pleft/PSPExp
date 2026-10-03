@@ -139,7 +139,12 @@ int pspexp_la_write(PspExpLocalAudio *la, const int16_t *stereo, uint32_t frames
     while (left) {
         ssize_t n = send(la->fd, p, left, MSG_NOSIGNAL);
         if (n > 0) { p += n; left -= (size_t)n; continue; }
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { la->dropped += (uint32_t)(left / 4u); return 0; }   /* full: the rest is dropped, as the PSP does */
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {   /* full: the rest is dropped, as the PSP does */
+            static uint32_t told;
+            la->dropped += (uint32_t)(left / 4u);
+            if (la->dropped - told >= 4410u) { told = la->dropped; fprintf(stderr, "[pspexp] Bluetooth sound: %u frames dropped so far (pw-play's input full)\n", (unsigned)la->dropped); }
+            return 0;
+        }
         if (n < 0 && errno == EINTR) continue;
         pspexp_la_close(la);   /* pw-play went away: opened again at the next check */
         return -1;
