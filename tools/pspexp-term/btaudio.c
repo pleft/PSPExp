@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #define CHECK_US 3000000u
@@ -18,8 +19,13 @@ static void route_path(char *out, size_t n) { snprintf(out, n, "/tmp/pspexp-audi
 
 int bt_available(void)
 {
+    /* a yes is kept; a no is asked again every 20 s: at boot the console can
+     * ask before the Bluetooth controller is up (the GameShell, 2026-10-03:
+     * Sound output never showed after a reboot) */
     static int have = -1;
-    if (have < 0) have = system("pspexp-bt available >/dev/null 2>&1") == 0;
+    static time_t at;
+    if (have == 1) return 1;
+    if (have < 0 || time(NULL) - at >= 20) { have = system("pspexp-bt available >/dev/null 2>&1") == 0; at = time(NULL); }
     return have;
 }
 

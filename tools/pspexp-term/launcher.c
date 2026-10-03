@@ -1492,6 +1492,16 @@ static void status_poll(uint64_t now)
     struct tm tmv;
     localtime_r(&t, &tmv);
     if (tmv.tm_min != g_minute) { g_minute = tmv.tm_min; g_dirty = 1; }
+    {   /* Bluetooth sound became possible (the controller came up after the console): System > Sound output */
+        static uint64_t at;
+        static int had = -1;
+        if (!at || now - at > 10000000u) {
+            int has = bt_available();
+            at = now;
+            if (had >= 0 && has != had) { cats_build(); g_dirty = 1; }
+            had = has;
+        }
+    }
     {   /* the Bluetooth sound and its volume: two small files, a few times a second */
         static uint64_t at;
         if (!at || now - at > 300000u) {

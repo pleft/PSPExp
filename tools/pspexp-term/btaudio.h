@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* this board can (bluetoothctl, PipeWire's pw-play, a controller); asked once */
+/* this board can (bluetoothctl, PipeWire's pw-play, a controller); a no is asked again every 20 s */
 int  bt_available(void);
 /* the main loop, each turn: the route kept current */
 void bt_route_tick(uint64_t now);
