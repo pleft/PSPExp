@@ -70,9 +70,16 @@ def main():
     md5 = "".join("%s  %s\n" % (hashlib.md5(f.getvalue()).hexdigest(), n[2:]) for n, i, f in members if f is not None)
     for f in (m[2] for m in members if m[2] is not None):
         f.seek(0)
-    cdata = tar_gz([("./", info("./", mode=0o755, kind=tarfile.DIRTYPE), None),
-                    ("./control", info("./control", len(ctl.encode())), io.BytesIO(ctl.encode())),
-                    ("./md5sums", info("./md5sums", len(md5.encode())), io.BytesIO(md5.encode()))])
+    cmembers = [("./", info("./", mode=0o755, kind=tarfile.DIRTYPE), None),
+                ("./control", info("./control", len(ctl.encode())), io.BytesIO(ctl.encode())),
+                ("./md5sums", info("./md5sums", len(md5.encode())), io.BytesIO(md5.encode()))]
+    # maintainer scripts: preinst / postinst / prerm / postrm beside the control file, when there
+    for name in ("preinst", "postinst", "prerm", "postrm"):
+        sp = os.path.join(os.path.dirname(control), name)
+        if os.path.isfile(sp):
+            sd = open(sp, "rb").read()
+            cmembers.append(("./" + name, info("./" + name, len(sd), 0o755), io.BytesIO(sd)))
+    cdata = tar_gz(cmembers)
     ddata = tar_gz(members)
     with open(outp, "wb") as f:
         f.write(ar([("debian-binary", b"2.0\n"), ("control.tar.gz", cdata), ("data.tar.gz", ddata)]))

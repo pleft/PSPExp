@@ -595,10 +595,15 @@ it, not yet on the PSP):
   packages: `pspexp-easyrpg` (Player 0.8.1.1 with liblcf 0.8.1 built in,
   compiled in a Debian 13 container of the board's architecture by
   `scripts/packages/build-easyrpg.sh`, its Depends from dpkg-shlibdeps) and
-  `alter-aila-genesis-data` (the game's 24 Nov 2010 release from the Internet
-  Archive's copy of rpgmaker.net, unpacked, every file unaltered, its
-  README with the developer's terms in the package's docs; it needs no RTP,
-  FullPackageFlag=1). `/usr/games/alter-aila-genesis` keeps the saves in the
+  `alter-aila-genesis`, an **installer**: PSPExp does not pass the game's
+  files on (its terms do not say they may be), so the package holds only a
+  launch script, and its postinst fetches the developer's 24 Nov 2010
+  release from the Internet Archive's copy of rpgmaker.net, checks its
+  SHA-256 and unpacks it (unar: bsdtar stopped on a CRC error with this
+  RAR) into `/usr/share/games/alter-aila-genesis`, every file as released;
+  postrm removes it. It needs no RTP (FullPackageFlag=1). On the Pi: the
+  upgrade from the first, file-carrying package took 108 s, a fresh install
+  46 s, removal deletes the game; the downloaded game runs. `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in

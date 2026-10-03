@@ -1,5 +1,7 @@
 # Alter A.I.L.A. Genesis: Neok's 2010 RPG Maker 2003 game (freeware), on
-# EasyRPG Player; both are PSPExp's packages (Debian has neither). The game
+# EasyRPG Player (PSPExp's package; Debian has neither). The board downloads
+# the game itself when it is installed (package alter-aila-genesis: PSPExp
+# does not pass its files on). The game
 # draws at 320x240, shown 4:3 in the middle of the PSP's screen. Keys only,
 # as the game's README gives them: Z confirms, X is the menu and cancels,
 # Shift held runs; arrow keys move.
@@ -10,10 +12,10 @@ title=Alter A.I.L.A. Genesis
 description=A science-fiction RPG made in RPG Maker 2003: a long story, turn-based battles with combos and a cast of soldiers. Freeware (Neok, 2010), on EasyRPG.
 category=game
 license=GPL-3.0 (EasyRPG Player); freeware (Alter A.I.L.A. Genesis, Neok, 2010)
-version=1
+version=2
 
 [debian]
-apt=alter-aila-genesis-data
+apt=alter-aila-genesis
 
 [entry]
 title=Alter A.I.L.A. Genesis

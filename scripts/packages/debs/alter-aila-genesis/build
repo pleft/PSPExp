@@ -1,0 +1,81 @@
+#!/bin/sh
+# alter-aila-genesis: an installer for Alter A.I.L.A. Genesis (Neok, 2010; RPG
+# Maker 2003; freeware), for EasyRPG Player. PSPExp does not pass the game's
+# files on (its terms do not say they may be): on installation the board
+# fetches the developer's release of 24 Nov 2010 from the Internet Archive's
+# copy of rpgmaker.net, checks its SHA-256, and unpacks it, every file as
+# released, into /usr/share/games/alter-aila-genesis (removed with the
+# package). The game carries all its resources (FullPackageFlag=1: no RTP).
+# /usr/games/alter-aila-genesis runs it with the saves in the user's data
+# folder (the game's is read-only). Arch all. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+V=2010.11.24-pspexp2
+URL="https://archive.org/download/rmn-game-272-alter-a-i-l-a-genesis/272%2Fdownloads%2FAlter%20Aila%20Genesis%20-%20Nov%2024%2C%202010_1.rar"
+SHA=1a832ab87a5d5e47e8949d9b4f5efdb123ad14d25a0c70ec655bcfbc7d474761
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/alter-aila-genesis" "$W/ctl"
+cat > "$W/root/usr/games/alter-aila-genesis" <<'S'
+#!/bin/sh
+# Alter A.I.L.A. Genesis on EasyRPG Player (package alter-aila-genesis); saves
+# in the user's data folder
+G=/usr/share/games/alter-aila-genesis
+[ -f "$G/RPG_RT.ldb" ] || { echo "the game is not there: reinstall the package alter-aila-genesis (it downloads it)" >&2; exit 1; }
+D="${XDG_DATA_HOME:-$HOME/.local/share}/alter-aila-genesis"
+mkdir -p "$D"
+exec /usr/games/easyrpg-player --project-path "$G" --save-path "$D" "$@"
+S
+chmod 755 "$W/root/usr/games/alter-aila-genesis"
+cat > "$W/root/usr/share/doc/alter-aila-genesis/README" <<D
+Alter A.I.L.A. Genesis (Neok, 2010), an RPG Maker 2003 game, freeware. This
+package holds no part of it: installing it downloads the developer's release
+of 24 November 2010 from
+  $URL
+checks its SHA-256 ($SHA), and unpacks it into
+/usr/share/games/alter-aila-genesis, every file as released (the developer's
+notes and terms: !README.txt there). Run with EasyRPG Player (pspexp-easyrpg).
+Installer by PSPExp.
+D
+cat > "$W/ctl/postinst" <<P
+#!/bin/sh
+# fetch, check and unpack the game (the package carries none of it)
+set -e
+[ "\$1" = configure ] || exit 0
+G=/usr/share/games/alter-aila-genesis
+C=/var/cache/alter-aila-genesis
+[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "1a832ab87a5d5e47e8949d9b4f5efdb123ad14d25a0c70ec655bcfbc7d474761" ] && exit 0
+mkdir -p "\$C"
+echo "Downloading Alter A.I.L.A. Genesis (76 MB) from the Internet Archive..."
+curl -fL --retry 3 --connect-timeout 20 -o "\$C/game.rar.part" "$URL" || { rm -f "\$C/game.rar.part"; echo "the download failed: try installing again" >&2; exit 1; }
+echo "1a832ab87a5d5e47e8949d9b4f5efdb123ad14d25a0c70ec655bcfbc7d474761  \$C/game.rar.part" | sha256sum -c --quiet - || { rm -f "\$C/game.rar.part"; echo "the download is not the expected file" >&2; exit 1; }
+rm -rf "\$C/x"; mkdir -p "\$C/x"
+unar -q -o "\$C/x" "\$C/game.rar.part" >/dev/null
+rm -rf "\$G.new"; mv "\$C/x/Alter Aila Genesis" "\$G.new"
+chmod -R u=rwX,go=rX "\$G.new"
+echo "1a832ab87a5d5e47e8949d9b4f5efdb123ad14d25a0c70ec655bcfbc7d474761" > "\$G.new/.pspexp-sha256"
+rm -rf "\$G"; mv "\$G.new" "\$G"
+rm -rf "\$C"
+P
+cat > "$W/ctl/postrm" <<'R'
+#!/bin/sh
+# the game the installer unpacked goes with the package
+set -e
+case "$1" in remove|purge) rm -rf /usr/share/games/alter-aila-genesis /usr/share/games/alter-aila-genesis.new /var/cache/alter-aila-genesis ;; esac
+exit 0
+R
+cat > "$W/ctl/control" <<C
+Package: alter-aila-genesis
+Version: $V
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: contrib/games
+Priority: optional
+Depends: pspexp-easyrpg, curl, ca-certificates, unar
+Conflicts: alter-aila-genesis-data
+Replaces: alter-aila-genesis-data
+Description: Alter A.I.L.A. Genesis (installer), for EasyRPG Player
+ Neok's 2010 science-fiction RPG made in RPG Maker 2003, freeware. Installing
+ this package downloads the game's own release from the Internet Archive and
+ checks it; the package itself holds none of the game. Installer by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/ctl/control" "$1/alter-aila-genesis_${V}_all.deb"
