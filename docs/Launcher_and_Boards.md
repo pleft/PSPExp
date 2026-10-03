@@ -1333,7 +1333,10 @@ same day (the music player's other formats): on the GameShell it decodes
 30 s of FLAC in 1.1 s and of Ogg Vorbis in 1.4 s. After a reboot Sound output was missing: the
 console asked `pspexp-bt available` once, before the Bluetooth controller
 was up, and kept the no; a no is now asked again every 20 s, and System
-gains the row when the answer changes.
+gains the row when the answer changes. Pairing on the GameShell then failed: its
+controller was not pairable (BlueZ's default there), so a pairing was
+dropped the moment it was made; `pspexp-bt` now turns pairable on with the
+power.
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering
