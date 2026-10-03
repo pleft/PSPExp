@@ -65,6 +65,15 @@ void gfx_button(char which, int x, int y);
 int  gfx_cover(const CoverSpec *c, int x, int y, int alpha);
 void gfx_cover_forget(const char *key);
 
+/* the cover in a disc (gfx_disc's comment in launcher_gfx.c), centred at
+ * (cx, cy): DISC_SMALL across, or DISC_BIG with the selection's glow; each
+ * drawn from a DISC_TEX square texture. 1 when the cover came from art */
+#define DISC_SMALL 70
+#define DISC_BIG   86
+#define DISC_TEX   128
+int  gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha);
+void gfx_disc_forget(const char *key);
+
 /* one picture at a time, for full-screen viewing: decoded, fitted inside
  * max_w x max_h (box-filtered, dithered to 5650) and kept on the PSP; its
  * size before fitting in *w, *h. 0 or -1 */

@@ -2,12 +2,16 @@
  * pspexp-term launcher view (see launcher.h). Layout at 480 x 272:
  *
  *   status    y 4..24     clock and date; Wi-Fi and battery
- *   rail      y 28..86    one tile per category (Recent, Favourites, Games,
- *                         each emulated system with ROMs, Apps, System)
- *   header    y 88..108   the category's name and size
- *   cover     x 16, y 112 128 x 128: box art or a generated cover
- *   list      x 160..464  the category's entries; the focused row expands
- *                         with a detail line
+ *   rail      x 0..46     one tile per category down the left (Recent,
+ *                         Favourites, Games, each emulated system with ROMs,
+ *                         Apps, System); up and down move along it
+ *   header    y 30        the category's name and size
+ *   shelf     y 60..160   the category's entries left to right, left and
+ *                         right move along it: games and ROMs as discs (the
+ *                         cover in a UMD-like shell, gfx_disc), apps and
+ *                         settings as icon tiles; the selection larger, lifted
+ *                         and glowing
+ *   details   y 174..246  the selection's title, description and detail line
  *   hints     y 250..268  what the buttons do
  *
  * The categories are built from the library (launcher_lib.c), never from
@@ -54,19 +58,21 @@
 #define C_ACCENT 0x8b9bff
 
 /* layout */
-#define RAIL_Y      56      /* tile centre */
-#define TILE        46
-#define TILE_SEL    58
-#define TILE_GAP    12
-#define HEAD_Y      90
-#define LIST_X      160
-#define LIST_W      300
-#define LIST_Y      112
-#define LIST_H      128
+/* the left rail: one tile per category, scrolled to keep the current one in view */
+#define RAIL_W      46
+#define RAIL_TOP    34
+#define RAIL_PITCH  40
+#define RAIL_TILE   32
+#define RAIL_SHOWN  5
+/* the shelf: discs (games, ROMs) or tiles (apps, settings) left to right */
+#define SHELF_X0    106     /* first item's centre */
+#define SHELF_PITCH 84
+#define SHELF_SHOWN 5
+#define SHELF_Y     104     /* item centre */
+#define SHELF_LABEL 150
+#define DETAIL_X    58
+#define DETAIL_Y    174
 #define ROW         22
-#define ROW_EXTRA   17
-#define COVER_X     16
-#define COVER_Y     112
 #define HINT_Y      252
 
 /* ---- categories ------------------------------------------------------------------------ */
@@ -260,8 +266,7 @@ static int mtext(int font, int x, int y, const char *s, uint32_t rgb, int alpha,
     return gfx_text_marquee(font, x, y, s, rgb, alpha, max_w, g_now - since, &g_anim);
 }
 static uint64_t g_last_frame, g_sel_since;
-static float g_rail_x = 16, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024], g_cover_fade = 1;
-static char g_cover_prev[160], g_cover_cur[160];
+static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_toast[160], g_toast_icon[32];
 static uint64_t g_toast_until;
 static float g_toast_a;
@@ -1456,10 +1461,11 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         return;
     }
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
-    if (left) select_cat(g_cur - 1, -1, now);
-    if (right) select_cat(g_cur + 1, 1, now);
-    if (up) move_sel(-1, (pressed & PSPEXP_BUTTON_UP) != 0, now);   /* wraps on a fresh press, stops while repeating */
-    if (down) move_sel(1, (pressed & PSPEXP_BUTTON_DOWN) != 0, now);
+    /* up and down the rail of categories, left and right along the shelf */
+    if (up) select_cat(g_cur - 1, -1, now);
+    if (down) select_cat(g_cur + 1, 1, now);
+    if (left) move_sel(-1, (pressed & PSPEXP_BUTTON_LEFT) != 0, now);   /* wraps on a fresh press, stops while repeating */
+    if (right) move_sel(1, (pressed & PSPEXP_BUTTON_RIGHT) != 0, now);
     if (pressed & PSPEXP_BUTTON_LTRIGGER) move_sel(-5, 0, now);
     if (pressed & PSPEXP_BUTTON_RTRIGGER) move_sel(5, 0, now);
     if (pressed & PSPEXP_BUTTON_CIRCLE) move_sel(-100000, 0, now);   /* back to the top */
@@ -1750,45 +1756,41 @@ static void draw_status(void)
 
 static void draw_rail(float dt)
 {
-    int i, pitch = TILE + TILE_GAP, total = g_ncat * pitch - TILE_GAP + (TILE_SEL - TILE);
+    int i, first;
     float target;
-    /* left-aligned with the cover column; scrolls when it overflows, two tiles of context on the left */
-    if (16 + total <= SCREEN_W - 16) target = 16;
-    else {
-        target = 16.0f - (float)((g_cur - 2) * pitch);
-        if (target > 16) target = 16;
-        if (target < (float)(SCREEN_W - 16 - total)) target = (float)(SCREEN_W - 16 - total);
-    }
-    g_rail_x = ease(g_rail_x, target, 14.0f, dt, 0.3f);
+    first = g_cur - RAIL_SHOWN / 2;
+    if (first > g_ncat - RAIL_SHOWN) first = g_ncat - RAIL_SHOWN;
+    if (first < 0) first = 0;
+    target = (float)first;
+    g_rail_top = ease(g_rail_top, target, 14.0f, dt, 0.01f);
+    gfx_rect(RAIL_W, RAIL_TOP, 1, RAIL_SHOWN * RAIL_PITCH, 0xffffff, 22);
+    gfx_set_clip(0, RAIL_TOP - 4, RAIL_W, RAIL_SHOWN * RAIL_PITCH + 6);
     for (i = 0; i < g_ncat; i++) {
         Cat *c = &g_cat[i];
         float lift = g_lift[i] = ease(g_lift[i], i == g_cur ? 1.0f : 0.0f, 16.0f, dt, 0.01f);
-        int size = TILE + (int)lroundf(lift * (TILE_SEL - TILE));
-        /* tiles after the selected one make room for its extra size */
-        float left = g_rail_x + (float)(i * pitch);
-        int x, y;
-        {
-            int k; float extra = 0;
-            for (k = 0; k < i; k++) extra += g_lift[k] * (TILE_SEL - TILE);
-            left += extra;
+        int size = RAIL_TILE + (int)lroundf(lift * 2);
+        int cy = RAIL_TOP + RAIL_PITCH / 2 + (int)lroundf((i - g_rail_top) * RAIL_PITCH) - 2;
+        int x = (RAIL_W - size) / 2, y = cy - size / 2;
+        if (cy < RAIL_TOP - RAIL_PITCH || cy > RAIL_TOP + (RAIL_SHOWN + 1) * RAIL_PITCH) continue;
+        if (lift > 0.02f) {
+            gfx_shadow(NINE_SHADOW10, x, y, size, size, 0x40a0ff, (int)(lift * 200));
+            gfx_nine(NINE_R10, x, y, size, size, 0x14305c, (int)(lift * 255));
         }
-        x = (int)lroundf(left);
-        y = RAIL_Y - size / 2 - (int)lroundf(lift * 2);
-        if (x + size < -20 || x > SCREEN_W + 20) continue;
-        if (lift > 0.02f) gfx_shadow(NINE_SHADOW14, x, y + 5, size, size, c->col, (int)(lift * 140));
-        gfx_nine(NINE_R14, x, y, size, size, C_TILE, 235);
-        if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, c->col, (int)(lift * 255));
         if (c->kind == CK_SYSTEM) {   /* systems: their short name, set like a logo */
             const char *t = L.sys[c->sys].shortname;
-            int f = gfx_text_width(FONT_TITLE, t) <= size - 12 ? FONT_TITLE : FONT_BODY, tw = gfx_text_width(f, t);
-            int ty = y + (size - gfx_line_height(f)) / 2;
-            gfx_text(f, x + (size - tw) / 2, ty, t, c->col, (int)((1 - lift) * 235), 0);
-            if (lift > 0.02f) gfx_text(f, x + (size - tw) / 2, ty, t, 0xffffff, (int)(lift * 255), 0);
+            int f = gfx_text_width(FONT_BODY, t) <= size - 6 ? FONT_BODY : FONT_BADGE, tw = gfx_text_width(f, t);
+            int ty = cy - gfx_line_height(f) / 2;
+            gfx_text(f, (RAIL_W - tw) / 2, ty, t, c->col, (int)((1 - lift) * 220), 0);
+            if (lift > 0.02f) gfx_text(f, (RAIL_W - tw) / 2, ty, t, 0xffffff, (int)(lift * 255), 0);
         } else {
-            gfx_icon(c->icon, 24, x + (size - 24) / 2, y + (size - 24) / 2, c->col, (int)((1 - lift) * 235));
-            if (lift > 0.02f) gfx_icon(c->icon, 24, x + (size - 24) / 2, y + (size - 24) / 2, 0xffffff, (int)(lift * 255));
+            gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220));
+            if (lift > 0.02f) gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255));
         }
     }
+    gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    /* more above or below */
+    if (g_rail_top > 0.05f) gfx_icon("chevron-up", 12, (RAIL_W - 12) / 2, RAIL_TOP - 12, C_MUTED, 200);
+    if (g_rail_top < (float)(g_ncat - RAIL_SHOWN) - 0.05f) gfx_icon("chevron-down", 12, (RAIL_W - 12) / 2, RAIL_TOP + RAIL_SHOWN * RAIL_PITCH, C_MUTED, 200);
 }
 
 static void human_size(long long b, char *out, size_t n)
@@ -1821,108 +1823,102 @@ static void detail_line(const LEntry *e, char *s, size_t n)
     }
 }
 
+/* games and ROMs are discs; apps, tools and settings tiles */
+static int is_disc(const LEntry *e) { return e->type == LT_GAME || e->type == LT_ROM; }
+
+static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
+{
+    if (is_disc(e)) {
+        CoverSpec cs;
+        char png[700] = "";
+        memset(&cs, 0, sizeof(cs));
+        cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
+        if (e->art[0]) cs.art = e->art;
+        else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
+        /* the small disc fades into the large one, which is lifted */
+        if (lift < 0.98f) gfx_disc(&cs, cx, cy, 0, (int)((1 - lift) * alpha));
+        if (lift > 0.02f) gfx_disc(&cs, cx, cy - (int)lroundf(lift * 4), 1, (int)(lift * alpha));
+    } else {
+        int size = 54 + (int)lroundf(lift * 8), x = cx - size / 2, y = cy - size / 2 - (int)lroundf(lift * 3);
+        int ip = 26 + (int)lroundf(lift * 2);
+        const char *ic = e->icon[0] ? e->icon : type_icon(e);
+        if (lift > 0.02f) gfx_shadow(NINE_SHADOW14, x, y, size, size, 0x40a0ff, (int)(lift * 230 * alpha / 255));
+        gfx_shadow(NINE_SHADOW10, x, y + 4, size, size, 0x000000, 110 * alpha / 255);
+        gfx_nine(NINE_R14, x, y, size, size, 0x16223c, alpha);
+        if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * alpha));
+        gfx_icon(ic, ip, cx - ip / 2, y + (size - ip) / 2, lift > 0.5f ? 0xffffff : 0xb9c8e0, alpha);
+    }
+    if (e->fav) {
+        int sx = cx + 22, sy = cy - 40 - (int)lroundf(lift * 4);
+        gfx_nine(NINE_R6, sx, sy, 18, 18, 0x000000, 130 * alpha / 255);
+        gfx_icon("star", 12, sx + 3, sy + 3, 0xfbbf24, alpha);
+    }
+}
+
 static void draw_list(float dt)
 {
     Cat *c = &g_cat[g_cur];
-    float y, target;
-    int i, alpha, dx, lh_t = gfx_line_height(FONT_TITLE), lh_b = gfx_line_height(FONT_BODY);
+    int i, alpha, dy, first, last;
+    float target;
     char s[200];
     LEntry *e = cur_entry();
     g_list_anim = ease(g_list_anim, 1.0f, 16.0f, dt, 0.01f);
     alpha = (int)(g_list_anim * 255);
-    dx = (int)lroundf((1 - g_list_anim) * 24 * g_list_dir);
+    dy = (int)lroundf((1 - g_list_anim) * 16 * g_list_dir);
 
     /* header: the category and its size */
-    gfx_text(FONT_TITLE, 16 + dx / 2, HEAD_Y - 2, c->name, C_TEXT, alpha, 300);
+    gfx_text(FONT_TITLE, DETAIL_X, 30 + dy / 2, c->name, C_TEXT, alpha, 300);
     if (c->kind != CK_SETTINGS) {
         snprintf(s, sizeof(s), "%d %s%s", c->n, c->noun, c->n == 1 ? "" : "s");
-        gfx_text(FONT_SMALL, LIST_X + LIST_W - gfx_text_width(FONT_SMALL, s), HEAD_Y + 2, s, C_MUTED, alpha, 0);
-    }
-
-    /* cover, cross-faded between selections */
-    if (e && strcmp(e->id, g_cover_cur)) {
-        snprintf(g_cover_prev, sizeof(g_cover_prev), "%s", g_cover_cur);
-        snprintf(g_cover_cur, sizeof(g_cover_cur), "%s", e->id);
-        g_cover_fade = g_cover_prev[0] ? 0 : 1;
-    }
-    g_cover_fade = ease(g_cover_fade, 1.0f, 24.0f, dt, 0.02f);
-    if (e) {
-        gfx_shadow(NINE_SHADOW14, COVER_X, COVER_Y + 6, COVER_SIZE, COVER_SIZE, 0x000000, 160);
-        if (g_cover_fade < 1 && g_cover_prev[0]) {
-            LEntry *p = lib_find(&L, g_cover_prev);
-            if (!p) { int k; for (k = 0; k < g_nactions; k++) if (!strcmp(g_actions[k].id, g_cover_prev)) p = &g_actions[k]; }
-            if (p) draw_cover(p, COVER_X, COVER_Y, 255);
-        }
-        draw_cover(e, COVER_X, COVER_Y, (int)(g_cover_fade * 255));
-        if (e->fav) {
-            gfx_nine(NINE_R6, COVER_X + COVER_SIZE - 28, COVER_Y + 8, 20, 20, 0x000000, 120);
-            gfx_icon("star", 12, COVER_X + COVER_SIZE - 24, COVER_Y + 12, 0xfbbf24, 255);
-        }
+        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), 34 + dy / 2, s, C_MUTED, alpha, 0);
     }
 
     if (!c->n) {
-        gfx_text(FONT_TITLE, LIST_X + 10 + dx, LIST_Y + 18, c->kind == CK_GAMES ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
-        gfx_text(FONT_SMALL, LIST_X + 10 + dx, LIST_Y + 42, "Installed games and apps appear here", C_MUTED, alpha, 0);
+        gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, c->kind == CK_GAMES ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
+        gfx_text(FONT_SMALL, DETAIL_X, SHELF_Y + 14 + dy, "Installed games and apps appear here", C_MUTED, alpha, 0);
         return;
     }
 
-    /* rows: the focused one grows to hold its detail line; scrolling keeps it in view */
-    for (i = 0; i < c->n && i < 1024; i++) g_expand[i] = ease(g_expand[i], i == c->sel ? 1.0f : 0.0f, 20.0f, dt, 0.01f);
-    target = (float)((c->sel - 1) * ROW);   /* one whole row of context above the focus */
-    if (target > (float)(c->n * ROW + ROW_EXTRA - LIST_H)) target = (float)(c->n * ROW + ROW_EXTRA - LIST_H);
+    /* the shelf scrolls to keep the selection in view, one item of context each side */
+    target = (float)(c->sel - (SHELF_SHOWN - 2));
+    if (target > (float)(c->sel - 1)) target = (float)(c->sel - 1);
+    if (c->scroll > (float)(c->sel - 1)) target = (float)(c->sel - 1);
+    else if (c->scroll < (float)(c->sel - (SHELF_SHOWN - 2))) target = (float)(c->sel - (SHELF_SHOWN - 2));
+    else target = c->scroll;
+    if (target > (float)(c->n - SHELF_SHOWN)) target = (float)(c->n - SHELF_SHOWN);
     if (target < 0) target = 0;
-    c->scroll = ease(c->scroll, target, 16.0f, dt, 0.3f);
+    c->scroll = ease(c->scroll, target, 14.0f, dt, 0.01f);
+    for (i = 0; i < c->n && i < 1024; i++) g_expand[i] = ease(g_expand[i], i == c->sel ? 1.0f : 0.0f, 18.0f, dt, 0.01f);
+    first = (int)floorf(c->scroll) - 1; if (first < 0) first = 0;
+    last = (int)ceilf(c->scroll) + SHELF_SHOWN + 1; if (last > c->n) last = c->n;
 
-    gfx_set_clip(LIST_X - 8, LIST_Y - 2, LIST_W + 16, LIST_H + 4);
-    y = (float)LIST_Y - c->scroll;
-    for (i = 0; i < c->n; i++) {
-        float ex = i < 1024 ? g_expand[i] : 0;
-        int h = ROW + (int)lroundf(ex * ROW_EXTRA), ry = (int)lroundf(y), sel = i == c->sel;
-        if (ry + h >= LIST_Y - 2 && ry <= LIST_Y + LIST_H + 2) {
-            LEntry *it = c->it[i];
-            int tx = LIST_X + 6 + dx, right = LIST_X + LIST_W - 6 + dx;
-            int font = sel ? FONT_TITLE : FONT_BODY, lh = sel ? lh_t : lh_b;
-            if (ex > 0.02f) {
-                int a = (int)(ex * alpha);
-                gfx_nine(NINE_R10, LIST_X - 6 + dx, ry, LIST_W + 12, h, 0xffffff, a * 24 / 255);
-                gfx_rect(LIST_X - 6 + dx, ry + 7, 3, h - 14, c->col, a);
-            }
-            if (it->type == LT_ACTION) {
-                const char *v = action_value(it);
-                gfx_icon(it->icon, 16, tx, ry + (ROW - 16) / 2 + (sel ? 1 : 0), sel ? 0xffffff : C_SUB, alpha);
-                tx += 24;
-                if (v) {
-                    right -= gfx_text_width(FONT_SMALL, v);
-                    gfx_text(FONT_SMALL, right, ry + (ROW - gfx_line_height(FONT_SMALL)) / 2 + 1, v, sel ? C_TEXT : C_MUTED, alpha, 0);
-                    right -= 8;
-                }
-            }
-            /* right side: favourite mark; the system in mixed lists */
-            if (it->fav) { right -= 12; gfx_icon("star", 12, right, ry + (ROW - 12) / 2 + 1, 0xfbbf24, alpha); right -= 6; }
-            if ((c->kind == CK_RECENT || c->kind == CK_FAVS) && it->type != LT_ACTION) {
-                const char *b = type_badge(it);
-                int bw = gfx_text_width(FONT_BADGE, b);
-                right -= bw;
-                gfx_text(FONT_BADGE, right, ry + (ROW - gfx_line_height(FONT_BADGE)) / 2 + 1, b, C_MUTED, alpha, 0);
-                right -= 8;
-            }
-            if (sel) mtext(font, tx, ry + (ROW - lh) / 2 + 1, it->title, C_TEXT, alpha, right - tx - 4, g_sel_since);
-            else gfx_text(font, tx, ry + (ROW - lh) / 2, it->title, C_SUB, alpha, right - tx - 4);
-            if (ex > 0.3f) {
-                detail_line(it, s, sizeof(s));
-                mtext(FONT_SMALL, tx, ry + ROW - 1, s, C_MUTED, (int)((ex - 0.3f) / 0.7f * alpha), LIST_X + LIST_W - 12 - tx + dx, g_sel_since);
-            }
-        }
-        y += (float)h;
+    gfx_set_clip(RAIL_W + 1, 26, SCREEN_W - RAIL_W - 1, DETAIL_Y - 30);
+    /* the others first, the selection last: its glow over its neighbours */
+    for (i = first; i < last; i++) if (i != c->sel) {
+        int cx = SHELF_X0 + (int)lroundf((i - c->scroll) * SHELF_PITCH);
+        shelf_item(c->it[i], cx, SHELF_Y + dy, i < 1024 ? g_expand[i] : 0, alpha);
+    }
+    if (c->sel >= first && c->sel < last) shelf_item(c->it[c->sel], SHELF_X0 + (int)lroundf((c->sel - c->scroll) * SHELF_PITCH), SHELF_Y + dy, g_expand[c->sel], alpha);
+    /* titles under the items */
+    for (i = first; i < last; i++) {
+        int cx = SHELF_X0 + (int)lroundf((i - c->scroll) * SHELF_PITCH), sel = i == c->sel, f = sel ? FONT_BODY : FONT_SMALL;
+        const char *t = c->it[i]->title;
+        int tw = gfx_text_width(f, t), mw = SHELF_PITCH - 6;
+        if (tw > mw) tw = mw;
+        gfx_text(f, cx - tw / 2, SHELF_LABEL + dy, t, sel ? C_TEXT : C_SUB, alpha, mw);
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    if (c->scroll > 0.05f) gfx_icon("chevron-left", 14, RAIL_W + 3, SHELF_Y - 7, C_MUTED, 200);
+    if (c->scroll < (float)(c->n - SHELF_SHOWN) - 0.05f) gfx_icon("chevron-right", 14, SCREEN_W - 17, SHELF_Y - 7, C_MUTED, 200);
 
-    /* scroll bar */
-    if (c->n * ROW + ROW_EXTRA > LIST_H) {
-        int full = c->n * ROW + ROW_EXTRA, th = LIST_H * LIST_H / full, ty = (int)(c->scroll * LIST_H / full);
-        if (th < 12) th = 12;
-        gfx_nine(NINE_R6, LIST_X + LIST_W + 10, LIST_Y, 3, LIST_H, 0xffffff, 18);
-        gfx_nine(NINE_R6, LIST_X + LIST_W + 10, LIST_Y + ty, 3, th, 0xffffff, 90);
+    /* the selection's details, where the list's expanded row was */
+    if (e) {
+        const char *v = e->type == LT_ACTION ? action_value(e) : NULL;
+        mtext(FONT_TITLE, DETAIL_X, DETAIL_Y, e->title, C_TEXT, alpha, SCREEN_W - 16 - DETAIL_X - (v ? gfx_text_width(FONT_BODY, v) + 12 : 0), g_sel_since);
+        if (v) gfx_text(FONT_BODY, SCREEN_W - 16 - gfx_text_width(FONT_BODY, v), DETAIL_Y + 1, v, C_ACCENT, alpha, 0);
+        if (e->desc[0]) gfx_text_wrapped(FONT_SMALL, DETAIL_X, DETAIL_Y + 22, e->desc, C_SUB, alpha, SCREEN_W - 16 - DETAIL_X, 14, 2);
+        detail_line(e, s, sizeof(s));
+        mtext(FONT_SMALL, DETAIL_X, e->desc[0] ? DETAIL_Y + 54 : DETAIL_Y + 24, s, 0x7fb2f5, alpha, SCREEN_W - 16 - DETAIL_X, g_sel_since);
     }
 }
 

@@ -38,6 +38,9 @@
 #define ID_COVER      4000 /* + pool index */
 #define ID_IMAGE      5000 /* + 0..3: the picture shown full screen, in tiles */
 #define COVER_SLOTS   10
+#define ID_DISC       4200 /* + pool index */
+#define DISC_SLOTS    14
+#define DISC_IDS      40
 #define COVER_IDS     32
 
 #define SCREEN_W 480
@@ -454,7 +457,7 @@ static const IconName ICONS[] = {
     { "toggle-left", 0xe18b }, { "toggle-right", 0xe18c }, { "image", 0xe0f6 }, { "image-off", 0xe1c0 }, { "router", 0xe3bf },
     { "microchip", 0xe61a }, { "circuit-board", 0xe403 }, { "laptop", 0xe1cd }, { "computer", 0xe4e4 },
     { "plug", 0xe37f }, { "ethernet-port", 0xe620 },
-    { "radio-tower", 0xe404 }, { "folder-open", 0xe247 }, { "memory-stick", 0xe445 }, { "chevron-down", 0xe06d }, { "activity", 0xe038 }, { "gauge", 0xe1bf },
+    { "radio-tower", 0xe404 }, { "folder-open", 0xe247 }, { "memory-stick", 0xe445 }, { "chevron-down", 0xe06d }, { "chevron-left", 0xe06e }, { "chevron-right", 0xe06f }, { "chevron-up", 0xe070 }, { "activity", 0xe038 }, { "gauge", 0xe1bf },
     { "thermometer", 0xe186 }, { "network", 0xe125 }, { "download", 0xe0b2 }, { "package-check", 0xe266 }, { "package-plus", 0xe268 },
     { "package-x", 0xe26a }, { "arrow-up-circle", 0xe07b }, { "store", 0xe3e4 }, { "server", 0xe153 }, { "loader", 0xe109 },
     { "cloud-download", 0xe089 }, { "circle-x", 0xe084 }, { "arrow-down", 0xe042 }, { "arrow-up", 0xe04a }, { "file-text", 0xe0cc }, { "tag", 0xe17f }, { "search-x", 0xe4ad },
@@ -948,6 +951,151 @@ void gfx_cover_forget(const char *key)
 {
     int i;
     for (i = 0; i < COVER_SLOTS; i++) if (!strcmp(cslot[i].key, key)) { pspexp_release(G, cslot[i].id); cslot[i].key[0] = 0; }
+}
+
+/* ---- discs ------------------------------------------------------------------------------ */
+
+/* A cover in a disc: a silver shell with squared shoulders (UMD-like, none of
+ * its marks), a slot at the top and two screws, the cover in the round window.
+ * Rendered here at its final size with its soft shadow; the large one (the
+ * selection) also with its blue glow and a light ring round the window. The
+ * PSP draws it 1:1, as everything else. */
+typedef struct DiscSlot { char key[200], art[320]; uint16_t id; int big, from_art; uint64_t used; } DiscSlot;
+static DiscSlot dslot[DISC_SLOTS];
+static int next_disc_id;
+
+static float smooth(float e0, float e1, float x) { float t = clampf((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
+
+/* straight-alpha "over" */
+static void over_px(float *p, float r, float g, float b, float a)
+{
+    float oa = a + p[3] * (1 - a);
+    if (oa <= 0) return;
+    p[0] = (r * a + p[0] * p[3] * (1 - a)) / oa;
+    p[1] = (g * a + p[1] * p[3] * (1 - a)) / oa;
+    p[2] = (b * a + p[2] * p[3] * (1 - a)) / oa;
+    p[3] = oa;
+}
+
+static float disc_shell_sd(float x, float y, float cx, float cy, float D)
+{
+    float R = D / 2, top = cy - R;
+    float dc = sqrtf((x - cx) * (x - cx) + (y - cy) * (y - cy)) - R;
+    float db = sd_rbox(x, y, cx, top + 0.275f * D, 0.44f * D, 0.275f * D, 0.2f * D);
+    return dc < db ? dc : db;
+}
+
+/* the cover (s x s RGBA) sampled at (u, v) in [0, 1), 2x2 samples */
+static void cover_sample(const uint8_t *cov, int s, float u, float v, float du, float *rgb)
+{
+    int k;
+    rgb[0] = rgb[1] = rgb[2] = 0;
+    for (k = 0; k < 4; k++) {
+        float uu = u + ((k & 1) ? 0.25f : -0.25f) * du, vv = v + ((k & 2) ? 0.25f : -0.25f) * du;
+        int x = (int)clampf(uu * s, 0, s - 1), y = (int)clampf(vv * s, 0, s - 1);
+        const uint8_t *p = cov + (y * s + x) * 4;
+        rgb[0] += p[0] / 255.0f; rgb[1] += p[1] / 255.0f; rgb[2] += p[2] / 255.0f;
+    }
+    rgb[0] /= 4; rgb[1] /= 4; rgb[2] /= 4;
+}
+
+static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
+{
+    float *f = (float *)calloc((size_t)T * T * 4, sizeof(float));
+    float cx = T / 2.0f, cy = T / 2.0f - 2, R = D / 2.0f, top = cy - R;
+    float lcx = cx, lcy = top + 0.12f * D + 0.40f * D, LR = 0.40f * D;
+    int x, y;
+    for (y = 0; y < T; y++)
+        for (x = 0; x < T; x++) {
+            float px = x + 0.5f, py = y + 0.5f, *p = f + (y * T + x) * 4;
+            float d = disc_shell_sd(px, py, cx, cy, D);
+            float ds = disc_shell_sd(px - 1.5f, py - 4.0f, cx, cy, D);
+            float in = cover_of(d), dl, a;
+            /* shadow, and the glow of the selection */
+            over_px(p, 0, 0, 0.03f, 0.55f * (1 - smooth(-2.0f, 6.0f, ds)));
+            if (big) over_px(p, 0.25f, 0.63f, 1.0f, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0));
+            if (in <= 0) continue;
+            /* the shell: silver, lit from above, a darker rim */
+            {
+                float t = clampf((py - top) / D, 0, 1), c = (236 - 70 * t) / 255.0f;
+                float rim = d > -1.4f ? 0.82f : 1.0f;
+                over_px(p, c * rim, (c + 2 / 255.0f) * rim, (c + 8 / 255.0f) * rim, in);
+            }
+            /* the slot and the two screws */
+            a = cover_of(sd_rbox(px, py, cx, top + 0.052f * D, 0.10f * D, 0.0175f * D, 0.017f * D));
+            if (a > 0) over_px(p, 150 / 255.0f, 156 / 255.0f, 168 / 255.0f, a * in);
+            {
+                int k;
+                for (k = -1; k <= 1; k += 2) {
+                    float sx = cx + k * 0.37f * D, sy = top + 0.86f * D;
+                    a = cover_of(sqrtf((px - sx) * (px - sx) + (py - sy) * (py - sy)) - 0.025f * D);
+                    if (a > 0) over_px(p, 140 / 255.0f, 146 / 255.0f, 158 / 255.0f, a * in);
+                }
+            }
+            /* the window: a dark ring, the cover, a gloss, the selection's light ring */
+            dl = sqrtf((px - lcx) * (px - lcx) + (py - lcy) * (py - lcy)) - LR;
+            a = cover_of(dl - 1.2f);
+            if (a > 0) over_px(p, 70 / 255.0f, 76 / 255.0f, 90 / 255.0f, a);
+            a = cover_of(dl);
+            if (a > 0) {
+                float rgb[3], u = (px - (lcx - LR)) / (2 * LR), v = (py - (lcy - LR)) / (2 * LR);
+                cover_sample(cov, COVER_SIZE, u, v, 1.0f / (2 * LR), rgb);
+                over_px(p, rgb[0], rgb[1], rgb[2], a);
+                {   /* gloss: an ellipse over the upper left */
+                    float ex = (px - (lcx - 0.30f * LR)) / (1.30f * LR), ey = (py - (lcy - 1.10f * LR)) / (1.0f * LR);
+                    float g = 1 - smooth(0.85f, 1.0f, sqrtf(ex * ex + ey * ey));
+                    if (g > 0) over_px(p, 1, 1, 1, 0.16f * g * a);
+                }
+            }
+            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) over_px(p, 150 / 255.0f, 205 / 255.0f, 1, a); }
+        }
+    for (y = 0; y < T * T; y++) {
+        out[y * 4 + 0] = (uint8_t)lroundf(clampf(f[y * 4 + 0], 0, 1) * 255);
+        out[y * 4 + 1] = (uint8_t)lroundf(clampf(f[y * 4 + 1], 0, 1) * 255);
+        out[y * 4 + 2] = (uint8_t)lroundf(clampf(f[y * 4 + 2], 0, 1) * 255);
+        out[y * 4 + 3] = (uint8_t)lroundf(clampf(f[y * 4 + 3], 0, 1) * 255);
+    }
+    free(f);
+}
+
+int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
+{
+    int i, best = -1, T = DISC_TEX;
+    if (alpha <= 0) return 0;
+    for (i = 0; i < DISC_SLOTS; i++) if (dslot[i].key[0] && dslot[i].big == big && !strcmp(dslot[i].key, c->key)) { best = i; break; }
+    /* art that appeared since (a finished download) replaces the generated cover */
+    if (best >= 0 && !dslot[best].from_art && c->art && c->art[0] && strcmp(dslot[best].art, c->art)) {
+        FILE *fp = fopen(c->art, "rb");
+        if (fp) { fclose(fp); dslot[best].key[0] = 0; pspexp_release(G, dslot[best].id); }
+        else dslot[best].used = ++cover_clock;
+        if (!fp) goto draw;
+    } else if (best >= 0) goto draw;
+    {
+        uint8_t *cov, *px;
+        if (best < 0) for (best = 0, i = 1; i < DISC_SLOTS; i++) if (!dslot[i].key[0] || dslot[i].used < dslot[best].used) best = i;
+        cov = (uint8_t *)calloc(COVER_SIZE * COVER_SIZE, 4);
+        px = (uint8_t *)calloc((size_t)T * T, 4);
+        dslot[best].from_art = load_art(c->art, cov, COVER_SIZE) == 0;
+        if (!dslot[best].from_art) cover_generate(c, cov, COVER_SIZE);
+        disc_render(cov, px, T, big ? DISC_BIG : DISC_SMALL, big);
+        if (dslot[best].key[0] && dslot[best].id) pspexp_release(G, dslot[best].id);
+        dslot[best].id = (uint16_t)(ID_DISC + (next_disc_id++ % DISC_IDS));   /* fresh id: the old one may still be on screen */
+        upload_rgba(dslot[best].id, px, T, T);
+        free(cov); free(px);
+        snprintf(dslot[best].key, sizeof(dslot[best].key), "%s", c->key);
+        snprintf(dslot[best].art, sizeof(dslot[best].art), "%s", c->art ? c->art : "");
+        dslot[best].big = big;
+    }
+draw:
+    dslot[best].used = ++cover_clock;
+    quad(dslot[best].id, cx - T / 2, cy - T / 2 + 2, T, T, 0, 0, T, T, c4444(0xffffff, alpha));
+    return dslot[best].from_art;
+}
+
+void gfx_disc_forget(const char *key)
+{
+    int i;
+    for (i = 0; i < DISC_SLOTS; i++) if (!strcmp(dslot[i].key, key)) { pspexp_release(G, dslot[i].id); dslot[i].key[0] = 0; }
 }
 
 /* ---- init -------------------------------------------------------------------------------------------- */

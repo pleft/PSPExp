@@ -200,17 +200,31 @@ over: about 3 MB on the Omega, whose graphics live on the PSP as textures.
 ### 3.3 The look
 
 ```
- 12:04 Sat 26 Sep                                        wifi  battery 76%
- [Recent] [Fav] [GAMES] [GBA] [SNES] [MD] [Apps] [System]     rail: rounded tiles,
-                                                              the focused one lifted,
- Game Boy Advance                                   5 games   filled with its colour
- +-------------+  Advance Wars                                and glowing
- |  box art or |  | Golden Sun                                list: the focused row
- |  generated  |  | GBA / USA, Europe / 8.0 MB                expands with a detail
- |  cover      |  Metroid Fusion                              line, accent bar
- +-------------+  ...
- (X) Play  ([]) Favourite  (/\) Details           Hold SELECT: console
+ 12:04 Sat 03 Oct                                        wifi  battery 76%
+ [hist] | Games                                          34 games   rail down the left:
+ [GAME] |  (disc) (DISC) (disc) (disc) (disc) >                     the current tile glows
+ [GB]   |  Quake Cave Story ...                                     shelf: discs for games
+ [NES]  | Cave Story                                                and ROMs, icon tiles for
+ [apps] | Studio Pixel's 2004 platformer ...                        apps and settings; the
+ [gear] | Game  /  PSP native                                       selection larger, lifted
+ (X) Play  ([]) Favourite  (/\) Details           START Search      and glowing
 ```
+
+**The redesign** (2026-10-03, from the user's concept art; step 1 of five:
+the shelf and the left rail; then a home screen, console drawings for the
+systems and a wave background drawn by the PSP). The rail runs down the
+left (up and down change category), the category's entries along a shelf
+(left and right). Games and ROMs are **discs**: the cover in the round
+window of a silver shell with squared shoulders, a slot and two screws,
+UMD-like but with none of Sony's marks (`gfx_disc`). Each disc is rendered
+on the board at its final size with its shadow, 70 px across, and once
+more at 86 px with the selection's blue glow and a light ring round the
+window, both 128x128 8888 textures in an LRU of 14; the small disc fades
+into the large one, lifted 4 px, as the selection arrives. Apps, tools and
+settings are icon tiles (54 px, 62 selected). Under the shelf the
+selection's title, its description (two lines) and its detail line; a
+setting's value at the right of its title. The cover column and the list
+are gone.
 
 Nothing from the ClockworkOS skin is used. Everything that is not a flat
 rectangle is rendered on the host at its final pixel size, because the GE
@@ -224,7 +238,8 @@ samples with nearest filtering (`launcher_gfx.c`):
   shadows as 9-slices (corners 1:1, uniform edges stretched).
 - **Backdrop**: 480x272 dark gradient with three soft colour glows, Bayer
   dithered to 5650, six textures.
-- **Covers** (128x128 8888, an LRU of 10 on the PSP): box art when there is
+- **Covers** (128x128 8888, an LRU of 10 on the PSP; on the shelf inside
+  discs, `gfx_disc`): box art when there is
   some, else generated: a gradient chosen by the title, a large faint icon,
   a badge (GBA, GAME, APP) and the title set in SemiBold.
 - **Box art**: for ROMs of systems with `thumbs=`, fetched in the background

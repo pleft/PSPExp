@@ -7,24 +7,27 @@ buttons; the board needs no screen, keyboard or mouse.
 
 ```
  12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
- [Recent] [Favourites] [Games] [NES] [SNES] [Apps] [System]
- Games                                                  12 games
- +-----------+  Cave Story
- |   cover   |  | Freedoom: Phase 1
- |           |  | a short description of the game
- +-----------+  OpenTyrian
+ [clock]  | Games                                                 12 games
+ [games]  |   (disc)   (DISC)   (disc)   (disc)   (disc)  >
+ [GB]     |   Quake  Cave Story OpenTyrian  ...
+ [NES]    | Cave Story
+ [apps]   | a short description of the game
+ [gear]   | Game  /  PSP native
  (X) Play  ([]) Favourite  (/\) Details                  START Search
 ```
 
-The top row is the **rail**: one tile per category. Games, every emulated
+Down the left is the **rail**: one tile per category. Games, every emulated
 system you have ROMs for, Apps, System, and Recent and Favourites once you
-have some. The top bar shows the time, the PSP's battery, and the board's
-own indicators (sound, network, power).
+have some. To its right the category's **shelf**: games and ROMs as discs
+with their cover in the window, apps and settings as icon tiles; the one
+you are on is larger and glows, and its description shows underneath. The
+top bar shows the time, the PSP's battery, and the board's own indicators
+(sound, network, power).
 
 | Button | In the launcher |
 |---|---|
-| left / right | the previous / next category |
-| up / down | move in the list (L / R: five at a time; circle: back to the top) |
+| up / down | the previous / next category |
+| left / right | move along the shelf (L / R: five at a time; circle: back to the first) |
 | cross | play, or open |
 | square | add to / remove from Favourites |
 | triangle | details: description, how it draws, size, when last played |

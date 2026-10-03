@@ -160,7 +160,7 @@ class Run:
             cur = s["launcher.category"]
             if cur == name:
                 return s
-            self.press("right" if cats.index(name) > cats.index(cur) else "left", idle=False)
+            self.press("down" if cats.index(name) > cats.index(cur) else "up", idle=False)   # the rail runs down the left
         self.ctl("idle 2500")
         raise Fail("could not reach %s" % name)
 
