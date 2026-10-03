@@ -44,6 +44,7 @@
 #define _GNU_SOURCE
 #endif
 #include <SDL.h>
+#include <SDL_syswm.h>
 #include "../../host/libpspexp/pspexp.h"
 #include "../../host/executor-null/pspexp_null.h"
 #include "../../host/transport-tcp/pspexp_tcp.h"
@@ -2378,6 +2379,16 @@ static void (*hg_ReadBuffer)(unsigned);
 static void (*hg_PixelStorei)(unsigned, int);
 static void (*hg_BindFramebuffer)(unsigned, unsigned);
 static void (*hg_GetIntegerv)(unsigned, int *);
+/* reading back without waiting (pixel buffer objects, GL 2.1 / ES 3): each frame goes into a buffer the
+ * GPU fills on its own, and the one before it is sent: a frame later on the PSP, but the program's next
+ * frame is not held up while the GPU finishes this one (SuperTuxKart on the Pi's V3D) */
+static void (*hg_GenBuffers)(int, unsigned *);
+static void (*hg_BindBuffer)(unsigned, unsigned);
+static void (*hg_BufferData)(unsigned, long, const void *, unsigned);
+static void *(*hg_MapBufferRange)(unsigned, long, long, unsigned);
+static unsigned char (*hg_UnmapBuffer)(unsigned);
+static unsigned hg_pbo[2];
+static int hg_pbo_w, hg_pbo_h, hg_pbo_n, hg_pbo_cur, hg_pbo_off;
 
 HOOK(SDL_GLContext, SDL_GL_CreateContext, (SDL_Window *win))
 {
@@ -2389,10 +2400,33 @@ HOOK(SDL_GLContext, SDL_GL_CreateContext, (SDL_Window *win))
         hg_PixelStorei = (void (*)(unsigned, int))SDL_GL_GetProcAddress("glPixelStorei");
         hg_BindFramebuffer = (void (*)(unsigned, unsigned))SDL_GL_GetProcAddress("glBindFramebuffer");
         hg_GetIntegerv = (void (*)(unsigned, int *))SDL_GL_GetProcAddress("glGetIntegerv");
+        hg_GenBuffers = (void (*)(int, unsigned *))SDL_GL_GetProcAddress("glGenBuffers");
+        hg_BindBuffer = (void (*)(unsigned, unsigned))SDL_GL_GetProcAddress("glBindBuffer");
+        hg_BufferData = (void (*)(unsigned, long, const void *, unsigned))SDL_GL_GetProcAddress("glBufferData");
+        hg_MapBufferRange = (void *(*)(unsigned, long, long, unsigned))SDL_GL_GetProcAddress("glMapBufferRange");
+        hg_UnmapBuffer = (unsigned char (*)(unsigned))SDL_GL_GetProcAddress("glUnmapBuffer");
+        hg_pbo_off = getenv("PSPEXP_HOSTGL_PBO") && !strcmp(getenv("PSPEXP_HOSTGL_PBO"), "0");
+        hg_pbo_n = 0; hg_pbo_w = hg_pbo_h = 0;
         connect_once();
         logf_("host GL: the frames drawn here go to the PSP as pictures");
     }
     return c;
+}
+
+/* SDL's offscreen driver (a board with no display: the GPU through EGL alone) has no window manager
+ * and so no WM info; SuperTuxKart's Irrlicht asks for it and stops without it. Answered here: none in
+ * particular, with success */
+HOOK(SDL_bool, SDL_GetWindowWMInfo, (SDL_Window *win, SDL_SysWMinfo *info))
+{
+    if (REAL(SDL_GetWindowWMInfo)(win, info)) return SDL_TRUE;
+    if (!info) return SDL_FALSE;
+    {
+        SDL_version v = info->version;
+        memset(info, 0, sizeof(*info));
+        info->version = v;
+        info->subsystem = SDL_SYSWM_UNKNOWN;
+    }
+    return SDL_TRUE;
 }
 
 HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
@@ -2410,7 +2444,26 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
             if (hg_BindFramebuffer) hg_BindFramebuffer(0x8CA8, 0);            /* the window's own framebuffer */
             if (hg_ReadBuffer) hg_ReadBuffer(0x0405);                         /* GL_BACK: the frame just drawn */
             if (hg_PixelStorei) hg_PixelStorei(0x0D05, 4);                    /* GL_PACK_ALIGNMENT */
-            hg_ReadPixels(0, 0, w, h, 0x1908, 0x1401, buf);                  /* GL_RGBA, GL_UNSIGNED_BYTE */
+            if (!hg_pbo_off && hg_GenBuffers && hg_BindBuffer && hg_BufferData && hg_MapBufferRange && hg_UnmapBuffer) {
+                const unsigned PACK = 0x88EB;   /* GL_PIXEL_PACK_BUFFER */
+                void *m;
+                if (w != hg_pbo_w || h != hg_pbo_h) {   /* (re)made at the drawable's size */
+                    int k;
+                    if (!hg_pbo[0]) hg_GenBuffers(2, hg_pbo);
+                    for (k = 0; k < 2; k++) { hg_BindBuffer(PACK, hg_pbo[k]); hg_BufferData(PACK, (long)n, NULL, 0x88E1 /* GL_STREAM_READ */); }
+                    hg_pbo_w = w; hg_pbo_h = h; hg_pbo_n = 0;
+                }
+                hg_BindBuffer(PACK, hg_pbo[hg_pbo_cur]);
+                hg_ReadPixels(0, 0, w, h, 0x1908, 0x1401, NULL);              /* into the buffer: no wait */
+                hg_pbo_cur ^= 1;
+                hg_pbo_n++;
+                if (hg_pbo_n < 2) { hg_BindBuffer(PACK, 0); if (hg_BindFramebuffer) hg_BindFramebuffer(0x8CA8, (unsigned)fb); REAL(SDL_GL_SwapWindow)(win); return; }
+                hg_BindBuffer(PACK, hg_pbo[hg_pbo_cur]);                     /* the frame before: done by now */
+                m = hg_MapBufferRange(PACK, 0, (long)n, 0x0001 /* GL_MAP_READ_BIT */);
+                if (m) { memcpy(buf, m, n); hg_UnmapBuffer(PACK); }
+                hg_BindBuffer(PACK, 0);
+                if (!m) hg_ReadPixels(0, 0, w, h, 0x1908, 0x1401, buf);
+            } else hg_ReadPixels(0, 0, w, h, 0x1908, 0x1401, buf);           /* GL_RGBA, GL_UNSIGNED_BYTE */
             if (hg_BindFramebuffer) hg_BindFramebuffer(0x8CA8, (unsigned)fb);
             for (y = 0; y < h / 2; y++) {   /* GL's rows run upwards */
                 uint8_t *a = buf + (size_t)y * row, *b = buf + (size_t)(h - 1 - y) * row, t[4096];

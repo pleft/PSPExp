@@ -788,6 +788,7 @@ static const char *graphics_label(const char *g)
     if (!strcmp(g, "sdl")) return "SDL";
     if (!strcmp(g, "opengl")) return "OpenGL";
     if (!strcmp(g, "opengl-shaders")) return "OpenGL with shaders";
+    if (!strcmp(g, "board-gpu")) return "OpenGL 3, the board's GPU";
     return "";
 }
 
@@ -2114,9 +2115,10 @@ static void draw_details(float dt)
     } else {
         if (!e->pspexp) snprintf(s, sizeof(s), "Shown through the mirror");
         else if (!strncmp(e->graphics, "opengl", 6)) snprintf(s, sizeof(s), "%s, drawn in 3D by the PSP", graphics_label(e->graphics));
+        else if (!strcmp(e->graphics, "board-gpu")) snprintf(s, sizeof(s), "OpenGL 3, drawn by the board's GPU, shown on the PSP");
         else if (!strcmp(e->graphics, "sdl")) snprintf(s, sizeof(s), "SDL, drawn by the PSP");
         else snprintf(s, sizeof(s), "Drawn by the PSP; hold START + SELECT to quit");
-        info_row(tx, ty, !e->pspexp ? "monitor" : !strncmp(e->graphics, "opengl", 6) ? "box" : !strcmp(e->graphics, "sdl") ? "image" : "zap", s, tw, a); ty += 20;
+        info_row(tx, ty, !e->pspexp ? "monitor" : !strncmp(e->graphics, "opengl", 6) || !strcmp(e->graphics, "board-gpu") ? "box" : !strcmp(e->graphics, "sdl") ? "image" : "zap", s, tw, a); ty += 20;
         if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
         if (!e->pkg[0]) { info_row(tx, ty, "folder-open", e->dir[0] ? e->dir : "/", tw, a); ty += 20; }   /* (a package's: its own folder) */
         if (e->pkg[0]) snprintf(s, sizeof(s), "Package %s", e->pkg);

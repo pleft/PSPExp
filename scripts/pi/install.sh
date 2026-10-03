@@ -79,7 +79,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 	[ -n "$V" ] && echo "$V" | ssh "$PI" 'cat > ~/pspexp/src/.pspexp-version'
 	ssh "$PI" 'set -e; cd ~/pspexp/src
 		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
-		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
+		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp sdl-pspexp-hostgl pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
 		[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
 	if [ "$PSPEXP_CORE" = build ]; then
 		echo "built on $PI (~/pspexp/src/build): package it with scripts/packages/debs/pspexp-core/build OUTDIR arm64 $PI"

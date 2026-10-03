@@ -10,10 +10,15 @@
 # sound on the PSP only (the console's audio FIFO is not the game's), the
 # headless SDL (dummy video and audio drivers): the X path costs chocolate-doom
 # 20 fps (35 headless) and there is no LCD to show it on. PSPEXP_X=1 keeps X
-# (hidden window) for programs that need it.
+# (hidden window) for programs that need it. PSPEXP_HOSTGL=1: the board's own GPU
+# draws (OpenGL 3 games the PSP's layer cannot: SuperTuxKart on the Pi's V3D):
+# libsdl-pspexp-hostgl.so instead, SDL's offscreen video driver (OpenGL through
+# EGL, no display), each finished frame read back and sent as a picture.
 # the SDL layer: an installer's copy (/usr/local) or the pspexp-core package's (/usr/lib/pspexp)
 LIB=${PSPEXP_SHIM:-}
-[ -n "$LIB" ] || for LIB in /usr/local/lib/libsdl-pspexp.so /usr/lib/pspexp/libsdl-pspexp.so; do [ -f "$LIB" ] && break; done
+SHIM=libsdl-pspexp.so
+[ "${PSPEXP_HOSTGL:-0}" = 1 ] && { SHIM=libsdl-pspexp-hostgl.so; export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-offscreen}"; }
+[ -n "$LIB" ] || for LIB in /usr/local/lib/$SHIM /usr/lib/pspexp/$SHIM; do [ -f "$LIB" ] && break; done
 [ -f "$LIB" ] || { echo "pspexp-run: $LIB missing" >&2; exit 1; }
 [ $# -ge 1 ] || { echo "usage: pspexp-run <program> [args...]" >&2; exit 2; }
 export PSPEXP="${PSPEXP:-usb}"

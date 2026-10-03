@@ -283,6 +283,11 @@ it without the checksum; §4.3).
   apt=pspexp-snes9x2005
   ```
 
+- **Not on a board:** an empty value there, `[debian:gameshell]` with
+  `apt=`, leaves the recipe out of that board's catalogue (SuperTuxKart:
+  OpenGL 3 on the Pi's GPU, which the GameShell's has not).
+- **Several first-run files:** one `first-run=PATH:CONTENT` line each,
+  every one written once, when missing, before the program starts.
 - **Any section can change per board:** `[package:omega]` gives the Omega2+
   its own `description`, for instance, when it plays the title with a
   different core.

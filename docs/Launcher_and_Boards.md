@@ -128,7 +128,7 @@ icon=rocket                        a Lucide icon
 exec=./run.sh                      a shell command, run in the package directory
 env=PSPEXP_KEYS=cross=space,...    NAME=value, as many lines as needed
 env=PSPEXP_NUB=keys
-graphics=sdl                       how it draws: sdl | opengl | opengl-shaders
+graphics=sdl                       how it draws: sdl | opengl | opengl-shaders | board-gpu
 pspexp=1                           drawn by the PSP itself: no mirror
 ```
 
@@ -686,7 +686,26 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   through SDL's renderer, its 320x240 shown 4:3: the language menu, title,
   and the name entry right in PPSSPP at 24-26 fps. Solarus's keys: cross
   Space (action, confirm), square C (sword), triangle / circle X / V (the two
-  items), START D (pause); its sound is OpenAL's, through pspexp-run. `/usr/games/alter-aila-genesis` keeps the saves in the
+  items), START D (pause); its sound is OpenAL's, through pspexp-run.
+- **SuperTuxKart** (`supertuxkart`, Debian's 1.4, Pi only): **drawn by the
+  Pi's own GPU** (architecture §12a, host-rendered OpenGL: `PSPEXP_HOSTGL=1`
+  in the entry, `graphics=board-gpu`, shown as "OpenGL 3, the board's GPU").
+  At the PSP's 480x272; its "screen resolution is too low" message is a
+  warning only (`main.cpp`: below 480 lines the menus are cramped) and is
+  turned off. Its first start is answered by three `first-run=` files (a
+  recipe may now have several): `config.xml` with the warning off and the
+  Internet not used (SuperTuxKart fills in the rest itself), `players.xml`
+  with a player "Player" (else a Create User screen), and `input.xml` with
+  the PSP's controller, which it recognises by its game-controller mapping
+  and numbers by raw button (cross 0, circle 1, square 2, triangle 3, L 4,
+  R 5, START 6, SELECT 7, the d-pad 12-15): cross accelerates, square
+  brakes, circle fires, R nitro, L drift, triangle rescue, SELECT look back,
+  START pause; in menus cross selects, circle goes back (its own default put
+  accelerate on triangle and look-back on cross). No keys (`keys=` all
+  none), so nothing counts twice. Seen in PPSSPP through the installed
+  start script: the main menu with Player, its sound streamed; a race at
+  11-16 fps there (the Pi drawing 34 ms a frame). `[debian:gameshell]` with
+  an empty `apt=` keeps it off the GameShell, whose GPU has OpenGL ES 2 only. `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in

@@ -215,11 +215,14 @@ P
 			keys=$(rget "$R" "$sec" keys); nub=$(rget "$R" "$sec" nub)
 			exec=$(rget "$R" "$sec" exec)
 			[ "$(rget "$R" "$sec" native)" = 1 ] || exec="pspexp-run $exec"
-			first=$(rget "$R" "$sec" first-run)
-			if [ -n "$first" ]; then   # a settings file written once, when missing, then the program
-				f=${first%%:*}; body=${first#*:}
+			first=$(rall "$R" "$sec" first-run)
+			if [ -n "$first" ]; then   # settings files (one first-run= line each) written once, when missing, then the program
 				{ echo '#!/bin/sh'; echo "# written by pspexp-pkg from the recipe $ID: first-run settings, then the program"
-				  echo "[ -f \"\$HOME/$f\" ] || { mkdir -p \"\$(dirname \"\$HOME/$f\")\"; printf '%b' '$body' > \"\$HOME/$f\"; }"
+				  printf '%s\n' "$first" | while IFS= read -r one; do
+					[ -n "$one" ] || continue
+					f=${one%%:*}; body=${one#*:}
+					echo "[ -f \"\$HOME/$f\" ] || { mkdir -p \"\$(dirname \"\$HOME/$f\")\"; printf '%b' '$body' > \"\$HOME/$f\"; }"
+				  done
 				  echo "exec $exec \"\$@\""; } > "$A/run-$eid.sh"
 				chmod 755 "$A/run-$eid.sh"
 				exec=./run-$eid.sh

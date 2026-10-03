@@ -34,7 +34,7 @@
 
 typedef struct Pkg {
     char id[48], title[96], desc[300];
-    char graphics[16];             /* how it draws: sdl | opengl | opengl-shaders ("" not said) */
+    char graphics[16];             /* how it draws: sdl | opengl | opengl-shaders | board-gpu ("" not said) */
     char avail[40], inst[40];      /* versions: offered, installed ("" none) */
     char cover[700];               /* its picture: a path ("" none) */
     char cat[12];                  /* catalogue: game | system | app | tool */
@@ -440,7 +440,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
             gfx_text(FONT_BADGE, 60, y + 28, !strcmp(p->st, "local") ? "an older package" : g_local ? "a PSPExp build" : "apt, by recipe", UI_SUB, 255, 84);
             if (p->graphics[0]) {   /* how it draws */
                 gfx_text(FONT_BADGE, 16, y + 56, "draws", UI_MUTED, 255, 0);
-                gfx_text(FONT_BADGE, 60, y + 56, !strcmp(p->graphics, "sdl") ? "SDL" : !strcmp(p->graphics, "opengl") ? "OpenGL" : "OpenGL, shaders", UI_SUB, 255, 84);
+                gfx_text(FONT_BADGE, 60, y + 56, !strcmp(p->graphics, "sdl") ? "SDL" : !strcmp(p->graphics, "opengl") ? "OpenGL" : !strcmp(p->graphics, "board-gpu") ? "board GPU" : "OpenGL, shaders", UI_SUB, 255, 84);
             }
         }
         /* the list: the section shown */
