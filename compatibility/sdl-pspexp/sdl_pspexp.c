@@ -209,6 +209,7 @@ static struct {
     /* stats */
     Uint32 last_report; unsigned frames, uploads, shot_every, shot_index;
     int no_delta, no_clut;             /* PSPEXP_DELTA=0 / PSPEXP_CLUT=0: every page, 16-bit (benchmarks) */
+    int quant;                         /* PSPEXP_QUANT=1: a page of more than 256 colours reduced to 256 (median cut), CLUT8 */
     int no_batch;                      /* PSPEXP_BATCH=0: every message its own transfer */
     uint64_t rep_bytes;                /* link bytes at the last report */
     uint64_t up_ticks, tot_up_ticks;
@@ -330,6 +331,13 @@ static void connect_once(void)
     S.shot_every = getenv("PSPEXP_SHOT_EVERY") ? (unsigned)atoi(getenv("PSPEXP_SHOT_EVERY")) : 0;
     S.no_delta = getenv("PSPEXP_DELTA") && !strcmp(getenv("PSPEXP_DELTA"), "0");
     S.no_clut = getenv("PSPEXP_CLUT") && !strcmp(getenv("PSPEXP_CLUT"), "0");
+    /* on by default for frames from the board's GPU (photo-like, every page changed: SuperTuxKart's
+     * race 230 -> 137 KB a frame, 0.4 ms more), off for the rest (pages over 256 colours are rare) */
+#ifdef PSPEXP_HOST_GL
+    S.quant = !(getenv("PSPEXP_QUANT") && !strcmp(getenv("PSPEXP_QUANT"), "0"));
+#else
+    S.quant = getenv("PSPEXP_QUANT") && !strcmp(getenv("PSPEXP_QUANT"), "1");
+#endif
     S.no_batch = getenv("PSPEXP_BATCH") && !strcmp(getenv("PSPEXP_BATCH"), "0");
     S.vjoy = -1;
     S.rsx = S.rsy = 1.0f;
@@ -741,7 +749,10 @@ static void page_grid(Tex *x)
  * results of one page. Pages are independent: on boards with more cores a
  * frame's pages are converted in parallel (see the pool), then written into
  * the outgoing message in order on the calling thread. */
-typedef struct Lane { uint16_t stamp[65536]; uint8_t index[65536]; uint16_t gen; } Lane;
+typedef struct Lane {
+    uint16_t stamp[65536]; uint8_t index[65536]; uint16_t gen;
+    uint32_t *cnt; uint16_t *col, *tmp;   /* PSPEXP_QUANT: counts by colour, the page's colours, a sort buffer */
+} Lane;
 typedef struct Conv {
     uint16_t *px16; uint8_t *idx8; size_t cap;
     uint16_t pal[256]; int npal, t8;
@@ -755,6 +766,90 @@ static int conv_reserve(Conv *cv, size_t n)
     if (!cv->px16 || !cv->idx8) { free(cv->px16); free(cv->idx8); cv->px16 = NULL; cv->idx8 = NULL; cv->cap = 0; return -1; }
     cv->cap = n;
     return 0;
+}
+
+/* PSPEXP_QUANT: a page of more than 256 colours (a moving 3D frame from the board's GPU: every page
+ * changes, 215 KB a frame at 480x272 in 16 bits) to its 256 best by median cut, then CLUT8: about half
+ * the bytes, nothing new on the PSP. The page's 5650 colours are counted; the box of colours whose
+ * longest side times its pixel count is largest is cut at its weighted median, until 256 boxes; each
+ * box's colours take its weighted mean. Channels have 32 or 64 values, so each cut sorts its box by a
+ * counting sort: a few passes over the page's colours, no comparisons. No dithering. */
+typedef struct QBox { int lo, hi; uint32_t w; int axis, range; } QBox;
+
+static int q_ch(uint16_t c, int axis) { return axis == 0 ? (c & 31) << 1 : axis == 1 ? (c >> 5) & 63 : (c >> 11) << 1; }   /* on one 0..63 scale */
+
+static void q_measure(const Lane *ln, QBox *b)
+{
+    int a, i, best = -1;
+    b->w = 0;
+    for (i = b->lo; i < b->hi; i++) b->w += ln->cnt[ln->col[i]];
+    b->range = 0; b->axis = 1;
+    for (a = 0; a < 3; a++) {
+        int mn = 64, mx = -1;
+        for (i = b->lo; i < b->hi; i++) { int v = q_ch(ln->col[i], a); if (v < mn) mn = v; if (v > mx) mx = v; }
+        if (mx - mn > best) { best = mx - mn; b->axis = a; }
+    }
+    b->range = best;
+}
+
+static void quantize_page(Lane *ln, const Page *p, Conv *cv)
+{
+    QBox box[256];
+    int nb = 1, n = 0, i, k, total = p->w * p->h;
+    if (!ln->cnt) {
+        ln->cnt = (uint32_t *)calloc(65536, sizeof(uint32_t));
+        ln->col = (uint16_t *)malloc(65536 * sizeof(uint16_t));
+        ln->tmp = (uint16_t *)malloc(65536 * sizeof(uint16_t));
+        if (!ln->cnt || !ln->col || !ln->tmp) { free(ln->cnt); free(ln->col); free(ln->tmp); ln->cnt = NULL; return; }
+    }
+    for (i = 0; i < total; i++) { uint16_t c = cv->px16[i]; if (!ln->cnt[c]++) ln->col[n++] = c; }
+    box[0].lo = 0; box[0].hi = n; q_measure(ln, &box[0]);
+    while (nb < 256) {
+        int pick = -1, ax, cut;
+        uint64_t score = 0;
+        uint32_t half, run = 0, hist[64];
+        for (k = 0; k < nb; k++) {
+            uint64_t sc = (uint64_t)box[k].range * box[k].w;
+            if (box[k].hi - box[k].lo > 1 && box[k].range > 0 && sc > score) { score = sc; pick = k; }
+        }
+        if (pick < 0) break;
+        {   /* counting sort of the box along its longest axis */
+            QBox *b = &box[pick];
+            uint32_t pos[64];
+            ax = b->axis;
+            memset(hist, 0, sizeof(hist));
+            for (i = b->lo; i < b->hi; i++) hist[q_ch(ln->col[i], ax)]++;
+            for (k = 0, run = 0; k < 64; k++) { pos[k] = run; run += hist[k]; }
+            for (i = b->lo; i < b->hi; i++) { uint16_t c = ln->col[i]; ln->tmp[pos[q_ch(c, ax)]++] = c; }
+            memcpy(ln->col + b->lo, ln->tmp, (size_t)(b->hi - b->lo) * sizeof(uint16_t));
+            /* the weighted median, never at an end */
+            half = b->w / 2; run = 0;
+            for (cut = b->lo; cut < b->hi - 1; cut++) { run += ln->cnt[ln->col[cut]]; if (run >= half) break; }
+            cut++;
+            if (cut <= b->lo) cut = b->lo + 1;
+            if (cut >= b->hi) cut = b->hi - 1;
+            box[nb].lo = cut; box[nb].hi = b->hi; b->hi = cut;
+            q_measure(ln, b); q_measure(ln, &box[nb]);
+            nb++;
+        }
+    }
+    for (k = 0; k < nb; k++) {   /* each box: its weighted mean, and its colours' index */
+        uint64_t r = 0, g = 0, bl = 0, w = 0;
+        for (i = box[k].lo; i < box[k].hi; i++) {
+            uint16_t c = ln->col[i];
+            uint32_t m = ln->cnt[c];
+            r += (uint64_t)(c & 31) * m; g += (uint64_t)((c >> 5) & 63) * m; bl += (uint64_t)(c >> 11) * m; w += m;
+            ln->index[c] = (uint8_t)k;
+        }
+        if (!w) w = 1;
+        cv->pal[k] = (uint16_t)(((r + w / 2) / w) | (((g + w / 2) / w) << 5) | (((bl + w / 2) / w) << 11));
+    }
+    for (i = 0; i < total; i++) cv->idx8[i] = ln->index[cv->px16[i]];
+    for (i = 0; i < n; i++) ln->cnt[ln->col[i]] = 0;   /* clean for the next page */
+    ln->gen++;                                          /* the index entries above are not this generation's */
+    if (ln->gen == 0) { memset(ln->stamp, 0, sizeof(ln->stamp)); ln->gen = 1; }
+    cv->npal = nb;
+    cv->t8 = 1;
 }
 
 static void convert_page(Lane *ln, const Tex *x, const Page *p, int opaque, Conv *cv)
@@ -799,6 +894,7 @@ static void convert_page(Lane *ln, const Tex *x, const Page *p, int opaque, Conv
 #undef PAGE_LOOP
     cv->npal = npal;
     cv->t8 = try8 && !over;
+    if (try8 && over && S.quant && opaque) quantize_page(ln, p, cv);
 }
 
 /* the converted page into the outgoing message: palette, texture, swizzled
