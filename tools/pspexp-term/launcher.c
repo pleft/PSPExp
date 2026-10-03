@@ -235,7 +235,7 @@ static void cats_build(void)
             { "Sound", "headphones", { "a:sound", NULL } },
             { "Clock", "clock", { "a:tz", "a:pspclock", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
-            { "This board", "power", { "a:about", "a:reboot", "a:poweroff", NULL } },
+            { "This board", "circuit-board", { "a:about", "a:reboot", "a:poweroff", NULL } },
         };
         Cat *top = c;
         int g, k, ng = 0;
