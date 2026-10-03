@@ -1336,7 +1336,14 @@ was up, and kept the no; a no is now asked again every 20 s, and System
 gains the row when the answer changes. Pairing on the GameShell then failed: its
 controller was not pairable (BlueZ's default there), so a pairing was
 dropped the moment it was made; `pspexp-bt` now turns pairable on with the
-power.
+power. Then the earbuds paired but would not connect ("a2dp-sink profile
+connect failed: Protocol not available"): WirePlumber starts its Bluetooth
+monitor only for a user with an active seat, and nobody logs in at a
+PSPExp board (Raspberry Pi OS ships with that check off, Debian does not).
+pspexp-core installs `/etc/wireplumber/wireplumber.conf.d/80-pspexp-bluez.conf`
+(`monitor.bluez.seat-monitoring = disabled`; read when WirePlumber starts,
+so after a reboot or `systemctl --user restart wireplumber`). Then the
+FreeBuds connected to the GameShell and took its sound.
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering
