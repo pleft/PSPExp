@@ -12,6 +12,8 @@
 #                          each install: itch.io's links last a minute)
 #   SIZE                   the download's size, for the message ("575 MB")
 #   TOP                    the folder inside the archive that holds the game ("" when at the top)
+#   KEEP                   instead of TOP: the download is kept whole under this name (a
+#                          Solarus quest's .solarus file, which the engine reads as it is)
 #   RUN                    the launch command, $G being the game's folder (shell code)
 #   DEPENDS                packages the game needs besides curl and unar
 #   ABOUT                  the package description's lines (one space-indented each)
@@ -45,6 +47,7 @@ S
 	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;
 	*) _unpack='unar -q -o "$C/x" "$C/game.part" >/dev/null' ;;
 	esac
+	[ -n "$KEEP" ] && { _unpack="mkdir -p \"\$C/x/g\" && mv \"\$C/game.part\" \"\$C/x/g/$KEEP\""; TOP=g; }
 	cat > "$_w/root/usr/share/doc/$ID/README" <<D
 $TITLE. This package holds no part of the game: installing it downloads the
 developer's release from

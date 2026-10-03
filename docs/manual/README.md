@@ -11,7 +11,7 @@ What you get on the PSP:
 - **A launcher made for the PSP's screen**: games, emulated systems, apps
   and settings, with covers, favourites and search.
 - **Games the PSP never had**: Doom (Freedoom), Quake, Cave Story,
-  Dink Smallwood, The Ur-Quan Masters (Star Control II), Hurrican, Egoboo, SuperTux, OpenTyrian, Simutrans, OpenTTD, the RPGs Alter
+  Dink Smallwood, The Ur-Quan Masters (Star Control II), Hurrican, Egoboo, Zelda: Mystery of Solarus DX, SuperTux, OpenTyrian, Simutrans, OpenTTD, the RPGs Alter
   A.I.L.A. Genesis and Theia: The Crimson Eclipse, classic Revolution adventures and more, installed from the **Packages** app in a couple of presses.
 - **Emulators**: NES, SNES, Mega Drive, Game Boy, Game Boy Advance, Atari
   Lynx, WonderSwan. Put your ROMs on the board and they show up with box art.

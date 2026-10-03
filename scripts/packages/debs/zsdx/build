@@ -1,0 +1,16 @@
+#!/bin/sh
+# zsdx: an installer for The Legend of Zelda: Mystery of Solarus DX (Solarus
+# Team's fan game, v1.12.3, for Solarus 1.6): PSPExp hosts none of it; the board
+# downloads the quest's .solarus file from its official release on GitLab
+# (SHA-256 as the release's checksums.txt gives it) and keeps it whole: the
+# engine reads it as it is (_installer.sh). Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=zsdx TITLE="The Legend of Zelda: Mystery of Solarus DX" VERSION=1.12.3-pspexp1
+URL="https://gitlab.com/solarus-games/games/zsdx/uploads/c00fd6ca1a8776570d95212388928737/zsdx-v1.12.3.solarus"
+SHA=1f7d78fbf538de819451f0c37f762b5baabc1ec2572e10f8e05dedb0579dc95a SIZE="21 MB" KEEP=zsdx.solarus
+RUN='exec /usr/lib/pspexp/solarus/solarus-run -lua-console=no "$G/zsdx.solarus" "$@"'
+DEPENDS=pspexp-solarus
+ABOUT=" The Solarus Team's fan-made Zelda adventure (Mystery of Solarus DX),
+ for the Solarus 1.6 engine."
+build_installer "$1"

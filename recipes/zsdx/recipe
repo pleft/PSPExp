@@ -1,0 +1,29 @@
+# The Legend of Zelda: Mystery of Solarus DX: the Solarus Team's fan game
+# (v1.12.3) on the Solarus 1.6 engine (PSPExp's build). PSPExp hosts none of
+# its files, not even a cover: the board downloads the quest from its
+# official GitLab release when it is installed (package zsdx), and the
+# launcher draws a generated cover. Solarus's own keys: Space the action key
+# (and confirm), C the sword, X / V the two items, D the pause menu. Its
+# sound is OpenAL's, which pspexp-run carries to the PSP.
+
+[package]
+id=zsdx
+title=Zelda: Mystery of Solarus DX
+description=A fan-made Zelda action-adventure on Solarus: dungeons, puzzles and bosses in the style of A Link to the Past, with a story of its own.
+category=game
+license=GPL-3.0 (Solarus); the quest's own terms (fan game, Solarus Team), downloaded from its release
+version=1
+
+[debian]
+apt=zsdx
+
+[entry]
+title=Zelda: Mystery of Solarus DX
+type=game
+description=A fan-made Zelda action-adventure on the Solarus engine: dungeons, puzzles and bosses in the style of A Link to the Past. Downloaded from its developers.
+icon=swords
+exec=/usr/games/zsdx
+keys=cross=space,square=c,triangle=x,circle=v,start=d,select=none,l=none,r=none,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl

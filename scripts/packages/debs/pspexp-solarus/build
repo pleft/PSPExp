@@ -1,0 +1,31 @@
+#!/bin/sh
+# pspexp-solarus: the Solarus 1.6.5 engine (GPL-3.0) for quests made for it,
+# which Debian 13 does not carry, built by scripts/packages/build-solarus.sh
+# ARCH. No quest in it: each quest's package downloads its own. Installs
+# /usr/lib/pspexp/solarus/ (solarus-run, libsolarus). Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/solarus"
+[ -x "$B/solarus-run" ] && [ -s "$B/depends.txt" ] || { echo "no $B/solarus-run: scripts/packages/build-solarus.sh $ARCH first" >&2; exit 1; }
+V=1.6.5-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L="$W/root/usr/lib/pspexp/solarus"
+mkdir -p "$L" "$W/root/usr/share/doc/pspexp-solarus"
+install -m 755 "$B/solarus-run" "$L/solarus-run"
+cp -P "$B"/libsolarus.so* "$L/"
+[ -f "$B/COPYING" ] && cp "$B/COPYING" "$W/root/usr/share/doc/pspexp-solarus/COPYING"
+echo "Solarus 1.6.5 (https://www.solarus-games.org), built by PSPExp. Quests come with their own packages, downloaded." > "$W/root/usr/share/doc/pspexp-solarus/README"
+cat > "$W/control" <<C
+Package: pspexp-solarus
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Solarus 1.6 engine, for PSPExp
+ The engine of action-RPG quests made with Solarus 1.6, which Debian 13
+ does not carry. Quests come with their own packages. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-solarus_${V}_$ARCH.deb"

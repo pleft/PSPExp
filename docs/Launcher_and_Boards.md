@@ -672,7 +672,21 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   readable, 27 fps in PPSSPP). Menus take the mouse (nub, cross clicks); in
   play its keyboard (square / circle the hands' items, triangle the
   inventory, R jumps, L / SELECT grab, START the menu). Play not reached by
-  script (the menus need clicks). `/usr/games/alter-aila-genesis` keeps the saves in the
+  script (the menus need clicks).
+- **The Legend of Zelda: Mystery of Solarus DX** (`zsdx`): the Solarus Team's
+  fan game, v1.12.3, on the Solarus 1.6.5 engine built by PSPExp
+  (`scripts/packages/build-solarus.sh`, `pspexp-solarus`: the engine and its
+  library together, found through RPATH; its Debian Depends listed from what
+  it loads, dpkg-shlibdeps refusing the private library). Nothing of the
+  quest is hosted, not even a cover (its title is the game's art and the
+  Zelda logo; the launcher generates one): the installer downloads its
+  official `.solarus` file from the GitLab release (checksum as its
+  checksums.txt gives it, 21 MB, 19 s on the Pi) and keeps it whole
+  (`KEEP=` in `_installer.sh`: the engine reads it as it is). It draws
+  through SDL's renderer, its 320x240 shown 4:3: the language menu, title,
+  and the name entry right in PPSSPP at 24-26 fps. Solarus's keys: cross
+  Space (action, confirm), square C (sword), triangle / circle X / V (the two
+  items), START D (pause); its sound is OpenAL's, through pspexp-run. `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in
