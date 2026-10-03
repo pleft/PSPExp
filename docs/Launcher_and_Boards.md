@@ -1328,7 +1328,9 @@ excellent"). The GameShell (2026-10-03): its image gains PipeWire, WirePlumber,
 the Bluetooth plugin and rfkill, and lingering for `cpi`
 (`image-setup.sh`; `stage.sh` adds the rfkill rule); installed on the
 running GameShell, `pspexp-bt available` passes and System > Sound output
-shows; not yet tried with headphones there.
+shows; not yet tried with headphones there. ffmpeg joined the image the
+same day (the music player's other formats): on the GameShell it decodes
+30 s of FLAC in 1.1 s and of Ogg Vorbis in 1.4 s.
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering

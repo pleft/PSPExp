@@ -73,4 +73,6 @@ Measured on the PSP-1000:
   Sound output** pairs headphones as on the Raspberry Pi (see
   [Using PSPExp](using-pspexp.md#bluetooth-headphones)). Not yet tried with
   headphones on the GameShell itself.
+- **Music**: MP3s are decoded by the PSP; Ogg, FLAC, Opus and M4A by the
+  GameShell (ffmpeg comes with the image), at a few percent of its processor.
 - Packages live in `/opt/pspexp`.

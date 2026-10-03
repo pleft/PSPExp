@@ -15,12 +15,13 @@ rm -rf "$R"
 # only what the board and PSPExp need: Wi-Fi (NetworkManager; hostapd for the
 # PSP's own access point), the USB network (ifupdown, dhclient), SSH and .local
 # names, Bluetooth (bluez; PipeWire and its Bluetooth plugin for headphones, pspexp-bt), the
-# clock, growing the card at first boot, and a small editor for the terminal; PSPExp itself and
+# clock, growing the card at first boot, a small editor for the terminal, and ffmpeg (the music
+# player's formats beyond MP3 and WAV); PSPExp itself and
 # its dependencies come from apt below
 PKGS="systemd-sysv,udev,dbus,openssh-server,sudo,network-manager,wpasupplicant,hostapd,iw,wireless-regdb,\
 firmware-brcm80211,curl,ca-certificates,gpgv,avahi-daemon,libnss-mdns,ifupdown,isc-dhcp-client,\
 cloud-guest-utils,fdisk,iproute2,kmod,nano,less,procps,tzdata,systemd-timesyncd,locales,bluez,\
-pipewire,pipewire-bin,wireplumber,libspa-0.2-bluetooth,rfkill"
+pipewire,pipewire-bin,wireplumber,libspa-0.2-bluetooth,rfkill,ffmpeg"
 mmdebstrap --arch=armhf --variant=minbase --mode=root --include="$PKGS" \
 	--components="main contrib non-free-firmware" trixie "$R" \
 	"deb http://deb.debian.org/debian trixie main contrib non-free-firmware" \
