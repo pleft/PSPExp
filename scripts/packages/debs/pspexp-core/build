@@ -30,7 +30,8 @@ install -m 755 "$W/b/pspexp-term" "$R/usr/bin/pspexp-term"
 [ -f "$W/b/libsdl-pspexp.so" ] && install -m 644 "$W/b/libsdl-pspexp.so" "$R/usr/lib/pspexp/libsdl-pspexp.so"
 for f in pspexp-exec pspexp-run pspexp-pkg pspexp-bt; do install -m 755 "$ROOT/scripts/board/$f" "$R/usr/bin/$f"; done
 install -m 755 "$ROOT/scripts/board/pspexp-pkg-apt" "$R/usr/sbin/pspexp-pkg-apt"
-install -D -m 644 "$ROOT/scripts/board/80-pspexp-bluez.conf" "$R/etc/wireplumber/wireplumber.conf.d/80-pspexp-bluez.conf"   # Bluetooth audio without a login
+mkdir -p "$R/etc/wireplumber/wireplumber.conf.d"   # (macOS install has no -D)
+install -m 644 "$ROOT/scripts/board/80-pspexp-bluez.conf" "$R/etc/wireplumber/wireplumber.conf.d/80-pspexp-bluez.conf"   # Bluetooth audio without a login
 install -m 755 "$ROOT/scripts/board/pspexp-apt-setup" "$R/usr/share/pspexp/pspexp-apt-setup"
 for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 	install -m 644 "$ROOT/tools/pspexp-term/assets/$f" "$R/usr/share/pspexp/launcher/$f"
