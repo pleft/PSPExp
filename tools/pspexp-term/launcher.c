@@ -186,7 +186,7 @@ static void cats_build(void)
     }
     /* the rail and the home screen: Favourites, Games, Emulators, Apps, Settings; each system's ROMs
      * a section of its own off the rail, opened from Emulators (what was played last: the home
-     * screen's Continue) */
+     * screen's Play again) */
     c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "favourite");
     for (i = 0; i < L.nfavs; i++) { LEntry *e = find_any(L.favs[i]); if (e) cat_push(c, e); }
     c = cat_add("Games", "gamepad-2", 0x818cf8, CK_GAMES, "game");
@@ -272,7 +272,7 @@ static int is_system_item(const LEntry *e) { return !strncmp(e->id, "s:", 2); }
 
 enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT, M_HOME };
 static int g_mode = M_HOME;
-static int g_home_sel = 1, g_home_row;   /* the home screen: the section in focus (Games), or its Continue row */
+static int g_home_sel = 1, g_home_row;   /* the home screen: the section in focus (Games), or its Play again row */
 static float g_home_lift[8], g_home_anim;
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
@@ -1510,7 +1510,7 @@ static void move_sel(int d, int wrap, uint64_t now)
     if (s != c->sel) { c->sel = s; g_sel_since = now; g_dirty = 1; }
 }
 
-/* the home screen: left and right the sections, down the Continue row */
+/* the home screen: left and right the sections, down the Play again row */
 static LEntry *home_continue(void)
 {
     int i;
@@ -1881,18 +1881,26 @@ static void human_size(long long b, char *out, size_t n)
     else snprintf(out, n, "%lld KB", (b + 1023) / 1024);
 }
 
+/* who draws it: the PSP's GE (the SDL layer, its OpenGL), or the board's own GPU with each frame
+ * sent as a picture (graphics=board-gpu) */
+static const char *renderer(const LEntry *e)
+{
+    const char *g = e->type == LT_ROM && e->sys >= 0 ? L.sys[e->sys].graphics : e->graphics;
+    return !strcmp(g, "board-gpu") ? "Board GPU renderer" : "PSP renderer";
+}
+
 static void detail_line(const LEntry *e, char *s, size_t n)
 {
     char sz[32];
     switch (e->type) {
     case LT_ROM:
         human_size(e->size, sz, sizeof(sz));
-        if (e->tags[0]) snprintf(s, n, "%s  /  %s  /  %s", L.sys[e->sys].shortname, e->tags, sz);
-        else snprintf(s, n, "%s  /  %s", L.sys[e->sys].name, sz);
+        if (e->tags[0]) snprintf(s, n, "%s  /  %s  /  %s  /  %s", L.sys[e->sys].shortname, e->tags, sz, renderer(e));
+        else snprintf(s, n, "%s  /  %s  /  %s", L.sys[e->sys].name, sz, renderer(e));
         break;
     case LT_APP:
         if (is_builtin(e)) snprintf(s, n, "Built in  /  %s", e->tags);
-        else snprintf(s, n, "App%s", e->pspexp ? "  /  PSP native" : "");
+        else snprintf(s, n, "App%s%s", e->pspexp ? "  /  " : "", e->pspexp ? renderer(e) : "");
         break;
     case LT_TOOL:
         if (is_system_item(e)) snprintf(s, n, "%s  /  %d ROM%s", L.sys[e->sys].shortname, L.sys[e->sys].nroms, L.sys[e->sys].nroms == 1 ? "" : "s");
@@ -1904,7 +1912,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
         else snprintf(s, n, "%s", e->tags);
         break;
-    default: snprintf(s, n, "Game%s%s%s", e->pspexp ? "  /  PSP native" : "", e->tags[0] ? "  /  " : "", e->tags); break;
+    default: snprintf(s, n, "Game  /  %s%s%s", renderer(e), e->tags[0] ? "  /  " : "", e->tags); break;
     }
 }
 
@@ -2025,7 +2033,7 @@ static void draw_list(float dt)
  * choice was the look without that cost */
 static void waves(float dt) { (void)dt; gfx_waves(0); }
 
-/* the home screen: the rail's sections as large tiles, what each holds, and Continue */
+/* the home screen: the rail's sections as large tiles, what each holds, and Play again */
 static void draw_home(float dt)
 {
     int i, n = rail_n(), pitch = n > 5 ? 80 : 88, x0 = SCREEN_W / 2 - (n - 1) * pitch / 2;
@@ -2061,18 +2069,18 @@ static void draw_home(float dt)
     else if (!sel->n && sel->kind == CK_FAVS) snprintf(s, sizeof(s), "%s", "Square on a game adds it here");
     else snprintf(s, sizeof(s), "%d %s%s", sel->n, sel->noun, sel->n == 1 ? "" : "s");
     gfx_text(FONT_SMALL, (SCREEN_W - gfx_text_width(FONT_SMALL, s)) / 2, 176, s, C_MUTED, 255, 0);
-    /* Continue: what was played last */
+    /* Play again: what was played last (started afresh, as from its section) */
     if (cont) {
         int on = g_home_row == 1, w, x, y = 200;
         snprintf(s, sizeof(s), "%s", cont->title);
-        w = 26 + gfx_text_width(FONT_SMALL, "Continue") + 10 + gfx_text_width(FONT_BODY, s) + 16;
+        w = 26 + gfx_text_width(FONT_SMALL, "Play again") + 10 + gfx_text_width(FONT_BODY, s) + 16;
         if (w > SCREEN_W - 80) w = SCREEN_W - 80;
         x = (SCREEN_W - w) / 2;
         if (on) gfx_shadow(NINE_SHADOW10, x, y, w, 26, 0x40a0ff, 220);
         gfx_nine(NINE_R10, x, y, w, 26, on ? 0x1e3a6e : 0x16223c, 235);
         gfx_icon("circle-play", 16, x + 8, y + 5, on ? 0xffffff : C_ACCENT, 255);
         x += 30;
-        x += gfx_text(FONT_SMALL, x, y + 7, "Continue", C_MUTED, 255, 0) + 8;
+        x += gfx_text(FONT_SMALL, x, y + 7, "Play again", C_MUTED, 255, 0) + 8;
         gfx_text(FONT_BODY, x, y + 5, s, on ? C_TEXT : C_SUB, 255, (SCREEN_W - 40) - x);
     }
     {

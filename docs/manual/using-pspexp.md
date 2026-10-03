@@ -7,14 +7,15 @@ buttons; the board needs no screen, keyboard or mouse.
 
 It opens on the **home screen**: five big tiles, **Favourites**, **Games**,
 **Emulators**, **Apps** and **Settings**, with what each holds underneath
-and, below, **Continue** with what you played last.
+and, below, **Play again** with what you played last (it starts afresh;
+the game's own saves are there as always).
 
 ```
  12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
      (star)    (GAMES)   (joystick)   (apps)   (gear)
    Favourites   Games    Emulators     Apps   Settings
                          34 games
-                 (>) Continue  GoldenEye 007
+                 (>) Play again  GoldenEye 007
  (X) Open                                                START Search
 ```
 
@@ -24,7 +25,10 @@ you were playing.
 Inside a section, the same five run down the left as the **rail**, and the
 section's **shelf** runs to its right: games and ROMs as discs with their
 cover in the window, apps and settings as icon tiles. The one you are on
-is larger and glows; its description shows underneath. **Emulators** has
+is larger and glows; its description shows underneath, and who draws it:
+**PSP renderer** (the PSP's graphics chip, most games) or **Board GPU
+renderer** (the board's own graphics chip, each frame sent to the PSP as a
+picture: SuperTuxKart, the Nintendo 64 on a Pi). **Emulators** has
 one tile per system you have ROMs for, with its console's picture (the
 N64's controller, a Game Boy...), like the home screen's; cross on
 one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
@@ -36,7 +40,7 @@ one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
  [joy]    |   Quake  Cave Story OpenTyrian  ...
  [apps]   | Cave Story
  [gear]   | a short description of the game
-          | Game  /  PSP native
+          | Game  /  PSP renderer
  (X) Play  ([]) Favourite  (/\) Details  (O) Home        START Search
 ```
 

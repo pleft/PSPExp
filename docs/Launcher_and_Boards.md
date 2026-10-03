@@ -206,7 +206,7 @@ over: about 3 MB on the Omega, whose graphics live on the PSP as textures.
  [GB]   |  Quake Cave Story ...                                     shelf: discs for games
  [NES]  | Cave Story                                                and ROMs, icon tiles for
  [apps] | Studio Pixel's 2004 platformer ...                        apps and settings; the
- [gear] | Game  /  PSP native                                       selection larger, lifted
+ [gear] | Game  /  PSP renderer                                       selection larger, lifted
  (X) Play  ([]) Favourite  (/\) Details           START Search      and glowing
 ```
 
@@ -224,14 +224,18 @@ into the large one, lifted 4 px, as the selection arrives. Apps, tools and
 settings are icon tiles (54 px, 62 selected). Under the shelf the
 selection's title, its description (two lines) and its detail line; a
 setting's value at the right of its title. The cover column and the list
-are gone.
+are gone. The detail line says who draws the entry: "PSP
+renderer" (the PSP's GE: the SDL layer, its OpenGL) or "Board GPU renderer"
+(`graphics=board-gpu`); it replaced "PSP native", which only meant the
+program spoke PSPExp, as every package does now.
 
 **Step 2** (2026-10-03): a home screen, and the rail cut to five sections,
 the same on both: Favourites, Games, Emulators, Apps, Settings (System
-renamed; Recent gone, the home screen's **Continue** row plays the last
-one played). The launcher opens on the home screen: the five as 60 px
+renamed; Recent gone, the home screen's **Play again** row starts the
+last one played afresh). The launcher opens on the home screen: the five as 60 px
 tiles (72 focused, lifted and glowing), what the focused one holds
-underneath, Continue below (down, then cross). Each emulated system is no
+underneath, Play again below (down, then cross; first called
+Continue, renamed as it does not resume). Each emulated system is no
 longer a rail tile: **Emulators** is a shelf of systems (entries `s:<id>`;
 tiles like the home screen's with the console's icon in the system's
 colour, see System icons below: discs are for games and ROMs only, the
