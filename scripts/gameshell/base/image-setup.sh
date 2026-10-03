@@ -14,11 +14,13 @@ R=$W/rootfs
 rm -rf "$R"
 # only what the board and PSPExp need: Wi-Fi (NetworkManager; hostapd for the
 # PSP's own access point), the USB network (ifupdown, dhclient), SSH and .local
-# names, Bluetooth (bluez), the clock, growing the card at first boot, and a small editor for
-# the terminal; PSPExp itself and its dependencies come from apt below
+# names, Bluetooth (bluez; PipeWire and its Bluetooth plugin for headphones, pspexp-bt), the
+# clock, growing the card at first boot, and a small editor for the terminal; PSPExp itself and
+# its dependencies come from apt below
 PKGS="systemd-sysv,udev,dbus,openssh-server,sudo,network-manager,wpasupplicant,hostapd,iw,wireless-regdb,\
 firmware-brcm80211,curl,ca-certificates,gpgv,avahi-daemon,libnss-mdns,ifupdown,isc-dhcp-client,\
-cloud-guest-utils,fdisk,iproute2,kmod,nano,less,procps,tzdata,systemd-timesyncd,locales,bluez"
+cloud-guest-utils,fdisk,iproute2,kmod,nano,less,procps,tzdata,systemd-timesyncd,locales,bluez,\
+pipewire,pipewire-bin,wireplumber,libspa-0.2-bluetooth,rfkill"
 mmdebstrap --arch=armhf --variant=minbase --mode=root --include="$PKGS" \
 	--components="main contrib non-free-firmware" trixie "$R" \
 	"deb http://deb.debian.org/debian trixie main contrib non-free-firmware" \
@@ -57,6 +59,9 @@ echo 'LANG=en_US.UTF-8' > "$R/etc/default/locale"
 chroot "$R" useradd -m -u 1000 -s /bin/bash -G sudo,audio,video,plugdev,netdev,input,dialout cpi
 echo 'cpi:cpi' | chroot "$R" chpasswd
 echo 'cpi ALL=(ALL) NOPASSWD: ALL' > "$R/etc/sudoers.d/cpi"; chmod 440 "$R/etc/sudoers.d/cpi"
+# cpi's PipeWire runs without a login (as loginctl enable-linger would): the console is a
+# system service, and Bluetooth sound goes through the user's PipeWire (pspexp-bt)
+mkdir -p "$R/var/lib/systemd/linger" && touch "$R/var/lib/systemd/linger/cpi"
 if [ -f "$IN/authorized_keys" ]; then
 	install -d -m 700 -o 1000 -g 1000 "$R/home/cpi/.ssh"
 	install -m 600 -o 1000 -g 1000 "$IN/authorized_keys" "$R/home/cpi/.ssh/authorized_keys"

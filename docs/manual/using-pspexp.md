@@ -127,7 +127,7 @@ Ogg, FLAC, Opus and M4A are decoded by the board when it has ffmpeg.
 
 ## Bluetooth headphones
 
-On a board with Bluetooth (the Raspberry Pi), **System > Sound output** sends
+On a board with Bluetooth (the Raspberry Pi, the GameShell), **System > Sound output** sends
 all sound to headphones or a speaker instead of the PSP:
 
 1. Put the headphones in pairing mode.

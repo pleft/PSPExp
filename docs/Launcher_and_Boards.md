@@ -1324,7 +1324,11 @@ icon and the volume among the board's indicators while the sound is on
 Bluetooth (`/tmp/pspexp-audio-volume-UID`, written by pspexp-bt). The control
 port's `volume-bar N` shows the bar (tests). Tried on the PSP-1000 from the Pi the same day:
 the bar in the launcher and in games, the top bar's volume ("works
-excellent").
+excellent"). The GameShell (2026-10-03): its image gains PipeWire, WirePlumber,
+the Bluetooth plugin and rfkill, and lingering for `cpi`
+(`image-setup.sh`; `stage.sh` adds the rfkill rule); installed on the
+running GameShell, `pspexp-bt available` passes and System > Sound output
+shows; not yet tried with headphones there.
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering
@@ -1340,5 +1344,5 @@ for 20 ms, which takes the cycle to 512 (`PSPEXP_BT_LATENCY` tries another
 value). What remains is the game's own buffer (OpenJazz 2048 samples, the
 emulators about 50 ms), a frame, and the radio's. Aladdin on the Mega Drive emulator
 afterwards: "sound fx are almost instant with the button presses". The volume buttons on the PSP-1000, same day: working
-("it rocks!"). Not tried: the GameShell (its radio has Bluetooth).
+("it rocks!").
 

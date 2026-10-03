@@ -61,7 +61,7 @@ gs_stage() {
 		done
 	fi
 	# nmcli joins Wi-Fi with the password among its arguments: sudo must not log those
-	{ echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli'
+	{ echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli, /usr/sbin/rfkill unblock bluetooth'
 	  echo 'Defaults!/usr/bin/nmcli !log_allowed'; } > "$S/pspexp.sudoers"
 	gs_copy "$S/pspexp.sudoers" 0440 0 0 /etc/sudoers.d/pspexp
 

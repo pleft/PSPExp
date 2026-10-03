@@ -69,7 +69,8 @@ Measured on the PSP-1000:
 - **Logging in** (for tinkerers): the user is `cpi`, password `cpi`, reachable
   over SSH as `gameshell.local` once on Wi-Fi. Change the password
   (`passwd`) if your network is not only yours.
-- **Bluetooth headphones**: the GameShell has Bluetooth and the image turns
-  it on, but sound to headphones has only been tried on the Raspberry Pi so
-  far.
+- **Bluetooth headphones**: the GameShell has Bluetooth, and **System >
+  Sound output** pairs headphones as on the Raspberry Pi (see
+  [Using PSPExp](using-pspexp.md#bluetooth-headphones)). Not yet tried with
+  headphones on the GameShell itself.
 - Packages live in `/opt/pspexp`.
