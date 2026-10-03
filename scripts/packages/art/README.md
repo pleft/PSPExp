@@ -31,5 +31,6 @@
 | `recipes/freedink/cover.png` | Debian's freedink package, its SVG icon rendered at 128x128 | GPL-3.0+ (FreeDink) |
 | `recipes/uqm/cover.png` | a screenshot of its main menu in PPSSPP, cropped and scaled | CC BY-NC-SA 2.5 (UQM's content) |
 | `recipes/hurrican/cover.png` | a screenshot of its first level in PPSSPP, cropped and scaled | freeware (Hurrican, Poke53280) |
+| `recipes/egoboo/cover.png` | a screenshot of its title menu in PPSSPP, cropped and scaled | GPL-3.0 (Egoboo's assets) |
 | `recipes/theia/cover.png` | a screenshot of the game's title in PPSSPP, cropped and scaled | free game (Theia: The Crimson Eclipse, MissingSeven) |
 | `recipes/alter-aila-genesis/cover.png` | a screenshot of the game's title in PPSSPP, cropped and scaled | freeware (Alter A.I.L.A. Genesis, Neok) |

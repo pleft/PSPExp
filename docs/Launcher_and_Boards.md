@@ -660,7 +660,19 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   over 512 on a side is kept at half size on the board (`PSPEXP_TEX_HALF`):
   1.2 MB a frame and 13.6 fps in PPSSPP became 197 KB and 30.7 fps. It plays,
   but its menus' text, an 800x600 game shown at 0.45, cannot be read (as
-  Flare's); not packaged. `/usr/games/alter-aila-genesis` keeps the saves in the
+  Flare's); not packaged.
+- **Egoboo** (`egoboo`): the egoboo repository's SDL2 code (2.9.0 at
+  401393e, unreleased since 2017; `scripts/packages/build-egoboo.sh`, GCC 14
+  needing standard headers forced in, `pspexp-egoboo`), and its GPL-3.0
+  assets downloaded at install from egoboo-assets (an installer, 167 MB, 129 s
+  on the Pi). Its data path was only beside its program; `EGOBOO_DATA` is
+  patched in. GLEW finds GL through `glXGetProcAddress`, which the layer
+  answers. Its default 1920x1080 window showed at a quarter; the launch
+  script's first settings make it 640x360 (0.75 on the PSP: the menu
+  readable, 27 fps in PPSSPP). Menus take the mouse (nub, cross clicks); in
+  play its keyboard (square / circle the hands' items, triangle the
+  inventory, R jumps, L / SELECT grab, START the menu). Play not reached by
+  script (the menus need clicks). `/usr/games/alter-aila-genesis` keeps the saves in the
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in

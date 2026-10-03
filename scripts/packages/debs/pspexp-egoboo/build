@@ -1,0 +1,29 @@
+#!/bin/sh
+# pspexp-egoboo: Egoboo's program (GPL-3.0; its SDL2 code from the egoboo
+# repository, 2.9.0 at 401393e), which Debian 13 no longer carries, built by
+# scripts/packages/build-egoboo.sh ARCH. Its data is not in it: package egoboo
+# downloads it. Installs /usr/lib/pspexp/egoboo/egoboo. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/egoboo"
+[ -x "$B/egoboo" ] && [ -s "$B/depends.txt" ] || { echo "no $B/egoboo: scripts/packages/build-egoboo.sh $ARCH first" >&2; exit 1; }
+V=2.9.0+401393e-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/egoboo" "$W/root/usr/share/doc/pspexp-egoboo"
+install -m 755 "$B/egoboo" "$W/root/usr/lib/pspexp/egoboo/egoboo"
+echo "Egoboo 2.9.0 (https://github.com/egoboo/egoboo, 401393e), GPL-3.0; built with SDL2 by PSPExp; EGOBOO_DATA names its data folder (patched in). The data comes with package egoboo (downloaded)." > "$W/root/usr/share/doc/pspexp-egoboo/README"
+cat > "$W/control" <<C
+Package: pspexp-egoboo
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Egoboo's program, for PSPExp
+ The program of Egoboo, a 3D dungeon crawler in the spirit of NetHack,
+ which Debian 13 does not carry. Its data comes with the package egoboo.
+ Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-egoboo_${V}_$ARCH.deb"

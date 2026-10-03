@@ -1,0 +1,31 @@
+# Egoboo: the egoboo repository's SDL2 code (2.9.0) built by PSPExp, its data
+# (egoboo-assets) downloaded at install from that repository. Run in a 640x360
+# window (the launch script's first settings). Its menus take the mouse: the
+# nub moves the pointer, cross clicks (and only clicks: the layer sends no key
+# for a mouse button). In play Egoboo's keyboard: the d-pad moves, square /
+# circle use the left / right hand's item (T / Y), triangle the inventory (B),
+# R jumps (Space), L / SELECT grab with the left / right hand (G / H), START
+# the menu (Escape).
+
+[package]
+id=egoboo
+title=Egoboo
+description=A 3D dungeon crawler in the spirit of NetHack: pick a hero, explore dungeons, fight monsters and gather loot, with a sense of humour.
+category=game
+license=GPL-3.0 (Egoboo and its assets), downloaded from its repository
+version=1
+
+[debian]
+apt=egoboo
+
+[entry]
+title=Egoboo
+type=game
+description=A 3D dungeon crawler in the spirit of NetHack: pick a hero, explore dungeons, fight monsters and gather loot. Menus by the nub as a pointer.
+icon=swords
+exec=/usr/games/egoboo
+keys=square=t,circle=y,triangle=b,r=space,l=g,select=h,start=esc,up=up,down=down,left=left,right=right
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=none
+env=PSPEXP_JOYSTICK=0
+graphics=opengl
