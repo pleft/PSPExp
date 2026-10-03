@@ -1,0 +1,29 @@
+# Dink Smallwood: Debian's FreeDink with its free data. Drawn with SDL's
+# software renderer (-S): its OpenGL one goes through shaders the PSP cannot
+# draw (a white screen). The title's pointer moves with the d-pad and cross
+# clicks; in the game, Dink's own keys: Ctrl attacks, Space talks, Shift casts,
+# Return is the inventory, Escape the menu, M the map. No controller (-j):
+# keys only, so a press never counts twice. Most of its music is MIDI
+# (FreePats); its few Ogg tracks stay silent (Debian's build has no Ogg music).
+
+[package]
+id=freedink
+title=Dink Smallwood
+description=A comic action RPG: Dink, a pig farmer, leaves his village and fights, talks and casts his way to hero, in a world full of odd humour. On FreeDink.
+category=game
+license=GPL-3.0+ (FreeDink); free data (Dink Smallwood, RTsoft)
+version=1
+
+[debian]
+apt=freedink
+
+[entry]
+title=Dink Smallwood
+type=game
+description=A comic action RPG: Dink, a pig farmer, leaves his village and fights, talks and casts his way to hero, in a world full of odd humour. On FreeDink.
+icon=swords
+exec=/usr/games/freedink -w -S -j
+keys=cross=lctrl,circle=space,square=lshift,triangle=return,start=escape,select=m,up=up,down=down,left=left,right=right,l=none,r=none
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl

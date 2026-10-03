@@ -11,8 +11,8 @@ What you get on the PSP:
 - **A launcher made for the PSP's screen**: games, emulated systems, apps
   and settings, with covers, favourites and search.
 - **Games the PSP never had**: Doom (Freedoom), Quake, Cave Story,
-  SuperTux, OpenTyrian, Simutrans, OpenTTD, classic Revolution adventures
-  and more, installed from the **Packages** app in a couple of presses.
+  Dink Smallwood, SuperTux, OpenTyrian, Simutrans, OpenTTD, the RPG Alter
+  A.I.L.A. Genesis, classic Revolution adventures and more, installed from the **Packages** app in a couple of presses.
 - **Emulators**: NES, SNES, Mega Drive, Game Boy, Game Boy Advance, Atari
   Lynx, WonderSwan. Put your ROMs on the board and they show up with box art.
 - **A music player**: MP3s are decoded by the PSP itself.

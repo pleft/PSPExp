@@ -247,7 +247,11 @@ graphics=sdl
 `pspexp-cavestory`: it packages the engine already built for that
 architecture (arm64 on the Pi, `scripts/pi/install.sh cavestory`; armhf
 cross-compiled for the GameShell, `scripts/packages/cross-glibc.sh`) with the
-freeware data. Data a
+freeware data. `pspexp-easyrpg` and `alter-aila-genesis-data`
+(2026-10-03) are made the same way: EasyRPG Player built in a Debian 13
+container of the board's architecture (`scripts/packages/build-easyrpg.sh`,
+Depends from dpkg-shlibdeps), and the game's own release, unpacked and
+unaltered. Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 

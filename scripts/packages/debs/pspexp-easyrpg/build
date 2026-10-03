@@ -1,0 +1,30 @@
+#!/bin/sh
+# pspexp-easyrpg: EasyRPG Player (GPL-3.0), the RPG Maker 2000 / 2003 engine,
+# which Debian does not carry, built against Debian 13's libraries by
+# scripts/packages/build-easyrpg.sh ARCH (in a container). Installs
+# /usr/games/easyrpg-player; its Depends come from that build (dpkg-shlibdeps).
+# Usage: build OUTDIR ARCH   (arm64 | armhf)
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/easyrpg"
+[ -x "$B/easyrpg-player" ] && [ -s "$B/depends.txt" ] || { echo "no $B/easyrpg-player: scripts/packages/build-easyrpg.sh $ARCH first" >&2; exit 1; }
+V=0.8.1.1-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-easyrpg"
+install -m 755 "$B/easyrpg-player" "$W/root/usr/games/easyrpg-player"
+[ -f "$B/COPYING" ] && cp "$B/COPYING" "$W/root/usr/share/doc/pspexp-easyrpg/COPYING"
+echo "EasyRPG Player $V (https://easyrpg.org), liblcf built in. Packaged by PSPExp." > "$W/root/usr/share/doc/pspexp-easyrpg/README"
+cat > "$W/control" <<C
+Package: pspexp-easyrpg
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: EasyRPG Player, for PSPExp
+ A free interpreter for RPG Maker 2000 and 2003 games, which Debian does
+ not carry. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-easyrpg_${V}_$ARCH.deb"

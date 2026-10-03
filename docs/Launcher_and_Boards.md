@@ -577,6 +577,33 @@ before the layer had attached its controller (attached now when a game first
 counts joysticks: Flare finds "PSP (PSPExp)"). Its recipe was removed for
 the text.
 
+
+Two more (recipes, 2026-10-03; installed on the Pi and checked in PPSSPP from
+it, not yet on the PSP):
+
+- **Dink Smallwood** (`freedink`, Debian's FreeDink and its free data): run
+  with `-S`, SDL's software renderer: its OpenGL one goes through shaders
+  the PSP cannot draw (a white screen). The title's pointer moves with the
+  d-pad and cross clicks (Ctrl, Dink's attack key); in the game cross
+  attacks, circle talks, square casts, triangle is the inventory, START the
+  menu, SELECT the map; `-j` and no controller, so a press never counts
+  twice. 640x480 drawn on the PSP's screen, 28 fps in PPSSPP, the status
+  bar's text small but readable. Its five Ogg music tracks stay silent
+  (Debian's build has no Ogg music); the twelve MIDI ones play through FreePats.
+- **Alter A.I.L.A. Genesis** (`alter-aila-genesis`): Neok's 2010 RPG Maker
+  2003 game, freeware, on **EasyRPG Player**, neither in Debian. Two PSPExp
+  packages: `pspexp-easyrpg` (Player 0.8.1.1 with liblcf 0.8.1 built in,
+  compiled in a Debian 13 container of the board's architecture by
+  `scripts/packages/build-easyrpg.sh`, its Depends from dpkg-shlibdeps) and
+  `alter-aila-genesis-data` (the game's 24 Nov 2010 release from the Internet
+  Archive's copy of rpgmaker.net, unpacked, every file unaltered, its
+  README with the developer's terms in the package's docs; it needs no RTP,
+  FullPackageFlag=1). `/usr/games/alter-aila-genesis` keeps the saves in the
+  user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
+  cross confirms (Z), circle / triangle / START the menu (X), square held
+  runs (Shift). The title, a new game and its opening scene drawn right in
+  PPSSPP at 26-29 fps.
+
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
 selector, cross picks a piece and then its square, circle / start open the

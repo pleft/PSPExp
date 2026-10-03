@@ -1,0 +1,57 @@
+#!/bin/sh
+# alter-aila-genesis-data: Alter A.I.L.A. Genesis (Neok, 2010; RPG Maker 2003;
+# freeware), for EasyRPG Player. Its own release of 24 Nov 2010 as the
+# Internet Archive keeps it (rpgmaker.net's downloads), unpacked, every file
+# unaltered (its !README.txt, the developer's terms, included). The game
+# carries all its resources (FullPackageFlag=1: no RTP). Installs
+# /usr/share/games/alter-aila-genesis and /usr/games/alter-aila-genesis, which
+# runs it with the saves in the user's data folder (the game's is read-only).
+# Arch all. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
+Z="$CACHE/aag-2010-11-24.rar"
+if [ ! -s "$Z" ]; then
+	curl -fsSL -o "$Z.part" "https://archive.org/download/rmn-game-272-alter-a-i-l-a-genesis/272%2Fdownloads%2FAlter%20Aila%20Genesis%20-%20Nov%2024%2C%202010_1.rar" || { rm -f "$Z.part"; echo "fetch failed" >&2; exit 1; }
+	mv "$Z.part" "$Z"
+fi
+case "$(shasum -a 256 "$Z" 2>/dev/null || sha256sum "$Z")" in
+1a832ab87a5d5e47e8949d9b4f5efdb123ad14d25a0c70ec655bcfbc7d474761*) ;;
+*) echo "the archive: unexpected SHA-256" >&2; exit 1 ;;
+esac
+command -v unar >/dev/null || { echo "unar needed (brew install unar)" >&2; exit 1; }
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+G="$W/root/usr/share/games/alter-aila-genesis"
+mkdir -p "$W/x" "$W/root/usr/games" "$W/root/usr/share/doc/alter-aila-genesis-data" "$(dirname "$G")"
+unar -q -o "$W/x" "$Z" >/dev/null
+mv "$W/x/Alter Aila Genesis" "$G"
+chmod -R u=rwX,go=rX "$G"
+cp "$G/!README.txt" "$W/root/usr/share/doc/alter-aila-genesis-data/README.game.txt"
+cat > "$W/root/usr/games/alter-aila-genesis" <<'S'
+#!/bin/sh
+# Alter A.I.L.A. Genesis on EasyRPG Player (package alter-aila-genesis-data);
+# saves in the user's data folder
+D="${XDG_DATA_HOME:-$HOME/.local/share}/alter-aila-genesis"
+mkdir -p "$D"
+exec /usr/games/easyrpg-player --project-path /usr/share/games/alter-aila-genesis --save-path "$D" "$@"
+S
+chmod 755 "$W/root/usr/games/alter-aila-genesis"
+cat > "$W/root/usr/share/doc/alter-aila-genesis-data/README" <<D
+Alter A.I.L.A. Genesis (Neok, 2010), an RPG Maker 2003 game, freeware: its
+release of 24 November 2010, every file as released; the developer's own
+notes and terms are README.game.txt. Run with EasyRPG Player
+(pspexp-easyrpg). Packaged by PSPExp.
+D
+cat > "$W/control" <<C
+Package: alter-aila-genesis-data
+Version: 2010.11.24-pspexp1
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: non-free/games
+Priority: optional
+Depends: pspexp-easyrpg
+Description: Alter A.I.L.A. Genesis, for EasyRPG Player
+ Neok's 2010 science-fiction RPG made in RPG Maker 2003, freeware, as
+ released. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/alter-aila-genesis-data_2010.11.24-pspexp1_all.deb"

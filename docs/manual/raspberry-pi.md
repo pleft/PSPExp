@@ -42,7 +42,7 @@ you never need to log in to it again.
 ## Your first games
 
 On the PSP: **Apps > Packages**. Pick a game (Freedoom, OpenTyrian, Cave
-Story, SuperTux, Quake...) and press cross to install it; it appears under
+Story, Dink Smallwood, Alter A.I.L.A. Genesis, SuperTux, Quake...) and press cross to install it; it appears under
 **Games** when done. Emulators install the same way (NES, SNES, Mega Drive,
 Game Boy, Game Boy Advance, Lynx, WonderSwan) and appear as their own tiles
 once you have ROMs for them.
