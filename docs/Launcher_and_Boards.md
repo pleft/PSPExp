@@ -263,14 +263,13 @@ samples with nearest filtering (`launcher_gfx.c`):
 - **Backdrop**: 480x272 blue gradient with two soft glows and three bands
   of light as waves across its lower half (step 5 of the redesign), Bayer
   dithered to 5650, six textures. Over it two light ribbons (512x64 8888,
-  periodic over their width) drift sideways, at 9 and -6 px/s, while the
-  launcher is in use (`gfx_waves`): two to four quads a frame, but the
-  board redraws and sends every frame while they move (about 6 KB each).
-  They stop where they are once the launcher is still (30 s), so an idle
-  PSP still gets no frames, and they never move on the Omega2+. Next: the
-  PSP drawing them itself (a backdrop message, the launcher's commands kept
-  as a list and replayed at the PSP's own 60 Hz), the board then sending
-  nothing for them.
+  periodic over their width, `gfx_waves`). They drifted at first, but
+  moving them meant the board redrawing and sending every frame (about
+  6 KB, ten a second) while the launcher was in use, where a still screen
+  sends nothing; the user chose the look without that cost, so they stay
+  still. (Drawing them on the PSP itself, a backdrop message and the
+  launcher's commands replayed at its own 60 Hz, was considered and not
+  built.)
 - **Covers** (128x128 8888, an LRU of 10 on the PSP; on the shelf inside
   discs, `gfx_disc`): box art when there is
   some, else generated: a gradient chosen by the title, a large faint icon,

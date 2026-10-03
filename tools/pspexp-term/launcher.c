@@ -2020,14 +2020,10 @@ static void draw_list(float dt)
     }
 }
 
-/* the ribbons drift while the launcher is in use and stop where they are once it is still (an idle
- * PSP gets no frames); on the Omega2+ they stay put: redrawing everything for them costs it too much */
-static float g_wave_t;
-static void waves(float dt)
-{
-    if (!board_openwrt() && !launcher_still(g_now)) { g_wave_t += dt; g_anim = 1; }
-    gfx_waves(g_wave_t);
-}
+/* the ribbons over the backdrop, still: moving them meant the board redrawing and sending a frame
+ * ten times a second while the launcher was in use (a still screen sends nothing); the user's
+ * choice was the look without that cost */
+static void waves(float dt) { (void)dt; gfx_waves(0); }
 
 /* the home screen: the rail's sections as large tiles, what each holds, and Continue */
 static void draw_home(float dt)
