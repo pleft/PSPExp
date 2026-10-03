@@ -56,7 +56,7 @@ ms0:/PSP/GAME/PSPExp/
 
 The board's `pspexp-runtime` package (a dependency of `pspexp-core`) holds
 the current set in `/usr/share/pspexp/runtime`. When it's newer than the
-PSP's, the console offers **System > Update the PSP**. The update fills the
+PSP's, the console offers **Settings > Update the PSP**. The update fills the
 slot not in use, checks every file, then writes `active.new`; leave PSPExp
 with HOME and start it again to run it. An update cut short leaves the old
 slot booting. A console speaking a newer protocol connects in **maintenance
@@ -113,7 +113,7 @@ Debian boards through apt, on the Omega2+ from our own builds.
 | launcher screenshots from a board (stand-in PSP on the Mac) | board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` (or `tz`, `wifi`, `password:<name>`) |
 | installers ship the existing build: after a source change | the board's `build.sh` first (the Pi's `install.sh` builds on the Pi) |
 | on a board: an SDL2 program on the PSP / packages | `pspexp-run <program>` (glibc boards) / `pspexp-pkg list` |
-| on a board: sound to Bluetooth (System > Sound output does the same) | `pspexp-bt devices` / `use ADDRESS` / `psp` / `volume +5` / `route` / `forget ADDRESS` |
+| on a board: sound to Bluetooth (Settings > Sound output does the same) | `pspexp-bt devices` / `use ADDRESS` / `psp` / `volume +5` / `route` / `forget ADDRESS` |
 
 ## GameShell (`scripts/gameshell/`)
 

@@ -2570,8 +2570,8 @@ static void psp_slots_check(void)
     /* only a newer one is an update (versions start with their build time,
      * so they sort): a PSP with a newer runtime than this board's keeps it */
     if (strcmp(have, s.version[s.current - 'a']) <= 0) { if (g_launcher_on) launcher_set_psp_update(0); return; }
-    fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: System > Update the PSP\n", s.version[s.current - 'a'], have);
-    if (g_launcher_on) { launcher_set_psp_update(1); launcher_notice("download", "A newer PSP runtime is here: System > Update the PSP"); }
+    fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: Settings > Update the PSP\n", s.version[s.current - 'a'], have);
+    if (g_launcher_on) { launcher_set_psp_update(1); launcher_notice("download", "A newer PSP runtime is here: Settings > Update the PSP"); }
 }
 
 /* this board's clock comes from the network (NTP) and is believed */

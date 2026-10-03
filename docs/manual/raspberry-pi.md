@@ -82,7 +82,7 @@ Pi; the GameShell's graphics chip is too small for them.
 ## Bluetooth headphones
 
 The Pi has Bluetooth. Put your headphones or speaker in pairing mode, then
-**System > Sound output**, wait for the scan, pick them with cross. From
+**Settings > Sound output**, wait for the scan, pick them with cross. From
 then on every game's sound plays in them, the PSP's volume buttons set
 their volume (a bar shows on screen), and when they go back in their case
 the sound returns to the PSP by itself. Choose **The PSP** in Sound output
@@ -96,7 +96,7 @@ to let them go, for your phone or tablet. Details:
 - **Music in other formats** (Ogg, FLAC, Opus, M4A) is decoded on the Pi by
   ffmpeg: `sudo apt install ffmpeg` if the player says it is missing.
 - **Updates** come through **Apps > Packages** (PSPExp itself is a package
-  too); after one, the launcher offers **System > Restart PSPExp**.
-- **Wi-Fi and the time zone** can be changed from the PSP: System > Wi-Fi
-  network, System > Time zone.
+  too); after one, the launcher offers **Settings > Restart PSPExp**.
+- **Wi-Fi and the time zone** can be changed from the PSP: Settings > Wi-Fi
+  network, Settings > Time zone.
 - Packages live in `/opt/pspexp`; your settings in `~/.config/pspexp*`.

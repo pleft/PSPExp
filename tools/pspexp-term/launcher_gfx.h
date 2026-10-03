@@ -32,6 +32,7 @@ typedef struct CoverSpec {
     const char *art;        /* PNG to show instead, or NULL */
     const uint32_t *grad;   /* two colours for the generated cover, or NULL: by the title */
     int hero;               /* the icon large and bright at the top, not a faint watermark */
+    int round;              /* for a disc's round window: icon and title centred, no badge */
 } CoverSpec;
 
 int  gfx_init(PspExpContext *ctx, const char *assets_dir);

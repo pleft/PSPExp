@@ -5,29 +5,45 @@ buttons; the board needs no screen, keyboard or mouse.
 
 ## The launcher
 
+It opens on the **home screen**: five big tiles, **Favourites**, **Games**,
+**Emulators**, **Apps** and **Settings**, with what each holds underneath
+and, below, **Continue** with what you played last.
+
 ```
  12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
- [clock]  | Games                                                 12 games
- [games]  |   (disc)   (DISC)   (disc)   (disc)   (disc)  >
- [GB]     |   Quake  Cave Story OpenTyrian  ...
- [NES]    | Cave Story
- [apps]   | a short description of the game
- [gear]   | Game  /  PSP native
- (X) Play  ([]) Favourite  (/\) Details                  START Search
+     (star)    (GAMES)   (joystick)   (apps)   (gear)
+   Favourites   Games    Emulators     Apps   Settings
+                         34 games
+                 (>) Continue  GoldenEye 007
+ (X) Open                                                START Search
 ```
 
-Down the left is the **rail**: one tile per category. Games, every emulated
-system you have ROMs for, Apps, System, and Recent and Favourites once you
-have some. To its right the category's **shelf**: games and ROMs as discs
-with their cover in the window, apps and settings as icon tiles; the one
-you are on is larger and glows, and its description shows underneath. The
-top bar shows the time, the PSP's battery, and the board's own indicators
-(sound, network, power).
+Left and right pick a tile, cross opens it; down then cross plays what
+you were playing.
+
+Inside a section, the same five run down the left as the **rail**, and the
+section's **shelf** runs to its right: games and ROMs as discs with their
+cover in the window, apps and settings as icon tiles. The one you are on
+is larger and glows; its description shows underneath. **Emulators** has
+one disc per system you have ROMs for (N64, SNES, Game Boy...); cross on
+one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
+
+```
+ 12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
+ [star]   | Games                                                 12 games
+ [GAMES]  |   (disc)   (DISC)   (disc)   (disc)   (disc)  >
+ [joy]    |   Quake  Cave Story OpenTyrian  ...
+ [apps]   | Cave Story
+ [gear]   | a short description of the game
+          | Game  /  PSP native
+ (X) Play  ([]) Favourite  (/\) Details  (O) Home        START Search
+```
 
 | Button | In the launcher |
 |---|---|
-| up / down | the previous / next category |
-| left / right | move along the shelf (L / R: five at a time; circle: back to the first) |
+| up / down | the previous / next section on the rail |
+| left / right | move along the shelf (L / R: five at a time) |
+| circle | back: from a system's ROMs to Emulators, else to the home screen |
 | cross | play, or open |
 | square | add to / remove from Favourites |
 | triangle | details: description, how it draws, size, when last played |
@@ -68,14 +84,15 @@ Installing runs in the background: the progress shows, and the game
 appears in the launcher when done. A few games (the RPG Maker ones) are
 downloaded from their developers' own pages while they install, so those
 need the board online and take a few minutes (Theia: about 6 on a Pi). PSPExp itself is updated the same way;
-after such an update, **System > Restart PSPExp** starts the new version,
-and **System > Update the PSP** puts the PSP's side up to date too.
+after such an update, **Settings > Restart PSPExp** starts the new version,
+and **Settings > Update the PSP** puts the PSP's side up to date too.
 
 ## Emulators and ROMs
 
 An emulator package adds a **system**: NES, SNES, Mega Drive (with Master
 System and Game Gear), Game Boy and Game Boy Color, Game Boy Advance,
-Atari Lynx, WonderSwan, and on a Raspberry Pi the Nintendo 64. Its tile appears on the rail once there are ROMs in
+Atari Lynx, WonderSwan, and on a Raspberry Pi the Nintendo 64. It appears
+under **Emulators** once there are ROMs in
 its folder in the board's home folder:
 
 | System | Folder |
@@ -93,10 +110,10 @@ On the Nintendo 64 the nub is the stick, cross A, square B, L the Z
 trigger, R the R button, START Start, and the d-pad the four C buttons
 (triangle is the N64's L).
 
-New ROMs show up within seconds (or **System > Refresh library**), with
+New ROMs show up within seconds (or **Settings > Refresh library**), with
 their titles cleaned up ("Legend of Zelda, The (USA)" becomes "The Legend
 of Zelda") and box art downloaded when the board is online (turn that off
-in **System > Box art**). Games with battery saves keep them on the board.
+in **Settings > Box art**). Games with battery saves keep them on the board.
 Only use ROMs of games you own.
 
 ## Files
@@ -141,11 +158,11 @@ Ogg, FLAC, Opus and M4A are decoded by the board when it has ffmpeg.
 
 ## Bluetooth headphones
 
-On a board with Bluetooth (the Raspberry Pi, the GameShell), **System > Sound output** sends
+On a board with Bluetooth (the Raspberry Pi, the GameShell), **Settings > Sound output** sends
 all sound to headphones or a speaker instead of the PSP:
 
 1. Put the headphones in pairing mode.
-2. **System > Sound output**. It scans for a few seconds and lists **The
+2. **Settings > Sound output**. It scans for a few seconds and lists **The
    PSP** and the devices it found.
 3. Cross on your headphones. They pair and connect, and the sound moves to
    them, starting at 40 % volume.
@@ -166,7 +183,7 @@ what remains depends on the headphones.
 
 ## The terminal
 
-Hold **SELECT** in the launcher (or **System > Console**): the board's
+Hold **SELECT** in the launcher (or **Apps > Terminal**): the board's
 Linux shell on the PSP, with an on-screen keyboard. Up to four shells,
 colours, scrollback; `vi` and `top` work. On a Raspberry Pi 400 its own
 keyboard types into it too.

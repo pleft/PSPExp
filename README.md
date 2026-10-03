@@ -256,7 +256,7 @@ The console also has a two-panel file manager (Apps > Files in the
 launcher, or Files here from the terminal's menu). It can copy, move,
 delete, rename and create folders; it shows pictures, reads text and
 plays music (MP3 is decoded by the PSP itself, on its Media Engine);
-System > Sound output sends all sound to Bluetooth headphones paired with
+Settings > Sound output sends all sound to Bluetooth headphones paired with
 the board instead, set with the PSP's volume buttons;
 opening a ROM starts it in its emulator, and a package gets installed.
 Each panel's drive button drops down every drive: the board's storage

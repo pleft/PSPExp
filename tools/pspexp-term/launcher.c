@@ -77,12 +77,13 @@
 
 /* ---- categories ------------------------------------------------------------------------ */
 
-enum { CK_RECENT, CK_FAVS, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
+enum { CK_RECENT, CK_FAVS, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS, CK_EMU };
 
 typedef struct Cat {
     char name[64], icon[32], noun[16];
     uint32_t col;
     int kind, sys;
+    int hidden;             /* not on the rail: a system's ROMs, opened from Emulators */
     LEntry **it; int n;
     int sel; float scroll;
 } Cat;
@@ -114,6 +115,7 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
 /* apps built into the console, first in Apps: the terminal and the file manager */
 #define NBUILTIN 4
 static LEntry g_builtin[NBUILTIN];
+static LEntry g_sysent[32];   /* Emulators' items: one per system with ROMs (id "s:<system>") */
 static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 },
                       GRAD_MONITOR[2] = { 0x0f766e, 0x2563eb }, GRAD_STORE[2] = { 0x7c3aed, 0xe11d48 };
 static char g_app_req[16];   /* a built-in app to show (appview.h), taken by the console */
@@ -181,28 +183,34 @@ static void cats_build(void)
         g_builtin[i].type = LT_APP;
         for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
     }
-    if (L.nrecent) {
-        c = cat_add("Recent", "history", 0xf5a524, CK_RECENT, "item");
-        for (i = 0; i < L.nrecent; i++) { LEntry *e = find_any(L.recent[i]); if (e) cat_push(c, e); }
-        if (!c->n) g_ncat--;
-    }
-    if (L.nfavs) {
-        c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "item");
-        for (i = 0; i < L.nfavs; i++) { LEntry *e = find_any(L.favs[i]); if (e) cat_push(c, e); }
-        if (!c->n) g_ncat--;
-    }
+    /* the rail and the home screen: Favourites, Games, Emulators, Apps, Settings; each system's ROMs
+     * a section of its own off the rail, opened from Emulators (what was played last: the home
+     * screen's Continue) */
+    c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "favourite");
+    for (i = 0; i < L.nfavs; i++) { LEntry *e = find_any(L.favs[i]); if (e) cat_push(c, e); }
     c = cat_add("Games", "gamepad-2", 0x818cf8, CK_GAMES, "game");
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME) cat_push(c, &L.e[i]);
-    for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])) - 2; s++) {
-        if (!L.sys[s].nroms) continue;
-        c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", system_colour(L.sys[s].id), CK_SYSTEM, "game");
-        c->sys = s;
-        for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
+    c = cat_add("Emulators", "joystick", 0x38bdf8, CK_EMU, "system");
+    {
+        int k = 0;
+        for (s = 0; s < L.nsys && k < (int)(sizeof(g_sysent) / sizeof(g_sysent[0])); s++) {
+            LEntry *e = &g_sysent[k];
+            if (!L.sys[s].nroms) continue;
+            memset(e, 0, sizeof(*e));
+            snprintf(e->id, sizeof(e->id), "s:%s", L.sys[s].id);
+            snprintf(e->title, sizeof(e->title), "%s", L.sys[s].name);
+            snprintf(e->icon, sizeof(e->icon), "%s", L.sys[s].icon[0] ? L.sys[s].icon : "gamepad");
+            snprintf(e->graphics, sizeof(e->graphics), "%s", L.sys[s].graphics);
+            snprintf(e->desc, sizeof(e->desc), "%d ROM%s in %s", L.sys[s].nroms, L.sys[s].nroms == 1 ? "" : "s", L.sys[s].roms);
+            e->type = LT_TOOL; e->sys = s;
+            cat_push(c, e);
+            k++;
+        }
     }
     c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
     for (i = 0; i < NBUILTIN; i++) cat_push(c, &g_builtin[i]);
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
-    c = cat_add("System", "settings", 0x94a3b8, CK_SETTINGS, "item");
+    c = cat_add("Settings", "settings", 0x94a3b8, CK_SETTINGS, "item");
     g_nactions = 0;
     ACTION("rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
     if (g_wifi_cmd) ACTION("wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
@@ -218,6 +226,12 @@ static void cats_build(void)
     ACTION("poweroff", "Power off", "power", "Shut this board down");
     ACTION("about", "About", "info", "This board, the PSP and the connection");
     for (i = 0; i < g_nactions; i++) cat_push(c, &g_actions[i]);
+    for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])); s++) {
+        if (!L.sys[s].nroms) continue;
+        c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", system_colour(L.sys[s].id), CK_SYSTEM, "game");
+        c->sys = s; c->hidden = 1;
+        for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
+    }
     /* back to where we were */
     g_cur = -1;
     for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
@@ -240,10 +254,25 @@ static LEntry *cur_entry(void)
     return c->n ? c->it[c->sel] : NULL;
 }
 
+/* the rail's sections (the categories not hidden): how many, the k-th, and where a category
+ * sits on it (a system's ROMs: where Emulators is) */
+static int rail_n(void) { int i, n = 0; for (i = 0; i < g_ncat; i++) if (!g_cat[i].hidden) n++; return n; }
+static int rail_cat(int k) { int i; for (i = 0; i < g_ncat; i++) if (!g_cat[i].hidden && k-- == 0) return i; return 0; }
+static int rail_pos(int cat)
+{
+    int i, k = 0;
+    if (g_cat[cat].hidden) for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_EMU) { cat = i; break; }
+    for (i = 0; i < cat; i++) if (!g_cat[i].hidden) k++;
+    return k;
+}
+static int is_system_item(const LEntry *e) { return !strncmp(e->id, "s:", 2); }
+
 /* ---- state ------------------------------------------------------------------------------ */
 
-enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT };
-static int g_mode;
+enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT, M_HOME };
+static int g_mode = M_HOME;
+static int g_home_sel = 1, g_home_row;   /* the home screen: the section in focus (Games), or its Continue row */
+static float g_home_lift[8], g_home_anim;
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
 static void about_collect(void);
@@ -654,8 +683,11 @@ static void run_action(LEntry *e, uint64_t now)
     }
 }
 
+static void open_system(const LEntry *e, uint64_t now);
+
 static void launch(LEntry *e, uint64_t now)
 {
+    if (is_system_item(e)) { open_system(e, now); return; }
     if (e->type == LT_ACTION) { run_action(e, now); return; }
     if (is_builtin(e)) { lib_recent_push(&L, e->id); run_action(e, now); cats_build(); return; }
     lib_command(&L, e, g_launch_cmd, sizeof(g_launch_cmd));
@@ -698,7 +730,7 @@ int launcher_category(const char *name)
 {
     int i;
     for (i = 0; i < g_ncat; i++)
-        if (!strcmp(g_cat[i].name, name)) { g_cur = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
+        if (!strcmp(g_cat[i].name, name)) { g_cur = i; if (g_mode == M_HOME) g_mode = M_BROWSE; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
     return 0;
 }
 
@@ -718,7 +750,7 @@ void launcher_set_core_updated(void)
     if (g_core_updated) return;
     g_core_updated = 1;
     cats_build();   /* System gains Restart PSPExp */
-    toast("package", "PSPExp was updated: System > Restart PSPExp starts the new version", pspexp_time_us());
+    toast("package", "PSPExp was updated: Settings > Restart PSPExp starts the new version", pspexp_time_us());
 }
 int  launcher_take_console_restart(void) { int r = g_console_restart_req; g_console_restart_req = 0; return r; }
 void launcher_set_psp_update(int available) { if (g_psp_update != available) { g_psp_update = available; cats_build(); } }
@@ -728,12 +760,12 @@ void launcher_notice(const char *icon, const char *text) { toast(icon, text, psp
 
 void launcher_state(char *out, size_t n)
 {
-    static const char *modes[] = { "browse", "search", "details", "about", "pick", "text" };
+    static const char *modes[] = { "browse", "search", "details", "about", "pick", "text", "home" };
     size_t l = strlen(out);
     LEntry *e = cur_entry();
     int i;
     l += (size_t)snprintf(out + l, n > l ? n - l : 0, "launcher.mode=%s\nlauncher.category=%s\nlauncher.selected=%s\nlauncher.items=",
-                          g_mode >= 0 && g_mode < 6 ? modes[g_mode] : "?", g_ncat ? g_cat[g_cur].name : "", e ? e->title : "");
+                          g_mode >= 0 && g_mode < 7 ? modes[g_mode] : "?", g_ncat ? g_cat[g_cur].name : "", e ? e->title : "");
     for (i = 0; g_ncat && i < g_cat[g_cur].n && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[g_cur].it[i]->title);
     if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.categories=");
     for (i = 0; i < g_ncat && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[i].name);
@@ -804,7 +836,7 @@ static int psp_battery(char *out, size_t n, PspExpPowerStatus *p)
     char t[64];
     out[0] = 0;
     if (!g_ctx || pspexp_link_state(g_ctx) != PSPEXP_LINK_CONNECTED) return 0;
-    if (!pspexp_power_supported(g_ctx)) { snprintf(out, n, "needs a newer PSP runtime (System > Update the PSP)"); return 0; }
+    if (!pspexp_power_supported(g_ctx)) { snprintf(out, n, "needs a newer PSP runtime (Settings > Update the PSP)"); return 0; }
     if (pspexp_power_status(g_ctx, p, NULL) < 0) { snprintf(out, n, "reading..."); return 0; }
     if (!(p->flags & PSPEXP_POWER_BATTERY)) { snprintf(out, n, "no battery: on the adapter"); return 0; }
     snprintf(out, n, p->percent >= 0 ? "%d%%" : "charge unknown", p->percent);
@@ -1425,16 +1457,46 @@ static void text_input(uint32_t pressed, int up, int down, int left, int right, 
 
 /* ---- input -------------------------------------------------------------------------------- */
 
-static void select_cat(int c, int dir, uint64_t now)
+static void show_cat(int c, int dir, uint64_t now)
 {
-    if (c < 0) c = g_ncat - 1;
-    if (c >= g_ncat) c = 0;
     if (c == g_cur) return;
     g_cur = c;
     g_list_anim = 0; g_list_dir = (float)dir;
     memset(g_expand, 0, sizeof(g_expand));
     g_sel_since = now;
     g_dirty = 1;
+}
+
+/* up and down the rail: k is a position on it, wrapping */
+static void select_cat(int k, int dir, uint64_t now)
+{
+    int n = rail_n();
+    if (!n) return;
+    k = ((k % n) + n) % n;
+    show_cat(rail_cat(k), dir, now);
+}
+
+/* an Emulators item: that system's ROMs */
+static void open_system(const LEntry *e, uint64_t now)
+{
+    int i;
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SYSTEM && g_cat[i].sys == e->sys) { show_cat(i, 1, now); return; }
+}
+
+/* circle: from a system's ROMs back to Emulators (on that system), else to the home screen */
+static void go_back(uint64_t now)
+{
+    Cat *c = &g_cat[g_cur];
+    if (c->hidden) {
+        int i, k, sys = c->sys;
+        for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_EMU) {
+            for (k = 0; k < g_cat[i].n; k++) if (g_cat[i].it[k]->sys == sys) g_cat[i].sel = k;
+            show_cat(i, -1, now);
+            return;
+        }
+    }
+    g_home_sel = rail_pos(g_cur); g_home_row = 0; g_home_anim = 0;
+    g_mode = M_HOME; g_sel_since = now; g_dirty = 1;
 }
 
 static void move_sel(int d, int wrap, uint64_t now)
@@ -1447,11 +1509,35 @@ static void move_sel(int d, int wrap, uint64_t now)
     if (s != c->sel) { c->sel = s; g_sel_since = now; g_dirty = 1; }
 }
 
+/* the home screen: left and right the sections, down the Continue row */
+static LEntry *home_continue(void)
+{
+    int i;
+    for (i = 0; i < L.nrecent; i++) { LEntry *e = find_any(L.recent[i]); if (e) return e; }
+    return NULL;
+}
+
+static void home_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
+{
+    int n = rail_n();
+    if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
+    if (left && g_home_row == 0) { g_home_sel = (g_home_sel + n - 1) % n; g_dirty = 1; }
+    if (right && g_home_row == 0) { g_home_sel = (g_home_sel + 1) % n; g_dirty = 1; }
+    if (down && home_continue()) { g_home_row = 1; g_dirty = 1; }
+    if (up) { g_home_row = 0; g_dirty = 1; }
+    if (pressed & PSPEXP_BUTTON_CROSS) {
+        if (g_home_row == 1) { LEntry *e = home_continue(); if (e) launch(e, now); return; }
+        g_mode = M_BROWSE;
+        g_cur = -1; show_cat(rail_cat(g_home_sel), 1, now);
+    }
+}
+
 void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
     LEntry *e;
     if (b || pressed || up || down || left || right) { if (launcher_still(now)) g_dirty = 1; g_input_at = now; }   /* (scrolling starts again) */
     if (g_running || !g_ncat) return;
+    if (g_mode == M_HOME) { home_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
     if (g_mode == M_PICK) { pick_input(pressed, up, down, now); return; }
@@ -1462,17 +1548,17 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     }
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
     /* up and down the rail of categories, left and right along the shelf */
-    if (up) select_cat(g_cur - 1, -1, now);
-    if (down) select_cat(g_cur + 1, 1, now);
+    if (up) select_cat(rail_pos(g_cur) - 1, -1, now);
+    if (down) select_cat(rail_pos(g_cur) + 1, 1, now);
     if (left) move_sel(-1, (pressed & PSPEXP_BUTTON_LEFT) != 0, now);   /* wraps on a fresh press, stops while repeating */
     if (right) move_sel(1, (pressed & PSPEXP_BUTTON_RIGHT) != 0, now);
     if (pressed & PSPEXP_BUTTON_LTRIGGER) move_sel(-5, 0, now);
     if (pressed & PSPEXP_BUTTON_RTRIGGER) move_sel(5, 0, now);
-    if (pressed & PSPEXP_BUTTON_CIRCLE) move_sel(-100000, 0, now);   /* back to the top */
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { go_back(now); return; }
     e = cur_entry();
     if (!e) return;
     if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && e->type != LT_ACTION) {
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && e->type != LT_ACTION && !is_system_item(e)) {
         char id[160];
         int on;
         snprintf(id, sizeof(id), "%s", e->id);
@@ -1481,7 +1567,8 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         toast("star", on ? "Added to favourites" : "Removed from favourites", now);
     }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) {
-        if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
+        if (is_system_item(e)) toast(e->icon, e->desc, now);
+        else if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
         else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
     }
 }
@@ -1499,7 +1586,7 @@ static void status_poll(uint64_t now)
     struct tm tmv;
     localtime_r(&t, &tmv);
     if (tmv.tm_min != g_minute) { g_minute = tmv.tm_min; g_dirty = 1; }
-    {   /* Bluetooth sound became possible (the controller came up after the console): System > Sound output */
+    {   /* Bluetooth sound became possible (the controller came up after the console): Settings > Sound output */
         static uint64_t at;
         static int had = -1;
         if (!at || now - at > 10000000u) {
@@ -1756,41 +1843,35 @@ static void draw_status(void)
 
 static void draw_rail(float dt)
 {
-    int i, first;
-    float target;
-    first = g_cur - RAIL_SHOWN / 2;
-    if (first > g_ncat - RAIL_SHOWN) first = g_ncat - RAIL_SHOWN;
+    int i, k, first, n = rail_n(), here = rail_pos(g_cur);
+    first = here - RAIL_SHOWN / 2;
+    if (first > n - RAIL_SHOWN) first = n - RAIL_SHOWN;
     if (first < 0) first = 0;
-    target = (float)first;
-    g_rail_top = ease(g_rail_top, target, 14.0f, dt, 0.01f);
+    g_rail_top = ease(g_rail_top, (float)first, 14.0f, dt, 0.01f);
     gfx_rect(RAIL_W, RAIL_TOP, 1, RAIL_SHOWN * RAIL_PITCH, 0xffffff, 22);
     gfx_set_clip(0, RAIL_TOP - 4, RAIL_W, RAIL_SHOWN * RAIL_PITCH + 6);
-    for (i = 0; i < g_ncat; i++) {
+    for (i = 0, k = 0; i < g_ncat; i++) {
         Cat *c = &g_cat[i];
-        float lift = g_lift[i] = ease(g_lift[i], i == g_cur ? 1.0f : 0.0f, 16.0f, dt, 0.01f);
-        int size = RAIL_TILE + (int)lroundf(lift * 2);
-        int cy = RAIL_TOP + RAIL_PITCH / 2 + (int)lroundf((i - g_rail_top) * RAIL_PITCH) - 2;
-        int x = (RAIL_W - size) / 2, y = cy - size / 2;
+        float lift;
+        int size, cy, x, y;
+        if (c->hidden) continue;
+        lift = g_lift[k] = ease(g_lift[k], k == here ? 1.0f : 0.0f, 16.0f, dt, 0.01f);
+        size = RAIL_TILE + (int)lroundf(lift * 2);
+        cy = RAIL_TOP + RAIL_PITCH / 2 + (int)lroundf((k - g_rail_top) * RAIL_PITCH) - 2;
+        x = (RAIL_W - size) / 2; y = cy - size / 2;
+        k++;
         if (cy < RAIL_TOP - RAIL_PITCH || cy > RAIL_TOP + (RAIL_SHOWN + 1) * RAIL_PITCH) continue;
         if (lift > 0.02f) {
             gfx_shadow(NINE_SHADOW10, x, y, size, size, 0x40a0ff, (int)(lift * 200));
             gfx_nine(NINE_R10, x, y, size, size, 0x14305c, (int)(lift * 255));
         }
-        if (c->kind == CK_SYSTEM) {   /* systems: their short name, set like a logo */
-            const char *t = L.sys[c->sys].shortname;
-            int f = gfx_text_width(FONT_BODY, t) <= size - 6 ? FONT_BODY : FONT_BADGE, tw = gfx_text_width(f, t);
-            int ty = cy - gfx_line_height(f) / 2;
-            gfx_text(f, (RAIL_W - tw) / 2, ty, t, c->col, (int)((1 - lift) * 220), 0);
-            if (lift > 0.02f) gfx_text(f, (RAIL_W - tw) / 2, ty, t, 0xffffff, (int)(lift * 255), 0);
-        } else {
-            gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220));
-            if (lift > 0.02f) gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255));
-        }
+        gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220));
+        if (lift > 0.02f) gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255));
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     /* more above or below */
     if (g_rail_top > 0.05f) gfx_icon("chevron-up", 12, (RAIL_W - 12) / 2, RAIL_TOP - 12, C_MUTED, 200);
-    if (g_rail_top < (float)(g_ncat - RAIL_SHOWN) - 0.05f) gfx_icon("chevron-down", 12, (RAIL_W - 12) / 2, RAIL_TOP + RAIL_SHOWN * RAIL_PITCH, C_MUTED, 200);
+    if (g_rail_top < (float)(n - RAIL_SHOWN) - 0.05f) gfx_icon("chevron-down", 12, (RAIL_W - 12) / 2, RAIL_TOP + RAIL_SHOWN * RAIL_PITCH, C_MUTED, 200);
 }
 
 static void human_size(long long b, char *out, size_t n)
@@ -1812,7 +1893,10 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         if (is_builtin(e)) snprintf(s, n, "Built in  /  %s", e->tags);
         else snprintf(s, n, "App%s", e->pspexp ? "  /  PSP native" : "");
         break;
-    case LT_TOOL: snprintf(s, n, "Tool"); break;
+    case LT_TOOL:
+        if (is_system_item(e)) snprintf(s, n, "%s  /  %d ROM%s", L.sys[e->sys].shortname, L.sys[e->sys].nroms, L.sys[e->sys].nroms == 1 ? "" : "s");
+        else snprintf(s, n, "Tool");
+        break;
     case LT_ACTION:
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
         else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
@@ -1824,7 +1908,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
 }
 
 /* games and ROMs are discs; apps, tools and settings tiles */
-static int is_disc(const LEntry *e) { return e->type == LT_GAME || e->type == LT_ROM; }
+static int is_disc(const LEntry *e) { return e->type == LT_GAME || e->type == LT_ROM || is_system_item(e); }
 
 static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
 {
@@ -1833,6 +1917,8 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         char png[700] = "";
         memset(&cs, 0, sizeof(cs));
         cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
+        cs.round = 1;
+        if (is_system_item(e)) { cs.title = L.sys[e->sys].shortname; cs.icon = e->icon; }   /* until the consoles are drawn */
         if (e->art[0]) cs.art = e->art;
         else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
         /* the small disc fades into the large one, which is lifted */
@@ -1867,7 +1953,11 @@ static void draw_list(float dt)
     dy = (int)lroundf((1 - g_list_anim) * 16 * g_list_dir);
 
     /* header: the category and its size */
-    gfx_text(FONT_TITLE, DETAIL_X, 30 + dy / 2, c->name, C_TEXT, alpha, 300);
+    if (c->hidden) {   /* a system's ROMs: under Emulators */
+        int x = DETAIL_X + gfx_text(FONT_BODY, DETAIL_X, 32 + dy / 2, "Emulators", C_MUTED, alpha, 0) + 2;
+        gfx_icon("chevron-right", 14, x, 34 + dy / 2, C_MUTED, alpha);
+        gfx_text(FONT_TITLE, x + 16, 30 + dy / 2, c->name, C_TEXT, alpha, 260);
+    } else gfx_text(FONT_TITLE, DETAIL_X, 30 + dy / 2, c->name, C_TEXT, alpha, 300);
     if (c->kind != CK_SETTINGS) {
         snprintf(s, sizeof(s), "%d %s%s", c->n, c->noun, c->n == 1 ? "" : "s");
         gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), 34 + dy / 2, s, C_MUTED, alpha, 0);
@@ -1922,16 +2012,79 @@ static void draw_list(float dt)
     }
 }
 
+/* the home screen: the rail's sections as large tiles, what each holds, and Continue */
+static void draw_home(float dt)
+{
+    int i, n = rail_n(), pitch = n > 5 ? 80 : 88, x0 = SCREEN_W / 2 - (n - 1) * pitch / 2;
+    char s[96];
+    LEntry *cont = home_continue();
+    Cat *sel;
+    g_home_anim = ease(g_home_anim, 1.0f, 12.0f, dt, 0.01f);
+    if (g_home_sel >= n) g_home_sel = n - 1;
+    if (!cont) g_home_row = 0;
+    for (i = 0; i < n && i < 8; i++) {
+        Cat *c = &g_cat[rail_cat(i)];
+        int on = i == g_home_sel && g_home_row == 0;
+        float lift = g_home_lift[i] = ease(g_home_lift[i], i == g_home_sel ? (on ? 1.0f : 0.55f) : 0.0f, 14.0f, dt, 0.01f);
+        int size = 60 + (int)lroundf(lift * 12), cx = x0 + i * pitch, cy = 104 - (int)lroundf(lift * 3);
+        int x = cx - size / 2, y = cy - size / 2, ip = 30 + (int)lroundf(lift * 6), a = (int)(g_home_anim * 255);
+        if (lift > 0.02f) gfx_shadow(NINE_SHADOW14, x, y, size, size, 0x40a0ff, (int)(lift * 230) * a / 255);
+        gfx_shadow(NINE_SHADOW10, x, y + 4, size, size, 0x000000, 110 * a / 255);
+        gfx_nine(NINE_R14, x, y, size, size, 0x16223c, a);
+        if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * a));
+        gfx_icon(c->icon, ip, cx - ip / 2, cy - ip / 2, lift > 0.5f ? 0xffffff : c->col, a);
+        {
+            int f = i == g_home_sel ? FONT_TITLE : FONT_BODY, tw = gfx_text_width(f, c->name);
+            gfx_text(f, cx - tw / 2, 150, c->name, i == g_home_sel ? C_TEXT : C_SUB, a, pitch);
+        }
+    }
+    /* what the focused section holds */
+    sel = &g_cat[rail_cat(g_home_sel)];
+    if (sel->kind == CK_EMU) {
+        int k, roms = 0;
+        for (k = 0; k < sel->n; k++) roms += L.sys[sel->it[k]->sys].nroms;
+        snprintf(s, sizeof(s), "%d system%s  /  %d ROM%s", sel->n, sel->n == 1 ? "" : "s", roms, roms == 1 ? "" : "s");
+    } else if (sel->kind == CK_SETTINGS) snprintf(s, sizeof(s), "%s", "This board, the PSP, sound and network");
+    else if (!sel->n && sel->kind == CK_FAVS) snprintf(s, sizeof(s), "%s", "Square on a game adds it here");
+    else snprintf(s, sizeof(s), "%d %s%s", sel->n, sel->noun, sel->n == 1 ? "" : "s");
+    gfx_text(FONT_SMALL, (SCREEN_W - gfx_text_width(FONT_SMALL, s)) / 2, 176, s, C_MUTED, 255, 0);
+    /* Continue: what was played last */
+    if (cont) {
+        int on = g_home_row == 1, w, x, y = 200;
+        snprintf(s, sizeof(s), "%s", cont->title);
+        w = 26 + gfx_text_width(FONT_SMALL, "Continue") + 10 + gfx_text_width(FONT_BODY, s) + 16;
+        if (w > SCREEN_W - 80) w = SCREEN_W - 80;
+        x = (SCREEN_W - w) / 2;
+        if (on) gfx_shadow(NINE_SHADOW10, x, y, w, 26, 0x40a0ff, 220);
+        gfx_nine(NINE_R10, x, y, w, 26, on ? 0x1e3a6e : 0x16223c, 235);
+        gfx_icon("circle-play", 16, x + 8, y + 5, on ? 0xffffff : C_ACCENT, 255);
+        x += 30;
+        x += gfx_text(FONT_SMALL, x, y + 7, "Continue", C_MUTED, 255, 0) + 8;
+        gfx_text(FONT_BODY, x, y + 5, s, on ? C_TEXT : C_SUB, 255, (SCREEN_W - 40) - x);
+    }
+    {
+        int x = 16;
+        gfx_button('x', x, HINT_Y); x += 18;
+        gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row ? "Play" : "Open", C_SUB, 255, 0);
+        x = SCREEN_W - 16 - gfx_text_width(FONT_SMALL, "Search");
+        gfx_text(FONT_SMALL, x, HINT_Y - 1, "Search", C_SUB, 255, 0);
+        x -= gfx_text_width(FONT_BADGE, "START") + 16;
+        gfx_nine(NINE_R6, x, HINT_Y, gfx_text_width(FONT_BADGE, "START") + 10, 14, 0x2a3142, 255);
+        gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, "START", C_SUB, 255, 0);
+    }
+}
+
 static void draw_hints(void)
 {
     int x = 16;
     LEntry *e = cur_entry();
     const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
     gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14;
-    if (e && e->type != LT_ACTION) {
+    if (e && e->type != LT_ACTION && !is_system_item(e)) {
         gfx_button('s', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, 255, 0) + 14;
     }
-    gfx_button('t', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0);
+    gfx_button('t', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0) + 14;
+    gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, g_cat[g_cur].hidden ? "Emulators" : "Home", C_SUB, 255, 0);
     {
         const char *r = "Search";
         int w = gfx_text_width(FONT_SMALL, r), bw = gfx_text_width(FONT_BADGE, "START") + 10;
@@ -2366,6 +2519,10 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
     else if (g_mode == M_ABOUT) draw_about(dt);
     else if (g_mode == M_PICK) draw_pick(dt);
     else if (g_mode == M_TEXT) draw_text(dt);
+    else if (g_ncat && g_mode == M_HOME) {
+        draw_status();
+        draw_home(dt);
+    }
     else if (g_ncat) {
         draw_status();
         draw_rail(dt);

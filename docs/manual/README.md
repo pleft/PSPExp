@@ -60,7 +60,7 @@ the setup and the list of packages differ.
 | PSPExp does not start from the XMB | Custom firmware is not running (on many PSPs it must be re-enabled after a full power-off). |
 | A game froze or will not quit | Hold **START + SELECT**: after a second the game is asked to quit, after two it is ended, and the launcher comes back. |
 | The PSP itself is stuck | Hold **HOME** for 2 seconds to leave PSPExp. |
-| No sound | System > Sound output: is it on Bluetooth headphones that are not with you? Choose The PSP. |
+| No sound | Settings > Sound output: is it on Bluetooth headphones that are not with you? Choose The PSP. |
 | The launcher offers "Update the PSP" or "Restart PSPExp" | A newer version was installed: choose it, it takes seconds. |
 
 More: the [cheatsheet](../cheatsheet.md) for command-line use, and the

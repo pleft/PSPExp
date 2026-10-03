@@ -494,7 +494,7 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
     }
     if (r) {
         if (!have_ffmpeg()) {
-            snprintf(err, en, dot && !strcasecmp(dot, ".mp3") ? "The PSP's PSPExp is too old to play MP3 (System > Update the PSP), and ffmpeg is not installed on the board."
+            snprintf(err, en, dot && !strcasecmp(dot, ".mp3") ? "The PSP's PSPExp is too old to play MP3 (Settings > Update the PSP), and ffmpeg is not installed on the board."
                                                                : "Only MP3 and 44.1 kHz WAV play without ffmpeg, which is not installed on the board.");
             player_stop();
             return -1;

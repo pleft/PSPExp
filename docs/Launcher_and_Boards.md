@@ -226,6 +226,22 @@ selection's title, its description (two lines) and its detail line; a
 setting's value at the right of its title. The cover column and the list
 are gone.
 
+**Step 2** (2026-10-03): a home screen, and the rail cut to five sections,
+the same on both: Favourites, Games, Emulators, Apps, Settings (System
+renamed; Recent gone, the home screen's **Continue** row plays the last
+one played). The launcher opens on the home screen: the five as 60 px
+tiles (72 focused, lifted and glowing), what the focused one holds
+underneath, Continue below (down, then cross). Each emulated system is no
+longer a rail tile: **Emulators** is a shelf of systems (entries `s:<id>`,
+a disc each with the system's short name, until the consoles are drawn),
+and cross on one opens its ROMs, a section off the rail (`hidden`), headed
+"Emulators > Nintendo 64", the rail showing Emulators. Circle goes back:
+from a system's ROMs to Emulators on that system, from a section to the
+home screen. A generated cover inside a disc is laid out for the round
+window (`CoverSpec.round`: icon and title centred, a system's short name
+large). The control port's `category <name>` still reaches every section,
+systems included; `launcher.mode` reports `home`.
+
 Nothing from the ClockworkOS skin is used. Everything that is not a flat
 rectangle is rendered on the host at its final pixel size, because the GE
 samples with nearest filtering (`launcher_gfx.c`):

@@ -30,8 +30,8 @@ is all of that.
    switch the GameShell on. The green LED lights when the system is up.
 4. **The first boot takes a minute or two**: the system grows to fill your
    card. Then the launcher appears on the PSP.
-5. On the PSP: **System > Wi-Fi network**, pick your network and type its
-   password on the on-screen keyboard. Then **System > Time zone**.
+5. On the PSP: **Settings > Wi-Fi network**, pick your network and type its
+   password on the on-screen keyboard. Then **Settings > Time zone**.
 
 Everything else happens on the PSP: **Apps > Packages** to install games.
 
@@ -65,11 +65,11 @@ Measured on the PSP-1000:
 - **The GameShell's battery** shows in the launcher's top bar beside the
   PSP's; the orange LED lights while it charges.
 - **Updates** come through **Apps > Packages**; after one, the launcher
-  offers **System > Restart PSPExp**.
+  offers **Settings > Restart PSPExp**.
 - **Logging in** (for tinkerers): the user is `cpi`, password `cpi`, reachable
   over SSH as `gameshell.local` once on Wi-Fi. Change the password
   (`passwd`) if your network is not only yours.
-- **Bluetooth headphones**: the GameShell has Bluetooth, and **System >
+- **Bluetooth headphones**: the GameShell has Bluetooth, and **Settings >
   Sound output** pairs headphones as on the Raspberry Pi (see
   [Using PSPExp](using-pspexp.md#bluetooth-headphones)). Not yet tried with
   headphones on the GameShell itself.

@@ -64,7 +64,7 @@ games you own.
 - **Music**: MP3 plays (the PSP decodes it) and 44.1 kHz WAV; other formats
   need ffmpeg, which the Omega does not have.
 - **No Bluetooth** on the Omega2+.
-- **Wi-Fi** can be changed from the PSP: System > Wi-Fi network.
+- **Wi-Fi** can be changed from the PSP: Settings > Wi-Fi network.
 - **Power**: if the Omega loses power while writing to its card, the card
   can need a check on a computer (a FAT file system check) before it is
   writable again.

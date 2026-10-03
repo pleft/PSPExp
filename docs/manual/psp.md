@@ -49,7 +49,7 @@ for 2 seconds.
   charges) next to the board's own indicators.
 - **Saving power.** While nothing happens on screen the PSP turns its
   backlight off; any button turns it back on.
-- **The clock.** System > PSP clock lets the board set the PSP's clock,
+- **The clock.** Settings > PSP clock lets the board set the PSP's clock,
   handy when its clock battery has run flat.
 - **Volume.** The PSP's volume buttons work as always; with Bluetooth
   headphones on the board, they set the headphones' volume instead, and a

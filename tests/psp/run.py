@@ -312,7 +312,7 @@ def suite_launcher(r):
         r.ctl("idle 3000")
         s = r.state()
         cats = s["launcher.categories"].split("|")
-        r.expect("Apps" in cats and "System" in cats, "sections: %s" % cats)
+        r.expect("Apps" in cats and "Settings" in cats, "sections: %s" % cats)
         r.note("sections: " + ", ".join(cats))
     r.check("the launcher's sections", sections)
 

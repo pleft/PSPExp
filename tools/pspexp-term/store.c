@@ -207,7 +207,7 @@ static int online(void)
 static void need_network(const char *title)
 {
     snprintf(g_result_title, sizeof(g_result_title), "%s", title);
-    snprintf(g_result, sizeof(g_result), "This needs a network: join Wi-Fi in System > Wi-Fi network, then try again.");
+    snprintf(g_result, sizeof(g_result), "This needs a network: join Wi-Fi in Settings > Wi-Fi network, then try again.");
     g_mode = S_RESULT;
 }
 
@@ -411,8 +411,8 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     if (broken) { snprintf(a, sizeof(a), ", %d broken", broken); strncat(s, a, sizeof(s) - strlen(s) - 1); }
     gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 9, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
     if (!g_n) {
-        if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (System > Wi-Fi network) and press START to read it.");
-        else snprintf(s, sizeof(s), "The catalogue is empty. Join a network (System > Wi-Fi network) and press START to read it.");
+        if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (Settings > Wi-Fi network) and press START to read it.");
+        else snprintf(s, sizeof(s), "The catalogue is empty. Join a network (Settings > Wi-Fi network) and press START to read it.");
         box(g_catmode ? "No packages" : "No catalogue", s, 110);
     } else if (!p) {
         gfx_text(FONT_BODY, LX + 12, 40, "Nothing in this section yet", UI_MUTED, 255, 0);
