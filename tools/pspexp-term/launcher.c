@@ -1972,8 +1972,8 @@ static void draw_list(float dt)
     }
 
     if (!c->n) {
-        gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, c->kind == CK_GAMES ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
-        gfx_text(FONT_SMALL, DETAIL_X, SHELF_Y + 14 + dy, "Installed games and apps appear here", C_MUTED, alpha, 0);
+        gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, c->kind == CK_GAMES ? "No games yet" : c->kind == CK_FAVS ? "No favourites yet" : "Nothing here yet", C_SUB, alpha, 0);
+        gfx_text(FONT_SMALL, DETAIL_X, SHELF_Y + 14 + dy, c->kind == CK_FAVS ? "Square on a game or ROM adds it here" : "Installed games and apps appear here", C_MUTED, alpha, 0);
         return;
     }
 
