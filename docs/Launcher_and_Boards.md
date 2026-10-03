@@ -784,7 +784,7 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   items), START D (pause); its sound is OpenAL's, through pspexp-run.
 - **SuperTuxKart** (`supertuxkart`, Debian's 1.4, Pi only): **drawn by the
   Pi's own GPU** (architecture §12a, host-rendered OpenGL: `PSPEXP_HOSTGL=1`
-  in the entry, `graphics=board-gpu`, shown as "OpenGL 3, the board's GPU").
+  in the entry, `graphics=board-gpu`, shown as "OpenGL 3, Board GPU renderer" on the details card, "Board GPU" under renderer in Packages).
   At the PSP's 480x272; its "screen resolution is too low" message is a
   warning only (`main.cpp`: below 480 lines the menus are cramped) and is
   turned off. Its first start is answered by three `first-run=` files (a

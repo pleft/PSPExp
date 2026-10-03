@@ -76,7 +76,8 @@ Some 3D games ask for more than the PSP's graphics chip can do
 own graphics chip instead, and each finished picture is sent to the PSP,
 which shows it, plays the sound and reads the buttons as for any other
 game. You don't have to do anything: install them from **Apps > Packages**
-as usual. Their entry there says **board GPU**. They are offered only on a
+as usual. Their entry there says **Board GPU** under renderer, and the
+launcher calls them **Board GPU renderer**. They are offered only on a
 Pi; the GameShell's graphics chip is too small for them.
 
 ## Bluetooth headphones
