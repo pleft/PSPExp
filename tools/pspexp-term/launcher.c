@@ -115,7 +115,8 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
 /* apps built into the console, first in Apps: the terminal and the file manager */
 #define NBUILTIN 4
 static LEntry g_builtin[NBUILTIN];
-static LEntry g_sysent[32];   /* Emulators' items: one per system with ROMs (id "s:<system>") */
+static LEntry g_sysent[32];
+static char g_assets[400];   /* the launcher's assets (fonts, icons, assets/systems) */   /* Emulators' items: one per system with ROMs (id "s:<system>") */
 static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 },
                       GRAD_MONITOR[2] = { 0x0f766e, 0x2563eb }, GRAD_STORE[2] = { 0x7c3aed, 0xe11d48 };
 static char g_app_req[16];   /* a built-in app to show (appview.h), taken by the console */
@@ -1931,7 +1932,11 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         gfx_shadow(NINE_SHADOW10, x, y + 4, size, size, 0x000000, 110 * alpha / 255);
         gfx_nine(NINE_R14, x, y, size, size, 0x16223c, alpha);
         if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * alpha));
-        if (is_system_item(e)) {   /* a system: its short name, set like a logo in its colour */
+        char ipath[600];
+        snprintf(ipath, sizeof(ipath), "%s/systems/%s.png", g_assets, L.sys[e->sys >= 0 ? e->sys : 0].thumbs);
+        if (is_system_item(e) && L.sys[e->sys].thumbs[0] && gfx_picon(ipath, 38, cx - 19, y + (size - 38) / 2, lift > 0.5f ? 0xffffff : system_colour(L.sys[e->sys].id), alpha)) {
+            /* a system: its console's icon (RetroArch's, assets/systems), in its colour */
+        } else if (is_system_item(e)) {   /* no icon for it: its short name, set like a logo in its colour */
             const char *t = L.sys[e->sys].shortname;
             int f = gfx_text_width(FONT_H1, t) <= size - 10 ? FONT_H1 : FONT_TITLE, tw = gfx_text_width(f, t);
             gfx_text(f, cx - tw / 2, y + (size - gfx_line_height(f)) / 2, t, lift > 0.5f ? 0xffffff : system_colour(L.sys[e->sys].id), alpha, 0);
@@ -2544,6 +2549,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
 {
     int i;
     g_ctx = ctx;
+    snprintf(g_assets, sizeof(g_assets), "%s", assets);
     g_wifi_cmd = getenv("PSPEXP_WIFI_MODE_CMD");
     if (!g_wifi_cmd && access("/usr/local/bin/pspexp-wifi-mode", X_OK) == 0) g_wifi_cmd = "/usr/local/bin/pspexp-wifi-mode";
     if (gfx_init(ctx, assets) < 0) { fprintf(stderr, "[launcher] no fonts in %s\n", assets); return -1; }

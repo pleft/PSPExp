@@ -96,7 +96,8 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		sudo install -m 0644 $S/build/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp.so.new && sudo mv /usr/local/lib/libsdl-pspexp.so.new /usr/local/lib/libsdl-pspexp.so
 		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 			sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
-		done'
+		done
+		sudo mkdir -p /usr/local/share/pspexp/launcher/systems && sudo cp $S/tools/pspexp-term/assets/systems/* /usr/local/share/pspexp/launcher/systems/'
 	CONSOLE=/usr/local/bin/pspexp-term
 else
 	# the board set up for the repository, then PSPExp itself from apt

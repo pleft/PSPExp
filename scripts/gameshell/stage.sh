@@ -59,6 +59,10 @@ gs_stage() {
 		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 			gs_copy "$ROOT/tools/pspexp-term/assets/$f" 0644 0 0 "/usr/local/share/pspexp/launcher/$f"
 		done
+		gs_dir 0755 0 0 /usr/local/share/pspexp/launcher/systems
+		for f in "$ROOT/tools/pspexp-term/assets/systems/"*; do
+			gs_copy "$f" 0644 0 0 "/usr/local/share/pspexp/launcher/systems/$(basename "$f")"
+		done
 	fi
 	# nmcli joins Wi-Fi with the password among its arguments: sudo must not log those
 	{ echo 'cpi ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/local/bin/pspexp-wifi-mode psp, /usr/local/bin/pspexp-wifi-mode home, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli, /usr/sbin/rfkill unblock bluetooth'

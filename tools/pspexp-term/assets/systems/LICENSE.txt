@@ -1,0 +1,7 @@
+The system icons in this folder are from the RetroArch assets, XMB
+"monochrome" theme (https://github.com/libretro/retroarch-assets,
+xmb/monochrome/png), by the libretro team and contributors, licensed under
+Creative Commons Attribution 4.0 International (CC BY 4.0,
+https://creativecommons.org/licenses/by/4.0/). Unmodified; the launcher
+scales them and tints them in each system's colour when it draws them.
+Each file is named after the system's libretro name (a recipe's thumbs=).

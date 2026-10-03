@@ -58,6 +58,7 @@ void gfx_nine(int style, int x, int y, int w, int h, uint32_t rgb, int alpha);
 /* a soft shadow / glow around the box (x, y, w, h) */
 void gfx_shadow(int style, int x, int y, int w, int h, uint32_t rgb, int alpha);
 int  gfx_icon(const char *name, int px, int x, int y, uint32_t rgb, int alpha);
+int  gfx_picon(const char *png_path, int px, int x, int y, uint32_t rgb, int alpha);
 void gfx_backdrop(void);
 /* PSP button badge, 14x14: 'x' cross, 'o' circle, 't' triangle, 's' square */
 void gfx_button(char which, int x, int y);

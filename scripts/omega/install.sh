@@ -22,6 +22,8 @@ scp -O -q "$B/pspexp-term" "$B/pspexp-ms" "$B/pspexp-bench" "$B/pspexp-sprite-de
 scp -O -q "$ROOT/tools/pspexp-term/assets/Inter-Regular.ttf" "$ROOT/tools/pspexp-term/assets/Inter-SemiBold.ttf" \
 	"$ROOT/tools/pspexp-term/assets/lucide.ttf" "$ROOT/tools/pspexp-term/assets/Inter-LICENSE.txt" \
 	"$ROOT/tools/pspexp-term/assets/lucide-LICENSE.txt" "$OM:$DIR/assets/"
+ssh "$OM" "mkdir -p $DIR/assets/systems"
+scp -O -q "$ROOT/tools/pspexp-term/assets/systems/"* "$OM:$DIR/assets/systems/"   # the systems' icons (CC BY 4.0)
 scp -O -q "$ROOT/scripts/omega/pspexp-term.init" "$OM:/tmp/pspexp-term.init"
 # pspexp-pkg for the Omega: the packages' files on the SD card
 W=$(mktemp); trap 'rm -f "$W"' EXIT

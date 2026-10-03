@@ -233,8 +233,9 @@ one played). The launcher opens on the home screen: the five as 60 px
 tiles (72 focused, lifted and glowing), what the focused one holds
 underneath, Continue below (down, then cross). Each emulated system is no
 longer a rail tile: **Emulators** is a shelf of systems (entries `s:<id>`;
-tiles like the home screen's, the system's short name as the logo in its
-colour: discs are for games and ROMs only, the user's call),
+tiles like the home screen's with the console's icon in the system's
+colour, see System icons below: discs are for games and ROMs only, the
+user's call),
 and cross on one opens its ROMs, a section off the rail (`hidden`), headed
 "Emulators > Nintendo 64", the rail showing Emulators. Circle goes back:
 from a system's ROMs to Emulators on that system, from a section to the
@@ -251,6 +252,12 @@ samples with nearest filtering (`launcher_gfx.c`):
   atlas whose palette is white with 256 alpha levels, tinted per string.
 - **Icons**: Lucide (ISC), rendered through stb_truetype per icon and size
   into 8888 textures, tinted. Systems show their short name on the rail tile.
+- **System icons**: the consoles (Game Boy, N64 pad, Mega Drive pad...) from
+  RetroArch's XMB "monochrome" theme (libretro/retroarch-assets, CC BY 4.0,
+  credited in `assets/systems/LICENSE.txt`), white PNGs named after the
+  libretro system name (a recipe's `thumbs=`), box-filtered to 38 px and
+  tinted like the font icons (`gfx_picon`); a system without one shows its
+  short name.
 - **Cards and shadows**: anti-aliased rounded rectangles and Gaussian
   shadows as 9-slices (corners 1:1, uniform edges stretched).
 - **Backdrop**: 480x272 dark gradient with three soft colour glows, Bayer

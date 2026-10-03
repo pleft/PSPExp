@@ -527,6 +527,46 @@ int gfx_icon(const char *name, int px, int x, int y, uint32_t rgb, int alpha)
     return 1;
 }
 
+/* an icon from a PNG (white on transparent, the systems' icons): its alpha box-filtered into
+ * px x px, kept with the font icons (keyed by the file's hash) and tinted the same way. 0 when
+ * there is no such file */
+int gfx_picon(const char *path, int px, int x, int y, uint32_t rgb, int alpha)
+{
+    int key = -(int)(gfx_hash(path) & 0x3fffffff) - 1, i, slot = -1;
+    if (alpha <= 0) return 0;
+    for (i = 0; i < nislots; i++) if (islot[i].cp == key && islot[i].px == px) { slot = i; break; }
+    if (slot < 0) {
+        uint8_t *file, *img, *rgba;
+        size_t len;
+        int w, h, n, dw, dh, ox, oy, xx, yy;
+        if (nislots >= ICON_SLOTS || read_file(path, &file, &len) < 0) return 0;
+        img = stbi_load_from_memory(file, (int)len, &w, &h, &n, 4);
+        free(file);
+        if (!img) return 0;
+        if (w >= h) { dw = px; dh = px * h / w; } else { dh = px; dw = px * w / h; }
+        ox = (px - dw) / 2; oy = (px - dh) / 2;
+        rgba = (uint8_t *)calloc((size_t)(px * px), 4);
+        for (i = 0; i < px * px; i++) rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 255;
+        for (yy = 0; yy < dh; yy++)
+            for (xx = 0; xx < dw; xx++) {
+                int sx0 = xx * w / dw, sx1 = (xx + 1) * w / dw, sy0 = yy * h / dh, sy1 = (yy + 1) * h / dh, a, b, cnt = 0;
+                float acc = 0;
+                if (sx1 <= sx0) sx1 = sx0 + 1;
+                if (sy1 <= sy0) sy1 = sy0 + 1;
+                for (b = sy0; b < sy1; b++) for (a = sx0; a < sx1; a++) { acc += img[((size_t)b * w + a) * 4 + 3]; cnt++; }
+                rgba[((oy + yy) * px + ox + xx) * 4 + 3] = (uint8_t)lroundf(acc / cnt);
+            }
+        stbi_image_free(img);
+        slot = nislots;
+        if (upload_rgba((uint16_t)(ID_ICON + slot), rgba, px, px) < 0) { free(rgba); return 0; }
+        free(rgba);
+        islot[slot].cp = key; islot[slot].px = px;
+        nislots++;
+    }
+    quad((uint16_t)(ID_ICON + slot), x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
+    return 1;
+}
+
 /* ---- PSP button badges -------------------------------------------------------------------------- */
 
 static void buttons_make(void)
