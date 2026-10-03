@@ -1,0 +1,33 @@
+# Open Surge: its 0.6.1.3 engine, built by PSPExp with Allegro 5 through SDL
+# (package pspexp-opensurge, its free-licensed data included: listed in its
+# licenses/ folder). Allegro draws with desktop OpenGL and GLSL 1.20, beyond
+# the PSP's layer: the board's own GPU draws it (PSPEXP_HOSTGL, the Pi 400's
+# V3D), each frame sent to the PSP as a picture, its 426x240 enlarged to the
+# screen. Its keyboard: the d-pad moves, cross jumps (Space), square is its
+# second action (Ctrl), circle / triangle look (Shift), START pauses (Enter),
+# SELECT backs out (Escape). The joystick is off: Allegro would read it too.
+
+[package]
+id=opensurge
+title=Open Surge
+description=A fast 2D platformer in the spirit of the classic Sonic games: Surge the Rabbit runs, jumps and rolls through colourful zones.
+category=game
+license=GPL-3.0 (engine); CC BY-SA, CC BY, CC0, OFL and others (its data)
+version=1
+
+[debian]
+apt=pspexp-opensurge
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Open Surge
+type=game
+description=A fast 2D platformer in the spirit of classic Sonic: Surge the Rabbit runs and jumps through colourful zones. Drawn by the board's GPU (Pi).
+icon=rabbit
+exec=/usr/lib/pspexp/opensurge/opensurge --windowed --resolution 1 --game-folder /usr/share/games/opensurge
+keys=cross=space,square=lctrl,circle=lshift,triangle=rshift,start=return,select=esc,up=up,down=down,left=left,right=right
+env=PSPEXP_HOSTGL=1
+env=PSPEXP_JOYSTICK=0
+graphics=board-gpu

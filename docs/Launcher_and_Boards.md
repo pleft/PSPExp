@@ -640,18 +640,35 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   its defaults (cross Alt jumps, square Ctrl shoots, circle Shift the
   lightning, triangle Space the power line, R / L Right Ctrl / Shift grenade
   and smart bomb, SELECT Return cycles weapons, START Escape).
-- **Open Surge**: not yet. Built (`scripts/packages/build-opensurge.sh`:
-  Allegro 5 with its SDL2 backend, so its window, input, sound and GL are
-  the layer's; Allegro's GTK dialogs replaced by `allegro-dialog-stub.c`,
-  messages to the log), but it draws each frame through several 426x240
-  render targets and the PSP's VRAM has no room for them (OUT_OF_MEMORY, a
-  black screen): the GL layer would have to share or shrink targets.
+- **Open Surge** (`opensurge`, Pi only): built by
+  `scripts/packages/build-opensurge.sh` (0.6.1.3, Allegro 5 with its SDL2
+  backend, so its window, input, sound and GL are the layer's; Allegro's GTK
+  dialogs replaced by `allegro-dialog-stub.c`, messages to the log), package
+  `pspexp-opensurge` with its data (free licences, each listed in its
+  `licenses/` folder). Under the PSP's layer each frame's 426x240 render
+  targets did not fit in VRAM (a black screen); **drawn by the Pi's GPU**
+  (`PSPEXP_HOSTGL=1`, `graphics=board-gpu`) it runs at about 30 fps in
+  PPSSPP, its 426x240 enlarged to the screen. Allegro had to be built with
+  GLU and desktop GL (it chose OpenGL ES, where Open Surge's GLSL 1.20
+  shaders fail), and its SDL backend patched to answer `$HOME` for the
+  user's home folder (it gave the program's folder: saves refused under
+  /usr/lib). Its keyboard: d-pad, cross jumps (Space), square Ctrl, circle /
+  triangle Shift, START Enter, SELECT Escape; the joystick off (Allegro would
+  read it as well).
 - **Wyrmsun**: not attempted; its engine is now Qt-based, out of the SDL
   layer's reach.
 - **SuperTuxKart** (1.4), **OpenClonk** (8.1), **Trackballs** (1.3.4), from
-  Debian: none starts; they ask for OpenGL 3.1, 3.2 and 3.3 core contexts,
-  and the layer is OpenGL 2.1 (SuperTuxKart's 3D would be far beyond the GE
-  besides). Removed from the Pi.
+  Debian: none starts under the PSP's layer; they ask for OpenGL 3.1, 3.2
+  and 3.3 core contexts, and the layer is OpenGL 2.1. Drawn by the Pi's GPU
+  instead: SuperTuxKart and Trackballs packaged (below); OpenClonk starts
+  (GLEW's "no GLX display" accepted, Mesa told to offer 3.2) but crashes in
+  its start menu, not packaged.
+- **Trackballs** (`trackballs`, Debian's 1.3.4, Pi only): drawn by the Pi's
+  GPU, Mesa told to offer OpenGL 3.3 (`MESA_GL_VERSION_OVERRIDE=3.3`,
+  `MESA_GLSL_VERSION_OVERRIDE=330`; V3D has 3.1, and what Trackballs uses
+  runs). A 640x480 window (`-w -r 640`, its smallest) shrunk to the screen:
+  the menu readable, 26-31 fps in PPSSPP. Menus by the nub as a pointer
+  (cross clicks); in play the d-pad steers, square jumps, START Escape.
 - **Project: Starfighter** (2.4, Debian): drew nothing at first: its whole
   800x600 frame, one streaming texture, needed 20 of the small pages a
   streaming texture is cut into, over the 16 a texture may have, and the

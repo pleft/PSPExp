@@ -65,6 +65,7 @@ Measured on the PSP-1000 with a Pi 400:
 | OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
+| Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); about 30 fps in the emulator, not yet measured on the PSP |
 
 ## Bluetooth headphones
 

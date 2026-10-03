@@ -24,6 +24,10 @@ apt-get install -y -qq --no-install-recommends build-essential cmake git ca-cert
 	libsdl2-dev libgl-dev libglu1-mesa-dev libpng-dev libjpeg-dev libwebp-dev libfreetype-dev libogg-dev libvorbis-dev libopusfile-dev libphysfs-dev >/dev/null
 cd /tmp
 git clone -q --depth 1 -b $AL_VER https://github.com/liballeg/allegro5.git allegro
+# its SDL backend answers the program's own folder for the user's home folder,
+# where Open Surge then puts its saves (.local/share under /usr/lib: refused): \$HOME
+perl -0pi -e 's/      case ALLEGRO_USER_HOME_PATH:\n//; s/(      case ALLEGRO_RESOURCES_PATH:)/      case ALLEGRO_USER_HOME_PATH:\n         if (getenv(\"HOME\")) { p = al_create_path_for_directory(getenv(\"HOME\")); break; }\n\1/; s/^/#include <stdlib.h>\n/' allegro/src/sdl/sdl_system.c
+grep -q 'getenv(\"HOME\")' allegro/src/sdl/sdl_system.c
 cmake -S allegro -B al -DCMAKE_BUILD_TYPE=Release -DALLEGRO_SDL=ON -DGL_BUILD_TYPE=gl -DSHARED=ON -DWANT_DOCS=OFF -DWANT_EXAMPLES=OFF \
 	-DWANT_TESTS=OFF -DWANT_DEMO=OFF -DWANT_VIDEO=OFF -DWANT_NATIVE_DIALOG=OFF -DWANT_OPENAL=OFF -DWANT_PULSEAUDIO=OFF \
 	-DWANT_ALSA=OFF -DWANT_FLAC=OFF -DWANT_MODAUDIO=OFF -DWANT_OPUS=ON -DCMAKE_INSTALL_PREFIX=/opt/al >/dev/null
@@ -48,7 +52,8 @@ mkdir -p /out/lib && cp -P /opt/al/lib/liballegro*.so* /opt/ss/lib/libsurgescrip
 mkdir -p /out/share && cp -R opensurge/* /out/share/ && cd /out/share && rm -rf src docs CMakeLists.txt *.md build* .git* 2>/dev/null; cd /tmp
 cp opensurge/LICENSE /out/COPYING 2>/dev/null || true
 mkdir -p debian && printf 'Source: x\n' > debian/control
-dpkg-shlibdeps -O -l/out/lib os/opensurge /out/lib/*.so.*.* 2>/dev/null | sed 's/^shlibs:Depends=//' > /out/depends.txt
+dpkg-shlibdeps -O --ignore-missing-info -l/out/lib /out/opensurge /out/lib/*.so.*.* > /tmp/dep 2> /tmp/dep.err || { cat /tmp/dep.err; exit 1; }
+sed -n 's/^shlibs:Depends=//p' /tmp/dep > /out/depends.txt
 echo built; cat /out/depends.txt
 "
 ls -l "$OUT/opensurge"; du -sh "$OUT/share"
