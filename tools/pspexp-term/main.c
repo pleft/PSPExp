@@ -14,14 +14,14 @@
  *   select        show / hide the on-screen keyboard (terminal 80x25 / 80x34)
  *   d-pad         move on the keyboard; arrow keys when it is hidden
  *   cross         type the highlighted key          square  Backspace
- *   circle        space                              triangle  Enter
- *   start         Tab (completion)
+ *   circle        Esc                                triangle  space
+ *   start         Enter
  *   L (held)      Shift                              R (held)  Ctrl
  *   nub           arrow keys (history, cursor, vi) with the keyboard shown
  *   L tap         the context menu: keys and commands for the shell or for
  *                 the full-screen program (vi, less, top), terminal actions
  *                 (~/.config/pspexp-term/menu, see term_menu.h)
- *   L + triangle  Esc                                R + square  Ctrl-C
+ *   L + triangle  Tab (completion)                   R + square  Ctrl-C
  *   L + R + left/right   the other shells (sessions, up to four; right
  *                 past the last opens a new one; `exit` closes one)
  *   R + up/down   scroll back a line (R + left/right: a page)
@@ -1190,11 +1190,11 @@ static const char *const HELP[][2] = {
     { "D-pad", "move on the keyboard (hidden: arrow keys)" },
     { "Cross", "type the highlighted key" },
     { "Square", "Backspace" },
-    { "Circle", "Space" },
-    { "Triangle", "Enter" },
-    { "Start", "Tab (completion)" },
+    { "Circle", "Esc" },
+    { "Triangle", "Space" },
+    { "Start", "Enter" },
     { "L held / R held", "Shift / Ctrl" },
-    { "L + Triangle", "Esc" },
+    { "L + Triangle", "Tab (completion)" },
     { "R + Square", "Ctrl-C (stop)" },
     { "Nub", "arrow keys (keyboard shown)" },
     { "#", "Screen" },
@@ -1770,12 +1770,13 @@ static void handle_input(void)
     if (fire(N_RIGHT, ax > 60, now, 1)) send_arrow('C');
 
     if (fire(V_CROSS, b & PSPEXP_BUTTON_CROSS, now, 1) && kb_shown) { send_key(&KROWS_[kb_row][kb_col], shift, ctrl); T.view = 0; T.dirty = 1; }
-    /* square: Backspace (R + square: Ctrl-C); circle: Space (the user's choice) */
+    /* the buttons as on every other screen (2026-10-03, the user's choice): square deletes (Backspace;
+     * R + square: Ctrl-C), circle backs out (Esc), triangle is Space (L + triangle: Tab), START Enter */
     if (ctrl && (pressed & PSPEXP_BUTTON_SQUARE)) { pty_puts("\003"); T.view = 0; fire(V_CIRCLE, 1, now, 1); }
     else if (!ctrl && fire(V_CIRCLE, b & PSPEXP_BUTTON_SQUARE, now, 1)) { pty_puts("\177"); T.view = 0; }
-    if (pressed & PSPEXP_BUTTON_CIRCLE) { pty_puts(" "); T.view = 0; }
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts(shift ? "\033" : "\r"); T.view = 0; }   /* L + triangle: Esc */
-    if (pressed & PSPEXP_BUTTON_START) pty_puts("\t");
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { pty_puts("\033"); T.view = 0; }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts(shift ? "\t" : " "); T.view = 0; }   /* L + triangle: Tab */
+    if (pressed & PSPEXP_BUTTON_START) { pty_puts("\r"); T.view = 0; }
 }
 
 /* ---- mirror view: the host framebuffer and a virtual keypad (Linux) ------------------ */

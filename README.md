@@ -239,10 +239,10 @@ it (`doom`) hands the PSP to the game and takes it back afterwards
 
 | PSP | console |
 |---|---|
-| cross / square / circle / triangle | the highlighted key / Backspace / Space / Enter |
-| start | Tab |
+| cross / square / circle / triangle | the highlighted key / Backspace / Esc / Space |
+| start | Enter |
 | L held / R held | Shift / Ctrl |
-| L + triangle / R + square | Esc / Ctrl-C |
+| L + triangle / R + square | Tab / Ctrl-C |
 | select | show / hide the keyboard (held: the launcher) |
 | d-pad | move on the keyboard; arrow keys when it is hidden |
 | R + d-pad, R + nub | scroll back (a line or a page) |

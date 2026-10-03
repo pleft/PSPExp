@@ -8,8 +8,8 @@ buttons; the board needs no screen, keyboard or mouse.
 | Button | What it does, on every screen |
 |---|---|
 | cross | choose: open, play, confirm, type the highlighted key |
-| circle | back: close, cancel, the folder above (in the terminal it types a Space) |
-| triangle | show more: details, the actions menu, a hidden password |
+| circle | back: close, cancel, the folder above (in the terminal: Esc) |
+| triangle | show more: details, the actions menu, a hidden password (in the terminal: Space) |
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
 | START | search, refresh or rescan, options |
 | SELECT | close an app; held, the terminal |
@@ -207,7 +207,9 @@ keyboard types into it too.
 
 | Button | |
 |---|---|
-| cross / square / circle / triangle | the highlighted key / Backspace / Space / Enter |
+| cross / square / circle / triangle | the highlighted key / Backspace / Esc / Space |
+| START | Enter |
+| L + triangle / R + square | Tab (completes names) / Ctrl-C (stops a program) |
 | d-pad | move on the keyboard; arrow keys when it is hidden |
 | SELECT | show / hide the keyboard (held: the launcher) |
 | L held / R held | Shift / Ctrl |

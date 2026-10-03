@@ -238,7 +238,9 @@ remove a package, forget a device, stop the music), START searches,
 refreshes or rescans. Moved: Packages' remove from triangle to square, the
 music player's stop from triangle to square, the Wi-Fi and Bluetooth
 lists' scan again from triangle to START, search's space off triangle.
-The terminal keeps circle as Space (the user's earlier choice).
+The terminal follows too, at the user's choice: circle Esc (was Space),
+triangle Space (was Enter), START Enter (was Tab), L + triangle Tab (was
+Esc).
 
 **Step 2** (2026-10-03): a home screen, and the rail cut to five sections,
 the same on both: Favourites, Games, Emulators, Apps, Settings (System
@@ -1109,10 +1111,10 @@ Controls screen in the menu lists them all):
 
 | | |
 |---|---|
-| cross / square / circle / triangle | the highlighted key / Backspace / Space / Enter |
-| start | Tab |
+| cross / square / circle / triangle | the highlighted key / Backspace / Esc / Space |
+| start | Enter |
 | L held / R held | Shift / Ctrl |
-| L + triangle / R + square | Esc / Ctrl-C |
+| L + triangle / R + square | Tab / Ctrl-C |
 | select | the on-screen keyboard (held: the launcher) |
 | R + d-pad, R + nub | scroll back (a line or a page; smoothly) |
 | nub, keyboard hidden | scroll back smoothly (shown: arrow keys) |
