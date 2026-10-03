@@ -63,7 +63,8 @@ use)
 	power_on
 	if [ "$(flag "$A" Paired)" = 0 ]; then
 		timeout 12 bluetoothctl --timeout 8 scan on >/dev/null 2>&1   # it must be seen before it pairs
-		bluetoothctl --timeout 25 pair "$A" >/dev/null 2>&1 || { echo "could not pair $A (is it in pairing mode?)" >&2; exit 1; }
+		bluetoothctl --timeout 25 pair "$A" >/dev/null 2>&1   # (its exit status does not say whether it paired)
+		[ "$(flag "$A" Paired)" = 1 ] || { echo "could not pair $A (is it in pairing mode, and free of other devices?)" >&2; exit 1; }
 	fi
 	bluetoothctl trust "$A" >/dev/null 2>&1
 	if [ "$(flag "$A" Connected)" = 0 ]; then
