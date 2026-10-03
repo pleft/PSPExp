@@ -229,6 +229,16 @@ renderer" (the PSP's GE: the SDL layer, its OpenGL) or "Board GPU renderer"
 (`graphics=board-gpu`); it replaced "PSP native", which only meant the
 program spoke PSPExp, as every package does now.
 
+**Polish** (2026-10-03): Settings in groups, like Emulators: tiles for
+Network, Sound, Clock, Library and This board (`g:<name>` entries, each
+opening a section off the rail headed "Settings > Clock"; a group of one
+opens its setting at once; a group's line lists what is in it on this
+board), Update the PSP and Restart PSPExp in front of them when shown.
+The palette is the new one everywhere (search, details, About, Files,
+Packages, the Monitor, the keyboards): blue cards and tiles (0x16223c,
+0x14203a), a blue accent (0x5aa9ff) for the old purple. The details card
+shows a game or ROM in its disc.
+
 **The buttons, made the same on every screen** (2026-10-03, after an
 audit of each view's handling): cross chooses, circle goes back (closes,
 cancels, the folder above; at a drive's top it closes Files, as it closes

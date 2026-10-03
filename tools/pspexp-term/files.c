@@ -978,7 +978,7 @@ static void draw_menu(const MItem *items, int n, const char *title)
 {
     int w = 250, h = 30 + n * 20, x = (UI_SCREEN_W - w) / 2, y = (UI_SCREEN_H - h) / 2 - 8, i;
     gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
-    gfx_nine(NINE_R14, x, y, w, h, 0x232a3b, 250);
+    gfx_nine(NINE_R14, x, y, w, h, 0x1b2a46, 250);
     gfx_text(FONT_BODY, x + 14, y + 8, title, UI_TEXT, 255, w - 28);
     for (i = 0; i < n; i++) {
         int ry = y + 28 + i * 20;
@@ -998,7 +998,7 @@ static void draw_drives(void)
     int x = 8 + g_act * (PANEL_W + PANEL_GAP) + 6, y = PANEL_Y + 24, w = PANEL_W - 12, rh = 30, h = 8 + g_ndrv * rh, i;
     int cur = drive_cur(act());
     gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
-    gfx_nine(NINE_R10, x, y, w, h, 0x232a3b, 250);
+    gfx_nine(NINE_R10, x, y, w, h, 0x1b2a46, 250);
     for (i = 0; i < g_ndrv; i++) {
         int ry = y + 4 + i * rh, sel = i == g_msel, avail = !drive_is_psp(i) || files_psp_available();
         char sub[FOPS_PATH + 48];
@@ -1025,7 +1025,7 @@ static void draw_box(const char *title, const char *text, int h)
     int w = 340, x = (UI_SCREEN_W - w) / 2, y = (UI_SCREEN_H - h) / 2 - 8, ly = y + 34;
     const char *p = text;
     gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
-    gfx_nine(NINE_R14, x, y, w, h, 0x232a3b, 250);
+    gfx_nine(NINE_R14, x, y, w, h, 0x1b2a46, 250);
     gfx_text(FONT_BODY, x + 16, y + 10, title, UI_TEXT, 255, w - 32);
     while (*p && ly < y + h - 16) {   /* word wrap */
         char line[160];

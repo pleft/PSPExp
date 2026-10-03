@@ -127,10 +127,10 @@ On the Nintendo 64 the nub is the stick, cross A, square B, L the Z
 trigger, R the R button, START Start, and the d-pad the four C buttons
 (triangle is the N64's L).
 
-New ROMs show up within seconds (or **Settings > Refresh library**), with
+New ROMs show up within seconds (or **Settings > Library > Refresh library**), with
 their titles cleaned up ("Legend of Zelda, The (USA)" becomes "The Legend
 of Zelda") and box art downloaded when the board is online (turn that off
-in **Settings > Box art**). Games with battery saves keep them on the board.
+in **Settings > Library > Box art**). Games with battery saves keep them on the board.
 Only use ROMs of games you own.
 
 ## Files
@@ -175,11 +175,11 @@ Ogg, FLAC, Opus and M4A are decoded by the board when it has ffmpeg.
 
 ## Bluetooth headphones
 
-On a board with Bluetooth (the Raspberry Pi, the GameShell), **Settings > Sound output** sends
+On a board with Bluetooth (the Raspberry Pi, the GameShell), **Settings > Sound** sends
 all sound to headphones or a speaker instead of the PSP:
 
 1. Put the headphones in pairing mode.
-2. **Settings > Sound output**. It scans for a few seconds and lists **The
+2. **Settings > Sound**. It scans for a few seconds and lists **The
    PSP** and the devices it found.
 3. Cross on your headphones. They pair and connect, and the sound moves to
    them, starting at 40 % volume.
@@ -216,20 +216,22 @@ keyboard types into it too.
 | L tapped | a menu: special keys, commands, themes, fonts, Files here |
 | R + d-pad | scroll back |
 
-## System
+## Settings
 
-| | |
+Settings shows its options in groups; cross on a group opens it (a group
+with a single option opens that option at once), circle comes back.
+
+| Group | |
 |---|---|
-| Refresh library | look for new games and ROMs now |
-| Wi-Fi network | join a network (an on-screen keyboard for the password) |
-| Sound output | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Time zone | for the clock |
-| PSP clock | let the board set the PSP's clock |
-| Box art | download covers for ROMs, on or off |
-| Update the PSP | shown when a newer PSPExp for the PSP is ready |
-| Restart PSPExp | shown after PSPExp was updated |
-| Restart / Power off | the board (asks for a second press) |
-| About | the board and the PSP: models, versions, battery, the connection |
+| Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
+| Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
+| Clock | Time zone, for the clock; PSP clock: let the board set the PSP's clock |
+| Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
+| This board | About (the board and the PSP: models, versions, battery, the connection), Restart, Power off (they ask for a second press) |
+
+When there is something to do, it comes first, before the groups:
+**Update the PSP** (a newer PSPExp for the PSP is ready) and **Restart
+PSPExp** (after PSPExp was updated).
 
 **Apps > System Monitor** shows the board's processor, memory, temperature,
 storage and network, and its programs (one can be ended from there if it

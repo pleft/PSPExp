@@ -9,7 +9,7 @@
 int ui_hint_cap(int x, const char *cap, const char *label, uint32_t col)
 {
     int bw = gfx_text_width(FONT_BADGE, cap) + 10;
-    gfx_nine(NINE_R6, x, UI_HINT_Y, bw, 14, 0x2a3142, 255);
+    gfx_nine(NINE_R6, x, UI_HINT_Y, bw, 14, 0x1e2c4a, 255);
     gfx_text(FONT_BADGE, x + 5, UI_HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, cap, UI_SUB, 255, 0);
     x += bw + 5;
     return x + gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, label, col, 255, 0) + 14;
@@ -80,7 +80,7 @@ void ui_kbd_draw(const UiKbd *k, const char *icon, const char *title, const char
     /* the field */
     for (i = 0; i < (int)l && i < (int)sizeof(shown) - 1; i++) shown[i] = k->masked && !k->show ? '*' : k->buf[i];
     shown[i] = 0;
-    gfx_nine(NINE_R10, fx, 44, fw, 30, 0x1d2334, a);
+    gfx_nine(NINE_R10, fx, 44, fw, 30, 0x172540, a);
     x = fx + 12;
     if (l) x += gfx_text(FONT_TITLE, x, 44 + (30 - gfx_line_height(FONT_TITLE)) / 2, shown, UI_TEXT, a, fw - 60);
     else gfx_text(FONT_BODY, x, 44 + (30 - gfx_line_height(FONT_BODY)) / 2, placeholder, UI_MUTED, a, 0);
@@ -96,7 +96,7 @@ void ui_kbd_draw(const UiKbd *k, const char *icon, const char *title, const char
             int foc = y == k->y && i == k->x;
             kx = x0 + i * (KEY_W + KEY_GAP); ky = 92 + y * (KEY_H + KEY_GAP);
             if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, KEY_W, KEY_H, UI_ACCENT, a * 120 / 255);
-            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x6f7ff5 : 0x222a3b, foc ? a : a * 235 / 255);
+            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x3d8bff : 0x222a3b, foc ? a : a * 235 / 255);
             gfx_text(FONT_BODY, kx + (KEY_W - gfx_text_width(FONT_BODY, c)) / 2, ky + (KEY_H - gfx_line_height(FONT_BODY)) / 2, c, foc ? 0xffffff : UI_TEXT, a, 0);
         }
     }
@@ -108,7 +108,7 @@ void ui_kbd_draw(const UiKbd *k, const char *icon, const char *title, const char
             const char *c = i == TK_NCTRL - 1 ? k->done : ctrl[i];
             kx = x0 + i * (w + KEY_GAP);
             if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, w, KEY_H, UI_ACCENT, a * 120 / 255);
-            gfx_nine(NINE_R6, kx, ky, w, KEY_H, foc ? 0x6f7ff5 : on ? 0x3a4560 : i == 4 ? 0x1f5f4a : 0x222a3b, foc ? a : a * 235 / 255);
+            gfx_nine(NINE_R6, kx, ky, w, KEY_H, foc ? 0x3d8bff : on ? 0x3a4560 : i == 4 ? 0x1f5f4a : 0x222a3b, foc ? a : a * 235 / 255);
             gfx_text(FONT_SMALL, kx + (w - gfx_text_width(FONT_SMALL, c)) / 2, ky + (KEY_H - gfx_line_height(FONT_SMALL)) / 2, c, foc ? 0xffffff : UI_TEXT, a, 0);
         }
     }

@@ -13,10 +13,10 @@
 #define UI_HINT_Y   252
 
 #define UI_TEXT   0xf1f4f9
-#define UI_SUB    0xa9b2c3
-#define UI_MUTED  0x7d869a
-#define UI_TILE   0x1b2131
-#define UI_ACCENT 0x8b9bff
+#define UI_SUB    0xa9b9d3
+#define UI_MUTED  0x7d8fae
+#define UI_TILE   0x16223c
+#define UI_ACCENT 0x5aa9ff
 
 /* a button badge ('x' cross, 'o' circle, 's' square, 't' triangle) and its
  * label at x on the hint row; returns where the next one goes */

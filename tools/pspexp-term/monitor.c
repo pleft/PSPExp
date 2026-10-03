@@ -135,7 +135,7 @@ static uint32_t level_col(double pct) { return pct > 85 ? 0xff7a7a : pct > 60 ? 
 static void bar(int x, int y, int w, int h, double pct)
 {
     int f = (int)(w * (pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100);
-    gfx_nine(NINE_R6, x, y, w, h, 0x10141f, 255);
+    gfx_nine(NINE_R6, x, y, w, h, 0x0d1628, 255);
     if (f > 2) gfx_nine(NINE_R6, x, y, f, h, level_col(pct), 255);
 }
 
@@ -158,7 +158,7 @@ static void draw_overview(PspExpContext *ctx)
     cw = g_s.ncpu > 0 ? (W - 86 - (g_s.ncpu - 1) * 3) / g_s.ncpu : 0;
     for (i = 0; i < g_s.ncpu && i < SYS_CORES; i++) {   /* one column per core */
         int h = 30, f = (int)(h * g_s.core[i] / 100), cx = L + 76 + i * (cw + 3);
-        gfx_nine(NINE_R6, cx, 50, cw, h, 0x10141f, 255);
+        gfx_nine(NINE_R6, cx, 50, cw, h, 0x0d1628, 255);
         if (f > 1) gfx_rect(cx + 1, 50 + h - f, cw - 2, f, level_col(g_s.core[i]), 255);
     }
     s[0] = 0;
@@ -286,7 +286,7 @@ static void draw_programs(void)
         const SysProc *p = &g_s.proc[g_sel];
         int w = 300, h = 76, bx = (UI_SCREEN_W - w) / 2, by = 90;
         gfx_shadow(NINE_SHADOW14, bx, by, w, h, 0x000000, 160);
-        gfx_nine(NINE_R14, bx, by, w, h, 0x232a3b, 250);
+        gfx_nine(NINE_R14, bx, by, w, h, 0x1b2a46, 250);
         snprintf(s, sizeof(s), "End %s (%d)?", p->name, p->pid);
         gfx_text(FONT_BODY, bx + 16, by + 12, s, UI_TEXT, 255, w - 32);
         gfx_text(FONT_SMALL, bx + 16, by + 32, "Unsaved work in it is lost.", UI_SUB, 255, w - 32);

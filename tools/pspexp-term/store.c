@@ -207,7 +207,7 @@ static int online(void)
 static void need_network(const char *title)
 {
     snprintf(g_result_title, sizeof(g_result_title), "%s", title);
-    snprintf(g_result, sizeof(g_result), "This needs a network: join Wi-Fi in Settings > Wi-Fi network, then try again.");
+    snprintf(g_result, sizeof(g_result), "This needs a network: join Wi-Fi in Settings > Network, then try again.");
     g_mode = S_RESULT;
 }
 
@@ -361,7 +361,7 @@ static void box(const char *title, const char *text, int h)
     int w = 320, bx = (UI_SCREEN_W - w) / 2, by = (UI_SCREEN_H - h) / 2 - 8, ln;
     const char *p = text;
     gfx_shadow(NINE_SHADOW14, bx, by, w, h, 0x000000, 160);
-    gfx_nine(NINE_R14, bx, by, w, h, 0x232a3b, 250);
+    gfx_nine(NINE_R14, bx, by, w, h, 0x1b2a46, 250);
     gfx_text(FONT_BODY, bx + 16, by + 12, title, UI_TEXT, 255, w - 32);
     for (ln = 0; ln < 3 && *p; ln++) {
         char line[200];
@@ -412,8 +412,8 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     if (broken) { snprintf(a, sizeof(a), ", %d broken", broken); strncat(s, a, sizeof(s) - strlen(s) - 1); }
     gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 9, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
     if (!g_n) {
-        if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (Settings > Wi-Fi network) and press START to read it.");
-        else snprintf(s, sizeof(s), "The catalogue is empty. Join a network (Settings > Wi-Fi network) and press START to read it.");
+        if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (Settings > Network) and press START to read it.");
+        else snprintf(s, sizeof(s), "The catalogue is empty. Join a network (Settings > Network) and press START to read it.");
         box(g_catmode ? "No packages" : "No catalogue", s, 110);
     } else if (!p) {
         gfx_text(FONT_BODY, LX + 12, 40, "Nothing in this section yet", UI_MUTED, 255, 0);
@@ -460,7 +460,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
             if (st == ST_CURRENT) chip(LX + LW - 8, y + 2, "Installed", 0x1f5f4a, 0xd1fae5);
             else if (st == ST_UPDATE) chip(LX + LW - 8, y + 2, "Update", 0x7c5a12, 0xfff3c4);
             else if (st == ST_BROKEN) chip(LX + LW - 8, y + 2, "Broken", 0x7f1d1d, 0xfecaca);
-            else if (st == ST_LOCAL) chip(LX + LW - 8, y + 2, "Installed", 0x2a3142, UI_SUB);
+            else if (st == ST_LOCAL) chip(LX + LW - 8, y + 2, "Installed", 0x1e2c4a, UI_SUB);
             else chip(LX + LW - 8, y + 2, "Get", 0x3a4560, 0xffffff);
         }
     }
