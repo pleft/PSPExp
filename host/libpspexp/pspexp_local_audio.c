@@ -48,6 +48,16 @@ void pspexp_la_close(PspExpLocalAudio *la)
     la->pid = -1;
 }
 
+/* a processor under 1.5 GHz (the GameShell's 1.2 GHz Cortex-A7): 20 ms made
+ * pw-play starve there now and then (2026-10-03), so it gets 60 */
+static int slow_board(void)
+{
+    FILE *f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r");
+    long khz = 0;
+    if (f) { if (fscanf(f, "%ld", &khz) != 1) khz = 0; fclose(f); }
+    return khz > 0 && khz < 1500000;
+}
+
 static int la_open(PspExpLocalAudio *la, uint32_t rate)
 {
     int sv[2];
@@ -59,7 +69,7 @@ static int la_open(PspExpLocalAudio *la, uint32_t rate)
     posix_spawn_file_actions_t fa;
     pid_t pid;
     snprintf(r, sizeof(r), "%u", (unsigned)rate);
-    snprintf(lat, sizeof(lat), "%s", getenv("PSPEXP_BT_LATENCY") ? getenv("PSPEXP_BT_LATENCY") : "20ms");
+    snprintf(lat, sizeof(lat), "%s", getenv("PSPEXP_BT_LATENCY") ? getenv("PSPEXP_BT_LATENCY") : slow_board() ? "60ms" : "20ms");
     if (!getenv("XDG_RUNTIME_DIR")) {   /* a system service has none: PipeWire's socket is the user's */
         snprintf(uid_dir, sizeof(uid_dir), "/run/user/%u", (unsigned)getuid());
         setenv("XDG_RUNTIME_DIR", uid_dir, 0);

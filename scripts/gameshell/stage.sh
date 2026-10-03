@@ -79,12 +79,20 @@ Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin
 ExecStart=$CONSOLE --shell /usr/bin/bash --launcher --mirror /dev/fb0 --usb --tcp 192.168.50.2
 Restart=always
 RestartSec=2
+# real-time priority allowed: its programs' sound to Bluetooth (pw-play) starved without it on the GameShell
+LimitRTPRIO=95
+LimitNICE=-19
+LimitMEMLOCK=4194304
 
 [Install]
 WantedBy=multi-user.target
 U
 	gs_copy "$S/pspexp-term.service" 0644 0 0 /etc/systemd/system/pspexp-term.service
 	gs_link /etc/systemd/system/pspexp-term.service /etc/systemd/system/multi-user.target.wants/pspexp-term.service
+	# the user's PipeWire (no login: lingering) may take real-time priority, as
+	# PipeWire's own 25-pw-rlimits.conf asks for its group, which no login sets here
+	printf '%s\n' '[Service]' 'LimitRTPRIO=95' 'LimitNICE=-19' 'LimitMEMLOCK=4194304' > "$S/pspexp-rt.conf"
+	gs_copy "$S/pspexp-rt.conf" 0644 0 0 /etc/systemd/system/user@.service.d/pspexp-rt.conf
 
 	# USB access to the PSP, the virtual keypad, the audio FIFO, ALSA into it
 	{

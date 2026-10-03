@@ -1343,7 +1343,16 @@ PSPExp board (Raspberry Pi OS ships with that check off, Debian does not).
 pspexp-core installs `/etc/wireplumber/wireplumber.conf.d/80-pspexp-bluez.conf`
 (`monitor.bluez.seat-monitoring = disabled`; read when WirePlumber starts,
 so after a reboot or `systemctl --user restart wireplumber`). Then the
-FreeBuds connected to the GameShell and took its sound.
+FreeBuds connected to the GameShell and took its sound. There a song then
+stuttered: measured while it played, pw-play starved about 6 times in 4 s
+(PipeWire's ERR count), the CPU shared between the governor's thread (38 %),
+WirePlumber, the console, ffmpeg and pw-play, none of them real-time
+(RTKit grants only logged-in users, and PipeWire's rlimits file is for a
+group no login sets). Now `user@.service` gets `LimitRTPRIO=95` (and nice,
+memlock) through a drop-in, and so does `pspexp-term.service`, whose
+pw-play children inherit it (`stage.sh`, `install.sh`): PipeWire's data
+threads ran at FIFO 83-88 and the Bluetooth sink's errors stopped (2 in all);
+and pw-play asks for 60 ms instead of 20 on a processor under 1.5 GHz.
 
 **The board's side.** The console is a system service, so the user's
 PipeWire must run without a login: `install.sh` turns on lingering

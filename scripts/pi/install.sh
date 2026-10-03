@@ -140,10 +140,17 @@ Environment=PSPEXP_TERM=1 HOME=$H SHELL=${SH:-/bin/bash} PATH=/usr/local/bin:/us
 ExecStart=$CONSOLE --shell ${SH:-/bin/bash} --launcher --usb
 Restart=always
 RestartSec=2
+# real-time priority allowed: its programs' sound to Bluetooth (pw-play) starved without it on the GameShell
+LimitRTPRIO=95
+LimitNICE=-19
+LimitMEMLOCK=4194304
 
 [Install]
 WantedBy=multi-user.target
 U
+# the user's PipeWire may take real-time priority with nobody logged in (Bluetooth sound)
+sudo install -d -m 0755 /etc/systemd/system/user@.service.d
+printf '%s\n' '[Service]' 'LimitRTPRIO=95' 'LimitNICE=-19' 'LimitMEMLOCK=4194304' | sudo tee /etc/systemd/system/user@.service.d/pspexp-rt.conf >/dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable pspexp-term >/dev/null 2>&1
 sudo systemctl restart pspexp-term
