@@ -602,7 +602,8 @@ it, not yet on the PSP):
   user's data folder (`--save-path`). 320x240, shown 4:3 in the middle;
   cross confirms (Z), circle / triangle / START the menu (X), square held
   runs (Shift). The title, a new game and its opening scene drawn right in
-  PPSSPP at 26-29 fps.
+  PPSSPP at 26-29 fps. The GameShell's EasyRPG (armhf) is built the same way under
+  emulation (about 20 min on the Mac) and published; not yet run there.
 
 DreamChess (`dreamchess`, 2026-10-01; 30 fps on the PSP-1000 with scripted
 keys, not yet played by hand): 3D chess against its engine, at 480x272. The d-pad or the nub moves the
