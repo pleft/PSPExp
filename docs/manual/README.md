@@ -10,7 +10,7 @@ What you get on the PSP:
 
 - **A launcher made for the PSP's screen**: games, emulated systems, apps
   and settings, with covers, favourites and search.
-- **Games the PSP never had**: Celeste 64 (the 3D Celeste, on a Pi), Unreal Tournament (on a Pi), Doom (Freedoom), Quake, Quake II (demo), Luanti (Minetest, on a Pi), Lugaru HD, AssaultCube (online), Cave Story,
+- **Games the PSP never had**: Celeste 64 (the 3D Celeste, on a Pi), Unreal Tournament (on a Pi), Doom (Freedoom), Quake, Quake II (demo), Luanti (Minetest, on a Pi), Lugaru HD, AssaultCube (online), Command & Conquer and Red Alert, Cave Story,
   Dink Smallwood, The Ur-Quan Masters (Star Control II), Hurrican, Egoboo, Zelda: Mystery of Solarus DX, SuperTux, OpenTyrian, Simutrans, OpenTTD, the RPGs Alter
   A.I.L.A. Genesis and Theia: The Crimson Eclipse, classic Revolution adventures and more, installed from the **Packages** app in a couple of presses.
 - **Emulators**: NES, SNES, Mega Drive, Game Boy, Game Boy Advance, Atari

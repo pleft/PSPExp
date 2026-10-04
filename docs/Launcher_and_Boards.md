@@ -732,6 +732,25 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **Command & Conquer and Red Alert** (`cnc`, `redalert`, 2026-10-04):
+  Vanilla Conquer (the source EA published in 2020, made portable: SDL2,
+  8-bit frames, `scripts/packages/build-vanillaconquer.sh`, package
+  `pspexp-vanillaconquer`), drawn by the PSP as CLUT8 pages, so every glibc
+  board; 25-28 fps into PPSSPP. The data is EA's freeware release (2007,
+  2008) as archived from EA's page on archive.org ("Command & Conquer
+  Classics Original Freeware Releases 2007-2010": the GDI disc, Red Alert's
+  Allied disc, EA's licence agreement inside), downloaded at install by
+  `cnc-freeware` / `redalert-freeware` (`_discinstaller.sh`: SHA-256
+  pinned, the disc image out of the RAR, its MIX files out of the image
+  with 7z). OpenRA's quick-install pack was tried first: it lacks the movies
+  (Red Alert's first start and campaign crash on a missing movie, without
+  PSPExp too) and the skirmish maps. With the discs: the campaign's video
+  briefings, the skirmish map list, C&C's interlaced intro. Its 640x400
+  stays whole (`PSPEXP_TEX_HALF=0`: halved to 320x200 the menus could not
+  be read); the dialog text is small at 480x272. Mouse as the original: nub
+  the pointer, cross / circle the buttons, d-pad scrolls (arrows), START
+  the options. Play past the menus not reached by script (its dialogs want
+  clicks in the game's own coordinates).
 - **Unreal Tournament: GOTY** (`ut99`, Pi only, 2026-10-04): free since
   Epic allowed OldUnreal to distribute it (the disc image on archive.org,
   their patch on GitHub). The installer runs OldUnreal's own Linux

@@ -1,0 +1,12 @@
+#!/bin/sh
+# cnc-freeware: Command & Conquer (Westwood, 1995; the Gold edition), EA's
+# freeware release (2007), its GDI disc, downloaded at install
+# (_discinstaller.sh), played by Vanilla Conquer's VanillaTD. Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_discinstaller.sh"
+ID=cnc-freeware TITLE="Command & Conquer" VERSION=1.0-pspexp1 PROGRAM=vanillatd
+URL=https://archive.org/download/official-cn-ctiberian-sun_202510/GDI95.iso
+SHA=c90b284d30ae48f7a2f5a92e7d70915f3c5562d9e8a149db920a6a6378c98462 SIZE="609 MB"
+ABOUT=" Westwood's 1995 real-time strategy game, GDI against the Brotherhood
+ of Nod: EA's freeware release of the Gold edition, for Vanilla Conquer."
+build_discinstaller "$1"

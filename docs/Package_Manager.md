@@ -268,7 +268,12 @@ whose short-lived link is asked for at each install); unpacked with unar
 (RAR, ZIP; tar for a .tar.gz, .tar.bz2 or .tar.xz, which unar would only decompress under the name game.part; unar with `-D`, so an archive of several
 top-level items is not wrapped in a folder named after the download), or
 kept whole (`KEEP=`: a Solarus quest's `.solarus` file). `theia`,
-`hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way. Data a
+`hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way.
+EA's freeware discs (`cnc-freeware`, `redalert-freeware`) use
+`_discinstaller.sh`: the release (a RAR or an ISO) downloaded and checked,
+the disc image out of it, the game's MIX files out of the image with 7z.
+Unreal Tournament (`ut99`) runs OldUnreal's own installer, pinned, after the
+terms are accepted (`terms=`). Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 

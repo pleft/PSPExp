@@ -35,6 +35,7 @@
 | `recipes/luanti/cover.png` | Debian's luanti package, its 128x128 icon | CC BY-SA 3.0 (Luanti's icon) |
 | `recipes/uqm/cover.png` | a screenshot of its main menu in PPSSPP, cropped and scaled | CC BY-NC-SA 2.5 (UQM's content) |
 | `recipes/hurrican/cover.png` | a screenshot of its first level in PPSSPP, cropped and scaled | freeware (Hurrican, Poke53280) |
+| (`recipes/cnc`, `recipes/redalert`: no cover) | none hosted: the box art is EA's; the launcher generates one | |
 | (`recipes/celeste64`: no cover) | none hosted: the game's art is Maddy Makes Games'; the launcher generates one | |
 | (`recipes/zsdx`: no cover) | none hosted: the game's title is its own art and the Zelda logo; the launcher generates one | |
 | `recipes/egoboo/cover.png` | a screenshot of its title menu in PPSSPP, cropped and scaled | GPL-3.0 (Egoboo's assets) |

@@ -1,0 +1,29 @@
+#!/bin/sh
+# pspexp-vanillaconquer: Vanilla Conquer (GPL-3.0), VanillaTD and VanillaRA,
+# built by scripts/packages/build-vanillaconquer.sh ARCH. Installs
+# /usr/lib/pspexp/vanillaconquer/; the games' data comes with cnc-freeware and
+# redalert-freeware (EA's freeware, downloaded). Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/vanillaconquer"
+[ -x "$B/vanillara" ] && [ -s "$B/depends.txt" ] || { echo "no $B/vanillara: scripts/packages/build-vanillaconquer.sh $ARCH first" >&2; exit 1; }
+V=2026.07+ce83b59-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/vanillaconquer" "$W/root/usr/share/doc/pspexp-vanillaconquer"
+install -m 755 "$B/vanillara" "$B/vanillatd" "$W/root/usr/lib/pspexp/vanillaconquer/"
+echo "Vanilla Conquer (https://github.com/TheAssemblyArmada/Vanilla-Conquer, ce83b59), GPL-3.0, from the source EA published in 2020; built with SDL2 and OpenAL by PSPExp. The games' data comes with cnc-freeware and redalert-freeware (downloaded)." > "$W/root/usr/share/doc/pspexp-vanillaconquer/README"
+cat > "$W/control" <<C
+Package: pspexp-vanillaconquer
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Vanilla Conquer, Command & Conquer and Red Alert's engine, for PSPExp
+ VanillaTD and VanillaRA, portable builds of the original games from the
+ source EA published. Their data comes with cnc-freeware and
+ redalert-freeware. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-vanillaconquer_${V}_$ARCH.deb"
