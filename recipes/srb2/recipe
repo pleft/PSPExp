@@ -1,0 +1,29 @@
+# Sonic Robo Blast 2: the SRB2 team's free 3D Sonic fan game (2.2.15), its
+# program built by PSPExp (package pspexp-srb2) and its assets downloaded at
+# install from the project's release (srb2). Its software renderer at the
+# PSP's own 480x272, drawn by the PSP as CLUT8 pages. The PSP's controller is
+# its gamepad: nub moves, cross jumps, square spins, L / R turn the camera,
+# START the menu, SELECT the scores, d-pad left / right the weapon rings in
+# match modes; in menus the d-pad moves, cross chooses, circle goes back.
+# The first run writes ~/.srb2/autoexec.cfg for START, SELECT, L and R
+# (package srb2). Online games through the board's network.
+
+[package]
+id=srb2
+title=Sonic Robo Blast 2
+description=Sonic in 3D: a free fan game with seven zones, Tails, Knuckles, Amy and more, and online play. Drawn by the PSP.
+category=game
+license=GPL-2.0 (SRB2); its assets under their own licences, downloaded at install
+version=1
+
+[debian]
+apt=srb2
+
+[entry]
+title=Sonic Robo Blast 2
+type=game
+description=Sonic in 3D: a free fan game with seven zones, Tails, Knuckles, Amy and more, and online play. Drawn by the PSP's graphics chip.
+icon=gamepad-2
+exec=/usr/games/srb2
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+graphics=sdl

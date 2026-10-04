@@ -748,6 +748,20 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   steers, cross accelerates, circle brakes, L item, R drift, square look
   back, triangle camera, START menu, SELECT pause); the d-pad's left / right
   also steer as the arrow keys. Online races through the board.
+- **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
+  Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
+  version. Built from the release tag (`scripts/packages/build-srb2.sh`,
+  `pspexp-srb2`; its assets' MD5s are in the source, so the build needs
+  none of them); the installer `srb2` downloads the release's
+  `SRB2-v2215-Full.zip` (179 MB; its Windows program comes along unused).
+  Unlike SRB2Kart's, SRB2 2.2's software renderer runs at the PSP's own
+  480x272. Greenflower Zone at 22-23 fps into PPSSPP (its cap 35), 44 KB a
+  frame as CLUT8 pages. The PSP's controller is its gamepad; SDL lists
+  START and SELECT as the 7th and 8th buttons, where SRB2's defaults expect
+  an Xbox pad's Back (screenshot) and Start (menu), so the first run writes
+  `~/.srb2/autoexec.cfg`: START the menu, SELECT the scores, L / R turn
+  the camera (no right stick). Nub moves, cross jumps, square spins; in
+  menus the d-pad moves, cross chooses, circle goes back.
 - **Command & Conquer and Red Alert** (`cnc`, `redalert`, 2026-10-04):
   Vanilla Conquer (the source EA published in 2020, made portable: SDL2,
   8-bit frames, `scripts/packages/build-vanillaconquer.sh`, package

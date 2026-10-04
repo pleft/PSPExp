@@ -68,6 +68,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's first mission at about 20 fps in the emulator, the game at full speed; not yet measured on the PSP |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): about 21 fps in the emulator; free with Epic's permission, its terms accepted in Packages |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): the Pi itself runs it at 60 fps; about 20 fps in the emulator, not yet measured on the PSP |
+| Sonic Robo Blast 2 | drawn by the PSP: about 23 fps in the emulator (the game's own cap 35) |
 | SRB2Kart | drawn by the PSP: about 23 fps in the emulator (the game's own cap 35); races online |
 | Command & Conquer, Red Alert | drawn by the PSP: 25-28 fps in the emulator; EA's freeware, about 600 MB each to download |
 | AssaultCube | drawn by the PSP: about 25 fps in the emulator, online matches; not yet measured on the PSP |

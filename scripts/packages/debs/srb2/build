@@ -1,0 +1,22 @@
+#!/bin/sh
+# srb2: an installer for Sonic Robo Blast 2 2.2.15's assets (srb2.pk3, zones,
+# characters, music; under the licences of their LICENSE files): the board
+# downloads the project's SRB2-v2215-Full.zip from its GitHub release when it is
+# installed (_installer.sh; the zip's Windows program comes along unused),
+# played by pspexp-srb2's program at the PSP's own 480x272 (SRB2Kart's renderer
+# needs 640x400; SRB2 2.2's does not). The first run writes ~/.srb2/autoexec.cfg:
+# SDL lists the PSP's START and SELECT as the 7th and 8th buttons, where SRB2
+# expects an Xbox pad's Back and Start, so START is bound to its menu, SELECT to
+# the scores, and L / R turn the camera (the PSP has no right stick).
+# Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=srb2 TITLE="Sonic Robo Blast 2" VERSION=2.2.15-pspexp1
+URL=https://github.com/STJr/SRB2/releases/download/SRB2_release_2.2.15/SRB2-v2215-Full.zip
+SHA=3eda3080ab87940fca5e4dcd22b8e041dc1d9e65bfe9177bff68383e9bd58a10 SIZE="179 MB" TOP=""
+RUN='[ -f "$HOME/.srb2/autoexec.cfg" ] || { mkdir -p "$HOME/.srb2"; printf "%s\n" "setcontrol systemmenu joy7" "setcontrol scores tab joy8" "setcontrol turnleft joy5" "setcontrol turnright joy6" > "$HOME/.srb2/autoexec.cfg"; }
+SRB2WADDIR="$G" exec /usr/lib/pspexp/srb2/srb2 -width 480 -height 272 "$@"'
+DEPENDS=pspexp-srb2
+ABOUT=" The SRB2 team's 3D Sonic fan game: its release's assets, run with
+ PSPExp's build of its program."
+build_installer "$1"
