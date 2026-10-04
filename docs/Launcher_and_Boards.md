@@ -774,6 +774,26 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   OpenArena's; the nub moves ET's own menu cursor (small, from the top-left
   corner), R clicks; the arrow keys also walk its menus. Arm64 only (the
   official release has no 32-bit ARM build).
+- **Diablo** (`devilutionx`, 2026-10-04): Blizzard's 1996 action RPG on
+  DevilutionX 1.5.5, with the shareware data (the cathedral, the Warrior),
+  or the player's own DIABDAT.MPQ (full game) in
+  `~/.local/share/diasurgical/devilution`, which the launch script then
+  plays instead. The project's own AArch64 build links the system's SDL2,
+  so the layer takes it unbuilt; the installer downloads it and the
+  shareware `spawn.mpq` from the project's assets release, pinned, once
+  DevilutionX's licence (Sustainable Use: non-commercial, accepted by
+  using it) is accepted (`terms=`). At 640x480 the picture was stretched to
+  16:9: the launch script's first `diablo.ini` sets 854x480, shrunk to the
+  PSP's screen, and a pad layout for the PSP (its defaults put the main
+  action on circle and cancel on cross, and Character and Inventory on
+  triggers the PSP lacks; Select combos fired the shoulder's own action
+  too): cross acts, square picks up, triangle casts, circle cancels, L / R
+  potions, the d-pad (walking is the nub's) inventory up, character left,
+  spellbook right, quests down. A new hero is named by DevilutionX itself
+  when the last input came from a pad (no keyboard keys mapped). Menus 24
+  fps into PPSSPP, 0.4-87 KB a frame (CLUT8 pages). Tested unattended with
+  `PSPEXP_SCRIPT`'s new `pad:` buttons. Arm64 only (no official 32-bit ARM
+  build; a build for the GameShell is possible later).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,

@@ -1,0 +1,37 @@
+# Diablo (Blizzard, 1996) on DevilutionX 1.5.5, with the shareware data: the
+# project's own Linux AArch64 build (it links the system's SDL2) and the
+# shareware spawn.mpq from the project's assets, downloaded at install
+# (package devilutionx). DevilutionX's licence (free for personal and
+# non-commercial use, accepted by using it) must be accepted first: Packages
+# asks. Drawn by the PSP at 854x480 shrunk to its screen. The PSP's
+# controller is DevilutionX's gamepad, laid out by the launch script's
+# diablo.ini: nub walks (and moves through the inventory), cross attacks,
+# talks and takes, square picks up and opens, triangle casts, circle cancels,
+# L / R a health / mana potion, the d-pad the inventory (up), character
+# (left), spellbook (right) and quests (down), START the menu, SELECT the
+# quick spells. A new hero gets a name of its own (no typing). Your own full
+# game: DIABDAT.MPQ in ~/.local/share/diasurgical/devilution. Arm64 boards.
+
+[package]
+id=devilutionx
+title=Diablo (shareware)
+description=Blizzard's 1996 action RPG on DevilutionX: the shareware's cathedral levels with the Warrior, or your own full game. Drawn by the PSP.
+category=game
+license=DevilutionX: Sustainable Use License (non-commercial); Diablo's shareware data, downloaded at install
+version=1
+terms=DevilutionX's licence terms|https://github.com/diasurgical/devilutionX/blob/1.5.5/LICENSE.md
+
+[debian]
+apt=devilutionx
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Diablo
+type=game
+description=Blizzard's 1996 action RPG on DevilutionX: the shareware's cathedral with the Warrior, or your own full game. Drawn by the PSP's graphics chip.
+icon=swords
+exec=/usr/games/devilutionx
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+graphics=sdl

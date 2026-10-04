@@ -276,7 +276,10 @@ Unreal Tournament (`ut99`) runs OldUnreal's own installer, pinned, after the
 terms are accepted (`terms=`). Wolfenstein: Enemy Territory (`etlegacy`)
 downloads ET: Legacy's official AArch64 release and id's ET 2.60 for Linux
 (its pak0-2.pk3 and licence agreement), both pinned, as ET: Legacy's own
-installer does, after id's licence agreement is accepted. Data a
+installer does, after id's licence agreement is accepted. Diablo
+(`devilutionx`) downloads DevilutionX's own AArch64 build and the shareware
+`spawn.mpq` from the project's assets release, after DevilutionX's licence
+(Sustainable Use: accepted by using it) is accepted. Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 

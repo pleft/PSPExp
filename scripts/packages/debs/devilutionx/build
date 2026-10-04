@@ -1,0 +1,116 @@
+#!/bin/sh
+# devilutionx: an installer for DevilutionX 1.5.5 (the Diablo engine made
+# portable; its own Sustainable Use License: free for personal and
+# non-commercial use, accepted by using it) with Diablo's shareware data.
+# The licence must be accepted first: the recipe names it (terms=), Packages
+# asks on the PSP, and pspexp-pkg-apt records the acceptance in
+# /var/lib/pspexp/terms/devilutionx, without which this refuses. Its
+# postinst downloads the project's own Linux AArch64 build
+# (it links the system's SDL2, so the SDL layer takes it as it is) and the
+# shareware spawn.mpq from the project's assets release (diasurgical/
+# devilutionx-assets v5), both checked by SHA-256; nothing is hosted by
+# PSPExp. The launch script writes DevilutionX's diablo.ini the first time:
+# 854x480 (the PSP's shape; 640x480 was stretched) and a PSP layout for the
+# pad (cross acts, square picks up, triangle casts, circle cancels; the d-pad,
+# which only repeated the nub's walking, opens the inventory, character,
+# spellbook and quests: the PSP has no triggers for them). The full game is
+# played the same way with the player's own DIABDAT.MPQ in
+# ~/.local/share/diasurgical/devilution. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"
+V=1.5.5-pspexp1
+DX=https://github.com/diasurgical/devilutionX/releases/download/1.5.5/devilutionx-linux-aarch64.tar.xz
+DX_SHA=71f34342cd750dc6dec1effefa250e90a5fe0f127e79d4c9c66f4d07706c3442
+SP=https://github.com/diasurgical/devilutionx-assets/releases/download/v5/spawn.mpq
+SP_SHA=64427cd7c1ba904eaa2e0031c16a6b136d0ecef9abc888c5ff8344b459356e38
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/devilutionx" "$W/ctl"
+cat > "$W/root/usr/games/devilutionx" <<'S'
+#!/bin/sh
+# Diablo on DevilutionX (package devilutionx: downloaded when it was installed)
+G=/usr/share/games/devilutionx
+[ -f "$G/.pspexp-installed" ] || { echo "DevilutionX is not there: install the package devilutionx again" >&2; exit 1; }
+C="$HOME/.local/share/diasurgical/devilution"
+if [ ! -f "$C/diablo.ini" ]; then   # the PSP's shape and buttons, once (DevilutionX keeps the rest)
+	mkdir -p "$C"
+	cat > "$C/diablo.ini" <<I
+[Graphics]
+Width=854
+Height=480
+
+[Padmapping]
+PrimaryAction=A
+SecondaryAction=X
+SpellAction=Y
+CancelAction=B
+MoveUp=
+MoveDown=
+MoveLeft=
+MoveRight=
+Inventory=Up
+Character=Left
+SpellBook=Right
+QuestLog=Down
+I
+fi
+# the player's own full game (DIABDAT.MPQ in $C) when it is there, else the shareware
+if ls "$C" 2>/dev/null | grep -qi '^diabdat\.mpq$'; then exec "$G/devilutionx" --data-dir "$C" "$@"; fi
+exec "$G/devilutionx" --data-dir "$G" --spawn "$@"
+S
+chmod 755 "$W/root/usr/games/devilutionx"
+cat > "$W/root/usr/share/doc/devilutionx/README" <<D
+Diablo on DevilutionX 1.5.5. This package holds none of it: installing it
+downloads the DevilutionX project's own build
+  $DX (SHA-256 $DX_SHA)
+and Diablo's shareware data from the project's assets
+  $SP (SHA-256 $SP_SHA)
+into /usr/share/games/devilutionx. With your own DIABDAT.MPQ (the full game,
+from GOG or a CD) in ~/.local/share/diasurgical/devilution it plays that
+instead. Removing the package removes them.
+D
+cat > "$W/ctl/postinst" <<P
+#!/bin/sh
+# DevilutionX's release and the shareware data
+set -e
+[ "\$1" = configure ] || exit 0
+G=/usr/share/games/devilutionx
+C=/var/cache/devilutionx
+[ -f /var/lib/pspexp/terms/devilutionx ] || { echo "DevilutionX: its licence must be accepted first (Packages asks; or: pspexp-pkg install --accept-terms devilutionx)" >&2; exit 1; }
+[ -f "\$G/.pspexp-installed" ] && [ "\$(cat "\$G/.pspexp-installed")" = "$DX_SHA $SP_SHA" ] && exit 0
+rm -rf "\$C" "\$G.new"; mkdir -p "\$C" "\$G.new"
+fail() { rm -rf "\$C" "\$G.new"; echo "\$1" >&2; exit 1; }
+echo "Downloading DevilutionX (22 MB) and Diablo's shareware data (25 MB)..."
+curl -fL --retry 3 --connect-timeout 20 -o "\$C/dx.tar.xz" "$DX" || fail "the download failed: install it again"
+echo "$DX_SHA  \$C/dx.tar.xz" | sha256sum -c --quiet - || fail "DevilutionX's download is not the expected file"
+curl -fL --retry 3 --connect-timeout 20 -o "\$G.new/spawn.mpq" "$SP" || fail "the download failed: install it again"
+echo "$SP_SHA  \$G.new/spawn.mpq" | sha256sum -c --quiet - || fail "the shareware data is not the expected file"
+tar -xJf "\$C/dx.tar.xz" -C "\$G.new" --no-same-owner
+rm -f "\$G.new/devilutionx.deb" "\$G.new/devilutionx.rpm"   # (other packagings of the same program)
+[ -x "\$G.new/devilutionx" ] || fail "no program in DevilutionX's download"
+chmod -R u=rwX,go=rX "\$G.new"
+echo "$DX_SHA $SP_SHA" > "\$G.new/.pspexp-installed"
+rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
+P
+cat > "$W/ctl/postrm" <<'R'
+#!/bin/sh
+# what the installer downloaded goes with the package
+set -e
+case "$1" in remove|purge) rm -rf /usr/share/games/devilutionx /usr/share/games/devilutionx.new /var/cache/devilutionx ;; esac
+exit 0
+R
+cat > "$W/ctl/control" <<C
+Package: devilutionx
+Version: $V
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: contrib/games
+Priority: optional
+Depends: curl, ca-certificates, tar, xz-utils, libsdl2-2.0-0, libsdl2-image-2.0-0, libsodium23, zlib1g, libbz2-1.0
+Description: Diablo on DevilutionX, with the shareware (installer)
+ Blizzard's 1996 action RPG on DevilutionX: installing this package
+ downloads the project's Linux AArch64 build and Diablo's shareware data
+ (the first two dungeon levels' worth: the cathedral). The package itself
+ holds none of it. Installer by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/ctl/control" "$OUT/devilutionx_${V}_all.deb"

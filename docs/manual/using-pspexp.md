@@ -100,7 +100,7 @@ Raspberry Pi).
 
 A few games come with terms to accept first (Unreal Tournament: the Epic
 Games Terms of Service; Wolfenstein: Enemy Territory: id Software's licence
-agreement). Packages shows them with where to read them; cross
+agreement; Diablo: DevilutionX's licence). Packages shows them with where to read them; cross
 accepts and installs, circle declines and nothing is downloaded.
 
 Installing runs in the background: the progress shows, and the game

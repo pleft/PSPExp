@@ -1671,12 +1671,16 @@ static void setup_vjoy(void)
 #endif
 }
 
+static uint32_t script_pad;   /* PSPEXP_SCRIPT's "pad:" buttons, held as if pressed on the PSP */
+
 static void feed_input(void)
 {
     const PspExpInput *in = pspexp_input(S.ctx);
+    PspExpInput with_script;
     uint32_t pressed, released;
     int i;
     if (in->sequence == 0 && in->timestamp_us == 0) return;
+    if (script_pad) { with_script = *in; with_script.buttons |= script_pad; in = &with_script; }
     pressed = in->buttons & ~S.prev_buttons;
     released = S.prev_buttons & ~in->buttons;
     S.prev_buttons = in->buttons;
@@ -2383,7 +2387,10 @@ static void script_tick(void)
     Uint32 now = SDL_GetTicks();
     if (!env) return;
     if (!script) { script = strdup(env); next = script; t0 = now; }
+    static uint32_t pad_tapped;
+    static Uint32 pad_up_at;
     if (tapped && now >= tap_up_at) { push_key(tapped, 0); tapped = 0; }
+    if (pad_tapped && now >= pad_up_at) { script_pad &= ~pad_tapped; pad_tapped = 0; }
     while (next && *next) {
         char name[32];
         const char *start = next;
@@ -2421,6 +2428,18 @@ static void script_tick(void)
                 logf_("script: %cclick at %ld ms", mode ? mode : ' ', at);
                 continue;
             }
+        }
+        if (!strncmp(name, "pad:", 4)) {   /* "pad:cross": a PSP button, through the same path as the PSP's own
+                                            * (the virtual controller and its keys): games that tell a pad from a keyboard */
+            int b;
+            for (b = 0; b < B_COUNT; b++) if (!strcmp(name + 4, BUTTON_NAMES[b])) break;
+            if (b < B_COUNT) {
+                if (mode == '+') script_pad |= BUTTON_BITS[b];
+                else if (mode == '-') script_pad &= ~BUTTON_BITS[b];
+                else { script_pad |= BUTTON_BITS[b]; pad_tapped |= BUTTON_BITS[b]; pad_up_at = now + 150; }
+                logf_("script: %c%s at %ld ms", mode ? mode : ' ', name, at);
+            }
+            continue;
         }
         key = key_from_name(name);
         if (mode == '+') push_key(key, 1);
