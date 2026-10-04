@@ -67,6 +67,7 @@ Measured on the PSP-1000 with a Pi 400:
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
 | Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's first mission at about 20 fps in the emulator, the game at full speed; not yet measured on the PSP |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): the Pi itself runs it at 60 fps; about 20 fps in the emulator, not yet measured on the PSP |
+| Lugaru HD | drawn by the PSP: about 20 fps in the emulator, not yet measured on the PSP |
 | Quake II (demo) | drawn by the PSP, like Quake: 22-24 fps in the emulator, not yet measured on the PSP |
 | Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): 20-22 fps in the emulator |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); about 30 fps in the emulator, not yet measured on the PSP |

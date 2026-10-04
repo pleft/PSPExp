@@ -732,6 +732,21 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **Lugaru HD** (`lugaru`, 2026-10-04): Wolfire's 3D rabbit fighter, OSS
+  Lugaru 1.2 from Debian (code GPL, data CC BY-SA; on the Vita, not the
+  PSP). Its fixed-function OpenGL is drawn by the PSP's GE: menus, the
+  campaign map and the tutorial level right in PPSSPP at 19-21 fps, but
+  **416 KB a frame** in play (its geometry sent anew each frame: the most
+  the PSP renderer has carried; to be measured on the PSP). Lugaru wants a
+  player name typed, through SDL's text input, which the PSP's buttons do
+  not give: `pspexp-lugaru`'s launch script writes a player "Player" (the
+  users file as `Account::saveFile` writes it, big-endian) and 480x272
+  settings on the first run, then starts Debian's lugaru. Mouse and keys:
+  nub the pointer and the camera, cross attacks and clicks, the d-pad
+  WASD, circle jumps, square crouches / rolls, triangle draws (E), L throws
+  (Q), START Escape. Reached by script with the new pointer commands of
+  `PSPEXP_SCRIPT` (`~DXxDY`, `click`): Lugaru builds its cursor from the
+  relative motion only, from its corner.
 - **Celeste 64: Fragments of the Mountain** (`celeste64`, Pi only,
   2026-10-04), chosen as PSPExp's showcase: Maddy Makes Games' free 3D
   platformer (2024), on no PSP or Vita. Their own Linux arm64 build, which

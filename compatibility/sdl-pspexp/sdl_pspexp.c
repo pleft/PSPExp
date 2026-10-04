@@ -2396,6 +2396,32 @@ static void script_tick(void)
         while (*next && *next != ',' && k < 31) name[k++] = *next++;
         name[k] = 0;
         if (*next == ',') next++;
+        {   /* the pointer: "@XxY" moves it there (window pixels); "click" taps the left button,
+             * "+click" / "-click" hold and let go (menus that want a mouse, tested unattended) */
+            int mx, my;
+            if ((name[0] == '@' || name[0] == '~') && sscanf(name + 1, "%dx%d", &mx, &my) == 2) {
+                /* "~DXxDY": a move by that much (games that make their own cursor from the motion,
+                 * Lugaru's starting at its corner) */
+                SDL_Event ev;
+                int rx = name[0] == '~' ? mx : mx - (int)S.px, ry = name[0] == '~' ? my : my - (int)S.py;
+                if (name[0] == '~') { mx = (int)S.px + rx; my = (int)S.py + ry; }
+                SDL_zero(ev);
+                ev.type = SDL_MOUSEMOTION; ev.motion.x = mx; ev.motion.y = my;
+                ev.motion.xrel = rx; ev.motion.yrel = ry;
+                ev.motion.state = S.mbuttons; ev.motion.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
+                S.rel_x += (float)rx; S.rel_y += (float)ry;   /* for games that poll the motion */
+                S.px = (float)mx; S.py = (float)my;
+                SDL_PushEvent(&ev);
+                logf_("script: pointer to %d,%d at %ld ms", mx, my, at);
+                continue;
+            }
+            if (!strcmp(name, "click")) {
+                push_mouse_button(SDL_BUTTON_LEFT, mode != '-');
+                if (!mode) push_mouse_button(SDL_BUTTON_LEFT, 0);
+                logf_("script: %cclick at %ld ms", mode ? mode : ' ', at);
+                continue;
+            }
+        }
         key = key_from_name(name);
         if (mode == '+') push_key(key, 1);
         else if (mode == '-') push_key(key, 0);
