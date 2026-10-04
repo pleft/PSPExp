@@ -265,8 +265,10 @@ the developer publishes it, checks a pinned SHA-256 and unpacks it, its
 control file. One builder makes them all, `scripts/packages/debs/_installer.sh`:
 a direct download (`URL=`) or an itch.io upload (`ITCH=user/game/upload`,
 whose short-lived link is asked for at each install); unpacked with unar
-(RAR, ZIP; tar for a .tar.gz), or kept whole (`KEEP=`: a Solarus quest's
-`.solarus` file). `theia`, `hurrican`, `egoboo` and `zsdx` came next the same way. Data a
+(RAR, ZIP; tar for a .tar.gz; unar with `-D`, so an archive of several
+top-level items is not wrapped in a folder named after the download), or
+kept whole (`KEEP=`: a Solarus quest's `.solarus` file). `theia`,
+`hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way. Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 

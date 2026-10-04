@@ -1,0 +1,31 @@
+# Quake II: id Software's demo (1997) on Debian's Yamagi Quake II with its
+# OpenGL 1 renderer, the world drawn by the PSP's GE through the SDL layer,
+# as Quake's. The demo is downloaded at install from the Yamagi project's
+# mirror of id's release (package quake2-demo). Keys only (the gamepad off:
+# Yamagi would read it as well): the d-pad and nub move and turn, cross fires
+# (and selects in menus), circle jumps, triangle crouches, square the next
+# weapon, L / R strafe, SELECT the inventory, START the menu. Quake II binds
+# no next weapon or crouch key by default: the first run adds them.
+
+[package]
+id=quake2
+title=Quake II (demo)
+description=id Software's 1997 first-person shooter against the Strogg, its demo levels on Yamagi Quake II: the 3D world drawn by the PSP.
+category=game
+license=GPL-2.0 (Yamagi Quake II); demo (Quake II, id Software, 1997), downloaded at install
+version=1
+
+[debian]
+apt=quake2-demo
+
+[entry]
+title=Quake II
+type=game
+description=id Software's 1997 first-person shooter against the Strogg: the demo's levels on Yamagi Quake II, its 3D drawn by the PSP's graphics chip.
+icon=swords
+exec=/usr/games/quake2-demo
+keys=cross=lctrl+return,circle=space,square=slash,triangle=c,l=comma,r=period,start=escape,select=tab,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+first-run=.yq2/baseq2/autoexec.cfg:bind / weapnext\nbind c +movedown\n
+graphics=opengl

@@ -718,6 +718,20 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   its defaults (cross Alt jumps, square Ctrl shoots, circle Shift the
   lightning, triangle Space the power line, R / L Right Ctrl / Shift grenade
   and smart bomb, SELECT Return cycles weapons, START Escape).
+- **Quake II** (`quake2`, 2026-10-04): id Software's demo on Debian's
+  Yamagi Quake II 8.50 with its OpenGL 1 renderer, which the SDL layer draws
+  on the PSP's GE (`graphics=opengl`, every glibc board): the demo's attract
+  loop right in PPSSPP at 22-24 fps, 150-220 KB a frame (immediate-mode
+  geometry). Its red frames are Quake II's damage flash (the GL1 renderer
+  on the Pi's own GPU shows the same). The demo's data is not hosted: the
+  installer `quake2-demo` downloads id's original release (39 MB) from the
+  Yamagi project's mirror and checks it; its several top-level items made
+  unar wrap them in a folder named after the download, so `_installer.sh`
+  now passes `-D`. Keys only (Yamagi would read the controller too): d-pad
+  and nub move and turn, cross fires and selects, circle jumps, triangle
+  crouches, square the next weapon, L / R strafe, SELECT the inventory,
+  START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
+  binding the next weapon and crouch, which Quake II leaves unbound.
 - **Open Surge** (`opensurge`, Pi only): built by
   `scripts/packages/build-opensurge.sh` (0.6.1.3, Allegro 5 with its SDL2
   backend, so its window, input, sound and GL are the layer's; Allegro's GTK

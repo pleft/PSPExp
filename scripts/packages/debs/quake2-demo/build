@@ -1,0 +1,17 @@
+#!/bin/sh
+# quake2-demo: an installer for id Software's Quake II demo (1997, its
+# baseq2 data: the first three levels) on Debian's Yamagi Quake II: the board
+# downloads the demo's original release from the Yamagi Quake II project's
+# mirror of id's files when it is installed (_installer.sh), nothing of it
+# hosted by PSPExp. Run with the OpenGL 1 renderer, which the SDL layer draws
+# on the PSP's GE. Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=quake2-demo TITLE="Quake II (demo)" VERSION=3.14-pspexp2
+URL=https://deponie.yamagi.org/quake2/idstuff/q2-314-demo-x86.exe
+SHA=7ace5a43983f10d6bdc9d9b6e17a1032ba6223118d389bd170df89b945a04a1e SIZE="39 MB" TOP="Install/Data"
+RUN='exec /usr/lib/yamagi-quake2/quake2 -datadir "$G" +set vid_renderer gl1 +set r_mode -1 +set r_customwidth 480 +set r_customheight 272 +set vid_fullscreen 0 "$@"'
+DEPENDS=yamagi-quake2
+ABOUT=" id Software's 1997 first-person shooter, its demo: the first levels of
+ the Strogg campaign, for Yamagi Quake II."
+build_installer "$1"

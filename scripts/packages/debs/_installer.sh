@@ -45,7 +45,7 @@ S
 	fi
 	case "$URL" in
 	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;
-	*) _unpack='unar -q -o "$C/x" "$C/game.part" >/dev/null' ;;
+	*) _unpack='unar -q -D -o "$C/x" "$C/game.part" >/dev/null' ;;   # -D: no folder of its own round an archive of several top-level items (named after game.part)
 	esac
 	[ -n "$KEEP" ] && { _unpack="mkdir -p \"\$C/x/g\" && mv \"\$C/game.part\" \"\$C/x/g/$KEEP\""; TOP=g; }
 	cat > "$_w/root/usr/share/doc/$ID/README" <<D
