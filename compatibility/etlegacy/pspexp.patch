@@ -1,0 +1,59 @@
+diff --git a/src/renderer/tr_bsp.c b/src/renderer/tr_bsp.c
+index 7c14d07..708750a 100644
+--- a/src/renderer/tr_bsp.c
++++ b/src/renderer/tr_bsp.c
+@@ -344,6 +344,12 @@ static shader_t *ShaderForShaderNum(int shaderNum, int lightmapNum)
+ 	}
+ 	dsh = &s_worldData.shaders[shaderNum];
+ 
++	// r_vertexLight (as ioquake3 has it): the map's vertex colours, not its lightmaps
++	if (lightmapNum >= 0 && ri.Cvar_Get("r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH)->integer)
++	{
++		lightmapNum = LIGHTMAP_BY_VERTEX;
++	}
++
+ 	shader = R_FindShader(dsh->shader, lightmapNum, qtrue);
+ 
+ 	// if the shader had errors, just use default shader
+diff --git a/src/renderer/tr_shader.c b/src/renderer/tr_shader.c
+index 89988eb..40f597c 100644
+--- a/src/renderer/tr_shader.c
++++ b/src/renderer/tr_shader.c
+@@ -2591,7 +2591,7 @@ static shader_t *GeneratePermanentShader(void)
+ 	return newShader;
+ }
+ 
+-#if 0 // To shut up compiler warnings until we use this function.
++#if 1 // used by r_vertexLight (PSPExp)
+ /**
+  * @brief If vertex lighting is enabled, only render a single pass, trying to guess
+  * which is the correct one to best aproximate what it is supposed to look like.
+@@ -2936,6 +2936,15 @@ static shader_t *FinishShader(void)
+ 		shader.sort = SS_OPAQUE;
+ 	}
+ 
++	// r_vertexLight (as ioquake3 has it): one pass per surface, the best of its stages lit by the
++	// vertex colours (a weak GPU, or the PSP's GE through PSPExp, draws each surface once)
++	if (ri.Cvar_Get("r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH)->integer && stage > 0)
++	{
++		VertexLightingCollapse();
++		stage            = 1;
++		hasLightmapStage = qfalse;
++	}
++
+ 	// look for multitexture potential
+ 	if (stage > 1 && CollapseMultitexture())
+ 	{
+diff --git a/src/renderer/tr_shader_program.c b/src/renderer/tr_shader_program.c
+index 2938d46..bf48986 100644
+--- a/src/renderer/tr_shader_program.c
++++ b/src/renderer/tr_shader_program.c
+@@ -70,7 +70,7 @@ void R_UseShaderProgram(shaderProgram_t *program)
+ 			shaderProgramInfo.currentProgram = program;
+ 		}
+ 	}
+-	else
++	else if (glUseProgramObjectARB)   // null on a driver without GL_ARB_shader_objects (no programs were made)
+ 	{
+ 		glUseProgramObjectARB(0);
+ 		shaderProgramInfo.currentProgram = NULL;

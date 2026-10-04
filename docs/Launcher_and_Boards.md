@@ -748,6 +748,31 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   steers, cross accelerates, circle brakes, L item, R drift, square look
   back, triangle camera, START menu, SELECT pause); the d-pad's left / right
   also steer as the arrow keys. Online races through the board.
+- **Wolfenstein: Enemy Territory** (`etlegacy`, 2026-10-04): the free team
+  shooter of 2003 on ET: Legacy 2.86.0, online (the live server list works)
+  or against Omni-bot bots (a game hosted from the menu fills with them).
+  ET: Legacy's own arm64 build has SDL linked in and not exported, out of
+  the layer's reach: the client is built against Debian's SDL2
+  (`scripts/packages/build-etlegacy.sh`, `pspexp-etlegacy`) with
+  `compatibility/etlegacy/pspexp.patch`: ioquake3's `r_vertexLight` back
+  (one pass a surface, the map's vertex colours: ET: Legacy had dropped it,
+  its collapse function left under `#if 0`), and `glUseProgramObjectARB(0)`
+  only when GLEW has it (ET calls it at every map load even with no shader
+  programs; GLEW loads it only with `GL_ARB_shader_objects`, which the
+  layer does not report: a null call crashed the first map). The installer
+  `etlegacy` downloads ET: Legacy's official AArch64 release (its mod, the
+  bots) and id's ET 2.60 for Linux (pak0-2.pk3, 271 MB) from id's mirror,
+  both pinned, as ET: Legacy's installer does, once id's licence agreement
+  is accepted (`terms=`; the agreement kept in the game's `Docs/`). The
+  launch script makes a profile the first time (ET: Legacy otherwise asks
+  for a typed name, and the layer sends no text input) with the PSP's
+  bindings, and starts with `com_ignorecrash` (its "crashed last time"
+  question needs a desktop). Its vanilla renderer drawn by the PSP's GE:
+  menus 24 fps at 21 KB a frame, Oasis in play about 20 fps into PPSSPP at
+  90-160 KB a frame (indexed draws kept by content, below). Controls as
+  OpenArena's; the nub moves ET's own menu cursor (small, from the top-left
+  corner), R clicks; the arrow keys also walk its menus. Arm64 only (the
+  official release has no 32-bit ARM build).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,

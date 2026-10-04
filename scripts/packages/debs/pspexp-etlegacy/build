@@ -1,0 +1,32 @@
+#!/bin/sh
+# pspexp-etlegacy: ET: Legacy 2.86.0's client (GPL-3.0 with id's additional
+# terms) built by scripts/packages/build-etlegacy.sh ARCH against Debian's SDL2
+# (the project's own build has SDL linked in, out of the SDL layer's reach),
+# patched (compatibility/etlegacy/pspexp.patch). Installs
+# /usr/lib/pspexp/etlegacy/etl; the rest of the game comes with package
+# etlegacy (the official releases, downloaded). Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/etlegacy"
+[ -x "$B/etl" ] && [ -s "$B/depends.txt" ] || { echo "no $B/etl: scripts/packages/build-etlegacy.sh $ARCH first" >&2; exit 1; }
+V=2.86.0-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/etlegacy" "$W/root/usr/share/doc/pspexp-etlegacy"
+install -m 755 "$B/etl" "$W/root/usr/lib/pspexp/etlegacy/etl"
+cp "$ROOT/compatibility/etlegacy/pspexp.patch" "$W/root/usr/share/doc/pspexp-etlegacy/"
+echo "ET: Legacy 2.86.0's client (https://github.com/etlegacy/etlegacy, tag v2.86.0), GPL-3.0 with id Software's additional terms, built by PSPExp with pspexp.patch (r_vertexLight; no glUseProgramObjectARB without the extension); the game itself comes with package etlegacy (downloaded)." > "$W/root/usr/share/doc/pspexp-etlegacy/README"
+cat > "$W/control" <<C
+Package: pspexp-etlegacy
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: ET: Legacy's client, for PSPExp
+ The open-source continuation of Wolfenstein: Enemy Territory, its client
+ built from the project's v2.86.0 tag against the system's SDL2. The game
+ comes with package etlegacy. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-etlegacy_${V}_$ARCH.deb"

@@ -99,7 +99,8 @@ graphics chip and sent to the PSP as pictures; only on boards that can, the
 Raspberry Pi).
 
 A few games come with terms to accept first (Unreal Tournament: the Epic
-Games Terms of Service). Packages shows them with where to read them; cross
+Games Terms of Service; Wolfenstein: Enemy Territory: id Software's licence
+agreement). Packages shows them with where to read them; cross
 accepts and installs, circle declines and nothing is downloaded.
 
 Installing runs in the background: the progress shows, and the game

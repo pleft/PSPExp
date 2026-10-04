@@ -273,7 +273,10 @@ EA's freeware discs (`cnc-freeware`, `redalert-freeware`) use
 `_discinstaller.sh`: the release (a RAR or an ISO) downloaded and checked,
 the disc image out of it, the game's MIX files out of the image with 7z.
 Unreal Tournament (`ut99`) runs OldUnreal's own installer, pinned, after the
-terms are accepted (`terms=`). Data a
+terms are accepted (`terms=`). Wolfenstein: Enemy Territory (`etlegacy`)
+downloads ET: Legacy's official AArch64 release and id's ET 2.60 for Linux
+(its pak0-2.pk3 and licence agreement), both pinned, as ET: Legacy's own
+installer does, after id's licence agreement is accepted. Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 
@@ -300,7 +303,8 @@ it without the checksum; §4.3).
   `apt=`, leaves the recipe out of that board's catalogue (SuperTuxKart:
   OpenGL 3 on the Pi's GPU, which the GameShell's has not).
 - **Terms to accept:** `terms=NAME|URL` in `[package]` (Unreal
-  Tournament: the Epic Games Terms of Service). `pspexp-pkg available`
+  Tournament: the Epic Games Terms of Service; ET: Legacy: id's licence
+  agreement, the URL id's download that carries it). `pspexp-pkg available`
   gives them as an eighth field ("NAME URL"); Packages shows them on the
   PSP before a first install, cross accepts and installs, circle declines;
   `pspexp-pkg install --accept-terms ID` then has the root helper record

@@ -1285,6 +1285,7 @@ static int texture_matrix_identity(void)
 
 /* Send n vertices as one GE primitive (already split to fit). */
 static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uint8_t *data, int n);
+static uint16_t content_handle(PspExpContext *ctx, uint32_t vt, const uint8_t *data, int n);
 
 static int16_t s16(float f) { f *= 32768.0f; return (int16_t)(f >= 32767.0f ? 32767 : f <= -32768.0f ? -32768 : lroundf(f)); }
 static uint16_t u16(float f) { f *= 32768.0f; return (uint16_t)(f >= 65535.0f ? 65535 : f <= 0 ? 0 : lroundf(f)); }
@@ -1829,6 +1830,36 @@ static void draw_vertices_ix0(GLenum mode, Vtx *v, int n, const int *ix, int nix
                 else if (!(ca & cb & cd)) {
                     if (!cut && !(cut = (Vtx *)malloc((size_t)(nix / 3) * 21 * sizeof(Vtx) + 1))) return;
                     k += clip_triangle(&c, &v[ix[t]], &v[ix[t + 1]], &v[ix[t + 2]], cut + k);
+                }
+            }
+            if (ns && n >= 64 && !GENV("PSPEXP_GL_NOMESH_IX")) {
+                /* all the draw's vertices kept on the PSP by content (Quake 3's surfaces, rebuilt in
+                 * client memory every frame unchanged): only the indices of the triangles that need
+                 * no cutting go each frame, 2 bytes each against 14 or more a vertex (ET: Legacy) */
+                static uint8_t *pb;
+                static size_t pcap;
+                size_t bytes = (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
+                uint16_t mh;
+                if (bytes > pcap) { uint8_t *b = (uint8_t *)realloc(pb, bytes); if (b) { pb = b; pcap = bytes; } }
+                if (bytes <= pcap) {
+                    pack(pb, vt, v, n);
+                    if ((mh = content_handle(ctx, vt, pb, n))) {
+                        /* and the indices too while they stay the same (the view still, or moving
+                         * without a triangle of the draw coming to need cutting): a few bytes a draw */
+                        uint16_t ih = ns <= 65535 ? content_handle(ctx, 0x80000000u, (const uint8_t *)safe, ns) : 0;
+                        if (ih) {
+                            pspexp_3d_draw_mesh(ctx, mh, ih, GU_TRIANGLES, 0, (uint32_t)ns);
+                        }
+                        for (i = ih ? ns : 0; i < ns; i += 65535 / 3 * 3) {
+                            int cnt = ns - i < 65535 / 3 * 3 ? ns - i : 65535 / 3 * 3;
+                            uint16_t *dst = pspexp_3d_draw_mesh(ctx, mh, PSPEXP_MESH_INLINE, GU_TRIANGLES, 0, (uint32_t)cnt);
+                            if (dst) memcpy(dst, safe + i, (size_t)cnt * 2u);
+                        }
+                        G.draws++; G.vertices += (unsigned)ns;
+                        send_chunked(ctx, GU_TRIANGLES, vt, cut, k, 3);
+                        free(cut);
+                        return;
+                    }
                 }
             }
             if (ns) {   /* only the vertices these triangles use (those only cut triangles use: not sent) */
@@ -3608,10 +3639,24 @@ static void meshes_forget_buffer(GLuint name)
     }
 }
 
+/* How many meshes are on the PSP: its resource table (1024 entries) is shared with the textures, and
+ * a game that is many surfaces filled it with meshes kept by content (ET: Legacy: TABLE_FULL, then every
+ * later upload refused and its draws missing) */
+#define MESH_COUNT_MAX 448
+static int mesh_count(void)
+{
+    const Mesh *m;
+    const IndexMesh *im;
+    int n = 0;
+    for (m = meshes; m; m = m->next) if (m->handle) n++;
+    for (im = index_meshes; im; im = im->next) n++;
+    return n;
+}
+
 /* Room for `bytes` more: the least recently drawn go first (never this frame's). */
 static int mesh_room(uint32_t bytes)
 {
-    while (mesh_bytes + bytes > MESH_BUDGET) {
+    while (mesh_bytes + bytes > MESH_BUDGET || mesh_count() >= MESH_COUNT_MAX) {
         Mesh **pp, **oldest = NULL;
         IndexMesh **ip, **ioldest = NULL;
         for (pp = &meshes; *pp; pp = &(*pp)->next) if ((*pp)->used != mesh_frame && (!oldest || (*pp)->used < (*oldest)->used)) oldest = pp;
@@ -3702,38 +3747,55 @@ static Mesh *vertex_mesh(PspExpContext *ctx, uint32_t vt, int need)
 
 /* A streamed draw's vertices by content: drawn once, remembered (hash);
  * drawn again, made a mesh on the PSP; from then on 16 bytes a frame. For
- * geometry a program rebuilds in client memory every frame unchanged. */
-static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uint8_t *data, int n)
+ * geometry a program rebuilds in client memory every frame unchanged.
+ * content_lookup: the mesh on the PSP for these packed vertices, made the
+ * second time they are seen (NULL until then, or with no room). */
+#define CONTENT_INDICES 0x80000000u   /* Mesh.vt of an index list kept by content (16-bit indices) */
+static Mesh *content_lookup(PspExpContext *ctx, uint32_t vt, const uint8_t *data, int n)
 {
     uint64_t h = 1469598103934665603ull;   /* FNV-1a */
-    size_t i, bytes = (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
+    size_t i, bytes = vt == CONTENT_INDICES ? (size_t)n * 2u : (size_t)pspexp_3d_vertex_size(vt) * (size_t)n;
     Mesh *m;
     uint8_t *out;
-    if (GENV("PSPEXP_GL_NOMESH")) return 0;
+    if (GENV("PSPEXP_GL_NOMESH")) return NULL;
     for (i = 0; i < bytes; i += 8) { uint64_t w; memcpy(&w, data + i, bytes - i >= 8 ? 8 : bytes - i); h = (h ^ w) * 1099511628211ull; }
     h ^= (uint64_t)vt << 32 ^ (uint64_t)n;
     if (!h) h = 1;
     for (m = meshes; m; m = m->next) if (m->hash == h && m->vt == vt && m->count == n) break;
     if (!m) {   /* first seen: remembered, sent as it is */
-        if (!(m = (Mesh *)calloc(1, sizeof(*m)))) return 0;
+        if (!(m = (Mesh *)calloc(1, sizeof(*m)))) return NULL;
         m->hash = h; m->vt = vt; m->count = n; m->seen = 1; m->used = mesh_frame;
         m->next = meshes; meshes = m;
-        return 0;
+        return NULL;
     }
     m->used = mesh_frame;
     if (!m->handle) {
-        if (++m->seen < 2 || !mesh_room((uint32_t)bytes)) return 0;
+        if (++m->seen < 2 || !mesh_room((uint32_t)bytes)) return NULL;
         m->handle = mesh_handle();
         m->bytes = (uint32_t)bytes;
-        if (!(out = (uint8_t *)pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n))) {
+        if (!(out = (uint8_t *)(vt == CONTENT_INDICES ? pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_INDICES16, 0, (uint32_t)n)
+                                                    : pspexp_upload_mesh_begin(ctx, m->handle, PSPEXP_MESH_VERTICES, vt, (uint32_t)n)))) {
             free_handles[nfree_handles < 4096 ? nfree_handles++ : 4095] = m->handle; m->handle = 0; m->bytes = 0;
-            return 0;
+            return NULL;
         }
         memcpy(out, data, bytes);
         pspexp_upload_mesh_commit(ctx);
         mesh_bytes += m->bytes;
-        if (G.log) gl_logf("mesh %u: %d vertices drawn again unchanged (%u KB)", m->handle, n, m->bytes / 1024);
+        if (G.log) gl_logf("mesh %u: %d %s drawn again unchanged (%u KB)", m->handle, n, vt == CONTENT_INDICES ? "indices" : "vertices", m->bytes / 1024);
     }
+    return m;
+}
+
+static uint16_t content_handle(PspExpContext *ctx, uint32_t vt, const uint8_t *data, int n)
+{
+    Mesh *m = content_lookup(ctx, vt, data, n);
+    return m ? m->handle : 0;
+}
+
+static int content_mesh(PspExpContext *ctx, uint8_t prim, uint32_t vt, const uint8_t *data, int n)
+{
+    Mesh *m = content_lookup(ctx, vt, data, n);
+    if (!m) return 0;
     pspexp_3d_draw_mesh(ctx, m->handle, PSPEXP_MESH_NONE, prim, 0, (uint32_t)n);
     return 1;
 }

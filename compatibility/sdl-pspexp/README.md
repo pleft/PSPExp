@@ -186,6 +186,7 @@ function; the tests check it is current).
 | `PSPEXP_USB_VERBOSE=1` | why a USB transfer failed (a "link lost"), in the log |
 | `PSPEXP_GL_DUMP=DIR` | OpenGL: every texture as sent, `DIR/tex-<name>-<w>x<h>.rgba`, and every shader source as the program gave it, `DIR/shader-<id>.glsl` |
 | `PSPEXP_GL_NOMESH=1` | OpenGL: no meshes, every vertex every frame (to compare) |
+| `PSPEXP_GL_NOMESH_IX=1` | OpenGL: an indexed draw from client memory (Quake 3's surfaces) streamed whole each frame, not kept by content (to compare): by default its vertices (64 or more) become a mesh on the PSP once drawn twice unchanged, and its list of triangles that need no cutting too while it stays the same; ET: Legacy's Oasis 1.3 MB to 90-160 KB a frame, OpenArena about 300 KB to 150 KB. Meshes on the PSP are also capped at 448 (its table of 1024 resources is shared with the textures) |
 | `PSPEXP_GL_NOCLIP=1` | OpenGL: no cutting of triangles that reach outside the GE's range (they then vanish whole) |
 | `PSPEXP_GL_VERSION=1.3` | OpenGL: the version reported (default "2.1 PSPExp") |
 | `PSPEXP_GL_UNITS=3` | OpenGL: the texture units reported (default 2). Fixed-function texture unit 1 is drawn as a second pass blended as its environment says (modulate, `GL_COMBINE` modulate x2, add, decal, replace), from buffer objects as a mesh like the first; with unit 0 off, as the draw's only texture; its coordinate generation and texture matrix are its own. `1`: what a game does with one unit. Quakespasm takes its shader path only with 3 |

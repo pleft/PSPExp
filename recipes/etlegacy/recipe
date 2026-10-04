@@ -1,0 +1,41 @@
+# ET: Legacy: Wolfenstein: Enemy Territory (Splash Damage, id Software, 2003),
+# the free team shooter (Axis against Allies, classes, objectives), on ET:
+# Legacy, its open-source continuation; online or against Omni-bot bots (a
+# game hosted from the menu fills with them). Installing downloads ET:
+# Legacy's release and id's game data (package etlegacy); the client is
+# PSPExp's build (pspexp-etlegacy), its vanilla renderer drawn by the PSP's GE,
+# one pass a surface (r_vertexLight, PSPExp's patch). id's licence agreement
+# must be accepted first: Packages asks. Controls as OpenArena's: the nub
+# aims (the mouse; it points in menus), the face buttons move (triangle /
+# cross forward and back, square / circle strafe), R fires (and clicks), L
+# jumps, the d-pad changes weapon (up / down), crouches (left) and reloads
+# (right), SELECT uses (doors, ladders), START the menu. Arm64 boards (the
+# official release is built for AArch64).
+
+[package]
+id=etlegacy
+title=Wolfenstein: Enemy Territory
+description=The free team shooter of 2003 on ET: Legacy: Axis against Allies, six classes, objectives to take, online or against bots. Drawn by the PSP.
+category=game
+license=GPL-3.0 (ET: Legacy); the game's data free under id Software's licence agreement, downloaded at install
+version=1
+terms=id Software's ET licence agreement|http://ftp.gwdg.de/pub/misc/ftp.idsoftware.com/idstuff/et/linux/et-linux-2.60.x86.run
+
+[debian]
+apt=etlegacy
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Wolfenstein: Enemy Territory
+type=game
+description=The free team shooter of 2003 on ET: Legacy: Axis against Allies, objectives to take, online or against bots. Drawn by the PSP's graphics chip.
+icon=swords
+exec=/usr/games/etlegacy
+keys=triangle=w,cross=s,square=a,circle=d,l=space,up=e,down=q,left=c,right=r,start=escape,select=f
+nub=mouse
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_GL_UNITS=1
+env=PSPEXP_MOUSE_BUTTONS=left=r,right=none
+graphics=opengl

@@ -1,0 +1,116 @@
+#!/bin/sh
+# etlegacy: an installer for ET: Legacy (Wolfenstein: Enemy Territory). Its
+# postinst downloads ET: Legacy's official 2.86.0 release for Linux AArch64
+# (etlegacy.com; its mod, the Omni-bot bots, GPL-3.0) and id Software's
+# Wolfenstein: ET 2.60 for Linux from id's mirror (the game's data,
+# pak0-2.pk3, freeware under id's licence agreement), both checked by SHA-256,
+# as ET: Legacy's own installer does; nothing of the game is hosted by PSPExp.
+# The client is pspexp-etlegacy's (built against the system's SDL2).
+# id's licence agreement must be accepted first: the recipe names it (terms=),
+# Packages asks on the PSP, and pspexp-pkg-apt records the acceptance in
+# /var/lib/pspexp/terms/etlegacy, without which this refuses; the agreement
+# is kept beside the game (Docs/). The launch script makes a profile the first
+# time (ET: Legacy asks for a typed name otherwise) with the PSP's bindings.
+# Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"
+V=2.86.0-pspexp1
+ETL=https://www.etlegacy.com/download/file/768
+ETL_SHA=b585aae5cf6418dfd164ace92948f7a93f77db3fda78838b1c55108d2bacd714
+ET=http://ftp.gwdg.de/pub/misc/ftp.idsoftware.com/idstuff/et/linux/et-linux-2.60.x86.run
+ET_SHA=41cbbc1afb8438bc8fc74a64a171685550888856005111cbf9af5255f659ae36
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/etlegacy" "$W/ctl"
+cat > "$W/root/usr/games/etlegacy" <<'S'
+#!/bin/sh
+# ET: Legacy (package etlegacy: downloaded when it was installed)
+G=/usr/share/games/etlegacy
+[ -f "$G/.pspexp-installed" ] || { echo "ET: Legacy is not there: install the package etlegacy again" >&2; exit 1; }
+P="$HOME/.etlegacy/legacy/profiles"
+if [ ! -f "$P/defaultprofile.dat" ]; then   # a profile, with the PSP's bindings (the face buttons, d-pad and SELECT are keys)
+	mkdir -p "$P/PSPExp"
+	echo '"PSPExp"' > "$P/defaultprofile.dat"
+	cat > "$P/PSPExp/etconfig.cfg" <<C
+seta name "PSP Soldier"
+bind w "+forward"
+bind s "+back"
+bind a "+moveleft"
+bind d "+moveright"
+bind SPACE "+moveup"
+bind c "+movedown"
+bind e "weapnext"
+bind q "weapprev"
+bind r "+reload"
+bind f "+activate"
+bind MOUSE1 "+attack"
+seta sensitivity "12"
+C
+fi
+# the vanilla renderer at the PSP's size, a pass a surface (r_vertexLight: PSPExp's patch), the map's
+# lighter settings; bots fill a game hosted from the menu
+exec /usr/lib/pspexp/etlegacy/etl +set fs_basepath "$G" +set com_ignorecrash 1 +set com_recommendedSet 1 \
+	+set r_mode -1 +set r_customwidth 480 +set r_customheight 272 +set r_fullscreen 0 +set r_vertexLight 1 \
+	+set r_lodbias 2 +set r_subdivisions 25 +set r_dynamiclight 0 +set r_fastsky 1 +set r_flares 0 +set cg_shadows 0 \
+	+set omnibot_enable 1 +set omnibot_path "$G/legacy/omni-bot" +set bot_minplayers 6 "$@"
+S
+chmod 755 "$W/root/usr/games/etlegacy"
+cat > "$W/root/usr/share/doc/etlegacy/README" <<D
+ET: Legacy (Wolfenstein: Enemy Territory). This package holds none of the
+game: installing it downloads ET: Legacy's release
+  $ETL (SHA-256 $ETL_SHA)
+and id Software's Wolfenstein: ET 2.60 for Linux
+  $ET (SHA-256 $ET_SHA)
+into /usr/share/games/etlegacy, as ET: Legacy's own installer does. id's
+licence agreement (Docs/EULA_Wolfenstein_Enemy_Territory.txt there) applies to
+the game's data; it is accepted in Packages before installing. Removing the
+package removes the game.
+D
+cat > "$W/ctl/postinst" <<P
+#!/bin/sh
+# ET: Legacy's release and id's ET data, once id's licence agreement was accepted
+set -e
+[ "\$1" = configure ] || exit 0
+G=/usr/share/games/etlegacy
+C=/var/cache/etlegacy
+[ -f /var/lib/pspexp/terms/etlegacy ] || { echo "ET: Legacy: id Software's Wolfenstein: ET licence agreement must be accepted first (Packages asks; or: pspexp-pkg install --accept-terms etlegacy)" >&2; exit 1; }
+[ -f "\$G/.pspexp-installed" ] && exit 0
+rm -rf "\$C" "\$G.new"; mkdir -p "\$C" "\$G.new"
+fail() { rm -rf "\$C" "\$G.new"; echo "\$1" >&2; exit 1; }
+echo "Downloading ET: Legacy (92 MB)..."
+curl -fL --retry 3 --connect-timeout 20 -o "\$C/etl.tar.gz" "$ETL" || fail "the download failed: install it again"
+echo "$ETL_SHA  \$C/etl.tar.gz" | sha256sum -c --quiet - || fail "ET: Legacy's download is not the expected file"
+tar -xzf "\$C/etl.tar.gz" -C "\$G.new" --strip-components=1 --no-same-owner
+rm -f "\$C/etl.tar.gz"
+echo "Downloading Wolfenstein: Enemy Territory's data (271 MB) from id's mirror..."
+curl -fL --retry 3 --connect-timeout 20 -o "\$C/et.run" "$ET" || fail "the download failed: install it again"
+echo "$ET_SHA  \$C/et.run" | sha256sum -c --quiet - || fail "id's download is not the expected file"
+sh "\$C/et.run" --noexec --target "\$C/et" > /dev/null 2>&1 || fail "id's archive could not be unpacked"
+for f in pak0.pk3 pak1.pk3 pak2.pk3; do cp "\$C/et/etmain/\$f" "\$G.new/etmain/" || fail "no \$f in id's archive"; done
+mkdir -p "\$G.new/Docs" && cp "\$C/et/Docs/EULA_Wolfenstein_Enemy_Territory.txt" "\$G.new/Docs/"
+chmod -R u=rwX,go=rX "\$G.new"
+touch "\$G.new/.pspexp-installed"
+rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
+P
+cat > "$W/ctl/postrm" <<'R'
+#!/bin/sh
+# the game the installer put there goes with the package
+set -e
+case "$1" in remove|purge) rm -rf /usr/share/games/etlegacy /usr/share/games/etlegacy.new /var/cache/etlegacy ;; esac
+exit 0
+R
+cat > "$W/ctl/control" <<C
+Package: etlegacy
+Version: $V
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: contrib/games
+Priority: optional
+Depends: curl, ca-certificates, tar, gzip, pspexp-etlegacy
+Description: ET: Legacy, Wolfenstein: Enemy Territory (installer)
+ The free team shooter of 2003 on ET: Legacy, online or against bots:
+ installing this package downloads ET: Legacy's release and id Software's
+ game data, once id's licence agreement was accepted. The package itself
+ holds none of the game. Installer by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/ctl/control" "$OUT/etlegacy_${V}_all.deb"
