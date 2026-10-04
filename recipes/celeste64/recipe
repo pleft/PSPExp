@@ -1,0 +1,39 @@
+# Celeste 64: Fragments of the Mountain (Maddy Makes Games, 2024, free): the
+# developers' Linux arm64 build, downloaded at install from their itch.io
+# page (package celeste64). Drawn by the board's own GPU (PSPEXP_HOSTGL: the
+# Pi 400's V3D, told it has OpenGL 3.3, which its renderer asks for) at 60 fps
+# on the Pi, each frame sent to the PSP as a picture; in a 480x272 window
+# (PSPEXP_WINDOW: it goes full screen otherwise, the headless board's
+# 1024x768). The PSP's controller is its gamepad: the nub moves, cross jumps
+# and confirms, square / circle dash (circle also backs out), L / R climb,
+# START pauses; the d-pad turns the camera (the PSP has no second stick: the
+# first run's controls.json moves the camera there). No keys. Nothing of the
+# game is hosted, not even a cover.
+
+[package]
+id=celeste64
+title=Celeste 64
+description=The makers of Celeste's free 3D platformer in the style of the N64: Madeline climbs, dashes and collects strawberries up a mountain. Drawn by the board's GPU.
+category=game
+license=Free (Celeste 64, Maddy Makes Games; code MIT), downloaded at install from the developers
+version=1
+
+[debian]
+apt=celeste64
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Celeste 64
+type=game
+description=The makers of Celeste's free 3D platformer, N64 style: Madeline climbs, dashes and collects strawberries up a mountain. Drawn by the board's GPU (Pi).
+icon=sparkles
+exec=/usr/games/celeste64
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+env=PSPEXP_HOSTGL=1
+env=PSPEXP_WINDOW=480x272
+env=MESA_GL_VERSION_OVERRIDE=3.3
+env=MESA_GLSL_VERSION_OVERRIDE=330
+first-run=.local/share/Celeste64/controls.json:{"Actions":{"Jump":[{"Key":"C"},{"Button":"South"},{"Button":"Y"}],"Dash":[{"Key":"X"},{"Button":"West"},{"Button":"East"}],"Climb":[{"Key":"Z"},{"Button":"LeftShoulder"},{"Button":"RightShoulder"}],"Confirm":[{"Key":"C"},{"Button":"South"}],"Cancel":[{"Key":"X"},{"Button":"East"}],"Pause":[{"Key":"Escape"},{"Button":"Start"},{"Button":"Back"}]},"Sticks":{"Move":{"Deadzone":0.35,"Up":[{"Key":"Up"},{"Axis":"LeftY","AxisInverted":true}],"Down":[{"Key":"Down"},{"Axis":"LeftY"}],"Left":[{"Key":"Left"},{"Axis":"LeftX","AxisInverted":true}],"Right":[{"Key":"Right"},{"Axis":"LeftX"}]},"Camera":{"Deadzone":0.35,"Up":[{"Key":"W"},{"Button":"Up"}],"Down":[{"Key":"S"},{"Button":"Down"}],"Left":[{"Key":"A"},{"Button":"Left"}],"Right":[{"Key":"D"},{"Button":"Right"}]},"Menu":{"Deadzone":0.35,"Up":[{"Key":"Up"},{"Button":"Up"},{"Axis":"LeftY","AxisDeadzone":0.5,"AxisInverted":true}],"Down":[{"Key":"Down"},{"Button":"Down"},{"Axis":"LeftY","AxisDeadzone":0.5}],"Left":[{"Key":"Left"},{"Button":"Left"},{"Axis":"LeftX","AxisDeadzone":0.5,"AxisInverted":true}],"Right":[{"Key":"Right"},{"Button":"Right"},{"Axis":"LeftX","AxisDeadzone":0.5}]}}}\n
+graphics=board-gpu

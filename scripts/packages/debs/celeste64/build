@@ -1,0 +1,18 @@
+#!/bin/sh
+# celeste64: an installer for Celeste 64: Fragments of the Mountain (Maddy
+# Makes Games, 2024; free; its code MIT, its content theirs), their official
+# Linux arm64 build v1.1.1: the board downloads it from the developers'
+# itch.io page when it is installed (_installer.sh), nothing of it hosted by
+# PSPExp. Its SDL2 is built into libFosterPlatform.so but exported, so the
+# host-rendered SDL layer still takes its window and controller.
+# Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=celeste64 TITLE="Celeste 64: Fragments of the Mountain" VERSION=1.1.1-pspexp1
+ITCH=maddymakesgamesinc/celeste64/9667963
+SHA=b871fd37759e2ab1187b78fa93e99407c69c72949e21993447068017f09c002d SIZE="31 MB" TOP=""
+RUN='exec "$G/Celeste64" "$@"'
+ABOUT=" A free 3D platformer by the makers of Celeste, in the style of the N64:
+ Madeline climbs a mountain of strawberries. The developers' own Linux
+ arm64 build."
+build_installer "$1"

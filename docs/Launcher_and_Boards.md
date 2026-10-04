@@ -732,6 +732,22 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **Celeste 64: Fragments of the Mountain** (`celeste64`, Pi only,
+  2026-10-04), chosen as PSPExp's showcase: Maddy Makes Games' free 3D
+  platformer (2024), on no PSP or Vita. Their own Linux arm64 build, which
+  the installer downloads from their itch.io page (upload 9667963, 31 MB,
+  checksum pinned); nothing hosted, not even a cover. Foster's
+  `libFosterPlatform.so` has SDL2 2.32 built in, but exports its functions,
+  so the preloaded layer still takes the window, the GL context and the
+  controller. Its renderer wants OpenGL 3.3: Mesa told so on the Pi's V3D.
+  It went full screen into the offscreen driver's 1024x768, its 16:9
+  letterboxed and three times the pixels read back: `PSPEXP_WINDOW=480x272`
+  (new) keeps it a window of the PSP's size. **60 fps on the Pi** with no
+  PSP in the loop; 19-24 fps into PPSSPP (the emulator the limit), 133 KB a
+  frame; title, menus and the first level right. The PSP's controller is
+  its gamepad (nub moves, cross jumps, square / circle dash, L / R climb,
+  START pauses); the first run's `controls.json` puts the camera on the
+  d-pad, the PSP having no second stick. No keys.
 - **Luanti** (`luanti`, formerly Minetest, Pi only, 2026-10-04): Debian's
   5.10.0 is built for X11 (Irrlicht's own window: "Need running XServer"),
   so `scripts/packages/build-luanti.sh` builds the same version with its

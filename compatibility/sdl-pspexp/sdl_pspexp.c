@@ -1874,9 +1874,29 @@ HOOK(int, SDL_GetDisplayUsableBounds, (int index, SDL_Rect *rect))
     return r;
 }
 
+/* PSPEXP_WINDOW=WxH: the window this size and never full screen, whatever the program asks
+ * (Celeste 64 goes full screen, which on a headless board is the offscreen driver's 1024x768: a
+ * 16:9 picture letterboxed in it, and three times the pixels read back); 0 when not set */
+static int forced_window(int *w, int *h)
+{
+    const char *e = getenv("PSPEXP_WINDOW");
+    int fw, fh;
+    if (!e || sscanf(e, "%dx%d", &fw, &fh) != 2 || fw < 16 || fh < 16) return 0;
+    *w = fw; *h = fh;
+    return 1;
+}
+
+HOOK(int, SDL_SetWindowFullscreen, (SDL_Window *win, Uint32 flags))
+{
+    int w, h;
+    if (forced_window(&w, &h)) return 0;   /* stays a window of the forced size */
+    return REAL(SDL_SetWindowFullscreen)(win, flags);
+}
+
 HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, int h, Uint32 flags))
 {
     SDL_Window *win;
+    if (forced_window(&w, &h)) flags &= ~(Uint32)SDL_WINDOW_FULLSCREEN_DESKTOP;   /* (FULLSCREEN is one of its bits) */
     if (headless_display() && ((flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP || w <= 1 || h <= 1)) {
         w = PSP_W; h = PSP_H;   /* "the desktop's size" or none at all: the PSP's screen */
         flags &= ~(Uint32)SDL_WINDOW_FULLSCREEN_DESKTOP;
