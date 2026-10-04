@@ -1,0 +1,36 @@
+# Luanti (formerly Minetest) with Minetest Game: Luanti 5.10.0 built with its
+# SDL2 device (package pspexp-luanti; Debian's is built for X11), drawn by the
+# board's own GPU with shaders (PSPEXP_HOSTGL: the Pi 400's V3D), each frame
+# sent to the PSP as a picture. Under the PSP's layer, shaders off, it
+# crashes once in the world: not offered on the GameShell. Straight into a
+# world "PSP" made on the first run. Mouse and keyboard, Luanti's defaults:
+# the nub looks, the d-pad walks, cross jumps, square digs (held), circle
+# places, triangle the inventory, L / R the hotbar's previous / next slot
+# (B / N), SELECT sneaks (Shift), START the menu.
+
+[package]
+id=luanti
+title=Luanti
+description=The voxel sandbox (formerly Minetest) with Minetest Game: explore, dig, build and craft in an endless world of blocks. Drawn by the board's GPU.
+category=game
+license=LGPL-2.1+ (Luanti); LGPL-2.1+ and CC BY-SA 3.0 (Minetest Game)
+version=1
+
+[debian]
+apt=pspexp-luanti
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Luanti
+type=game
+description=The voxel sandbox (formerly Minetest): explore, dig, build and craft in an endless world of blocks. Drawn by the board's GPU (Pi).
+icon=box
+exec=/usr/games/pspexp-luanti
+keys=cross=space,triangle=i,l=b,r=n,select=lshift,start=escape,up=w,down=s,left=a,right=d,square=none,circle=none
+nub=mouse
+env=PSPEXP_HOSTGL=1
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_MOUSE_BUTTONS=left=square,right=circle
+graphics=board-gpu

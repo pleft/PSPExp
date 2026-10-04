@@ -32,6 +32,7 @@
 | `recipes/supertuxkart/cover.png` | a screenshot of a race in PPSSPP (the Pi's GPU drawing), cropped and scaled | CC BY-SA (SuperTuxKart's data) |
 | `recipes/trackballs/cover.png` | Debian's trackballs package, its 128x128 icon | GPL-2.0+ (Trackballs) |
 | `recipes/opensurge/cover.png` | a screenshot of its title screen in PPSSPP (the Pi's GPU drawing), cropped and scaled | Open Surge's art, under the free licences its credits give (its `licenses/` folder) |
+| `recipes/luanti/cover.png` | Debian's luanti package, its 128x128 icon | CC BY-SA 3.0 (Luanti's icon) |
 | `recipes/uqm/cover.png` | a screenshot of its main menu in PPSSPP, cropped and scaled | CC BY-NC-SA 2.5 (UQM's content) |
 | `recipes/hurrican/cover.png` | a screenshot of its first level in PPSSPP, cropped and scaled | freeware (Hurrican, Poke53280) |
 | (`recipes/zsdx`: no cover) | none hosted: the game's title is its own art and the Zelda logo; the launcher generates one | |

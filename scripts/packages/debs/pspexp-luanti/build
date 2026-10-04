@@ -1,0 +1,45 @@
+#!/bin/sh
+# pspexp-luanti: Luanti 5.10.0 (LGPL-2.1+) built with its SDL2 device by
+# scripts/packages/build-luanti.sh ARCH, on Debian's data of the same version
+# (luanti-data) and Minetest Game (luanti-game-minetest). Installs
+# /usr/lib/pspexp/luanti/luanti and /usr/games/pspexp-luanti, which makes a
+# world and settings for the PSP on its first run and goes straight into the
+# world (Luanti's own menus want a mouse and are small at 480x272).
+# Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/luanti"
+[ -x "$B/luanti" ] && [ -s "$B/depends.txt" ] || { echo "no $B/luanti: scripts/packages/build-luanti.sh $ARCH first" >&2; exit 1; }
+V=5.10.0-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/luanti" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-luanti"
+install -m 755 "$B/luanti" "$W/root/usr/lib/pspexp/luanti/luanti"
+cat > "$W/root/usr/games/pspexp-luanti" <<'S'
+#!/bin/sh
+# Luanti for the PSP (package pspexp-luanti): its settings and a world "PSP"
+# (Minetest Game) made on the first run, then straight into the world
+D="${XDG_DATA_HOME:-$HOME/.local/share}/pspexp-luanti"
+C="$D/luanti.conf"
+mkdir -p "$D/worlds/PSP"
+[ -f "$C" ] || printf '%s\n' 'video_driver = opengl' 'screen_w = 480' 'screen_h = 272' 'fullscreen = false' \
+	'viewing_range = 80' 'menu_clouds = false' 'enable_joysticks = false' 'name = Player' > "$C"
+[ -f "$D/worlds/PSP/world.mt" ] || printf '%s\n' 'gameid = minetest' > "$D/worlds/PSP/world.mt"
+exec /usr/lib/pspexp/luanti/luanti --config "$C" --world "$D/worlds/PSP" --go "$@"
+S
+chmod 755 "$W/root/usr/games/pspexp-luanti"
+echo "Luanti 5.10.0 (https://github.com/luanti-org/luanti), LGPL-2.1+; built with its SDL2 device by PSPExp, on Debian's luanti-data and Minetest Game." > "$W/root/usr/share/doc/pspexp-luanti/README"
+cat > "$W/control" <<C
+Package: pspexp-luanti
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt"), luanti-data (>= 5.10.0), luanti-data (<< 5.11), luanti-game-minetest
+Description: Luanti (Minetest), built with SDL2, for PSPExp
+ Luanti, the voxel sandbox game engine, built with its SDL2 device (Debian's
+ is built for X11) so that PSPExp's SDL layer takes its window, with
+ Minetest Game. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-luanti_${V}_$ARCH.deb"

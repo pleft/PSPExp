@@ -66,13 +66,15 @@ Measured on the PSP-1000 with a Pi 400:
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
 | Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's first mission at about 20 fps in the emulator, the game at full speed; not yet measured on the PSP |
+| Quake II (demo) | drawn by the PSP, like Quake: 22-24 fps in the emulator, not yet measured on the PSP |
+| Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): 20-22 fps in the emulator |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); about 30 fps in the emulator, not yet measured on the PSP |
 
 ## Games drawn by the Pi's graphics chip
 
 Most games are drawn by the PSP itself: the Pi only tells it what to draw.
 Some 3D games ask for more than the PSP's graphics chip can do
-(SuperTuxKart, Trackballs, Open Surge). On a Pi these are drawn by the Pi's
+(SuperTuxKart, Trackballs, Open Surge, Luanti). On a Pi these are drawn by the Pi's
 own graphics chip instead, and each finished picture is sent to the PSP,
 which shows it, plays the sound and reads the buttons as for any other
 game. You don't have to do anything: install them from **Apps > Packages**

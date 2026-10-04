@@ -732,6 +732,20 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **Luanti** (`luanti`, formerly Minetest, Pi only, 2026-10-04): Debian's
+  5.10.0 is built for X11 (Irrlicht's own window: "Need running XServer"),
+  so `scripts/packages/build-luanti.sh` builds the same version with its
+  SDL2 device (the program lands in the source tree's `bin/`), package
+  `pspexp-luanti` on Debian's luanti-data and Minetest Game. Under the PSP's
+  layer, its legacy OpenGL driver with shaders off (Luanti warns against
+  it), it crashes once in the world (framebuffer calls the layer lacks among
+  the first): drawn by the Pi's GPU instead, shaders on, 20-22 fps into
+  PPSSPP, 17 KB a frame standing. `/usr/games/pspexp-luanti` writes its
+  settings (480x272, view 80, joysticks off) and a world "PSP" on the first
+  run and goes straight in: its menus want a mouse. Keys: nub looks (as a
+  mouse), d-pad walks (WASD), cross jumps, square digs and circle places
+  (the mouse buttons), triangle the inventory, L / R the hotbar (B / N),
+  SELECT sneaks, START the menu. Walking and jumping checked by script.
 - **Open Surge** (`opensurge`, Pi only): built by
   `scripts/packages/build-opensurge.sh` (0.6.1.3, Allegro 5 with its SDL2
   backend, so its window, input, sound and GL are the layer's; Allegro's GTK
