@@ -1,4 +1,4 @@
-# Command & Conquer: EA's freeware release (package redalert-freeware: downloaded at install from
+# Red Alert: EA's freeware release (package redalert-freeware: downloaded at install from
 # EA's release as archived, nothing hosted) on Vanilla Conquer (package
 # pspexp-vanillaconquer: the original game from the source EA published, 8-bit
 # frames drawn by the PSP as CLUT8 pages; its 640x400 kept whole,
@@ -8,19 +8,19 @@
 
 [package]
 id=redalert
-title=Command & Conquer
-description= Red Alert
+title=Red Alert
+description=Westwood's 1996 real-time strategy game: the Allies against the Soviets, both campaigns. EA's freeware, drawn by the PSP.
 category=game
-license=Freeware (Command & Conquer, EA, under EA's licence agreement), downloaded at install; GPL-3.0 (Vanilla Conquer)
-version=1
+license=Freeware (Red Alert, EA, under EA's licence agreement), downloaded at install; GPL-3.0 (Vanilla Conquer)
+version=2
 
 [debian]
 apt=redalert-freeware
 
 [entry]
-title=Command & Conquer
+title=Red Alert
 type=game
-description=Westwood's 1996 real-time strategy game Drawn by the PSP's graphics chip.
+description=Westwood's 1996 real-time strategy game: the Allies against the Soviets, both campaigns. EA's freeware. Drawn by the PSP's graphics chip.
 icon=swords
 exec=/usr/games/redalert-freeware
 keys=start=escape,up=up,down=down,left=left,right=right,square=none,triangle=none,l=none,r=none,select=none

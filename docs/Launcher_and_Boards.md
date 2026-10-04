@@ -774,6 +774,16 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   OpenArena's; the nub moves ET's own menu cursor (small, from the top-left
   corner), R clicks; the arrow keys also walk its menus. Arm64 only (the
   official release has no 32-bit ARM build).
+- **Red Alert and Tiberian Dawn on OpenRA** (`openra-ra`, `openra-cnc`,
+  2026-10-04, Pi only): OpenRA built for arm64 (`build-openra.sh`,
+  `pspexp-openra`, self-contained .NET; its `SDL2.so` the layer's wrapper),
+  drawn by the board's GPU at 1024x576: skirmish about 10 fps into PPSSPP.
+  The first start shows OpenRA's content installer: Quick Install (cross on
+  it) fetches the game's freeware content from OpenRA's mirrors. Mouse on
+  the nub, cross / circle its buttons, the d-pad scrolls, START the menu.
+  The Vanilla Conquer recipes beside them (`cnc`, `redalert`, recipe 2):
+  their titles and descriptions had come out garbled (Red Alert was listed
+  as "Command & Conquer"), fixed.
 - **Diablo** (`devilutionx`, 2026-10-04): Blizzard's 1996 action RPG on
   DevilutionX 1.5.5, with the shareware data (the cathedral, the Warrior),
   or the player's own DIABDAT.MPQ (full game) in

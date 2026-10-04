@@ -56,6 +56,7 @@
 #endif
 #include <stdarg.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -2284,16 +2285,34 @@ HOOK(int, SDL_RenderDrawPoints, (SDL_Renderer *r, const SDL_Point *points, int c
  * once a second would lose every press and let the audio pile up. Games
  * poll events every loop iteration, so the link is serviced from there. */
 static void script_tick(void);
+/* The link is one conversation: a program that draws on a thread of its own (OpenRA's render
+ * thread swaps while its main thread polls events) had the two reading it at once, the frame's
+ * present reply taken by the event poll and the swap waiting for it for ever. One lock, recursive
+ * (a frame's end pumps the link too), around the event side and the frame side. */
+static pthread_mutex_t link_mutex;
+static pthread_once_t link_once = PTHREAD_ONCE_INIT;
+static void link_mutex_init(void)
+{
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&link_mutex, &a);
+}
+static void link_lock(void) { pthread_once(&link_once, link_mutex_init); pthread_mutex_lock(&link_mutex); }
+static void link_unlock(void) { pthread_mutex_unlock(&link_mutex); }
+
 static void service_link(void)
 {
     static Uint32 last;
     Uint32 now = SDL_GetTicks();
     if (!S.active || !link_up() || now == last) return;
+    link_lock();
     last = now;
     pspexp_pump(S.ctx, 0);
     feed_input();
     audio_drain();
     script_tick();   /* a game waiting for an event (Pinball's menu) gets its scripted keys too */
+    link_unlock();
 }
 
 /* PSPEXP_NUB=mouse: the PSP shows no host cursor, so the pointer is drawn
@@ -2449,9 +2468,16 @@ static void script_tick(void)
     }
 }
 
+static void end_frame_locked(void);
 static void end_frame(void)
 {
     if (!S.active) return;
+    link_lock();
+    end_frame_locked();
+    link_unlock();
+}
+static void end_frame_locked(void)
+{
     if (S.win) {   /* programs resize their window after creating it (scalers, settings) */
         int w = 0, h = 0;
         SDL_GetWindowSize(S.win, &w, &h);
@@ -2861,7 +2887,14 @@ HOOK(int, SDL_WaitEvent, (SDL_Event *ev)) { return wait_event_impl(ev, -1); }
 
 /* A whole frame of pixels to the PSP (a window surface; with PSPEXP_HOST_GL, the frame the host's own
  * GPU drew): converted, shrunk to the PSP's screen when larger, the pages that changed sent */
+static void stream_frame_locked(SDL_Window *win, const Frame *surf);
 static void stream_frame(SDL_Window *win, const Frame *surf)
+{
+    link_lock();
+    stream_frame_locked(win, surf);
+    link_unlock();
+}
+static void stream_frame_locked(SDL_Window *win, const Frame *surf)
 {
     Tex *x;
     if (!S.inited) { S.win = win; S.win_w = surf->w; S.win_h = surf->h; connect_once(); update_scale(); }
@@ -2901,7 +2934,24 @@ static void stream_frame(SDL_Window *win, const Frame *surf)
             for (xx = 0; xx < dw; xx++) dst[xx] = src[xx * surf->w / dw];
         }
         x->w = dw; x->h = dh;
-        x->dirty = 1;
+        {   /* only the pages that changed since the last frame, as at full size: a frame shrunk from a
+             * larger window was all sent every time (OpenRA's battlefield, 140 KB a frame however still) */
+            static uint32_t *prev;
+            static int prev_w, prev_h;
+            size_t n = (size_t)dw * dh;
+            if (prev && prev_w == dw && prev_h == dh && x->npages && !x->npages_grid_changed && !x->dirty && !S.no_delta) {
+                int i, yy2;
+                uint32_t bits = 0;
+                for (i = 0; i < x->npages; i++) {
+                    const Page *p = &x->pages[i];
+                    for (yy2 = p->y0; yy2 < p->y0 + p->h; yy2++)
+                        if (memcmp(x->rgba + (size_t)yy2 * dw + p->x0, prev + (size_t)yy2 * dw + p->x0, (size_t)p->w * 4)) { bits |= 1u << i; break; }
+                }
+                x->pdirty |= bits;
+            } else x->dirty = 1;
+            if (prev_w * prev_h != (int)n) { free(prev); prev = (uint32_t *)malloc(n * 4); }
+            if (prev) { memcpy(prev, x->rgba, n * 4); prev_w = dw; prev_h = dh; } else prev_w = prev_h = 0;
+        }
     }
     begin_frame();
     S.has_clip = 0;

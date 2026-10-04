@@ -1,0 +1,47 @@
+#!/bin/sh
+# pspexp-openra: OpenRA release-20250330 (GPL-3.0) built by
+# scripts/packages/build-openra.sh (self-contained .NET 6, so no .NET on the
+# board), its SDL2.so a wrapper that puts PSPExp's board-GPU layer before
+# Debian's SDL2. Installs /usr/lib/pspexp/openra/ and the launch scripts
+# /usr/games/openra-ra and /usr/games/openra-cnc. The original games' content
+# comes through OpenRA's own content installer (Quick Install downloads it from
+# OpenRA's mirrors). Usage: build OUTDIR ARCH (arm64)
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+[ "$ARCH" = arm64 ] || { echo "pspexp-openra: arm64 only" >&2; exit 1; }
+B="$ROOT/build/arm64/openra"
+[ -x "$B/lib/OpenRA" ] && [ -s "$B/depends.txt" ] || { echo "no $B/lib/OpenRA: scripts/packages/build-openra.sh first" >&2; exit 1; }
+V=20250330-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-openra"
+cp -R "$B/lib" "$W/root/usr/lib/pspexp/openra"
+for m in ra cnc; do
+	cat > "$W/root/usr/games/openra-$m" <<S
+#!/bin/sh
+# OpenRA's $m (package pspexp-openra), drawn by the board's GPU through PSPExp: a 1024x576 window
+# (its menus and lobby need about 1024 wide; 854x480 cut the lobby's Start button off), OpenGL ES
+# (the Pi's V3D has ES 3.1 and GL 3.1 only), the first-run cards skipped: the introduction (its
+# defaults: the name Commander, the modern controls) and the request to send system information
+# (not sent)
+cd /usr/lib/pspexp/openra && exec ./OpenRA Game.Mod=$m Graphics.Mode=Windowed Graphics.WindowedSize=1024,576 \\
+	Graphics.GLProfile=Embedded Game.IntroductionPromptVersion=1 Debug.SystemInformationVersionPrompt=6 \\
+	Debug.SendSystemInformation=False "\$@"
+S
+	chmod 755 "$W/root/usr/games/openra-$m"
+done
+echo "OpenRA release-20250330 (https://github.com/OpenRA/OpenRA), GPL-3.0, built by PSPExp for arm64 (self-contained .NET 6); SDL2.so there is PSPExp's wrapper (its layer, then the system SDL2)." > "$W/root/usr/share/doc/pspexp-openra/README"
+cat > "$W/control" <<C
+Package: pspexp-openra
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt"), pspexp-core
+Description: OpenRA (Red Alert, Tiberian Dawn), for PSPExp
+ The classic Command & Conquer games remade, with online play: OpenRA
+ release-20250330 built for arm64. The original games' content is
+ installed by OpenRA's own content installer. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-openra_${V}_$ARCH.deb"

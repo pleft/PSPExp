@@ -72,6 +72,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Diablo (shareware) | drawn by the PSP: about 24 fps in the emulator; your own full game too (DIABDAT.MPQ in ~/.local/share/diasurgical/devilution); DevilutionX's licence accepted in Packages |
 | Sonic Robo Blast 2 | drawn by the PSP: about 23 fps in the emulator (the game's own cap 35) |
 | SRB2Kart | drawn by the PSP: about 23 fps in the emulator (the game's own cap 35); races online |
+| Red Alert, Tiberian Dawn on OpenRA | drawn by the Pi's graphics chip (only on a Pi): a skirmish about 10 fps in the emulator; the first start installs the game's content (Quick Install) |
 | Command & Conquer, Red Alert | drawn by the PSP: 25-28 fps in the emulator; EA's freeware, about 600 MB each to download |
 | AssaultCube | drawn by the PSP: about 25 fps in the emulator, online matches; not yet measured on the PSP |
 | Lugaru HD | drawn by the PSP: about 20 fps in the emulator, not yet measured on the PSP |

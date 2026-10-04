@@ -1,0 +1,36 @@
+# Tiberian Dawn (OpenRA): OpenRA release-20250330 (package pspexp-openra, built by PSPExp for
+# arm64), Tiberian Dawn (Command & Conquer) with modern controls, skirmish against its AI and online
+# play. The first start offers OpenRA's content installer: Quick Install
+# downloads the original game's content (the freeware release, without its
+# music and videos) from OpenRA's mirrors. Drawn by the board's GPU (the Pi
+# 400's V3D through OpenGL ES) at 1024x576, shrunk to the PSP's screen:
+# about 10 fps in a skirmish into PPSSPP. The nub is the mouse (cross its
+# left button: select and order; circle the right), the d-pad scrolls the
+# map, START its menu.
+
+[package]
+id=openra-cnc
+title=Tiberian Dawn (OpenRA)
+description=Command & Conquer remade by OpenRA: skirmish against the computer, online battles and the campaigns, with modern controls. Drawn by the board's GPU (Pi).
+category=game
+license=GPL-3.0 (OpenRA); the original game's content downloaded by OpenRA's installer (EA's freeware)
+version=1
+
+[debian]
+apt=pspexp-openra
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Tiberian Dawn (OpenRA)
+type=game
+description=Command & Conquer remade by OpenRA: skirmish against the computer, online battles and the campaigns, with modern controls. Drawn by the board's GPU (Pi).
+icon=swords
+exec=/usr/games/openra-cnc
+keys=start=escape,up=up,down=down,left=left,right=right,cross=none,circle=none,square=none,triangle=none,l=none,r=none,select=none
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_WINDOW=1024x576
+graphics=board-gpu

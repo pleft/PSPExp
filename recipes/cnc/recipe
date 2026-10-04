@@ -9,10 +9,10 @@
 [package]
 id=cnc
 title=Command & Conquer
-description=Westwood's 1995 real-time strategy game
+description=Westwood's 1995 real-time strategy game: GDI against the Brotherhood of Nod, the Gold edition. EA's freeware, drawn by the PSP.
 category=game
 license=Freeware (Command & Conquer, EA, under EA's licence agreement), downloaded at install; GPL-3.0 (Vanilla Conquer)
-version=1
+version=2
 
 [debian]
 apt=cnc-freeware
@@ -20,7 +20,7 @@ apt=cnc-freeware
 [entry]
 title=Command & Conquer
 type=game
-description= GDI against the Brotherhood of Nod, the Gold edition. EA's freeware, drawn by the PSP. Drawn by the PSP's graphics chip.
+description=Westwood's 1995 real-time strategy game: GDI against the Brotherhood of Nod, the Gold edition. EA's freeware. Drawn by the PSP's graphics chip.
 icon=swords
 exec=/usr/games/cnc-freeware
 keys=start=escape,up=up,down=down,left=left,right=right,square=none,triangle=none,l=none,r=none,select=none
