@@ -65,14 +65,14 @@ Measured on the PSP-1000 with a Pi 400:
 | OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
-| Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's first mission at about 20 fps in the emulator, the game at full speed; not yet measured on the PSP |
-| Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): about 21 fps in the emulator; free with Epic's permission, its terms accepted in Packages |
-| Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): the Pi itself runs it at 60 fps; about 20 fps in the emulator, not yet measured on the PSP |
-| Wolfenstein: Enemy Territory | drawn by the PSP: about 20 fps in the emulator in play, online or against bots; id's licence agreement accepted in Packages; not yet measured on the PSP |
-| Diablo (shareware) | drawn by the PSP: about 24 fps in the emulator; your own full game too (DIABDAT.MPQ in ~/.local/share/diasurgical/devilution); DevilutionX's licence accepted in Packages |
-| Sonic Robo Blast 2 | drawn by the PSP: about 23 fps in the emulator (the game's own cap 35) |
-| SRB2Kart | drawn by the PSP: about 23 fps in the emulator (the game's own cap 35); races online |
-| Red Alert, Tiberian Dawn on OpenRA | drawn by the Pi's graphics chip (only on a Pi): a skirmish about 10 fps in the emulator; the first start installs the game's content (Quick Install) |
+| Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's menus at 17 fps on the PSP-1000 (the game's own rate), its first mission about 20 fps in the emulator; not yet measured on the PSP |
+| Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |
+| Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000 |
+| Wolfenstein: Enemy Territory | drawn by the PSP: on the PSP-1000 about 20 fps over Oasis's open ground, up to 60 indoors; online or against bots; id's licence agreement accepted in Packages |
+| Diablo (shareware) | drawn by the PSP: 60 fps on the PSP-1000; your own full game too (DIABDAT.MPQ in ~/.local/share/diasurgical/devilution); DevilutionX's licence accepted in Packages |
+| Sonic Robo Blast 2 | drawn by the PSP: 60 fps on the PSP-1000, running through Greenflower Zone |
+| SRB2Kart | drawn by the PSP: 56-57 fps on the PSP-1000; races online |
+| Red Alert, Tiberian Dawn on OpenRA | drawn by the Pi's graphics chip (only on a Pi): a skirmish 16-17 fps on the PSP-1000; the first start installs the game's content (Quick Install) |
 | Command & Conquer, Red Alert | drawn by the PSP: 25-28 fps in the emulator; EA's freeware, about 600 MB each to download |
 | AssaultCube | drawn by the PSP: about 25 fps in the emulator, online matches; not yet measured on the PSP |
 | Lugaru HD | drawn by the PSP: about 20 fps in the emulator, not yet measured on the PSP |
