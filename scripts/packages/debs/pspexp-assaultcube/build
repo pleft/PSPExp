@@ -1,0 +1,30 @@
+#!/bin/sh
+# pspexp-assaultcube: AssaultCube 1.3.0.2's client (zlib licence) built by
+# scripts/packages/build-assaultcube.sh ARCH (Debian's arm64 one fails against
+# its own local server). Installs /usr/lib/pspexp/assaultcube/native_client;
+# the game's data comes with assaultcube-release, downloaded at install from
+# the project's release. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/assaultcube"
+[ -x "$B/native_client" ] && [ -s "$B/depends.txt" ] || { echo "no $B/native_client: scripts/packages/build-assaultcube.sh $ARCH first" >&2; exit 1; }
+V=1.3.0.2-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/assaultcube" "$W/root/usr/share/doc/pspexp-assaultcube"
+install -m 755 "$B/native_client" "$W/root/usr/lib/pspexp/assaultcube/native_client"
+echo "AssaultCube 1.3.0.2's client (https://github.com/assaultcube/AC, tag v1.3.0.2), built by PSPExp; its data comes with assaultcube-release (downloaded)." > "$W/root/usr/share/doc/pspexp-assaultcube/README"
+cat > "$W/control" <<C
+Package: pspexp-assaultcube
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: AssaultCube's client, for PSPExp
+ The client of AssaultCube, the free online first-person shooter, built
+ from the project's release tag. Its data comes with assaultcube-release.
+ Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-assaultcube_${V}_$ARCH.deb"

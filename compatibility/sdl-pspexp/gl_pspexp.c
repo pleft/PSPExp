@@ -4801,9 +4801,26 @@ GLAPI(void, glDrawPixels, (GLsizei w, GLsizei h, GLenum f, GLenum t, const GLvoi
 { (void)w; (void)h; (void)f; (void)t; (void)p; unsupported("glDrawPixels"); }
 GLAPI(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, GLvoid *p))
 {
-    (void)x; (void)y; (void)f;
+    /* black, exactly as many bytes as asked for: one float of depth read as four had written 16 into
+     * AssaultCube's 4-byte variable (a heap corruption). Rows unpadded: fewer than the pack alignment
+     * would ask at most, never more */
+    size_t comp, size;
+    (void)x; (void)y;
     unsupported("glReadPixels (reads black)");
-    if (p && w > 0 && h > 0) memset(p, 0, (size_t)w * (size_t)h * (size_t)(t == GL_FLOAT ? 16 : 4));
+    switch (f) {
+    case GL_RGBA: case GL_BGRA: comp = 4; break;
+    case GL_RGB: case GL_BGR: comp = 3; break;
+    case GL_LUMINANCE_ALPHA: comp = 2; break;
+    default: comp = 1; break;   /* depth, stencil, one channel */
+    }
+    switch (t) {
+    case GL_FLOAT: case GL_UNSIGNED_INT: case GL_INT: size = 4 * comp; break;
+    case GL_UNSIGNED_SHORT: case GL_SHORT: size = 2 * comp; break;
+    case GL_UNSIGNED_SHORT_5_6_5: case GL_UNSIGNED_SHORT_4_4_4_4: case GL_UNSIGNED_SHORT_5_5_5_1: size = 2; break;
+    case GL_UNSIGNED_INT_8_8_8_8: case GL_UNSIGNED_INT_8_8_8_8_REV: size = 4; break;
+    default: size = comp; break;   /* bytes */
+    }
+    if (p && w > 0 && h > 0) memset(p, 0, (size_t)w * (size_t)h * size);
 }
 
 GLAPI(void, glFogf, (GLenum p, GLfloat v))

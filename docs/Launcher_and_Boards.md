@@ -732,6 +732,22 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **AssaultCube** (`assaultcube`, 2026-10-04): the free online shooter,
+  no PSP or Vita port. Debian's arm64 build fails against its own local
+  server ("protocol incompatible"); built from the project's v1.3.0.2 tag
+  instead (`scripts/packages/build-assaultcube.sh`: its enet configured
+  first, its Makefile racing under -j; GCC, not the clang++ it names), package
+  `pspexp-assaultcube`, and its data from the project's Linux release at
+  install (`assaultcube-release`, 52 MB; not named assaultcube, Debian's
+  package would win). Drawn by the PSP's GE: 24-25 fps into PPSSPP, 19 KB a
+  frame; the first-run dialog over a map in 3D. It first crashed with a
+  heap corruption: the GL layer's black-reading `glReadPixels` wrote 16
+  bytes for one float of depth (now exactly the bytes asked for). The
+  installer's `.tar.bz2` was only decompressed by unar (it knows a
+  compressed tar by name, and the download is `game.part`): tar now for
+  .bz2 and .xz as for .gz. Mouse and keys: nub aims, cross fires, R the
+  scope, d-pad moves, circle jumps, square reloads, triangle the previous
+  weapon, L crouches, START the menu, SELECT the scores.
 - **Lugaru HD** (`lugaru`, 2026-10-04): Wolfire's 3D rabbit fighter, OSS
   Lugaru 1.2 from Debian (code GPL, data CC BY-SA; on the Vita, not the
   PSP). Its fixed-function OpenGL is drawn by the PSP's GE: menus, the

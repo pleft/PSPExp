@@ -2,7 +2,7 @@
 # §4.2): the package holds a launch script and nothing of the game; its
 # postinst fetches the developer's own release from where the developer
 # publishes it, checks a pinned SHA-256, unpacks it (unar: RAR and ZIP; tar for
-# a .tar.gz, which unar only ungzips) into
+# a .tar.gz, .tar.bz2 or .tar.xz, which unar only decompresses) into
 # /usr/share/games/ID, and postrm removes it. Sourced by a game's build script,
 # which sets:
 #   ID TITLE VERSION       package name, the game's title, the package's version
@@ -44,7 +44,9 @@ S
 		_fetch="u='$URL'"
 	fi
 	case "$URL" in
-	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;
+	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;   # (unar knows a compressed tar by its name only:
+	*.tar.bz2|*.tbz2|*.tbz) _unpack='tar -xjf "$C/game.part" -C "$C/x"' ;;   #  on game.part it just decompresses it)
+	*.tar.xz|*.txz) _unpack='tar -xJf "$C/game.part" -C "$C/x"' ;;
 	*) _unpack='unar -q -D -o "$C/x" "$C/game.part" >/dev/null' ;;   # -D: no folder of its own round an archive of several top-level items (named after game.part)
 	esac
 	[ -n "$KEEP" ] && { _unpack="mkdir -p \"\$C/x/g\" && mv \"\$C/game.part\" \"\$C/x/g/$KEEP\""; TOP=g; }
