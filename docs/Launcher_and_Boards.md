@@ -732,6 +732,22 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **SRB2Kart** (`srb2kart`, 2026-10-04): Kart Krew's free kart racer with
+  Sonic and friends, on no PSP (the Vita has a port). Built from the v1.6
+  tag (`scripts/packages/build-srb2kart.sh`, `pspexp-srb2kart`); its build
+  records the official assets' MD5s and checks them at start (skipping its
+  assets step left them empty: "file is corrupt"), so the container
+  fetches the release's `AssetsLinuxOnly.zip` for the build only; the
+  installer `srb2kart` downloads the same zip at install (221 MB). Its
+  software renderer crashes on a NULL wall drawer at heights that are not a
+  multiple of 200 (480x272, 640x360; also without PSPExp): run at 640x400
+  (`-width 640 -height 400`), where its HUD is drawn twice its size, and
+  shrunk to the PSP's screen it stays readable. Drawn by the PSP as CLUT8
+  pages: Green Hills in a race at 22-23 fps into PPSSPP (its cap 35). The
+  PSP's controller is its gamepad (its SDL game-controller defaults: nub
+  steers, cross accelerates, circle brakes, L item, R drift, square look
+  back, triangle camera, START menu, SELECT pause); the d-pad's left / right
+  also steer as the arrow keys. Online races through the board.
 - **Command & Conquer and Red Alert** (`cnc`, `redalert`, 2026-10-04):
   Vanilla Conquer (the source EA published in 2020, made portable: SDL2,
   8-bit frames, `scripts/packages/build-vanillaconquer.sh`, package

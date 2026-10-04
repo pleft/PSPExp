@@ -1,0 +1,17 @@
+#!/bin/sh
+# srb2kart: an installer for SRB2Kart 1.6's assets (its characters, maps,
+# music; freeware, under the licences of their LICENSE files): the board
+# downloads the project's AssetsLinuxOnly.zip from its GitHub release when it is
+# installed (_installer.sh), played by pspexp-srb2kart's program at 640x400
+# (its software renderer crashes at heights that are not a multiple of 200).
+# Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=srb2kart TITLE="SRB2Kart" VERSION=1.6-pspexp1
+URL=https://github.com/STJr/Kart-Public/releases/download/v1.6/AssetsLinuxOnly.zip
+SHA=7a384fb99d42f0cf41d12e3ed873754f9a5ba2b993d5e54bde7962bea3accdd1 SIZE="221 MB" TOP=""
+RUN='SRB2WADDIR="$G" exec /usr/lib/pspexp/srb2kart/srb2kart -width 640 -height 400 "$@"'
+DEPENDS=pspexp-srb2kart
+ABOUT=" Kart Krew's kart racer with Sonic and friends, on Sonic Robo Blast 2's
+ engine: its release's assets, run with PSPExp's build of its program."
+build_installer "$1"

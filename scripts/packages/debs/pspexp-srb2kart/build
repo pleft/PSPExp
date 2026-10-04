@@ -1,0 +1,28 @@
+#!/bin/sh
+# pspexp-srb2kart: SRB2Kart 1.6's program (GPL-2.0) built by
+# scripts/packages/build-srb2kart.sh ARCH. Installs /usr/lib/pspexp/srb2kart/;
+# its assets come with package srb2kart (the project's release, downloaded).
+# Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/srb2kart"
+[ -x "$B/srb2kart" ] && [ -s "$B/depends.txt" ] || { echo "no $B/srb2kart: scripts/packages/build-srb2kart.sh $ARCH first" >&2; exit 1; }
+V=1.6-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/srb2kart" "$W/root/usr/share/doc/pspexp-srb2kart"
+install -m 755 "$B/srb2kart" "$W/root/usr/lib/pspexp/srb2kart/srb2kart"
+echo "SRB2Kart 1.6 (https://github.com/STJr/Kart-Public, tag v1.6), GPL-2.0, built by PSPExp; its assets come with package srb2kart (downloaded)." > "$W/root/usr/share/doc/pspexp-srb2kart/README"
+cat > "$W/control" <<C
+Package: pspexp-srb2kart
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: SRB2Kart's program, for PSPExp
+ Kart Krew's kart racer on Sonic Robo Blast 2's engine, built from the
+ project's v1.6 tag. Its assets come with package srb2kart. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-srb2kart_${V}_$ARCH.deb"
