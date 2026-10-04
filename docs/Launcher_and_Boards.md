@@ -498,8 +498,9 @@ PSPEXP_LAUNCHER_OPEN=about PSPEXP_TERM_KEYS=wait \
 `--shot N` saves every Nth frame sent; a still launcher sends few, so use
 1. `PSPEXP_TERM_KEYS` replays buttons (`left,down,cross,wait,...`) to reach
 other pages; `PSPEXP_LAUNCHER_OPEN` opens a page without them: `about`,
-`tz`, `wifi`, or `password:<network>` (the keyboard, joining nothing
-unless typed into). Do not
+`tz`, `wifi`, `password:<network>` (the keyboard, joining nothing
+unless typed into), or `terms:<package>` (Packages with that package's
+terms to accept: the box has four lines, for id's long address). Do not
 replay keys into System on a slow link: a dropped press can land on Restart
 or Power off. A game started with `PSPEXP=tcp:<mac>:3838` draws to the same
 server, which is enough to check it runs but not its frame rate.

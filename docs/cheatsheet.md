@@ -110,7 +110,7 @@ Debian boards through apt, on the Omega2+ from our own builds.
 | install / remove / list / what the catalogue offers (on the board) | `pspexp-pkg install nes gameboy` / `remove ID` / `list` / `available` |
 | check the recipes | `scripts/packages/check-recipes` |
 | copy the test ROMs (`roms/<system>/`, git-ignored) to a board | `scripts/packages/push-roms.sh <host> [nes gb ...]` |
-| launcher screenshots from a board (stand-in PSP on the Mac) | board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` (or `tz`, `wifi`, `password:<name>`) |
+| launcher screenshots from a board (stand-in PSP on the Mac) | board: `PSPEXP_LAUNCHER_OPEN=about pspexp-term --launcher --tcp <mac>:3838 --shot 1` (or `tz`, `wifi`, `password:<name>`, `terms:<package>`) |
 | installers ship the existing build: after a source change | the board's `build.sh` first (the Pi's `install.sh` builds on the Pi) |
 | on a board: an SDL2 program on the PSP / packages | `pspexp-run <program>` (glibc boards) / `pspexp-pkg list` |
 | on a board: sound to Bluetooth (Settings > Sound does the same) | `pspexp-bt devices` / `use ADDRESS` / `psp` / `volume +5` / `route` / `forget ADDRESS` |

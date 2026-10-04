@@ -2644,6 +2644,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
         const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
         if (o && !strcmp(o, "about")) { about_collect(); g_mode = M_ABOUT; g_dirty = 1; }
         if (o && !strcmp(o, "tz")) pick_open(PICK_TZ, 0);
+        if (o && !strncmp(o, "terms:", 6)) snprintf(g_app_req, sizeof(g_app_req), "store");   /* (store.c shows them) */
         if (o && !strcmp(o, "wifi") && board_wifi_kind() != BOARD_WIFI_NONE) pick_open(PICK_WIFI, 0);
         if (o && !strncmp(o, "password:", 9)) {   /* the keyboard for a network, typing nothing */
             snprintf(g_join.ssid, sizeof(g_join.ssid), "%s", o + 9);

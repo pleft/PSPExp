@@ -280,6 +280,13 @@ static void st_open(void)
         g_catmode = access(pub, R_OK) == 0;
     }
     load_catalogue();
+    {   /* screenshots: PSPEXP_LAUNCHER_OPEN=terms:ID shows that package's terms to accept */
+        const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
+        int i;
+        if (o && !strncmp(o, "terms:", 6))
+            for (i = 0; i < g_n; i++)
+                if (!strcmp(g_pk[i].id, o + 6) && g_pk[i].terms[0]) { g_vis[0] = i; g_nvis = 1; g_sel = 0; g_mode = S_TERMS; }
+    }
 }
 
 static int st_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
@@ -372,7 +379,7 @@ static void box(const char *title, const char *text, int h)
     gfx_shadow(NINE_SHADOW14, bx, by, w, h, 0x000000, 160);
     gfx_nine(NINE_R14, bx, by, w, h, 0x1b2a46, 250);
     gfx_text(FONT_BODY, bx + 16, by + 12, title, UI_TEXT, 255, w - 32);
-    for (ln = 0; ln < 3 && *p; ln++) {
+    for (ln = 0; ln < (h >= 124 ? 4 : 3) && *p; ln++) {   /* (the terms' box: a fourth line for a long address) */
         char line[200];
         size_t l = 0, cut = 0;
         while (p[l] && l < sizeof(line) - 1) {
@@ -494,9 +501,9 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         char name[200];
         snprintf(name, sizeof(name), "%.*s", url ? (int)(url - p->terms) : (int)strlen(p->terms), p->terms);
         snprintf(s, sizeof(s), "%s apply to %s. Read them at %s", name, p->title, url ? url + 1 : "");
-        box("Terms to accept", s, 110);
-        gfx_button('x', (UI_SCREEN_W - 320) / 2 + 16, (UI_SCREEN_H - 110) / 2 - 8 + 86); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 34, (UI_SCREEN_H - 110) / 2 - 8 + 85, "Accept and install", UI_TEXT, 255, 0);
-        gfx_button('o', (UI_SCREEN_W - 320) / 2 + 180, (UI_SCREEN_H - 110) / 2 - 8 + 86); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 198, (UI_SCREEN_H - 110) / 2 - 8 + 85, "Decline", UI_TEXT, 255, 0);
+        box("Terms to accept", s, 124);   /* four lines: id's ET licence agreement's address is long */
+        gfx_button('x', (UI_SCREEN_W - 320) / 2 + 16, (UI_SCREEN_H - 124) / 2 - 8 + 100); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 34, (UI_SCREEN_H - 124) / 2 - 8 + 99, "Accept and install", UI_TEXT, 255, 0);
+        gfx_button('o', (UI_SCREEN_W - 320) / 2 + 180, (UI_SCREEN_H - 124) / 2 - 8 + 100); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 198, (UI_SCREEN_H - 124) / 2 - 8 + 99, "Decline", UI_TEXT, 255, 0);
     } else if (g_mode == S_WORKING) {
         int bx = (UI_SCREEN_W - 320) / 2, by = (UI_SCREEN_H - 84) / 2 - 8;
         box(g_job, g_phase[0] ? g_phase : "This runs in the background; a moment.", 84);
