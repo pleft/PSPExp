@@ -195,6 +195,7 @@ static struct {
     /* self-paced: the game's callback is driven by our own thread on a precise
      * clock (headless hosts: SDL's dummy driver runs slow and jittery) */
     int dev_selfpaced[8]; SDL_AudioDeviceID dev_id[8]; SDL_Thread *audio_thread; int audio_thread_stop;
+    int dev_open[8]; SDL_mutex *pace_mu;   /* slots in use; the pacer's lock against an open or a close */
     /* input */
     int nub_mouse, nub_keys, hide_window, cursor_hidden, relative;
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
@@ -220,6 +221,8 @@ static struct {
     uint64_t prof_game, prof_game_cpu, prof_last_end, prof_last_end_cpu;   /* ns: between frames: the program and its
                                          OpenGL here (wall, and this thread's CPU), from the end of the frame before */   /* ns of this thread's CPU converting textures (waits do not count) */
     unsigned pages_sent, pages_t8, pages_kept;          /* since the last report */
+    unsigned long dropped;                              /* frames not sent under PSPEXP_FRAME_DROP */
+    unsigned long silent_ms, sound_ms;                   /* a paced device's silence while paused, and its sound */
     unsigned long tot_pages_sent, tot_pages_t8, tot_pages_kept;
     Uint64 first_frame;                /* performance counter at the first frame sent */
     uint32_t last_shot_frame;
@@ -1533,10 +1536,14 @@ static void audio_drain(void)
 /* Calls the game's audio callback at exactly the device rate, under the
  * device lock the game may also take (SDL_LockAudioDevice), while the real
  * (dummy) device only outputs silence. Started for the first self-paced slot. */
+static void link_lock(void);
+static void link_unlock(void);
+static void audio_drain(void);
 static int audio_pacer(void *arg)
 {
     Uint64 f = SDL_GetPerformanceFrequency(), t0 = SDL_GetPerformanceCounter();
     Uint64 produced[8] = { 0 };
+    int started[8] = { 0 };   /* the slot has played: a pause after that is silence */
     Uint8 *buf = NULL; int buflen = 0;
     (void)arg;
     while (!S.audio_thread_stop) {
@@ -1546,12 +1553,30 @@ static int audio_pacer(void *arg)
             const SDL_AudioSpec *sp = &S.dev_spec[slot];
             Uint64 target;
             int bytes;
-            if (!S.dev_selfpaced[slot] || !S.dev_cb[slot] || !sp->freq) continue;
-            if (SDL_GetAudioDeviceStatus(S.dev_id[slot]) != SDL_AUDIO_PLAYING) { produced[slot] = (Uint64)(elapsed * sp->freq); continue; }
+            if (S.pace_mu) SDL_LockMutex(S.pace_mu);
+            if (!S.dev_selfpaced[slot] || !S.dev_cb[slot] || !sp->freq) { started[slot] = 0; if (S.pace_mu) SDL_UnlockMutex(S.pace_mu); continue; }
+            if (SDL_GetAudioDeviceStatus(S.dev_id[slot]) != SDL_AUDIO_PLAYING) {
+                /* paused: a sound card plays silence, so silence goes, once sound has gone (Mupen64Plus pauses
+                 * its device for a moment whenever its emulation falls behind: sending nothing let the PSP's
+                 * buffer run dry, and it then waits to refill 100 ms before playing on: a gap every two seconds
+                 * in GoldenEye) */
+                if (started[slot]) {
+                    int bytes0 = sp->samples * sp->channels * (int)(SDL_AUDIO_BITSIZE(sp->format) / 8);
+                    target = (Uint64)(elapsed * sp->freq);
+                    if (bytes0 > buflen) { free(buf); buf = (Uint8 *)malloc((size_t)bytes0); buflen = bytes0; }
+                    if (buf && produced[slot] + (Uint64)sp->freq / 8 >= target) {
+                        memset(buf, sp->silence, (size_t)bytes0);
+                        while (produced[slot] < target) { audio_tap(slot, buf, bytes0); produced[slot] += (Uint64)sp->samples; S.silent_ms += (unsigned long)sp->samples * 1000u / (unsigned long)sp->freq; }
+                    } else produced[slot] = target;
+                } else produced[slot] = (Uint64)(elapsed * sp->freq);
+                if (S.pace_mu) SDL_UnlockMutex(S.pace_mu);
+                continue;
+            }
+            started[slot] = 1;
             target = (Uint64)(elapsed * sp->freq);
             bytes = sp->samples * sp->channels * (int)(SDL_AUDIO_BITSIZE(sp->format) / 8);
             if (bytes > buflen) { free(buf); buf = (Uint8 *)malloc((size_t)bytes); buflen = bytes; }
-            if (!buf) break;
+            if (!buf) { if (S.pace_mu) SDL_UnlockMutex(S.pace_mu); break; }
             /* never more than ~120 ms ahead (after a stall), never behind */
             if (produced[slot] + (Uint64)sp->freq / 8 < target) produced[slot] = target - (Uint64)sp->freq / 8;
             while (produced[slot] < target) {
@@ -1560,8 +1585,19 @@ static int audio_pacer(void *arg)
                 SDL_UnlockAudioDevice(S.dev_id[slot]);
                 audio_tap(slot, buf, bytes);
                 produced[slot] += (Uint64)sp->samples;
+                S.sound_ms += (unsigned long)sp->samples * 1000u / (unsigned long)sp->freq;
             }
+            if (S.pace_mu) SDL_UnlockMutex(S.pace_mu);
         }
+#ifdef PSPEXP_HOST_GL
+        /* sent from here as soon as made, not only when the program swaps or polls: GoldenEye and
+         * Perfect Dark, heavier, left gaps over the 100 ms the PSP keeps, and it ran dry about every
+         * two seconds. (The board-GPU layer only: there every use of the link is under its lock,
+         * while the PSP-drawn one builds a frame's draws without it.) */
+        link_lock();
+        audio_drain();
+        link_unlock();
+#endif
         SDL_Delay(2);
     }
     free(buf);
@@ -1577,6 +1613,7 @@ static int want_selfpaced(void)
 
 static void start_selfpaced(int slot, SDL_AudioDeviceID id)
 {
+    if (!S.pace_mu) S.pace_mu = SDL_CreateMutex();
     S.dev_selfpaced[slot] = 1;
     S.dev_id[slot] = id;
     if (!S.audio_thread) S.audio_thread = SDL_CreateThread(audio_pacer, "pspexp-audio", NULL);
@@ -1673,6 +1710,7 @@ static void setup_vjoy(void)
 }
 
 static uint32_t script_pad;   /* PSPEXP_SCRIPT's "pad:" buttons, held as if pressed on the PSP */
+static int script_nub, script_nub_x, script_nub_y;   /* its "nub:XxY": the nub held there (-127..127 each) */
 
 static void feed_input(void)
 {
@@ -1681,7 +1719,12 @@ static void feed_input(void)
     uint32_t pressed, released;
     int i;
     if (in->sequence == 0 && in->timestamp_us == 0) return;
-    if (script_pad) { with_script = *in; with_script.buttons |= script_pad; in = &with_script; }
+    if (script_pad || script_nub) {
+        with_script = *in;
+        with_script.buttons |= script_pad;
+        if (script_nub) { with_script.analog_x = (uint8_t)(128 + script_nub_x); with_script.analog_y = (uint8_t)(128 + script_nub_y); }
+        in = &with_script;
+    }
     pressed = in->buttons & ~S.prev_buttons;
     released = S.prev_buttons & ~in->buttons;
     S.prev_buttons = in->buttons;
@@ -2448,6 +2491,16 @@ static void script_tick(void)
                 continue;
             }
         }
+        if (!strncmp(name, "nub:", 4)) {   /* "nub:100x0": the nub held over that far (right, down positive), "nub:0x0" lets go */
+            int nx = 0, ny = 0;
+            if (sscanf(name + 4, "%dx%d", &nx, &ny) == 2) {
+                script_nub_x = nx < -127 ? -127 : nx > 127 ? 127 : nx;
+                script_nub_y = ny < -127 ? -127 : ny > 127 ? 127 : ny;
+                script_nub = nx || ny;
+                logf_("script: %s at %ld ms", name, at);
+            }
+            continue;
+        }
         if (!strncmp(name, "pad:", 4)) {   /* "pad:cross": a PSP button, through the same path as the PSP's own
                                             * (the virtual controller and its keys): games that tell a pad from a keyboard */
             int b;
@@ -2644,6 +2697,18 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
     static uint8_t *buf;
     static size_t cap;
     int w = 0, h = 0;
+    static int drop = -1;
+    if (drop < 0) drop = getenv("PSPEXP_FRAME_DROP") && atoi(getenv("PSPEXP_FRAME_DROP")) > 0;
+    /* PSPEXP_FRAME_DROP=1: while the PSP still has the frame before, this one is not sent (nor read
+     * back) rather than waited for: a program that keeps time by its sound (Mupen64Plus, its audio
+     * plugin pacing the emulation) then runs at its own speed. Waiting held the N64 to the PSP's
+     * 50-57 fps, the emulation 5-10% slow and its sound short: a crackle. */
+    if (drop && S.active && link_up()) {
+        link_lock();
+        pspexp_pump(S.ctx, 0);
+        if (!pspexp_should_render(S.ctx)) { S.dropped++; link_unlock(); REAL(SDL_GL_SwapWindow)(win); return; }
+        link_unlock();
+    }
     SDL_GL_GetDrawableSize(win, &w, &h);
     if (hg_ReadPixels && w > 0 && h > 0) {
         size_t row = (size_t)w * 4, n = row * (size_t)h;
@@ -3015,7 +3080,7 @@ HOOK(SDL_AudioDeviceID, SDL_OpenAudioDevice, (const char *device, int iscapture,
     int slot;
     if (iscapture || !desired) return REAL(SDL_OpenAudioDevice)(device, iscapture, desired, obtained, allowed);
     connect_once();
-    for (slot = 1; slot < 8; slot++) if (!S.dev_stream[slot]) break;
+    for (slot = 2; slot < 8; slot++) if (!S.dev_open[slot]) break;   /* (1: SDL_OpenAudio's) */
     if (slot == 8) return REAL(SDL_OpenAudioDevice)(device, iscapture, desired, obtained, allowed);
     want = *desired;
     S.dev_cb[slot] = desired->callback;
@@ -3023,7 +3088,10 @@ HOOK(SDL_AudioDeviceID, SDL_OpenAudioDevice, (const char *device, int iscapture,
     if (desired->callback) { want.callback = audio_callback_wrapper; want.userdata = (void *)(intptr_t)slot; }
     id = REAL(SDL_OpenAudioDevice)(device, iscapture, &want, &have, allowed);
     if (id) {
+        if (S.pace_mu) SDL_LockMutex(S.pace_mu);
         setup_stream(slot, &have);
+        S.dev_open[slot] = 1; S.dev_id[slot] = id;
+        if (S.pace_mu) SDL_UnlockMutex(S.pace_mu);
         if (obtained) { *obtained = have; obtained->callback = desired->callback; obtained->userdata = desired->userdata; }
         logf_("audio device %u tapped: %d Hz x%d fmt %#x", (unsigned)id, have.freq, have.channels, have.format);
         if (desired->callback && want_selfpaced()) start_selfpaced(slot, id);
@@ -3042,17 +3110,41 @@ HOOK(int, SDL_OpenAudio, (SDL_AudioSpec *desired, SDL_AudioSpec *obtained))
     S.dev_ud[1] = desired->userdata;
     if (desired->callback) { desired->callback = audio_callback_wrapper; desired->userdata = (void *)(intptr_t)1; }
     rc = REAL(SDL_OpenAudio)(desired, obtained ? obtained : &have);
-    if (rc == 0) setup_stream(1, obtained ? obtained : &have);
+    if (rc == 0) { setup_stream(1, obtained ? obtained : &have); S.dev_open[1] = 1; S.dev_id[1] = 1; }
     if (rc == 0 && S.dev_cb[1] && want_selfpaced()) start_selfpaced(1, 1);
     desired->callback = S.dev_cb[1]; desired->userdata = S.dev_ud[1];
     if (obtained) { obtained->callback = S.dev_cb[1]; obtained->userdata = S.dev_ud[1]; }
     return rc;
 }
 
+/* A closed device's slot let go: Mupen64Plus closes its sound device and opens it again when a game
+ * starts, SDL gives the new one the same number, and the old slot, still paced, had the plugin's
+ * callback called twice as often: twice the sound to the PSP (its buffer full, the rest dropped) and
+ * the plugin's own buffer run dry, a crackle. */
+static void audio_slot_closed(SDL_AudioDeviceID dev)
+{
+    int slot;
+    if (S.pace_mu) SDL_LockMutex(S.pace_mu);
+    for (slot = 1; slot < 8; slot++)
+        if (S.dev_open[slot] && S.dev_id[slot] == dev) { S.dev_open[slot] = 0; S.dev_selfpaced[slot] = 0; S.dev_cb[slot] = NULL; }
+    if (S.pace_mu) SDL_UnlockMutex(S.pace_mu);
+}
+HOOK(void, SDL_CloseAudioDevice, (SDL_AudioDeviceID dev))
+{
+    audio_slot_closed(dev);
+    REAL(SDL_CloseAudioDevice)(dev);
+}
+HOOK(void, SDL_CloseAudio, (void))
+{
+    audio_slot_closed(1);
+    REAL(SDL_CloseAudio)();
+}
+
 HOOK(int, SDL_QueueAudio, (SDL_AudioDeviceID dev, const void *data, Uint32 len))
 {
     int slot = -1, i;
-    for (i = 1; i < 8; i++) if (S.dev_stream[i]) { slot = i; break; }   /* single queued device is the common case */
+    for (i = 1; i < 8; i++) if (S.dev_open[i] && S.dev_id[i] == dev) { slot = i; break; }
+    if (slot < 0) for (i = 1; i < 8; i++) if (S.dev_open[i]) { slot = i; break; }   /* single queued device is the common case */
     if (slot > 0) audio_tap(slot, (const Uint8 *)data, (int)len);
     if (!S.local_audio) return 0;
     return REAL(SDL_QueueAudio)(dev, data, len);
@@ -3073,6 +3165,8 @@ static void shim_exit(void)
               secs > 0 ? (fr - 1) / secs : 0.0, (double)st->bytes_sent / 1024.0 / fr, S.tot_pages_sent + S.pages_sent, S.tot_pages_t8 + S.pages_t8,
               S.tot_pages_kept + S.pages_kept, (double)(S.tot_up_ticks + S.up_ticks) / 1e6 / fr,
               S.no_delta ? "off" : "on", S.no_clut ? "off" : "on");
+        if (S.silent_ms) logf_("audio: %lu ms of silence sent while the program had its device paused, against %lu ms of its sound", S.silent_ms, S.sound_ms);
+        if (S.dropped) logf_("frames not sent while the PSP was busy (PSPEXP_FRAME_DROP): %lu", S.dropped);
     }
     if (S.audio_thread) { S.audio_thread_stop = 1; SDL_WaitThread(S.audio_thread, NULL); S.audio_thread = NULL; }
     if (S.ctx) {

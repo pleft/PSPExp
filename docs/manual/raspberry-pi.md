@@ -65,7 +65,7 @@ Measured on the PSP-1000 with a Pi 400:
 | OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
-| Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's menus at 17 fps on the PSP-1000 (the game's own rate), its first mission about 20 fps in the emulator; not yet measured on the PSP |
+| Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); the sound clean in Mario, Ocarina and Banjo-Tooie; GoldenEye and Perfect Dark still have short gaps where the Pi falls behind |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000 |
 | Wolfenstein: Enemy Territory | drawn by the PSP: on the PSP-1000 about 20 fps over Oasis's open ground, up to 60 indoors; online or against bots; id's licence agreement accepted in Packages |
