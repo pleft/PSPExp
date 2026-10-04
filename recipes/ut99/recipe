@@ -1,0 +1,39 @@
+# Unreal Tournament: Game of the Year Edition (Epic, 1999), free with Epic
+# Games' permission through OldUnreal: installing runs OldUnreal's own Linux
+# installer (the disc image from archive.org, their patch) and lays their
+# 469d arm64 patch over it (SDL2); nothing is hosted by PSPExp (package ut99).
+# The Epic Games Terms of Service must be accepted first: Packages asks.
+# Drawn by the board's own GPU (the Pi 400's V3D): its OpenGL renderer needs
+# ARB vertex and fragment programs, which the PSP's layer has not. Mouse and
+# keys: the nub aims (and points in menus), cross fires (and clicks), R
+# alt-fires, the d-pad moves and strafes, circle jumps, square ducks,
+# triangle the next weapon (E), L the translocator (Q), START the menu.
+
+[package]
+id=ut99
+title=Unreal Tournament
+description=Epic's 1999 arena shooter, Game of the Year Edition: deathmatch, capture the flag and assault against bots or online. Drawn by the board's GPU.
+category=game
+license=Free with Epic Games' permission (Unreal Tournament GOTY), downloaded at install through OldUnreal; Epic Games Terms of Service
+version=1
+terms=Epic Games Terms of Service|https://legal.epicgames.com/en-US/epicgames/tos
+
+[debian]
+apt=ut99
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Unreal Tournament
+type=game
+description=Epic's 1999 arena shooter, Game of the Year Edition: deathmatch, capture the flag and assault, against bots or online. Drawn by the board's GPU (Pi).
+icon=swords
+exec=/usr/games/ut99
+keys=circle=space,square=c,triangle=e,l=q,start=escape,up=up,down=down,left=left,right=right,select=none
+nub=mouse
+env=PSPEXP_HOSTGL=1
+env=PSPEXP_WINDOW=480x272
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=r
+env=PSPEXP_JOYSTICK=0
+graphics=board-gpu

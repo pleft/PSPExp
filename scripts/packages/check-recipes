@@ -6,7 +6,7 @@ Check PSPExp's recipes (recipes/<id>/recipe; format: docs/Package_Manager.md §4
 import os, re, sys
 
 SECTIONS = {"package", "debian", "omega", "entry", "system"}
-PACKAGE_KEYS = {"id", "title", "description", "category", "license", "version", "requires"}
+PACKAGE_KEYS = {"id", "title", "description", "category", "license", "version", "requires", "terms"}
 BOARD_KEYS = {"apt", "core", "build", "data", "warn"}
 ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover", "graphics"}
 SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native", "graphics", "exec"}

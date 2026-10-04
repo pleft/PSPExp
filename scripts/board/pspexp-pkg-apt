@@ -9,6 +9,8 @@
 #   pspexp-pkg-apt install ID    both; the recipe's meta-package pspexp-recipe-ID, built here from the
 #                                trusted recipe, installed (or upgraded) with apt; dependencies an
 #                                older version had and nothing needs any more are removed (§5.4, §5.6)
+#   pspexp-pkg-apt accept ID     the user accepted the terms the recipe names (terms=): recorded in
+#                                /var/lib/pspexp/terms/ID, which that game's installer requires
 #   pspexp-pkg-apt remove ID     the meta-package, then only its own dependencies apt reports unneeded
 #   pspexp-pkg-apt upgrade       newer versions of what the installed recipes depend on, and pspexp-*
 #   pspexp-pkg-apt repair        dpkg --configure -a, apt-get -f install
@@ -154,6 +156,12 @@ update)
 	echo "catalogue $new: $(ls "$CAT/recipes" | wc -l) recipes"
 	apt-get -q -o DPkg::Lock::Timeout=120 update >/dev/null 2>&1 || die "apt could not read its lists"
 	echo "apt lists updated" ;;
+accept)   # the user accepted the recipe's terms (Packages asked on the PSP): recorded for its installer
+	r=$(recipe "$1"); t=$(rget "$r" package terms)
+	[ -n "$t" ] || die "$1 has no terms to accept"
+	mkdir -p /var/lib/pspexp/terms
+	printf 'accepted %s: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$t" > "/var/lib/pspexp/terms/$1"
+	echo "terms of $1 accepted" ;;
 prepare)   # the meta-package for recipe ID at VERSION, before anything is installed
 	prepare_meta "$1" "$2" ;;
 resume)   # install from the meta-package prepare wrote (pspexp-pkg's apt step, and recover's), never the catalogue
@@ -168,7 +176,7 @@ remove)
 		$APT remove "pspexp-recipe-$id"
 		prune "$d"
 	fi
-	rm -f "$META/pspexp-recipe-${id}_"*.deb
+	rm -f "$META/pspexp-recipe-${id}_"*.deb "/var/lib/pspexp/terms/$id"   # (a new install asks again)
 	echo "removed pspexp-recipe-$id" ;;
 upgrade)
 	lists

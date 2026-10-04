@@ -35,6 +35,7 @@
 typedef struct Pkg {
     char id[48], title[96], desc[300];
     char graphics[16];             /* how it draws: sdl | opengl | opengl-shaders | board-gpu ("" not said) */
+    char terms[200];               /* what must be accepted before installing: "NAME URL" ("" none) */
     char avail[40], inst[40];      /* versions: offered, installed ("" none) */
     char cover[700];               /* its picture: a path ("" none) */
     char cat[12];                  /* catalogue: game | system | app | tool */
@@ -44,7 +45,7 @@ typedef struct Pkg {
 static Pkg g_pk[PKG_MAX];
 static int g_n, g_sel, g_top, g_dirty = 1, g_exit;
 static char g_err[200];
-enum { S_LIST, S_CONFIRM, S_WORKING, S_RESULT };
+enum { S_LIST, S_CONFIRM, S_WORKING, S_RESULT, S_TERMS };
 static int g_mode;
 static pid_t g_pid;                /* the background job */
 static char g_job[160], g_result_title[96], g_result[400];
@@ -131,11 +132,11 @@ static void load_catalogue(void)
     g_n = 0;
     if ((f = popen("pspexp-pkg available 2>/dev/null", "r"))) {
         while (fgets(line, sizeof(line), f) && g_n < PKG_MAX) {
-            char *fld[7], *p = line;
+            char *fld[8], *p = line;
             int k;
             Pkg *pk;
             line[strcspn(line, "\r\n")] = 0;
-            for (k = 0; k < 7; k++) { fld[k] = p; p = p ? strchr(p, '|') : NULL; if (p) *p++ = 0; }   /* (fld[6]: older pspexp-pkg has none) */
+            for (k = 0; k < 8; k++) { fld[k] = p; p = p ? strchr(p, '|') : NULL; if (p) *p++ = 0; }   /* (fld[6], fld[7]: older pspexp-pkg has none) */
             if (!fld[0][0] || !fld[5] || !(pk = find(fld[0]))) continue;
             snprintf(pk->avail, sizeof(pk->avail), "%s", fld[1]);
             snprintf(pk->st, sizeof(pk->st), "%s", fld[2]);
@@ -143,6 +144,7 @@ static void load_catalogue(void)
             snprintf(pk->title, sizeof(pk->title), "%s", fld[4]);
             snprintf(pk->desc, sizeof(pk->desc), "%s", fld[5]);
             snprintf(pk->graphics, sizeof(pk->graphics), "%s", fld[6] ? fld[6] : "");
+            snprintf(pk->terms, sizeof(pk->terms), "%s", fld[7] ? fld[7] : "");
             snprintf(line, sizeof(line), "%s/recipes/%s/cover.png", g_catdir, pk->id);
             if (access(line, R_OK) == 0) snprintf(pk->cover, sizeof(pk->cover), "%s", line);
         }
@@ -227,10 +229,13 @@ static void catalogue_job(const char *verb, const Pkg *p)
 }
 
 static void start_install(Pkg *p)
-{   /* broken: finish or retry through recover, else install / update */
+{   /* broken: finish or retry through recover, else install / update; a new install of a package
+     * with terms (an Epic Games ToS) asks first (S_TERMS), and goes with --accept-terms */
     char j[800];
     snprintf(j, sizeof(j), "%s/state/txn", root_dir());
-    catalogue_job(!strcmp(p->st, "broken") && access(j, F_OK) == 0 ? "recover" : "install", p);
+    if (!strcmp(p->st, "broken") && access(j, F_OK) == 0) { catalogue_job("recover", p); return; }
+    if (p->terms[0] && g_mode != S_TERMS) { snprintf(j, sizeof(j), "/var/lib/pspexp/terms/%s", p->id); if (access(j, F_OK) != 0) { g_mode = S_TERMS; return; } }
+    catalogue_job(g_mode == S_TERMS ? "install --accept-terms" : "install", p);
 }
 
 static void start_remove(Pkg *p) { catalogue_job("remove", p); }
@@ -290,6 +295,10 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     case S_RESULT: if (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE)) g_mode = S_LIST; return;
     case S_CONFIRM:
         if ((pressed & PSPEXP_BUTTON_CROSS) && p) start_remove(p);
+        else if (pressed & PSPEXP_BUTTON_CIRCLE) g_mode = S_LIST;
+        return;
+    case S_TERMS:   /* cross accepts and installs, circle declines */
+        if ((pressed & PSPEXP_BUTTON_CROSS) && p) start_install(p);
         else if (pressed & PSPEXP_BUTTON_CIRCLE) g_mode = S_LIST;
         return;
     }
@@ -480,6 +489,14 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         box("Remove", s, 96);   /* the buttons sit below two lines of text */
         gfx_button('x', (UI_SCREEN_W - 320) / 2 + 16, (UI_SCREEN_H - 96) / 2 - 8 + 72); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 34, (UI_SCREEN_H - 96) / 2 - 8 + 71, "Remove", UI_TEXT, 255, 0);
         gfx_button('o', (UI_SCREEN_W - 320) / 2 + 120, (UI_SCREEN_H - 96) / 2 - 8 + 72); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 138, (UI_SCREEN_H - 96) / 2 - 8 + 71, "Keep", UI_TEXT, 255, 0);
+    } else if (g_mode == S_TERMS && p) {
+        const char *url = strrchr(p->terms, ' ');
+        char name[200];
+        snprintf(name, sizeof(name), "%.*s", url ? (int)(url - p->terms) : (int)strlen(p->terms), p->terms);
+        snprintf(s, sizeof(s), "%s apply to %s. Read them at %s", name, p->title, url ? url + 1 : "");
+        box("Terms to accept", s, 110);
+        gfx_button('x', (UI_SCREEN_W - 320) / 2 + 16, (UI_SCREEN_H - 110) / 2 - 8 + 86); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 34, (UI_SCREEN_H - 110) / 2 - 8 + 85, "Accept and install", UI_TEXT, 255, 0);
+        gfx_button('o', (UI_SCREEN_W - 320) / 2 + 180, (UI_SCREEN_H - 110) / 2 - 8 + 86); gfx_text(FONT_SMALL, (UI_SCREEN_W - 320) / 2 + 198, (UI_SCREEN_H - 110) / 2 - 8 + 85, "Decline", UI_TEXT, 255, 0);
     } else if (g_mode == S_WORKING) {
         int bx = (UI_SCREEN_W - 320) / 2, by = (UI_SCREEN_H - 84) / 2 - 8;
         box(g_job, g_phase[0] ? g_phase : "This runs in the background; a moment.", 84);

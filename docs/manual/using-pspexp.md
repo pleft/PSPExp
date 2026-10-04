@@ -98,6 +98,10 @@ by the PSP's graphics chip) or **Board GPU** (drawn by the board's own
 graphics chip and sent to the PSP as pictures; only on boards that can, the
 Raspberry Pi).
 
+A few games come with terms to accept first (Unreal Tournament: the Epic
+Games Terms of Service). Packages shows them with where to read them; cross
+accepts and installs, circle declines and nothing is downloaded.
+
 Installing runs in the background: the progress shows, and the game
 appears in the launcher when done. A few games (the RPG Maker ones) are
 downloaded from their developers' own pages while they install, so those

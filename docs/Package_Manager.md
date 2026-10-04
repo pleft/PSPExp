@@ -294,6 +294,16 @@ it without the checksum; §4.3).
 - **Not on a board:** an empty value there, `[debian:gameshell]` with
   `apt=`, leaves the recipe out of that board's catalogue (SuperTuxKart:
   OpenGL 3 on the Pi's GPU, which the GameShell's has not).
+- **Terms to accept:** `terms=NAME|URL` in `[package]` (Unreal
+  Tournament: the Epic Games Terms of Service). `pspexp-pkg available`
+  gives them as an eighth field ("NAME URL"); Packages shows them on the
+  PSP before a first install, cross accepts and installs, circle declines;
+  `pspexp-pkg install --accept-terms ID` then has the root helper record
+  the acceptance (`pspexp-pkg-apt accept ID`: `/var/lib/pspexp/terms/ID`,
+  the date and the terms) before apt runs, and the game's installer refuses
+  without that record. Without `--accept-terms` and no record, install
+  stops and says what must be accepted. Removing the recipe removes the
+  record: a new install asks again.
 - **Several first-run files:** one `first-run=PATH:CONTENT` line each,
   every one written once, when missing, before the program starts.
 - **Any section can change per board:** `[package:omega]` gives the Omega2+

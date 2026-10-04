@@ -5414,6 +5414,16 @@ GLAPI(void, glCompressedTexImage2D, (GLenum target, GLint level, GLenum internal
     GLFN(glTexImage2D)(target, level, internal == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ? GL_RGB : GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
     free(px);
 }
+/* asked for by name only (Unreal Tournament's OpenGLDrv refuses to start without them; it uses
+ * none here): 3D textures compressed or copied, and reading compressed ones back */
+GLAPI(void, glCompressedTexImage3D, (GLenum target, GLint level, GLenum internal, GLsizei w, GLsizei h, GLsizei d, GLint border, GLsizei size, const GLvoid *data))
+{ (void)target; (void)level; (void)internal; (void)w; (void)h; (void)d; (void)border; (void)size; (void)data; unsupported("glCompressedTexImage3D"); }
+GLAPI(void, glCompressedTexSubImage3D, (GLenum target, GLint level, GLint x, GLint y, GLint z, GLsizei w, GLsizei h, GLsizei d, GLenum format, GLsizei size, const GLvoid *data))
+{ (void)target; (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)d; (void)format; (void)size; (void)data; unsupported("glCompressedTexSubImage3D"); }
+GLAPI(void, glCopyTexSubImage3D, (GLenum target, GLint level, GLint xo, GLint yo, GLint zo, GLint x, GLint y, GLsizei w, GLsizei h))
+{ (void)target; (void)level; (void)xo; (void)yo; (void)zo; (void)x; (void)y; (void)w; (void)h; unsupported("glCopyTexSubImage3D"); }
+GLAPI(void, glGetCompressedTexImage, (GLenum target, GLint level, GLvoid *img))
+{ (void)target; (void)level; (void)img; unsupported("glGetCompressedTexImage"); }
 GLAPI(void, glCompressedTexSubImage2D, (GLenum target, GLint level, GLint x, GLint y, GLsizei w, GLsizei h, GLenum format, GLsizei size, const GLvoid *data))
 {
     uint32_t *px;

@@ -732,6 +732,22 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   crouches, square the next weapon, L / R strafe, SELECT the inventory,
   START the menu; the first run writes `~/.yq2/baseq2/autoexec.cfg`
   binding the next weapon and crouch, which Quake II leaves unbound.
+- **Unreal Tournament: GOTY** (`ut99`, Pi only, 2026-10-04): free since
+  Epic allowed OldUnreal to distribute it (the disc image on archive.org,
+  their patch on GitHub). The installer runs OldUnreal's own Linux
+  installer (FullGameInstallers at a pinned commit, its SHA-256 checked),
+  which needs the Epic Games Terms of Service accepted: the first recipe
+  with `terms=` (Package Manager §4.3; Packages asks on the PSP). Their
+  latest patch (469e) draws through **SDL3**, which the SDL layer does not
+  hook, so their 469d arm64 patch (SDL2, pinned) is laid over it, and its
+  `Default.ini` / `DefUser.ini` set a 480x272 window and E for the next
+  weapon. Its OpenGLDrv wants `glCompressedTexImage3D` and three more by
+  name (stubs added to the GL layer), then ARB vertex and fragment
+  programs, which the PSP's layer has not: drawn by the Pi's GPU instead,
+  the city fly-by intro right at 480x272, about 21 fps into PPSSPP. Keys
+  and mouse: nub aims, cross fires and clicks, R alt-fires, d-pad moves
+  and strafes, circle jumps, square ducks, triangle the next weapon, L the
+  translocator, START the menu.
 - **AssaultCube** (`assaultcube`, 2026-10-04): the free online shooter,
   no PSP or Vita port. Debian's arm64 build fails against its own local
   server ("protocol incompatible"); built from the project's v1.3.0.2 tag

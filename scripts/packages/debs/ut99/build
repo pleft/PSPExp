@@ -1,0 +1,91 @@
+#!/bin/sh
+# ut99: an installer for Unreal Tournament: Game of the Year Edition, free
+# with Epic Games' permission through OldUnreal. Its postinst runs OldUnreal's
+# own Linux installer (pinned: FullGameInstallers at a commit, checked by
+# SHA-256), which downloads the game's disc image from archive.org (its size and
+# SHA-256 pinned in that script) and OldUnreal's latest patch 469 (Linux arm64
+# builds) into /usr/share/games/ut99; nothing of the game is hosted by PSPExp.
+# Their latest patch (469e) draws through SDL3, which the SDL layer does not
+# hook: OldUnreal's 469d for Linux arm64 (SDL2, pinned) is laid over it, and its
+# defaults set for the PSP (a 480x272 window, the next weapon on E).
+# The Epic Games Terms of Service must be accepted first: the recipe names them
+# (terms=), Packages asks on the PSP, and pspexp-pkg-apt records the acceptance
+# in /var/lib/pspexp/terms/ut99, without which this refuses. Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"
+V=469d-pspexp1
+P469D=https://github.com/OldUnreal/UnrealTournamentPatches/releases/download/v469d/OldUnreal-UTPatch469d-Linux-arm64.tar.bz2
+P469D_SHA=d9ef651c1d768cb4d1f146287cb58bee0834a9bd88a8593a78d0f74f956a031d
+COMMIT=7ebf94345070ff01bf256e495795038afa68d713
+SHA=e38a2420ba89481bc4b9259b123a4fc8a5991e2885293e896cdd79c1a8fea4aa
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/ut99" "$W/ctl"
+cat > "$W/root/usr/games/ut99" <<'S'
+#!/bin/sh
+# Unreal Tournament (package ut99: downloaded when it was installed)
+G=/usr/share/games/ut99
+[ -f "$G/.pspexp-installed" ] || { echo "Unreal Tournament is not there: install the package ut99 again" >&2; exit 1; }
+cd "$G/SystemARM64" && exec ./ut-bin-arm64 "$@"
+S
+chmod 755 "$W/root/usr/games/ut99"
+cat > "$W/root/usr/share/doc/ut99/README" <<D
+Unreal Tournament: Game of the Year Edition. This package holds none of the
+game: installing it runs OldUnreal's own Linux installer
+(https://github.com/OldUnreal/FullGameInstallers, commit $COMMIT,
+SHA-256 $SHA), which downloads the game from archive.org with Epic Games'
+permission and applies OldUnreal's patch. The Epic Games Terms of Service
+(https://legal.epicgames.com/en-US/epicgames/tos) apply; they are accepted in
+Packages before installing. Removing the package removes the game.
+D
+cat > "$W/ctl/postinst" <<P
+#!/bin/sh
+# Unreal Tournament through OldUnreal's installer, once the Epic Games ToS were accepted
+set -e
+[ "\$1" = configure ] || exit 0
+G=/usr/share/games/ut99
+C=/var/cache/ut99
+[ -f /var/lib/pspexp/terms/ut99 ] || { echo "Unreal Tournament: the Epic Games Terms of Service must be accepted first (Packages asks; or: pspexp-pkg install --accept-terms ut99)" >&2; exit 1; }
+[ -f "\$G/.pspexp-installed" ] && exit 0
+rm -rf "\$C"; mkdir -p "\$C"
+echo "Fetching OldUnreal's installer..."
+curl -fsSL --retry 3 -o "\$C/install-ut99.sh" "https://raw.githubusercontent.com/OldUnreal/FullGameInstallers/$COMMIT/Linux/install-ut99.sh" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
+echo "$SHA  \$C/install-ut99.sh" | sha256sum -c --quiet - || { rm -rf "\$C"; echo "OldUnreal's installer is not the expected file" >&2; exit 1; }
+echo "Downloading Unreal Tournament (about 650 MB) and OldUnreal's patch..."
+rm -rf "\$G.new"
+# the terms were accepted by the user in Packages (recorded above): the installer's question answered so
+printf 'y\\n' | bash "\$C/install-ut99.sh" --ui-mode none --application-entry skip --desktop-shortcut skip -d "\$G.new" > "\$C/install.log" 2>&1 || { tail -5 "\$C/install.log" >&2; rm -rf "\$G.new" "\$C"; echo "the installation failed: install it again" >&2; exit 1; }
+echo "Laying OldUnreal's patch 469d over it (SDL2: the SDL layer takes it)..."
+curl -fsSL --retry 3 -o "\$C/469d.tar.bz2" "$P469D" || { rm -rf "\$G.new" "\$C"; echo "the download failed: install it again" >&2; exit 1; }
+echo "$P469D_SHA  \$C/469d.tar.bz2" | sha256sum -c --quiet - || { rm -rf "\$G.new" "\$C"; echo "the patch is not the expected file" >&2; exit 1; }
+tar -xjf "\$C/469d.tar.bz2" -C "\$G.new"
+[ -x "\$G.new/SystemARM64/ut-bin-arm64" ] || { rm -rf "\$G.new" "\$C"; echo "no game program after installing" >&2; exit 1; }
+# defaults for the PSP: a 480x272 window, the next weapon on E (Unreal leaves E unbound)
+sed -i 's/^WindowedViewportX=.*/WindowedViewportX=480/; s/^WindowedViewportY=.*/WindowedViewportY=272/; s/^FullscreenViewportX=.*/FullscreenViewportX=480/; s/^FullscreenViewportY=.*/FullscreenViewportY=272/; s/^StartupFullscreen=.*/StartupFullscreen=False/' "\$G.new/SystemARM64/Default.ini"
+sed -i 's/^E=\$/E=NextWeapon/' "\$G.new/SystemARM64/DefUser.ini"
+chmod -R u=rwX,go=rX "\$G.new"
+touch "\$G.new/.pspexp-installed"
+rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
+P
+cat > "$W/ctl/postrm" <<'R'
+#!/bin/sh
+# the game the installer put there goes with the package
+set -e
+case "$1" in remove|purge) rm -rf /usr/share/games/ut99 /usr/share/games/ut99.new /var/cache/ut99 ;; esac
+exit 0
+R
+cat > "$W/ctl/control" <<C
+Package: ut99
+Version: $V
+Architecture: all
+Maintainer: PSPExp <pspexp@localhost>
+Section: contrib/games
+Priority: optional
+Depends: bash, curl, ca-certificates, jq, 7zip, tar, bzip2
+Description: Unreal Tournament: Game of the Year Edition (installer)
+ Epic's 1999 arena shooter, free with Epic Games' permission through
+ OldUnreal: installing this package runs OldUnreal's Linux installer, which
+ downloads the game and their patch. The package itself holds none of the
+ game. Installer by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/ctl/control" "$OUT/ut99_${V}_all.deb"

@@ -66,6 +66,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
 | Nintendo 64 (GoldenEye 007, Super Mario 64) | drawn by the Pi's graphics chip (only on a Pi); GoldenEye's first mission at about 20 fps in the emulator, the game at full speed; not yet measured on the PSP |
+| Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): about 21 fps in the emulator; free with Epic's permission, its terms accepted in Packages |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): the Pi itself runs it at 60 fps; about 20 fps in the emulator, not yet measured on the PSP |
 | AssaultCube | drawn by the PSP: about 25 fps in the emulator, online matches; not yet measured on the PSP |
 | Lugaru HD | drawn by the PSP: about 20 fps in the emulator, not yet measured on the PSP |

@@ -330,6 +330,11 @@ install_recipe() {
 	[ "$FAMILY" = debian ] || die "$ID: recipes install through apt, on the Debian boards; this board takes archives"
 	[ -n "$(rget "$R" debian apt)" ] || die "$ID: nothing for this board"
 	RV=$(rget "$R" package version)
+	T=$(rget "$R" package terms)
+	if [ -n "$T" ]; then   # terms the user must accept first (an Epic Games ToS): recorded as root for the installer
+		[ -n "$ACCEPT" ] || [ -f "/var/lib/pspexp/terms/$ID" ] || die "$ID: its terms must be accepted first ($T): pspexp-pkg install --accept-terms $ID"
+		[ -z "$ACCEPT" ] || $APT_HELPER accept "$ID" >/dev/null || die "$ID: could not record the accepted terms"
+	fi
 	stage
 	# what apt will install, recorded by the helper before the journal says staged:
 	# recover finishes from it, not from the catalogue
@@ -461,8 +466,9 @@ state_of() {   # installed | update | new | broken
 	[ "$m" = "$(rget "$CAT/$1/recipe" package version)" ] && echo installed || echo update
 }
 
-# the catalogue for this board: id|recipe version|state|category|title|description|graphics
-# (graphics: how its first entry or system draws, "" not said)
+# the catalogue for this board: id|recipe version|state|category|title|description|graphics|terms
+# (graphics: how its first entry or system draws, "" not said; terms: what must be accepted before
+# installing, "NAME URL", "" none)
 available() {
 	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
 	for r in "$CAT"/*/recipe; do
@@ -471,14 +477,15 @@ available() {
 		[ -n "$(rget "$r" "$FAMILY" apt)$(rget "$r" "$FAMILY" build)" ] || continue   # nothing for this board
 		w=$(rget "$r" "$FAMILY" warn)   # e.g. too heavy for this board: said first
 		g=$(rget "$r" entry graphics); [ -n "$g" ] || g=$(rget "$r" system graphics)
-		printf '%s|%s|%s|%s|%s|%s%s|%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)" "$g"
+		printf '%s|%s|%s|%s|%s|%s%s|%s|%s\n' "$id" "$(rget "$r" package version)" "$(state_of "$id")" "$(rget "$r" package category)" "$(rget "$r" package title)" "${w:+$w. }" "$(rget "$r" package description)" "$g" "$(rget "$r" package terms | tr '|' ' ')"
 	done
 }
 
 cmd="$1"; [ $# -gt 0 ] && shift
 case "$cmd" in
 install)
-	[ $# -ge 1 ] || die "usage: pspexp-pkg install ID|FILE.tar.gz..."
+	ACCEPT=; [ "$1" = --accept-terms ] && { ACCEPT=1; shift; }   # Packages asked the user to accept the recipe's terms=
+	[ $# -ge 1 ] || die "usage: pspexp-pkg install [--accept-terms] ID|FILE.tar.gz..."
 	lock
 	for f in "$@"; do
 		case "$f" in *.tar.gz|*.tgz|*/*) install_one "$f" ;; *) install_recipe "$f" ;; esac
