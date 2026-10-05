@@ -3162,6 +3162,29 @@ HOOK(void, SDL_CloseAudio, (void))
     REAL(SDL_CloseAudio)();
 }
 
+/* The virtual controller attached as the program starts SDL's joysticks, before it lists them: attached
+ * later (at the first input from the PSP), it was missed by programs that look once and do not watch
+ * for controllers added (Sonic Robo Blast 2: no PSP button reached it, its intro could not be skipped) */
+HOOK(int, SDL_Init, (Uint32 flags))
+{
+    int rc = REAL(SDL_Init)(flags);
+    if (rc == 0 && (flags & (SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER))) setup_vjoy();
+    return rc;
+}
+HOOK(int, SDL_InitSubSystem, (Uint32 flags))
+{
+    int rc = REAL(SDL_InitSubSystem)(flags);
+    if (rc == 0 && (flags & (SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER))) setup_vjoy();
+    return rc;
+}
+
+/* the joysticks shut down: SDL lets the virtual one go with them, attached again on the next start */
+HOOK(void, SDL_QuitSubSystem, (Uint32 flags))
+{
+    REAL(SDL_QuitSubSystem)(flags);
+    if ((flags & (SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER)) && !SDL_WasInit(SDL_INIT_JOYSTICK)) { S.vjoy_handle = NULL; S.vjoy = -1; }
+}
+
 HOOK(int, SDL_QueueAudio, (SDL_AudioDeviceID dev, const void *data, Uint32 len))
 {
     int slot = -1, i;
