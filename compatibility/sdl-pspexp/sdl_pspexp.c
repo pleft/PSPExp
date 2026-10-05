@@ -1748,8 +1748,14 @@ static void feed_input(void)
     setup_vjoy();
     if (S.vjoy_handle) {
         Uint8 hat = 0;
-        SDL_JoystickSetVirtualAxis(S.vjoy_handle, 0, (Sint16)(((int)in->analog_x - 128) * 258));
-        SDL_JoystickSetVirtualAxis(S.vjoy_handle, 1, (Sint16)(((int)in->analog_y - 128) * 258));
+        /* the nub (0..255, 128 the middle) as SDL's -32768..32767, clamped: at 0 (fully up or left)
+         * 128 * 258 is 33024, which wrapped round in 16 bits to +32512, the opposite way at full tilt
+         * (Super Mario 64's Mario, pushed up, ran back at the camera and round in circles) */
+        int ax = ((int)in->analog_x - 128) * 258, ay = ((int)in->analog_y - 128) * 258;
+        ax = ax < -32768 ? -32768 : ax > 32767 ? 32767 : ax;
+        ay = ay < -32768 ? -32768 : ay > 32767 ? 32767 : ay;
+        SDL_JoystickSetVirtualAxis(S.vjoy_handle, 0, (Sint16)ax);
+        SDL_JoystickSetVirtualAxis(S.vjoy_handle, 1, (Sint16)ay);
         for (i = 0; i < 8; i++) SDL_JoystickSetVirtualButton(S.vjoy_handle, i, (in->buttons & BUTTON_BITS[i]) ? 1 : 0);
         if (in->buttons & PSPEXP_BUTTON_UP) hat |= SDL_HAT_UP;
         if (in->buttons & PSPEXP_BUTTON_DOWN) hat |= SDL_HAT_DOWN;
