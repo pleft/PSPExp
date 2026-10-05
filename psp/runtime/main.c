@@ -439,8 +439,9 @@ int main(int argc, char *argv[])
         if (now - last_input >= 16666) {
             last_input = now;
             sceCtrlPeekBufferPositive(&pad, 1);
-            if (rt.connected)   /* the volume buttons: kernel mode's to read (the board's Bluetooth volume) */
-                pspexp_runtime_push_input(&rt, pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN)), pad.Lx, pad.Ly);
+            if (rt.connected)   /* the volume buttons and the note button: kernel mode's to read (the board's
+                                 * Bluetooth volume; the note pauses and resumes the board's music) */
+                pspexp_runtime_push_input(&rt, pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE)), pad.Lx, pad.Ly);
         }
         /* Keep the status page until the first frame; after that the GE owns the screen. */
         if (rt.stats.frames == 0 && now - last_status > 250000) { draw_status(&rt, gen, 1); last_status = now; }

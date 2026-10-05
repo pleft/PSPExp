@@ -1,6 +1,7 @@
 /* pspexp-term's file manager view: see files.h */
 #include "files.h"
 #include "player.h"
+#include "appview.h"
 #include "files_ops.h"
 #include "files_psp.h"
 #include "launcher_gfx.h"
@@ -81,9 +82,7 @@ static char **g_vlines; static int g_vn, g_vtop;
 static char g_vtitle[256];
 
 /* the music player (player.c): the playable files of the folder it started in */
-static FEntry *g_trk; static int g_trk_n, g_trk_i, g_trk_over;
-static char g_trk_dir[FOPS_PATH];
-static char g_cover_key[300];     /* the cover the picture slot holds */
+static char g_open_app[16];        /* the app chosen to open a file (apps.c), for the console to show */
 static PspExpContext *g_ctx;      /* the link, for the player (files_render's) */
 
 static void drives_refresh(void);
@@ -166,7 +165,8 @@ void files_open(const char *path)
 }
 
 void files_invalidate(void) { g_dirty = 1; }
-int  files_take_exit(void) { int e = g_exit; g_exit = 0; if (e) { player_stop(); g_trk_n = 0; } return e; }
+int  files_take_exit(void) { int e = g_exit; g_exit = 0; return e; }   /* (the music goes on: it is Music's) */
+int  files_take_app(char *id, size_t n) { if (!g_open_app[0]) return 0; snprintf(id, n, "%s", g_open_app); g_open_app[0] = 0; return 1; }
 int  files_take_terminal(char *path, size_t n)
 {
     if (!g_term) return 0;
@@ -270,6 +270,13 @@ static int local_path(const Panel *p, const FEntry *e, char *out, size_t n, char
     return 0;
 }
 
+int files_fetch(const char *dir, const FEntry *e, char *out, size_t n, char *err, size_t en)
+{
+    static Panel from;   /* local_path's view of the folder: its path */
+    snprintf(from.path, sizeof(from.path), "%s", dir);
+    return local_path(&from, e, out, n, err, en);
+}
+
 /* ---- the text viewer ------------------------------------------------------------ */
 
 static void view_free(void)
@@ -333,7 +340,6 @@ static int image_show(int i)
     Panel *p = act();
     char path[FOPS_PATH], err[160];
     if (local_path(p, &p->list.e[i], path, sizeof(path), err, sizeof(err)) < 0) return -1;
-    g_cover_key[0] = 0;   /* the picture slot is this one's now */
     if (gfx_image_load(path, UI_SCREEN_W, UI_SCREEN_H, &g_img_w, &g_img_h) < 0) return -1;
     g_img_idx = i;
     p->sel = i;   /* back in the panel, the highlight is on the last one shown */
@@ -407,127 +413,20 @@ static void install_done(int status)
     reload_all();
 }
 
-/* ---- the music player ---------------------------------------------------------- */
-
-static int play_track(int i)
-{
-    static Panel from;   /* local_path's view of the folder: its path */
-    char path[FOPS_PATH], err[300];
-    snprintf(from.path, sizeof(from.path), "%s", g_trk_dir);
-    if (local_path(&from, &g_trk[i], path, sizeof(path), err, sizeof(err)) < 0 || player_start(g_ctx, path, err, sizeof(err)) < 0) {
-        snprintf(g_msg_title, sizeof(g_msg_title), "%s", g_trk[i].name);
-        snprintf(g_msg, sizeof(g_msg), "%s", err);
-        g_over = O_MESSAGE;
-        g_dirty = 1;
-        return -1;
-    }
-    g_trk_i = i;
-    g_trk_over = 0;
-    g_over = O_PLAY;
-    g_dirty = 1;
-    return 0;
-}
-
-/* the player for e: back to it when it is the track loaded, else the folder's tracks from e */
-static void play_from(Panel *p, const FEntry *e)
-{
-    PlayerInfo pi;
-    int i, at = 0;
-    if (player_info(&pi) && g_trk_n && !strcmp(g_trk_dir, p->path) && !strcmp(g_trk[g_trk_i].name, e->name)) { g_over = O_PLAY; g_dirty = 1; return; }
-    free(g_trk);
-    g_trk = malloc(sizeof(FEntry) * (size_t)(p->list.n ? p->list.n : 1));
-    g_trk_n = 0;
-    if (!g_trk) return;
-    for (i = 0; i < p->list.n; i++) {
-        const FEntry *f = &p->list.e[i];
-        if (f->is_dir || f->is_up || !player_handles(f->name)) continue;
-        if (f == e) at = g_trk_n;
-        g_trk[g_trk_n++] = *f;
-    }
-    snprintf(g_trk_dir, sizeof(g_trk_dir), "%s", p->path);
-    if (g_trk_n) play_track(at);
-}
-
-/* the next (d = 1) or previous (-1) track that plays; wrap: past the ends */
-static int play_step(int d, int wrap)
-{
-    int k;
-    for (k = 1; k < g_trk_n + (wrap ? 0 : 1); k++) {
-        int i = g_trk_i + d * k;
-        if (!wrap && (i < 0 || i >= g_trk_n)) return -1;
-        i = ((i % g_trk_n) + g_trk_n) % g_trk_n;
-        if (play_track(i) == 0) return 0;
-    }
-    return -1;
-}
-
-static void fmt_time(double t, char *out, size_t n)
-{
-    int s = t > 0 ? (int)t : 0;
-    if (s >= 3600) snprintf(out, n, "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60);
-    else snprintf(out, n, "%d:%02d", s / 60, s % 60);
-}
-
-static void play_draw(uint64_t now)
-{
-    PlayerInfo pi;
-    char t1[16], t2[16], pos[48];
-    int x, y, w, h, bar_x = 24, bar_w = UI_SCREEN_W - 48, bar_y = 196;
-    if (!player_info(&pi)) return;
-    gfx_icon("file-music", 16, 16, 10, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 40, 8, "Now playing", UI_TEXT, 255, 260);
-    snprintf(pos, sizeof(pos), "%d / %d", g_trk_i + 1, g_trk_n);
-    gfx_text(FONT_SMALL, UI_SCREEN_W - 16 - gfx_text_width(FONT_SMALL, pos), 12, pos, UI_MUTED, 255, 0);
-    /* the cover: the track's picture, one beside it, or a disc */
-    if (pi.cover[0] && strcmp(g_cover_key, pi.cover)) {
-        snprintf(g_cover_key, sizeof(g_cover_key), "%s", pi.cover);
-        if (gfx_image_load(pi.cover, 128, 128, &w, &h) < 0) snprintf(g_cover_key, sizeof(g_cover_key), "-");
-    }
-    if (pi.cover[0] && !strcmp(g_cover_key, pi.cover)) {
-        gfx_image_size(&w, &h);
-        gfx_image_draw(24 + (128 - w) / 2, 44 + (128 - h) / 2);
-    } else {
-        gfx_nine(NINE_R10, 24, 44, 128, 128, UI_TILE, 255);
-        gfx_icon("disc-3", 72, 24 + 28, 44 + 28, UI_ACCENT, 255);
-    }
-    x = 168; y = 48;
-    {
-        int moving;
-        gfx_text_marquee(FONT_TITLE, x, y, pi.title, UI_TEXT, 255, UI_SCREEN_W - x - 16, now, &moving);
-        if (moving) g_dirty = 1;
-    }
-    y += 26;
-    if (pi.artist[0]) { gfx_text(FONT_BODY, x, y, pi.artist, UI_SUB, 255, UI_SCREEN_W - x - 16); y += 20; }
-    if (pi.album[0]) { gfx_text(FONT_SMALL, x, y, pi.album, UI_MUTED, 255, UI_SCREEN_W - x - 16); y += 18; }
-    y = 140;
-    gfx_text(FONT_SMALL, x, y, pi.format, UI_MUTED, 255, UI_SCREEN_W - x - 16);
-    gfx_icon("cpu", 12, x, y + 20, UI_ACCENT, 255);
-    gfx_text(FONT_SMALL, x + 16, y + 17, pi.decoder, UI_SUB, 255, UI_SCREEN_W - x - 32);
-    /* where it is */
-    gfx_rect(bar_x, bar_y, bar_w, 6, 0x2a3145, 255);
-    if (pi.dur > 0) gfx_rect(bar_x, bar_y, (int)(bar_w * (pi.pos / pi.dur > 1 ? 1 : pi.pos / pi.dur)), 6, UI_ACCENT, 255);
-    fmt_time(pi.pos, t1, sizeof(t1));
-    if (pi.dur > 0) fmt_time(pi.dur, t2, sizeof(t2)); else snprintf(t2, sizeof(t2), "--:--");
-    gfx_text(FONT_SMALL, bar_x, bar_y + 10, t1, UI_SUB, 255, 0);
-    gfx_text(FONT_SMALL, bar_x + bar_w - gfx_text_width(FONT_SMALL, t2), bar_y + 10, t2, UI_SUB, 255, 0);
-    {
-        const char *st = pi.ended ? "Ended" : pi.paused ? "Paused" : "";
-        if (st[0]) gfx_text(FONT_SMALL, (UI_SCREEN_W - gfx_text_width(FONT_SMALL, st)) / 2, bar_y + 10, st, UI_ACCENT, 255, 0);
-    }
-    x = 16;
-    x = ui_hint_btn(x, 'x', pi.paused || pi.ended ? "Play" : "Pause");
-    x = ui_hint_cap(x, "LEFT/RIGHT", "10 s", UI_SUB);
-    if (g_trk_n > 1) x = ui_hint_cap(x, "L/R", "Track", UI_SUB);
-    x = ui_hint_btn(x, 's', "Stop");
-    x = ui_hint_btn(x, 'o', "Back");
-}
-
 /* a file is text by its name, or when its start has no NUL */
 static void open_file(Panel *p, const FEntry *e)
 {
     char path[FOPS_PATH], err[300];
     int r;
-    if (player_handles(e->name)) { play_from(p, e); return; }
+    {   /* a file an app opens (Music: songs): the folder's entries go to it, and the console shows it */
+        const FileHandler *h = app_file_handler(e->name);
+        if (h) {
+            if (h->open_list(p->path, p->list.e, p->list.n, (int)(e - p->list.e)) == 0) { snprintf(g_open_app, sizeof(g_open_app), "%s", h->app); g_exit = 1; }
+            else { snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name); snprintf(g_msg, sizeof(g_msg), "It does not play."); g_over = O_MESSAGE; }
+            g_dirty = 1;
+            return;
+        }
+    }
     if (fops_is_remote(p->path) && !is_image(e) && (is_package(e) || launcher_system_for(e->name, err, 16))) {
         snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
         snprintf(g_msg, sizeof(g_msg), "This is on the PSP's memory stick: copy it to the board first (triangle, then Copy), and open it there.");
@@ -775,22 +674,6 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         if (right) image_step(1);
         if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS)) { gfx_image_free(); g_over = O_NONE; g_dirty = 1; }
         return;
-    case O_PLAY: {
-        PlayerInfo pi;
-        int have = player_info(&pi);
-        if (pressed & PSPEXP_BUTTON_CROSS) {
-            if (have && pi.ended) play_track(g_trk_i);
-            else player_toggle_pause();
-        }
-        if (left) player_seek(-10);
-        if (right) player_seek(10);
-        if ((pressed & PSPEXP_BUTTON_LTRIGGER) && g_trk_n > 1) play_step(-1, 1);
-        if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_trk_n > 1) play_step(1, 1);
-        if (pressed & PSPEXP_BUTTON_SQUARE) { player_stop(); g_trk_n = 0; g_over = O_NONE; }   /* square: stop, its symbol */
-        if (pressed & PSPEXP_BUTTON_CIRCLE) g_over = O_NONE;   /* the music goes on */
-        g_dirty = 1;
-        return;
-    }
     case O_VIEW: {
         int page = 14;
         if (up && g_vtop > 0) g_vtop--;
@@ -867,14 +750,6 @@ int files_needs_frame(uint64_t now)
     if (g_inst_pid > 0) {
         int st;
         if (waitpid(g_inst_pid, &st, WNOHANG) == g_inst_pid) { install_done(st); g_dirty = 1; }
-    }
-    {   /* the player: the next track when one ends; the time shown each second */
-        PlayerInfo pi;
-        static int shown = -1;
-        if (player_info(&pi)) {
-            if (pi.ended && !g_trk_over) { g_trk_over = 1; if (play_step(1, 0) < 0) g_dirty = 1; }
-            if (g_over == O_PLAY && (int)(pi.pos * 4) != shown) { shown = (int)(pi.pos * 4); g_dirty = 1; }
-        }
     }
     if (g_over == O_PROGRESS) return 1;
     if (g_over == O_KBD && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
@@ -1080,12 +955,6 @@ void files_render(PspExpContext *ctx, uint64_t now)
         g_dirty = 0;
         return;
     }
-    if (g_over == O_PLAY) {
-        play_draw(now);
-        pspexp_present(ctx);
-        g_dirty = 0;
-        return;
-    }
     if (g_over == O_VIEW) {
         int i, rows = 14;
         char pos[48];
@@ -1219,8 +1088,8 @@ void files_state(char *out, size_t n)
     if (g_over == O_VIEW) ADD("files.viewer=%s lines=%d\n", g_vtitle, g_vn);
     {
         PlayerInfo pi;
-        if (player_info(&pi)) ADD("files.player=%s pos=%.1f dur=%.1f paused=%d ended=%d track=%d/%d format=%s decoder=%s\n",
-                                   pi.title, pi.pos, pi.dur, pi.paused, pi.ended, g_trk_i + 1, g_trk_n, pi.format, pi.decoder);
+        if (player_info(&pi)) ADD("files.player=%s pos=%.1f dur=%.1f paused=%d ended=%d format=%s decoder=%s\n",
+                                   pi.title, pi.pos, pi.dur, pi.paused, pi.ended, pi.format, pi.decoder);
         if (g_ctx && pspexp_audio_status(g_ctx)) {
             const PspExpAudioStatus *as = pspexp_audio_status(g_ctx);
             ADD("files.player_psp=buffered %u received %u dropped %u underruns %u\n", as->buffered_frames, as->received_frames, as->dropped_frames, as->underruns);

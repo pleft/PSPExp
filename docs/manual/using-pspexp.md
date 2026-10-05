@@ -14,13 +14,16 @@ buttons; the board needs no screen, keyboard or mouse.
 | START | search, refresh or rescan, options |
 | SELECT | close an app; held, the terminal |
 | L / R | the other tab, panel or page |
+| ♪ (note) | pause or resume the music, from anywhere (not during a game) |
 
 ## The launcher
 
 It opens on the **home screen**: five big tiles, **Favourites**, **Games**,
 **Emulators**, **Apps** and **Settings**, with what each holds underneath
 and, below, **Play again** with what you played last (it starts afresh;
-the game's own saves are there as always).
+the game's own saves are there as always) and, while music is loaded,
+**Now playing** (or **Paused**) with the song. A note at the top shows
+music playing, a pause sign that it is paused.
 
 ```
  12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
@@ -32,7 +35,8 @@ the game's own saves are there as always).
 ```
 
 Left and right pick a tile, cross opens it; down then cross plays what
-you were playing.
+you were playing (or opens Music, on Now playing; left / right between
+the two).
 
 Inside a section, the same five run down the left as the **rail**, and the
 section's **shelf** runs to its right: games and ROMs as discs with their
@@ -148,7 +152,7 @@ Only use ROMs of games you own.
 | d-pad | move (left / right: a page) |
 | up from the top | the drive button: cross lists every drive |
 | L / R | the left / right panel |
-| cross | open: a folder, a picture, a text file, music, a ROM (plays it), a package (installs it) |
+| cross | open: a folder, a picture, a text file, music (in Music), a ROM (plays it), a package (installs it) |
 | circle | the folder above; at the top of a drive, close Files |
 | square | mark several files |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
@@ -163,21 +167,38 @@ PSPExp, copy.
 
 ## Music
 
-Cross on a music file in **Files** plays it, then the rest of the folder.
+**Apps > Music** plays the music on your board, your USB sticks and the
+PSP's memory stick. Cross on a song in **Files** opens it here too. It has
+three views; **START** goes from one to the next:
+
+- **Now playing**: the song, artist, album and cover, the time, and
+  what comes next;
+- **Browse**: your music folder, home, the drives, and the PSP's
+  **MUSIC** folder. Cross opens a folder, or plays a song and the rest of
+  its folder; circle goes up;
+- **Queue**: the songs to come. Cross plays one, square takes it out.
 
 | Button | |
 |---|---|
 | cross | pause / play |
 | left / right | 10 seconds back / on |
-| L / R | the previous / next track |
+| L / R | the previous / next song |
 | square | stop |
-| circle | back to the files; the music goes on |
+| triangle | play order: shuffle, repeat (off, all, one song) |
+| START | the next view |
+| circle | close Music; the music goes on |
+| ♪ (note) | pause / play, from anywhere |
 
-The player shows the title, artist, album and the cover (from the file, or
-a `cover.jpg` / `folder.jpg` beside it). **MP3s are decoded by the PSP
-itself**, on its second processor, the Media Engine: the board barely
-works and the cable carries a few kilobytes a second. WAV plays as it is;
-Ogg, FLAC, Opus and M4A are decoded by the board when it has ffmpeg.
+The music goes on while you use the launcher, Files or the other apps;
+**Now playing** on the home screen, or Apps > Music, brings it back.
+Starting a game stops it.
+
+The cover comes from the file, or a `cover.jpg` / `folder.jpg` beside it.
+**MP3s are decoded by the PSP itself**, on its second processor, the
+Media Engine: the board barely works and the cable carries a few kilobytes
+a second. WAV plays as it is; Ogg, FLAC, Opus and M4A are decoded by the
+board when it has ffmpeg. The note button needs the PSP's PSPExp from
+5 October 2026 or later (Settings > Update the PSP).
 
 ## Bluetooth headphones
 

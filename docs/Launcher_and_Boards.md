@@ -17,7 +17,7 @@ GameShell, hence sections 1-5; section 6 is the emulators. Scripts:
 7. The terminal and the file manager
 8. Integration tests on a real PSP
 9. The PSP's clock from the board
-10. System Monitor and Packages
+10. System Monitor, Packages and Music
 11. Sound on Bluetooth
 
 ---
@@ -1359,7 +1359,7 @@ Files here at the shell's folder; select closes it.
 |---|---|
 | d-pad | move (left / right: a page); up from the top row: the drive button |
 | L / R | the left / right panel |
-| cross | open: a folder; a picture full screen (left / right the others); music in the player; a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
+| cross | open: a folder; a picture full screen (left / right the others); music in the Music app (§10.4); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
 | circle | the folder above |
 | square | mark and move down |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
@@ -1380,7 +1380,8 @@ console comes back to the file manager afterwards. A package runs
 `pspexp-pkg install` in the background, its message shown after.
 
 **The music player** (2026-10-03, `player.c` for the sound, `files.c` for
-its screen): cross on MP3, WAV, Ogg, FLAC, Opus, M4A/AAC, WMA or a tracker
+its screen; since 2026-10-05 an app of its own, Music, §10.4, and this
+screen is gone): cross on MP3, WAV, Ogg, FLAC, Opus, M4A/AAC, WMA or a tracker
 module (MOD, XM, IT, S3M) plays it, then the folder's other playable files
 in order. The screen shows the title, artist and album from the tags
 (ID3v1, ID3v2.2-2.4; ffprobe's for the rest), the cover (the picture in the
@@ -1401,8 +1402,8 @@ CPU. 16-bit 44.1 kHz WAV goes as PCM. Everything else, and MP3 for a PSP
 whose PSPExp is older, is decoded on the board by ffmpeg when it is
 installed (the Pi has it; the Omega does not) and sent as PCM. Files on the
 PSP's memory stick are copied to the board first (up to 16 MB, as for
-pictures). Closing the file manager, or a program taking the PSP, stops the
-music. Tested in PPSSPP from the Mac (all the formats above but WMA and
+pictures). A program taking the PSP stops the music (closing the file
+manager did too, until Music). Tested in PPSSPP from the Mac (all the formats above but WMA and
 the modules; an MP3 with a cover and a Greek title), then on the PSP-1000
 from the Pi 400 (2026-10-03): a real song as MP3 (decoded on the PSP) and
 as FLAC (ffmpeg on the Pi), played by hand.
@@ -1629,7 +1630,7 @@ to touch the PSP's Settings.
   behind and was set. Then its zone (UTC+2 without summer time) was set to
   Athens' UTC+3 with summer time, and the user saw the XMB clock right.
 
-## 10. System Monitor and Packages (2026-09-28)
+## 10. System Monitor, Packages and Music (2026-09-28)
 
 Apps now holds four built-in apps: Terminal, Files, **System Monitor** and
 **Packages**, each with a cover of its own. The last two are views like the
@@ -1713,6 +1714,61 @@ The integration tests have an `apps` suite:
 
 `--store-writes` adds a remove and reinstall of the smallest package. The
 control port gained `category NAME`.
+
+### 10.4 Music (2026-10-05)
+
+The file manager's player (§7.2) left the music playing behind the
+launcher with nothing to show it or bring it back, and its few buttons
+were all there was. Music is now a built-in app (`music.c`, `MUSIC_APP`,
+the fifth tile in Apps) with three views, START going round them:
+
+- **Now playing**: title, artist, album, cover, format and where it is
+  decoded, the time, and the next track;
+- **Browse**: places first (~/Music, home, the board's drives, the PSP's
+  `ms0:/MUSIC` and the whole stick while PSPExp runs), then folders and
+  playable files only; cross on a song plays the folder from it, circle
+  goes up (from a place's top: back to the places);
+- **Queue**: the folder's tracks in play order; cross plays one, square
+  removes one (not the one playing).
+
+| | |
+|---|---|
+| cross | pause / play (Browse: open, play; Queue: play) |
+| left / right | 10 s back / on (Now playing) |
+| L / R | the previous / next track |
+| square | stop (Queue: remove) |
+| triangle | play order: Shuffle (the current track stays first), Repeat off / all / one |
+| START | the next view |
+| circle | close (Browse: up); the music goes on |
+
+The queue lives in `music.c`, not in a view: `music_tick`, called every
+main-loop turn whatever is on the screen, moves on when a track ends. A
+program taking the PSP still stops it.
+
+**Files hands songs over.** A small registry (`appview.h`:
+`FileHandler`, `app_file_handler` in `apps.c`) names the app that opens a
+file by its name; Files asks it on cross, and for music closes and opens
+Music with the folder queued from that song (`files_take_app`). Files on
+the memory stick are copied to the board first (`files_fetch`), as before.
+Other apps can take other kinds of file the same way.
+
+**The launcher shows it.** The top bar has a note while music plays, a
+pause sign while paused. The home screen gains a **Now playing** (or
+**Paused**) pill, next to Play again: down then cross opens Music.
+
+**The note button.** The PSP's ♪ button pauses and resumes from anywhere
+in the console (not while a program has the PSP). The runtime reads it in
+kernel mode with the volume buttons and sends it as `PSPEXP_BUTTON_NOTE`
+(0x800000), runtimes from 2026-10-05; an older runtime never sends it.
+The control port takes it as `note` (`press note`); its `state` always has
+the `music.*` lines (view, track, shuffle, repeat, playing, title, pos,
+dur, paused, ended, folder, error), whichever view is open.
+
+Tested on the Mac's console against PPSSPP (three short MP3s in a folder):
+browse to the folder and play, auto-advance through the three, the queue
+and play order, the launcher's pill and top-bar icon, cross on the pill,
+Apps > Music, Files handing a song over, the note button through the
+control port. Not yet on the real PSP.
 
 ---
 

@@ -255,7 +255,9 @@ it (`doom`) hands the PSP to the game and takes it back afterwards
 The console also has a two-panel file manager (Apps > Files in the
 launcher, or Files here from the terminal's menu). It can copy, move,
 delete, rename and create folders; it shows pictures, reads text and
-plays music (MP3 is decoded by the PSP itself, on its Media Engine);
+hands music to Apps > Music (folders, a queue, shuffle and repeat, playing
+on behind the launcher; the PSP's note button pauses it; MP3 is decoded by
+the PSP itself, on its Media Engine);
 Settings > Sound sends all sound to Bluetooth headphones paired with
 the board instead, set with the PSP's volume buttons;
 opening a ROM starts it in its emulator, and a package gets installed.

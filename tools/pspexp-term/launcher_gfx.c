@@ -440,6 +440,7 @@ void gfx_shadow(int style, int x, int y, int w, int h, uint32_t rgb, int alpha)
 
 typedef struct IconName { const char *name; int cp; } IconName;
 static const IconName ICONS[] = {
+    { "pause", 0xe12e }, { "shuffle", 0xe15e }, { "repeat", 0xe146 }, { "repeat-1", 0xe1fd }, { "folder-up", 0xe33d },   /* Music */
     { "gamepad-2", 0xe0df }, { "gamepad", 0xe0de }, { "joystick", 0xe355 }, { "history", 0xe1f5 }, { "star", 0xe176 },
     { "clock", 0xe087 }, { "rocket", 0xe286 }, { "settings", 0xe154 }, { "power", 0xe140 }, { "rotate-ccw", 0xe148 },
     { "refresh-cw", 0xe145 }, { "moon", 0xe11e }, { "music", 0xe122 }, { "wifi", 0xe1ae }, { "wifi-off", 0xe1af },

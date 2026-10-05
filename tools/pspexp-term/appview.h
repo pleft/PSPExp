@@ -22,8 +22,19 @@ typedef struct AppView {
     void (*state)(char *out, size_t n);   /* "<id>.key=value" lines for the control port */
 } AppView;
 
-extern const AppView MONITOR_APP, STORE_APP;
+extern const AppView MONITOR_APP, STORE_APP, MUSIC_APP;
 const AppView *app_find(const char *id);
+
+/* Apps that open files (a plugin of sorts): Files asks which app takes a file
+ * by its name, hands it the folder's entries and the one chosen, and the
+ * console then shows that app. Music takes songs. */
+struct FEntry;
+typedef struct FileHandler {
+    const char *app;                               /* the AppView's id */
+    int (*handles)(const char *name);              /* does it take this file (by its name) */
+    int (*open_list)(const char *dir, const struct FEntry *entries, int n, int chosen);   /* 0, or -1 (it said why) */
+} FileHandler;
+const FileHandler *app_file_handler(const char *name);
 
 /* the monitor may end the program the launcher started (on boards where
  * everything runs as root, that is all it may end) */

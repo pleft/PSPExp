@@ -63,6 +63,7 @@
 #include "term_themes.h"
 #include "files.h"
 #include "player.h"
+#include "music.h"
 #include "btaudio.h"
 #include "files_psp.h"
 #include "control.h"
@@ -1666,6 +1667,8 @@ static void handle_input(void)
     /* the views get SELECT as a tap, on its release: a press closing Files, Packages or the Monitor
      * also closed them when the user was holding it for the terminal */
     if (g_app || g_view_files || g_view_launcher) pressed = (pressed & ~(uint32_t)PSPEXP_BUTTON_SELECT) | (g_select_tap ? PSPEXP_BUTTON_SELECT : 0);
+    /* the PSP's note button: the music paused or resumed, from anywhere (runtimes that send it: 2026-10-06) */
+    if ((pressed & PSPEXP_BUTTON_NOTE) && g_launch_pid <= 0) { music_toggle(); launcher_invalidate(); if (g_app) g_redraw_app = 1; }
     if (g_app) { g_app->input(b, pressed, up, down, left, right, now); return; }
     if (g_view_files) { files_input(b, pressed, up, down, left, right, now); return; }
     if (g_view_launcher) { launcher_input(b, pressed, up, down, left, right, now); return; }
@@ -2739,7 +2742,7 @@ static uint32_t ctl_buttons_of(const char *s)   /* "l+r+right" */
     static const struct { const char *n; uint32_t b; } names[] = {
         { "up", PSPEXP_BUTTON_UP }, { "down", PSPEXP_BUTTON_DOWN }, { "left", PSPEXP_BUTTON_LEFT }, { "right", PSPEXP_BUTTON_RIGHT },
         { "cross", PSPEXP_BUTTON_CROSS }, { "circle", PSPEXP_BUTTON_CIRCLE }, { "square", PSPEXP_BUTTON_SQUARE }, { "triangle", PSPEXP_BUTTON_TRIANGLE },
-        { "l", PSPEXP_BUTTON_LTRIGGER }, { "r", PSPEXP_BUTTON_RTRIGGER }, { "start", PSPEXP_BUTTON_START }, { "select", PSPEXP_BUTTON_SELECT } };
+        { "l", PSPEXP_BUTTON_LTRIGGER }, { "r", PSPEXP_BUTTON_RTRIGGER }, { "start", PSPEXP_BUTTON_START }, { "select", PSPEXP_BUTTON_SELECT }, { "note", PSPEXP_BUTTON_NOTE } };
     uint32_t m = 0;
     while (*s) {
         size_t l = strcspn(s, "+"), i;
@@ -2772,6 +2775,7 @@ static void ctl_state(char *o, size_t n)
             g_launcher_on && launcher_running_title() ? launcher_running_title() : "");
     if (g_launcher_on) launcher_state(o, n);
     if (g_app && g_app->state) g_app->state(o, n);
+    if (g_app != &MUSIC_APP) MUSIC_APP.state(o, n);   /* the music plays on behind the other views */
     files_state(o, n);
     ctl_add(o, n, "psp_clock=%s\nprogram_pid=%d\n", g_clock_report, (int)g_launch_pid);
     ctl_add(o, n, "term.session=%d\nterm.cursor=%d,%d\nterm.scrolled=%d\n", g_sess_cur, T.cx, T.cy, T.view);
@@ -2972,7 +2976,7 @@ static void ctl_step(uint64_t now, int connected)
         else if (!strcmp(w, "launcher")) { if (!g_launcher_on) { ctl_reply("error not started with --launcher"); return; } g_app = NULL; g_view_files = 0; g_view_launcher = 1; launcher_invalidate(); }
         else if (!strcmp(w, "terminal")) { g_app = NULL; g_view_files = 0; g_view_launcher = 0; T.dirty = 1; }
         else if (app_find(w)) { if (!g_launcher_on) { ctl_reply("error the apps need --launcher"); return; } app_show(app_find(w)); }
-        else { ctl_reply("error open launcher|terminal|files [PATH]|monitor|store"); return; }
+        else { ctl_reply("error open launcher|terminal|files [PATH]|monitor|store|music"); return; }
         swallow();
         C.st = CS_SETTLE; C.until = now + 150000u;
     } else if (!strncmp(cmd, "volume-bar ", 11)) {   /* the PSP's volume bar, as a volume button shows it (tests) */
@@ -3143,6 +3147,7 @@ int main(int argc, char **argv)
     }
     pspexp_set_log(ctx, log_fn, NULL);
     files_psp_init(ctx);   /* the PSP's memory stick as a file-manager drive */
+    music_init(ctx);
     if (g_ctl_on == 0) {   /* the test-control port (tests/psp), this user only */
         g_ctl_on = ctl_open(ctl_path()) == 0;
         fprintf(stderr, "[pspexp-term] control port %s%s%s\n", ctl_path(), g_ctl_on ? "" : ": could not open: ", g_ctl_on ? "" : strerror(errno));
@@ -3307,7 +3312,11 @@ int main(int argc, char **argv)
         monitor_set_program(g_launch_pid);
         if (g_view_files) {
             char dir[1024];
-            if (files_take_exit()) view_cycle();
+            if (files_take_exit()) {   /* closed, or a file handed to an app (Music): that app shown */
+                char id[16];
+                if (files_take_app(id, sizeof(id))) app_show(app_find(id));
+                else view_cycle();
+            }
             if (files_take_terminal(dir, sizeof(dir))) {   /* "terminal here": cd in the shell shown */
                 char cmd[1200], *o = cmd, *d;
                 g_view_files = 0; g_view_launcher = 0; T.dirty = 1;
@@ -3319,10 +3328,12 @@ int main(int argc, char **argv)
             }
         }
         audio_fifo_pump();
-        {   /* the file manager's music: fed here, stopped when a program takes the PSP */
+        {   /* the music (Music's queue): fed here, the next track when one ends whatever is shown,
+             * stopped when a program takes the PSP */
             PlayerInfo pi;
             if (player_info(&pi) && launcher_running_title()) player_stop();
             player_pump(ctx);
+            music_tick(now);
         }
         bt_route_tick(now);   /* the sound's way: the PSP or a Bluetooth device (btaudio.h) */
         {   /* the PSP's volume bar: a frame at once to show it, and one when it went away

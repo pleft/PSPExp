@@ -461,7 +461,7 @@ A runtime with `PSPEXP_FEATURE_AUDIO_MP3` takes `AUDIO_CODED_STREAM` (0x0307): w
 
 ### Sound on the board's Bluetooth (2026-10-03)
 
-When the console has routed sound to a Bluetooth device paired with the board (`pspexp-bt`, System > Sound output), libpspexp writes the stream to a `pw-play` on the board instead of `AUDIO_STREAM`, in every program, and the link carries no sound; the PSP's volume buttons (`PSPEXP_BUTTON_VOLUP` / `VOLDOWN`, read by the runtime in kernel mode) set the device's volume, and `OSD_VOLUME` (0x000C, `PSPEXP_FEATURE_OSD`) has the PSP draw a volume bar over its frames for 1.5 s. Details in docs/Launcher_and_Boards.md §11.
+When the console has routed sound to a Bluetooth device paired with the board (`pspexp-bt`, System > Sound output), libpspexp writes the stream to a `pw-play` on the board instead of `AUDIO_STREAM`, in every program, and the link carries no sound; the PSP's volume buttons (`PSPEXP_BUTTON_VOLUP` / `VOLDOWN`, read by the runtime in kernel mode) set the device's volume, and `OSD_VOLUME` (0x000C, `PSPEXP_FEATURE_OSD`) has the PSP draw a volume bar over its frames for 1.5 s. Details in docs/Launcher_and_Boards.md §11. The note button (`PSPEXP_BUTTON_NOTE`, 0x800000, runtimes from 2026-10-05) is read the same way and pauses or resumes the console's Music app (docs/Launcher_and_Boards.md §10.4).
 
 Graphics, input, resources, and audio are separate logical protocol channels even when they share the same physical connection.
 

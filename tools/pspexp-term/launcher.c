@@ -18,6 +18,7 @@
  * folders. Every movement is eased by time; a still screen sends nothing.
  */
 #include "launcher.h"
+#include "music.h"
 #include "btaudio.h"
 #include "launcher_lib.h"
 #include "launcher_board.h"
@@ -113,13 +114,13 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
 }
 
 /* apps built into the console, first in Apps: the terminal and the file manager */
-#define NBUILTIN 4
+#define NBUILTIN 5
 static LEntry g_builtin[NBUILTIN];
 static LEntry g_sysent[32];
 static LEntry g_grpent[8];    /* Settings' items: one per group of settings (id "g:<name>") */
 static char g_assets[400];   /* the launcher's assets (fonts, icons, assets/systems) */   /* Emulators' items: one per system with ROMs (id "s:<system>") */
 static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 },
-                      GRAD_MONITOR[2] = { 0x0f766e, 0x2563eb }, GRAD_STORE[2] = { 0x7c3aed, 0xe11d48 };
+                      GRAD_MONITOR[2] = { 0x0f766e, 0x2563eb }, GRAD_STORE[2] = { 0x7c3aed, 0xe11d48 }, GRAD_MUSIC[2] = { 0xdb2777, 0xf59e0b };
 static char g_app_req[16];   /* a built-in app to show (appview.h), taken by the console */
 
 static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp(e->id, "a:", 2); }
@@ -180,6 +181,7 @@ static void cats_build(void)
     action(&g_builtin[1], "files", "Files", "folder-open", "The board's drives and the PSP's memory stick: copy, move, view");
     action(&g_builtin[2], "monitor", "System Monitor", "activity", "This board's CPU, memory, temperature, storage, network and programs");
     action(&g_builtin[3], "store", "Packages", "package", "Games, emulators and apps for this board: install, update, remove");
+    action(&g_builtin[4], "music", "Music", "music", "Songs from this board and the PSP's memory stick: play folders, shuffle, a queue; it goes on behind everything");
     for (i = 0; i < NBUILTIN; i++) {
         int k;
         g_builtin[i].type = LT_APP;
@@ -314,6 +316,8 @@ static int is_system_item(const LEntry *e) { return !strncmp(e->id, "s:", 2); }
 enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT, M_HOME };
 static int g_mode = M_HOME;
 static int g_home_sel = 1, g_home_row;   /* the home screen: the section in focus (Games), or its Play again row */
+static int g_home_pill;                  /* on that row: 0 Now playing (the music), 1 Play again */
+static char g_np_title[160]; static int g_np_on, g_np_paused;   /* what Music plays, as last drawn */
 static float g_home_lift[8], g_home_anim;
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
@@ -546,7 +550,7 @@ static void draw_cover(const LEntry *e, int x, int y, int alpha)
     cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
     if (is_builtin(e)) {
         cs.hero = 1;
-        cs.grad = !strcmp(e->id, "a:files") ? GRAD_FILES : !strcmp(e->id, "a:monitor") ? GRAD_MONITOR : !strcmp(e->id, "a:store") ? GRAD_STORE : GRAD_TERMINAL;
+        cs.grad = !strcmp(e->id, "a:files") ? GRAD_FILES : !strcmp(e->id, "a:monitor") ? GRAD_MONITOR : !strcmp(e->id, "a:store") ? GRAD_STORE : !strcmp(e->id, "a:music") ? GRAD_MUSIC : GRAD_TERMINAL;
     }
     if (e->art[0]) cs.art = e->art;
     else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
@@ -662,7 +666,7 @@ static void run_action(LEntry *e, uint64_t now)
         g_console_req = 1;
     } else if (!strcmp(a, "files")) {
         g_files_req = 1;
-    } else if (!strcmp(a, "monitor") || !strcmp(a, "store")) {
+    } else if (!strcmp(a, "monitor") || !strcmp(a, "store") || !strcmp(a, "music")) {
         snprintf(g_app_req, sizeof(g_app_req), "%s", a);
     } else if (!strcmp(a, "psp-update")) {
         g_psp_update_req = 1;
@@ -1580,9 +1584,11 @@ static void home_input(uint32_t pressed, int up, int down, int left, int right, 
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
     if (left && g_home_row == 0) { g_home_sel = (g_home_sel + n - 1) % n; g_dirty = 1; }
     if (right && g_home_row == 0) { g_home_sel = (g_home_sel + 1) % n; g_dirty = 1; }
-    if (down && home_continue()) { g_home_row = 1; g_dirty = 1; }
+    if (down && (home_continue() || g_np_on)) { g_home_row = 1; g_home_pill = g_np_on ? 0 : 1; g_dirty = 1; }
     if (up) { g_home_row = 0; g_dirty = 1; }
+    if (g_home_row == 1 && (left || right) && g_np_on && home_continue()) { g_home_pill ^= 1; g_dirty = 1; }   /* the two pills */
     if (pressed & PSPEXP_BUTTON_CROSS) {
+        if (g_home_row == 1 && g_home_pill == 0 && g_np_on) { snprintf(g_app_req, sizeof(g_app_req), "music"); return; }
         if (g_home_row == 1) { LEntry *e = home_continue(); if (e) launch(e, now); return; }
         g_mode = M_BROWSE;
         g_cur = -1; show_cat(rail_cat(g_home_sel), 1, now);
@@ -1790,6 +1796,14 @@ int launcher_needs_frame(uint64_t now)
     }
     bg_poll(now);
     scan_poll();
+    {   /* the music: its title and pause shown in the top bar and on the home screen */
+        char t[160] = "";
+        int paused = 0, on = music_now(t, sizeof(t), &paused);
+        if (on != g_np_on || paused != g_np_paused || strcmp(t, g_np_title)) {
+            g_np_on = on; g_np_paused = paused; snprintf(g_np_title, sizeof(g_np_title), "%s", t);
+            g_dirty = 1;
+        }
+    }
     fetch_poll(now);
     status_poll(now);
     if (g_confirm[0] && now > g_confirm_until) g_confirm[0] = 0;
@@ -1859,6 +1873,11 @@ static void draw_status(void)
         gfx_icon("plug", 16, x, 6, C_SUB, 255);
     }
     x -= 10;
+    if (g_np_on) {   /* music (Music) loaded: a note, or a pause sign while paused */
+        x -= 16;
+        gfx_icon(g_np_paused ? "pause" : "music", 16, x, 6, g_np_paused ? C_SUB : C_ACCENT, 255);
+        x -= 10;
+    }
     if (g_snd_on) {   /* the sound on a Bluetooth device: its volume (the PSP's volume buttons set it) */
         if (g_snd_vol >= 0) {
             snprintf(s, sizeof(s), "%d%%", g_snd_vol);
@@ -2102,7 +2121,7 @@ static void draw_home(float dt)
     Cat *sel;
     g_home_anim = ease(g_home_anim, 1.0f, 12.0f, dt, 0.01f);
     if (g_home_sel >= n) g_home_sel = n - 1;
-    if (!cont) g_home_row = 0;
+    if (!cont && !g_np_on) g_home_row = 0;
     for (i = 0; i < n && i < 8; i++) {
         Cat *c = &g_cat[rail_cat(i)];
         int on = i == g_home_sel && g_home_row == 0;
@@ -2129,24 +2148,35 @@ static void draw_home(float dt)
     else if (!sel->n && sel->kind == CK_FAVS) snprintf(s, sizeof(s), "%s", "Square on a game adds it here");
     else snprintf(s, sizeof(s), "%d %s%s", sel->n, sel->noun, sel->n == 1 ? "" : "s");
     gfx_text(FONT_SMALL, (SCREEN_W - gfx_text_width(FONT_SMALL, s)) / 2, 176, s, C_MUTED, 255, 0);
-    /* Play again: what was played last (started afresh, as from its section) */
-    if (cont) {
-        int on = g_home_row == 1, w, x, y = 200;
-        snprintf(s, sizeof(s), "%s", cont->title);
-        w = 26 + gfx_text_width(FONT_SMALL, "Play again") + 10 + gfx_text_width(FONT_BODY, s) + 16;
-        if (w > SCREEN_W - 80) w = SCREEN_W - 80;
-        x = (SCREEN_W - w) / 2;
-        if (on) gfx_shadow(NINE_SHADOW10, x, y, w, 26, 0x40a0ff, 220);
-        gfx_nine(NINE_R10, x, y, w, 26, on ? 0x1e3a6e : 0x16223c, 235);
-        gfx_icon("circle-play", 16, x + 8, y + 5, on ? 0xffffff : C_ACCENT, 255);
-        x += 30;
-        x += gfx_text(FONT_SMALL, x, y + 7, "Play again", C_MUTED, 255, 0) + 8;
-        gfx_text(FONT_BODY, x, y + 5, s, on ? C_TEXT : C_SUB, 255, (SCREEN_W - 40) - x);
+    /* the lower row: Now playing (Music) and Play again (what was played last), side by side */
+    if (g_home_row == 1 && g_home_pill == 0 && !g_np_on) g_home_pill = 1;
+    if (g_home_row == 1 && g_home_pill == 1 && !cont) g_home_pill = 0;
+    {
+        const char *lab[2] = { g_np_paused ? "Paused" : "Now playing", "Play again" }, *ic[2] = { "music", "circle-play" };
+        const char *txt[2] = { g_np_title, cont ? cont->title : "" };
+        int has[2] = { g_np_on, cont != NULL }, w[2] = { 0, 0 }, k, total = 0, gap = 10, x, y = 200;
+        int maxw = has[0] && has[1] ? (SCREEN_W - 40 - gap) / 2 : SCREEN_W - 80;
+        for (k = 0; k < 2; k++) if (has[k]) {
+            w[k] = 26 + gfx_text_width(FONT_SMALL, lab[k]) + 10 + gfx_text_width(FONT_BODY, txt[k]) + 16;
+            if (w[k] > maxw) w[k] = maxw;
+            total += w[k] + (total ? gap : 0);
+        }
+        x = (SCREEN_W - total) / 2;
+        for (k = 0; k < 2; k++) if (has[k]) {
+            int on = g_home_row == 1 && g_home_pill == k, tx = x;
+            if (on) gfx_shadow(NINE_SHADOW10, x, y, w[k], 26, 0x40a0ff, 220);
+            gfx_nine(NINE_R10, x, y, w[k], 26, on ? 0x1e3a6e : 0x16223c, 235);
+            gfx_icon(ic[k], 16, x + 8, y + 5, on ? 0xffffff : C_ACCENT, 255);
+            tx += 30;
+            tx += gfx_text(FONT_SMALL, tx, y + 7, lab[k], C_MUTED, 255, 0) + 8;
+            gfx_text(FONT_BODY, tx, y + 5, txt[k], on ? C_TEXT : C_SUB, 255, x + w[k] - 10 - tx);
+            x += w[k] + gap;
+        }
     }
     {
         int x = 16;
         gfx_button('x', x, HINT_Y); x += 18;
-        gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row ? "Play" : "Open", C_SUB, 255, 0);
+        gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row && g_home_pill == 1 ? "Play" : "Open", C_SUB, 255, 0);
         x = SCREEN_W - 16 - gfx_text_width(FONT_SMALL, "Search");
         gfx_text(FONT_SMALL, x, HINT_Y - 1, "Search", C_SUB, 255, 0);
         x -= gfx_text_width(FONT_BADGE, "START") + 16;

@@ -32,6 +32,12 @@ void files_render(PspExpContext *ctx, uint64_t now);
 void files_invalidate(void);
 /* 1 once when the user closed the file manager */
 int  files_take_exit(void);
+/* an app chosen to open a file (apps.c's handlers: "music"), once */
+int  files_take_app(char *id, size_t n);
+/* the file dir/e as a path on this board: as it is, or fetched from the PSP's
+ * stick into a folder of the board's first (-1 and err when it cannot) */
+struct FEntry;
+int  files_fetch(const char *dir, const struct FEntry *e, char *out, size_t n, char *err, size_t en);
 /* 1 once with a folder when the user asked for a terminal there */
 int  files_take_terminal(char *path, size_t n);
 /* tests (the control port): what is on screen, as "files.key=value" lines appended to out */
