@@ -1819,3 +1819,18 @@ emulators about 50 ms), a frame, and the radio's. Aladdin on the Mega Drive emul
 afterwards: "sound fx are almost instant with the button presses". The volume buttons on the PSP-1000, same day: working
 ("it rocks!").
 
+**The GameShell's Bluetooth line** (2026-10-05). Music on the GameShell's
+Bluetooth paused for over a second every three and skipped ahead, on the
+Edifier R1700BT and then on the FreeBuds too, though PipeWire's own errors
+stayed still and a recording of what it sent to the earbuds had no gap. The
+AP6212's Bluetooth sits on UART1, and our device tree gave it no
+`max-speed`: the line stayed at its 115200 baud, 93 kbit/s measured on the
+port's counters, a third of what SBC needs. The 60 ms latency and real-time
+priority of 2026-10-03 had only made it less audible (they were measured
+with clicks, not a song). With `max-speed = <1500000>` (the R16's UART at its
+24 MHz clock) the firmware loads in 0.8 s instead of 4.5, a song carries 271
+kbit/s and plays right (heard on the FreeBuds). A running GameShell takes it
+by its `.dtb` in /boot (the old one kept as `.dtb.prev`) and a reboot. Still
+open: connecting a second device while one is connected fails
+(`a2dp_select_capabilities() Unable to select SEP`): Sound output should
+disconnect the other first.

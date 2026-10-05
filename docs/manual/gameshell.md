@@ -71,8 +71,11 @@ Measured on the PSP-1000:
   (`passwd`) if your network is not only yours.
 - **Bluetooth headphones**: the GameShell has Bluetooth, and **Settings >
   Sound** pairs headphones as on the Raspberry Pi (see
-  [Using PSPExp](using-pspexp.md#bluetooth-headphones)). Not yet tried with
-  headphones on the GameShell itself.
+  [Using PSPExp](using-pspexp.md#bluetooth-headphones)). Music plays right on
+  Bluetooth earbuds (tried with HUAWEI FreeBuds) since the GameShell's
+  Bluetooth line runs at full speed (2026-10-05; a card made before then needs
+  its boot files updated). To switch to another speaker or headphones,
+  disconnect the one in use first.
 - **Music**: MP3s are decoded by the PSP; Ogg, FLAC, Opus and M4A by the
   GameShell (ffmpeg comes with the image), at a few percent of its processor.
 - Packages live in `/opt/pspexp`.

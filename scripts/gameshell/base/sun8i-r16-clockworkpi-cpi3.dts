@@ -208,6 +208,11 @@
 
 	bluetooth {
 		compatible = "brcm,bcm43438-bt";
+		/* without it the line stayed at 115200 baud: 93 kbit/s, a third of what
+		 * music over Bluetooth (SBC) needs: pauses every few seconds, skips
+		 * ("fast forward"). 1.5 Mbaud is the R16's UART at its 24 MHz clock;
+		 * a song then carried 271 kbit/s (2026-10-05) */
+		max-speed = <1500000>;
 		clocks = <&rtc CLK_OSC32K_FANOUT>;
 		clock-names = "lpo";
 		vbat-supply = <&reg_dldo1>;
