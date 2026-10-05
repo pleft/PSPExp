@@ -35,6 +35,9 @@ else
 		T="${XDG_RUNTIME_DIR:-/tmp}/pspexp-openal-$$"
 		printf '[general]\ndrivers=wave\nfrequency=44100\nchannels=stereo\nsample-type=int16\n[wave]\nfile=%s.fifo\n' "$T" > "$T.conf" &&
 			export ALSOFT_CONF="$T.conf" ALSOFT_DRIVERS=wave PSPEXP_AUDIO_FIFO="$T.fifo"
+		# the pipe made now, before the program: one that opens OpenAL before its window (Vanilla
+		# Conquer's Red Alert) made a plain file of the name, never read (no sound)
+		rm -f "$T.fifo"; mkfifo -m 600 "$T.fifo" 2>/dev/null || true
 	fi
 fi
 # a setuid or setgid program (Debian's games that keep a shared high-score file:

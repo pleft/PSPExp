@@ -412,9 +412,12 @@ static void connect_once(void)
     }
     S.active = 1;
     atexit(shim_exit);
-    S.amu = SDL_CreateMutex();
-    S.acap = 44100 * 2;
-    S.aring = (int16_t *)calloc(S.acap * 2, sizeof(int16_t));
+    {   /* the ring before its lock: the audio pipe's reader runs from load and pushes once the lock exists */
+        SDL_mutex *mu = SDL_CreateMutex();
+        S.acap = 44100 * 2;
+        S.aring = (int16_t *)calloc(S.acap * 2, sizeof(int16_t));
+        __atomic_store_n(&S.amu, mu, __ATOMIC_RELEASE);
+    }
 #ifndef PSPEXP_STATIC_RENAME
     start_audio_fifo();
 #endif
@@ -1394,6 +1397,7 @@ static void mirror_line(float x0, float y0, float x1, float y1)
 static void audio_push(const int16_t *stereo, size_t frames)
 {
     size_t f;
+    if (!__atomic_load_n(&S.amu, __ATOMIC_ACQUIRE) || !S.aring) return;   /* (the pipe's sound before the link is up: read, so the program does not block, and let go) */
     SDL_LockMutex(S.amu);
     for (f = 0; f < frames && S.abuf < S.acap; f++) {
         S.aring[S.atail * 2] = stereo[f * 2];
@@ -1449,14 +1453,14 @@ static void audio_tap(int slot, const Uint8 *data, int len)
  * stream (s16, stereo, 44.1 kHz; mono doubled). For games that play through
  * OpenAL, not SDL: OpenAL Soft's "wave" output writes into the pipe
  * (scripts/board/pspexp-run sets that up). */
-static int audio_fifo_thread(void *arg)
+static void *audio_fifo_thread(void *arg)
 {
     const char *path = (const char *)arg;
     int fd, channels = 2;
     unsigned char hdr[8];
     static int16_t buf[4096 * 2];
     for (;;) {   /* each opening of the pipe: a new stream (the game may reopen its device) */
-        if ((fd = open(path, O_RDONLY)) < 0) return 0;
+        if ((fd = open(path, O_RDONLY)) < 0) return NULL;
         if (read(fd, hdr, 4) == 4 && !memcmp(hdr, "RIFF", 4) && read(fd, hdr, 8) == 8) {   /* RIFF size WAVE */
             for (;;) {   /* the chunks up to data */
                 uint32_t len;
@@ -1496,10 +1500,22 @@ static void start_audio_fifo(void)
     const char *p = getenv("PSPEXP_AUDIO_FIFO");
     if (!p || !*p || path[0]) return;
     snprintf(path, sizeof(path), "%s", p);
-    unlink(path);
-    if (mkfifo(path, 0600) < 0) { logf_("audio pipe %s: cannot make it", path); return; }
-    SDL_DetachThread(SDL_CreateThread(audio_fifo_thread, "pspexp-audio-fifo", path));
+    {   /* pspexp-run makes the pipe before the program starts: a program that opens its OpenAL device
+         * before its window (Vanilla Conquer's Red Alert) found no pipe, OpenAL made a plain file of that
+         * name, and the pipe made here afterwards was never written: no sound. A pipe already there is
+         * kept; anything else is replaced. */
+        struct stat st;
+        if (stat(path, &st) != 0 || !S_ISFIFO(st.st_mode)) {
+            unlink(path);
+            if (mkfifo(path, 0600) < 0) { logf_("audio pipe %s: cannot make it", path); return; }
+        }
+    }
+    {   /* read from when the library loads: OpenAL's open of the pipe waits for a reader */
+        pthread_t t;
+        if (pthread_create(&t, NULL, audio_fifo_thread, path) == 0) pthread_detach(t);
+    }
 }
+__attribute__((constructor)) static void audio_fifo_early(void) { start_audio_fifo(); }
 #endif
 
 static void audio_callback_wrapper(void *userdata, Uint8 *stream, int len)
