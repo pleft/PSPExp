@@ -1833,4 +1833,11 @@ kbit/s and plays right (heard on the FreeBuds). A running GameShell takes it
 by its `.dtb` in /boot (the old one kept as `.dtb.prev`) and a reboot. Still
 open: connecting a second device while one is connected fails
 (`a2dp_select_capabilities() Unable to select SEP`): Sound output should
-disconnect the other first.
+disconnect the other first. Hitches left after the fix came with the
+GameShell's Wi-Fi: where two access points reach it weakly it scans, drops
+(`locally_generated=1`) and hops between them, and each time the shared AP6212
+radio holds Bluetooth back (0.1 s of sound dropped at a reconnect; a hop to the
+other access point stopped the music for a moment). Wi-Fi power saving off
+made it worse (Wi-Fi then takes more of the radio); the CPU governor made no
+difference. Left as it is by the user's choice; pinning the access point, or
+Wi-Fi off while the sound is on Bluetooth, would avoid it.
