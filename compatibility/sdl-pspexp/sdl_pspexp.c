@@ -1517,6 +1517,13 @@ static void start_audio_fifo(void)
 }
 __attribute__((constructor)) static void audio_fifo_early(void) { start_audio_fifo(); }
 #endif
+/* the PSP is the input whatever has the board's focus: SDL drops joystick events while no window of
+ * the program has keyboard focus (a headless board's never does; the focus the layer shows the program
+ * is an event, not SDL's own), so Sonic Robo Blast 2 got no button of the PSP's controller at all */
+__attribute__((constructor)) static void joystick_background_events(void)
+{
+    setenv("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1", 0);
+}
 
 static void audio_callback_wrapper(void *userdata, Uint8 *stream, int len)
 {
@@ -1757,6 +1764,9 @@ static void feed_input(void)
         SDL_JoystickSetVirtualAxis(S.vjoy_handle, 0, (Sint16)ax);
         SDL_JoystickSetVirtualAxis(S.vjoy_handle, 1, (Sint16)ay);
         for (i = 0; i < 8; i++) SDL_JoystickSetVirtualButton(S.vjoy_handle, i, (in->buttons & BUTTON_BITS[i]) ? 1 : 0);
+        if (pressed && getenv("PSPEXP_LOG_EVENTS"))
+            logf_("input: buttons %#x pressed; joystick events %s, button 0 now %d", (unsigned)pressed,
+                  SDL_JoystickEventState(SDL_QUERY) == SDL_ENABLE ? "on" : "OFF", SDL_JoystickGetButton(S.vjoy_handle, 0));
         if (in->buttons & PSPEXP_BUTTON_UP) hat |= SDL_HAT_UP;
         if (in->buttons & PSPEXP_BUTTON_DOWN) hat |= SDL_HAT_DOWN;
         if (in->buttons & PSPEXP_BUTTON_LEFT) hat |= SDL_HAT_LEFT;
@@ -2528,6 +2538,7 @@ static void script_tick(void)
             int b;
             for (b = 0; b < B_COUNT; b++) if (!strcmp(name + 4, BUTTON_NAMES[b])) break;
             if (b < B_COUNT) {
+                if (getenv("PSPEXP_LOG_EVENTS")) logf_("script: virtual controller %s", S.vjoy_handle ? (SDL_JoystickGetAttached(S.vjoy_handle) ? "attached and open" : "handle no longer attached") : "not open");
                 if (mode == '+') script_pad |= BUTTON_BITS[b];
                 else if (mode == '-') script_pad &= ~BUTTON_BITS[b];
                 else { script_pad |= BUTTON_BITS[b]; pad_tapped |= BUTTON_BITS[b]; pad_up_at = now + 150; }
@@ -2913,6 +2924,25 @@ HOOK(Uint32, SDL_GetWindowFlags, (SDL_Window *win))
     return f;
 }
 
+/* PSPEXP_LOG_EVENTS=1: every input event the program takes from SDL, in the log (which input reaches a
+ * game, and from which device) */
+static void log_event(const SDL_Event *ev)
+{
+    static int on = -1;
+    if (on < 0) on = getenv("PSPEXP_LOG_EVENTS") && atoi(getenv("PSPEXP_LOG_EVENTS")) > 0;
+    if (!on) return;
+    switch (ev->type) {
+    case SDL_KEYDOWN: case SDL_KEYUP: logf_("event: key %s %s", SDL_GetKeyName(ev->key.keysym.sym), ev->type == SDL_KEYDOWN ? "down" : "up"); break;
+    case SDL_JOYBUTTONDOWN: case SDL_JOYBUTTONUP: logf_("event: joystick %d button %d %s", (int)ev->jbutton.which, ev->jbutton.button, ev->type == SDL_JOYBUTTONDOWN ? "down" : "up"); break;
+    case SDL_JOYAXISMOTION: if (ev->jaxis.value > 16000 || ev->jaxis.value < -16000) logf_("event: joystick %d axis %d %d", (int)ev->jaxis.which, ev->jaxis.axis, ev->jaxis.value); break;
+    case SDL_JOYHATMOTION: logf_("event: joystick %d hat %d", (int)ev->jhat.which, ev->jhat.value); break;
+    case SDL_CONTROLLERBUTTONDOWN: case SDL_CONTROLLERBUTTONUP: logf_("event: controller %d %s %s", (int)ev->cbutton.which, SDL_GameControllerGetStringForButton((SDL_GameControllerButton)ev->cbutton.button), ev->type == SDL_CONTROLLERBUTTONDOWN ? "down" : "up"); break;
+    case SDL_JOYDEVICEREMOVED: logf_("event: joystick %d removed", (int)ev->jdevice.which); break;
+    case SDL_JOYDEVICEADDED: case SDL_CONTROLLERDEVICEADDED: logf_("event: %s device %d added", ev->type == SDL_JOYDEVICEADDED ? "joystick" : "controller", (int)ev->jdevice.which); break;
+    default: break;
+    }
+}
+
 static int drop_event(const SDL_Event *ev)
 {
     if (!hide_focus_loss()) return 0;
@@ -2948,6 +2978,7 @@ HOOK(int, SDL_PollEvent, (SDL_Event *ev))
     service_link();
     fake_focus_once();
     while ((rc = REAL(SDL_PollEvent)(ev)) == 1 && ev && drop_event(ev)) ;
+    if (rc == 1 && ev) log_event(ev);
     return rc;
 }
 
