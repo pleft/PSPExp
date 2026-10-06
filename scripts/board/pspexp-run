@@ -30,11 +30,19 @@ else
 	export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}" SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
 	# games that play through OpenAL (SuperTux): OpenAL Soft's "wave" output
 	# into a pipe the SDL layer streams to the PSP (Debian's OpenAL has no SDL
-	# output); nothing for the others
+	# output); and those that play through ALSA itself (FMOD: Celeste 64): ALSA's
+	# default made a WAV file output into the same pipe (with no display the
+	# Pi's only ALSA device, HDMI, does not open and FMOD did not start at all);
+	# nothing for the others
 	if [ -z "$ALSOFT_CONF" ]; then
 		T="${XDG_RUNTIME_DIR:-/tmp}/pspexp-openal-$$"
 		printf '[general]\ndrivers=wave\nfrequency=44100\nchannels=stereo\nsample-type=int16\n[wave]\nfile=%s.fifo\n' "$T" > "$T.conf" &&
 			export ALSOFT_CONF="$T.conf" ALSOFT_DRIVERS=wave PSPEXP_AUDIO_FIFO="$T.fifo"
+		A=/usr/share/alsa/alsa.conf
+		if [ -z "$ALSA_CONFIG_PATH" ] && [ -f "$A" ]; then
+			printf 'pcm.!default { type plug; slave { pcm "pspexp_out"; format S16_LE; rate 44100; channels 2 } }\npcm.pspexp_out { type file; slave.pcm "null"; file "%s.fifo"; format "wav" }\n' "$T" > "$T.asound" &&
+				export ALSA_CONFIG_PATH="$A:$T.asound"
+		fi
 		# the pipe made now, before the program: one that opens OpenAL before its window (Vanilla
 		# Conquer's Red Alert) made a plain file of the name, never read (no sound)
 		rm -f "$T.fifo"; mkfifo -m 600 "$T.fifo" 2>/dev/null || true

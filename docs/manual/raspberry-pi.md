@@ -64,21 +64,25 @@ Measured on the PSP-1000 with a Pi 400:
 | Quake (shareware) | 45–60 fps, about 30 in the biggest fights |
 | OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
 | Music player | MP3 decoded by the PSP; the Pi does almost nothing |
-| SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi, not yet measured on the PSP |
+| SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi; its menus 33-60 fps on the PSP-1000 |
 | Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); the sound clean in Mario, Ocarina and Banjo-Tooie; GoldenEye and Perfect Dark still have short gaps where the Pi falls behind |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |
-| Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000 |
+| Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000, its music and sound on the PSP |
 | Wolfenstein: Enemy Territory | drawn by the PSP: on the PSP-1000 about 20 fps over Oasis's open ground, up to 60 indoors; online or against bots; id's licence agreement accepted in Packages |
 | Diablo (shareware) | drawn by the PSP: 60 fps on the PSP-1000; your own full game too (DIABDAT.MPQ in ~/.local/share/diasurgical/devilution); DevilutionX's licence accepted in Packages |
 | Sonic Robo Blast 2 | drawn by the PSP: 60 fps on the PSP-1000, running through Greenflower Zone |
 | SRB2Kart | drawn by the PSP: 56-57 fps on the PSP-1000; races online |
-| Red Alert, Tiberian Dawn on OpenRA | drawn by the Pi's graphics chip (only on a Pi): a skirmish 16-17 fps on the PSP-1000; the first start installs the game's content (Quick Install) |
+| Red Alert, Tiberian Dawn on OpenRA | drawn by the Pi's graphics chip (only on a Pi): a skirmish 16-17 fps on the PSP-1000, menus 13-20; the first start installs the game's content (Quick Install) |
 | Command & Conquer, Red Alert | drawn by the PSP: 25-28 fps in the emulator; EA's freeware, about 600 MB each to download |
-| AssaultCube | drawn by the PSP: about 25 fps in the emulator, online matches; not yet measured on the PSP |
-| Lugaru HD | drawn by the PSP: about 20 fps in the emulator, not yet measured on the PSP |
-| Quake II (demo) | drawn by the PSP, like Quake: 22-24 fps in the emulator, not yet measured on the PSP |
-| Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): 20-22 fps in the emulator |
-| Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); about 30 fps in the emulator, not yet measured on the PSP |
+| AssaultCube | drawn by the PSP: about 20 fps in its menus on the PSP-1000, online matches |
+| Lugaru HD | drawn by the PSP: about 58 fps in its menus on the PSP-1000 |
+| Quake II (demo) | drawn by the PSP, like Quake: 31-60 fps in its first seconds on the PSP-1000 |
+| Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): its menus about 58 fps on the PSP-1000 |
+| Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); 51-60 fps in their first seconds on the PSP-1000 |
+
+Every game here was started on the PSP-1000 from the launcher on 6
+October 2026, its sound heard, its nub and START + SELECT tried
+(`tests/psp/all-games.sh`).
 
 ## Games drawn by the Pi's graphics chip
 

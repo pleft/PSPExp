@@ -791,7 +791,13 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   the nub, cross / circle its buttons, the d-pad scrolls, START the menu.
   The Vanilla Conquer recipes beside them (`cnc`, `redalert`, recipe 2):
   their titles and descriptions had come out garbled (Red Alert was listed
-  as "Command & Conquer"), fixed.
+  as "Command & Conquer"), fixed. From the launcher neither started until
+  2026-10-06 (recipe 3): they had only been tried with a test script that
+  set SDL's offscreen video driver, the packages' entries did not, and
+  OpenRA found only the dummy driver ("Unknown pixel format"). The entries
+  now set `PSPEXP_HOSTGL=1`, which also makes `pspexp-run` preload the
+  board-GPU layer the wrapper needs: with the PSP-drawn layer preloaded
+  beside it, two layers each read the sound pipe and OpenRA was silent.
 - **Diablo** (`devilutionx`, 2026-10-04): Blizzard's 1996 action RPG on
   DevilutionX 1.5.5, with the shareware data (the cathedral, the Warrior),
   or the player's own DIABDAT.MPQ (full game) in
@@ -907,7 +913,15 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   frame; title, menus and the first level right. The PSP's controller is
   its gamepad (nub moves, cross jumps, square / circle dash, L / R climb,
   START pauses); the first run's `controls.json` puts the camera on the
-  d-pad, the PSP having no second stick. No keys.
+  d-pad, the PSP having no second stick. No keys. It stopped starting
+  after the Pi had been rebooted with no display (2026-10-06): its sound,
+  FMOD, plays through ALSA, whose only device on the Pi is HDMI, and that
+  does not open without a display; FMOD did not start and the game quit
+  after 4 s. `pspexp-run` now gives ALSA its own output into the sound pipe
+  (SDL layer README), and Celeste 64 is heard on the PSP for the first
+  time; the pipe reader keeps it to real time (taken as fast as FMOD
+  wrote, its sound swamped the link and the PSP dropped it). Its
+  controller had no up and down until the same day (layer README).
 - **Luanti** (`luanti`, formerly Minetest, Pi only, 2026-10-04): Debian's
   5.10.0 is built for X11 (Irrlicht's own window: "Need running XServer"),
   so `scripts/packages/build-luanti.sh` builds the same version with its
@@ -1591,6 +1605,43 @@ from the Pi 400:
   slow, and the runner copied each 391 KB BMP to the Mac as it was. It now
   compresses them on the board, to about 44 KB, which brings a screenshot
   down to 3 s, as on the Pi.
+
+### 8.4 Every game on the real PSP (2026-10-06)
+
+Most games had been tried in PPSSPP only, and the user found many failing
+in their first steps on the PSP. `tests/psp/all-games.sh`, on the board
+with the PSP connected, starts each game from the launcher as a player
+would (the control port selects it and presses cross) and gives the
+console's games, through a systemd drop-in for the run, input logging, a
+PSP screenshot every 300 frames and a script: the nub up, down, left,
+right from 15 s, cross at 20 s, START + SELECT held from 28 s. It records
+whether the game starts, its frames a second (median / best), whether its
+sound reaches the PSP, which inputs it takes, whether START + SELECT ends
+it, and whether the PSP is still there; it stops if the PSP is gone. A ROM
+is given as `"Section::Title"` (`"Nintendo 64::Super Mario 64"`).
+
+First run, 48 games on the Pi 400 and the PSP-1000: the PSP stayed through
+all of them, Hurrican included (59 fps; the user's earlier crash with it
+did not come back). It found, fixed the same day and run again:
+
+| | found | fix |
+|---|---|---|
+| Celeste 64 | did not start (FMOD found no sound device), then the link dropped as it loaded | ALSA's output into the sound pipe; the pipe read at real time: 60 fps, sound, quits |
+| Unreal Tournament | stood at its title (found by the user): waiting to open the sound pipe, whose reader had ended | the reader survives a signal: runs and quits |
+| OpenRA (both) | never started from the launcher; then silent | recipe 3: `PSPEXP_HOSTGL=1`: 13-20 fps, sound, quits |
+| Luanti, Lugaru HD, Red Alert | START + SELECT: the game hung in its own cleanup, the PSP never back | `_exit` 1.5 s after the way out |
+| OpenRA's Red Alert | asked to quit, stopped polling and hung | ended after 3 s without reading input |
+| Diablo, Celeste 64 | the stick had no up and down (Diablo found by the user) | the controller mapping's missing comma |
+
+Then one ROM per emulator and every N64 game: Game Boy, Game Boy Color,
+Mega Drive, NES 58-60 fps, SNES 49-50, Super Mario 64 57, Banjo-Tooie 57,
+Ocarina of Time 44, GoldenEye and Perfect Dark 38 (first seconds): all
+started, were heard, took the nub and quit. The sound was steady in every
+game (the PSP's underruns 0-4 in half a minute). What it cannot tell: a
+game that reads its input as state (`SDL_GetKeyboardState`,
+`SDL_GameControllerGetAxis`) or the nub as a mouse shows no input events
+while working; the numbers are from the first half minute (menus mostly);
+each screenshot stalls the PSP a moment, its sound queue jumping then.
 
 ## 9. The PSP's clock from the board (2026-09-28)
 

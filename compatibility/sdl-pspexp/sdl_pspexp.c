@@ -59,6 +59,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <math.h>
 #include <time.h>
 #if !defined(__APPLE__) && !defined(PSPEXP_STATIC_RENAME)
@@ -1394,10 +1395,11 @@ static void mirror_line(float x0, float y0, float x1, float y1)
 
 /* ---- audio ----------------------------------------------------------------- */
 
-static void audio_push(const int16_t *stereo, size_t frames)
+/* the frames that fit in the ring (the rest are dropped by the caller, or waited for) */
+static size_t audio_push(const int16_t *stereo, size_t frames)
 {
     size_t f;
-    if (!__atomic_load_n(&S.amu, __ATOMIC_ACQUIRE) || !S.aring) return;   /* (the pipe's sound before the link is up: read, so the program does not block, and let go) */
+    if (!__atomic_load_n(&S.amu, __ATOMIC_ACQUIRE) || !S.aring) return 0;   /* (the pipe's sound before the link is up: read, so the program does not block, and let go) */
     SDL_LockMutex(S.amu);
     for (f = 0; f < frames && S.abuf < S.acap; f++) {
         S.aring[S.atail * 2] = stereo[f * 2];
@@ -1406,6 +1408,7 @@ static void audio_push(const int16_t *stereo, size_t frames)
         S.abuf++;
     }
     SDL_UnlockMutex(S.amu);
+    return f;
 }
 
 static void audio_tap(int slot, const Uint8 *data, int len)
@@ -1451,8 +1454,18 @@ static void audio_tap(int slot, const Uint8 *data, int len)
 #include <unistd.h>
 /* PSPEXP_AUDIO_FIFO=PATH: sound from a named pipe to the PSP, as a WAV
  * stream (s16, stereo, 44.1 kHz; mono doubled). For games that play through
- * OpenAL, not SDL: OpenAL Soft's "wave" output writes into the pipe
- * (scripts/board/pspexp-run sets that up). */
+ * OpenAL or ALSA, not SDL: OpenAL Soft's "wave" output and ALSA's default
+ * (a file output, WAV) write into the pipe (scripts/board/pspexp-run sets
+ * both up). */
+/* read(), again when a signal cut it short: the reader must not end, or the program's next
+ * open of the pipe waits for it for ever (Unreal Tournament stood still at its title) */
+static ssize_t fifo_read(int fd, void *b, size_t n)
+{
+    ssize_t r;
+    do r = read(fd, b, n); while (r < 0 && errno == EINTR);
+    return r;
+}
+
 static void *audio_fifo_thread(void *arg)
 {
     const char *path = (const char *)arg;
@@ -1460,34 +1473,59 @@ static void *audio_fifo_thread(void *arg)
     unsigned char hdr[8];
     static int16_t buf[4096 * 2];
     for (;;) {   /* each opening of the pipe: a new stream (the game may reopen its device) */
-        if ((fd = open(path, O_RDONLY)) < 0) return NULL;
-        if (read(fd, hdr, 4) == 4 && !memcmp(hdr, "RIFF", 4) && read(fd, hdr, 8) == 8) {   /* RIFF size WAVE */
+        if ((fd = open(path, O_RDONLY)) < 0) {   /* (open waits for a writer: a signal may cut it short) */
+            if (errno == EINTR) continue;
+            logf_("audio pipe %s: %s; no sound from it", path, strerror(errno));
+            return NULL;
+        }
+        if (fifo_read(fd, hdr, 4) == 4 && !memcmp(hdr, "RIFF", 4) && fifo_read(fd, hdr, 8) == 8) {   /* RIFF size WAVE */
             for (;;) {   /* the chunks up to data */
                 uint32_t len;
-                if (read(fd, hdr, 8) != 8) break;
+                if (fifo_read(fd, hdr, 8) != 8) break;
                 len = (uint32_t)hdr[4] | (uint32_t)hdr[5] << 8 | (uint32_t)hdr[6] << 16 | (uint32_t)hdr[7] << 24;
                 if (!memcmp(hdr, "data", 4)) break;
                 {
                     unsigned char fmt[64];
                     uint32_t k = len < sizeof(fmt) ? len : (uint32_t)sizeof(fmt), rest = len - k;
-                    if (read(fd, fmt, k) != (ssize_t)k) break;
+                    if (fifo_read(fd, fmt, k) != (ssize_t)k) break;
                     if (!memcmp(hdr, "fmt ", 4) && k >= 16) {
                         unsigned rate = (unsigned)fmt[4] | (unsigned)fmt[5] << 8 | (unsigned)fmt[6] << 16;
                         channels = fmt[2];
                         if (rate != 44100 || (fmt[14] | fmt[15] << 8) != 16 || channels < 1 || channels > 2)
                             logf_("audio pipe: %u Hz, %d channels, %d bits: 44100 Hz 16-bit stereo or mono wanted", rate, channels, fmt[14] | fmt[15] << 8);
                     }
-                    while (rest > 0) { unsigned char skip[256]; ssize_t r = read(fd, skip, rest < 256 ? rest : 256); if (r <= 0) break; rest -= (uint32_t)r; }
+                    while (rest > 0) { unsigned char skip[256]; ssize_t r = fifo_read(fd, skip, rest < 256 ? rest : 256); if (r <= 0) break; rest -= (uint32_t)r; }
                 }
             }
             logf_("audio pipe %s: streaming to the PSP", path);
+            {
+            /* taken at 44.1 kHz by the clock, at most 100 ms ahead: the pipe then holds the writer to
+             * real time. OpenAL's wave output keeps time itself, ALSA's file output (FMOD: Celeste 64)
+             * writes as fast as it is let: its sound reached the link many times faster than it
+             * plays, and the PSP, swamped, dropped the link */
+            struct timespec t0, tn;
+            uint64_t taken = 0;
+            clock_gettime(CLOCK_MONOTONIC, &t0);
             for (;;) {
-                ssize_t r = read(fd, buf, channels == 2 ? sizeof(buf) : sizeof(buf) / 2);
+                ssize_t r;
                 size_t frames, f;
+                uint64_t due;
+                clock_gettime(CLOCK_MONOTONIC, &tn);
+                due = (uint64_t)((double)(tn.tv_sec - t0.tv_sec) * 44100.0 + (double)(tn.tv_nsec - t0.tv_nsec) * 44100e-9);
+                if (taken + 22050 < due) taken = due;   /* the writer stopped a while: no catching up in a burst */
+                if (taken > due + 4410) { usleep((useconds_t)((taken - due - 4410) * 1000000 / 44100) + 1000); continue; }
+                r = fifo_read(fd, buf, channels == 2 ? sizeof(buf) / 4 : sizeof(buf) / 8);   /* 1024 frames at a time */
                 if (r <= 0) break;
                 if (channels == 2) frames = (size_t)r / 4;
                 else { frames = (size_t)r / 2; for (f = frames; f-- > 0; ) { buf[f * 2 + 1] = buf[f]; buf[f * 2] = buf[f]; } }
-                audio_push(buf, frames);
+                /* all of it, waiting while the ring is full (the program not sending it a while) */
+                for (f = 0; f < frames; ) {
+                    size_t k = audio_push(buf + f * 2, frames - f);
+                    f += k;
+                    if (f < frames) { if (!__atomic_load_n(&S.amu, __ATOMIC_ACQUIRE) || !S.aring) break; usleep(5000); }
+                }
+                taken += frames;
+            }
             }
         }
         close(fd);
@@ -1517,6 +1555,40 @@ static void start_audio_fifo(void)
 }
 __attribute__((constructor)) static void audio_fifo_early(void) { start_audio_fifo(); }
 #endif
+#define NUB_DEAD 8000
+static int nub_dead(int v)
+{
+    int m = v < 0 ? -v : v;
+    if (m <= NUB_DEAD) return 0;
+    m = (int)((long)(m - NUB_DEAD) * 32767 / (32767 - NUB_DEAD));
+    if (m > 32767) m = 32767;
+    return v < 0 ? -m : m;
+}
+
+static void *quit_watchdog(void *arg)
+{
+    (void)arg;
+    usleep(1500000);
+    logf_("still here 1.5 s after leaving: ended");
+    _exit(0);
+    return NULL;
+}
+
+/* after the request to quit: a program that no longer reads its input for 3 s is stuck in its own
+ * shutdown (OpenRA's Red Alert: asked, it stopped polling, so the 2 s way out, which runs on its
+ * polling, never came, and the PSP stayed with it). One still reading (an "are you sure?") is left */
+static volatile Uint32 last_feed;
+static void *quit_request_watchdog(void *arg)
+{
+    int i;
+    (void)arg;
+    for (i = 0; i < 300; i++) {   /* 30 s at most */
+        usleep(100000);
+        if (SDL_GetTicks() - last_feed > 3000) { logf_("no input read for 3 s since asked to quit: ended"); _exit(0); }
+    }
+    return NULL;
+}
+
 /* the PSP is the input whatever has the board's focus: SDL drops joystick events while no window of
  * the program has keyboard focus (a headless board's never does; the focus the layer shows the program
  * is an event, not SDL's own), so Sonic Robo Blast 2 got no button of the PSP's controller at all */
@@ -1723,9 +1795,12 @@ static void setup_vjoy(void)
     S.vjoy = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 2, 12, 1);
     if (S.vjoy < 0) { failed = 1; logf_("virtual joystick: %s (PSPEXP_KEYS still works)", SDL_GetError()); return; }
     SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(S.vjoy), guid, sizeof(guid));
+    /* the trailing comma matters: SDL appends its own ",crc:..." only after one, else straight on,
+     * and "lefty:a1crc:db13" is no binding: the controller had no up and down at all (Diablo's
+     * hero and Celeste 64's Madeline went only left and right; the joystick's own axis was right) */
     snprintf(mapping, sizeof(mapping),
              "%s,PSP (PSPExp),a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,start:b6,back:b7,"
-             "dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1", guid);
+             "dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,", guid);
     SDL_GameControllerAddMapping(mapping);
     S.vjoy_handle = SDL_JoystickOpen(S.vjoy);
     logf_("virtual game controller attached (%s)", guid);
@@ -1741,6 +1816,7 @@ static void feed_input(void)
     PspExpInput with_script;
     uint32_t pressed, released;
     int i;
+    last_feed = SDL_GetTicks();
     if (in->sequence == 0 && in->timestamp_us == 0) return;
     if (script_pad || script_nub) {
         with_script = *in;
@@ -1761,6 +1837,9 @@ static void feed_input(void)
         int ax = ((int)in->analog_x - 128) * 258, ay = ((int)in->analog_y - 128) * 258;
         ax = ax < -32768 ? -32768 : ax > 32767 ? 32767 : ax;
         ay = ay < -32768 ? -32768 : ay > 32767 ? 32767 : ay;
+        /* a PSP-1000's nub rests off the middle and trembles (one measured: -5400 / +2000, steps of
+         * 260): within NUB_DEAD of it is the middle, the rest scaled to the full range */
+        ax = nub_dead(ax); ay = nub_dead(ay);
         SDL_JoystickSetVirtualAxis(S.vjoy_handle, 0, (Sint16)ax);
         SDL_JoystickSetVirtualAxis(S.vjoy_handle, 1, (Sint16)ay);
         for (i = 0; i < 8; i++) SDL_JoystickSetVirtualButton(S.vjoy_handle, i, (in->buttons & BUTTON_BITS[i]) ? 1 : 0);
@@ -1803,9 +1882,19 @@ static void feed_input(void)
             SDL_PushEvent(&ev);
             S.quit_sent = 1;
             logf_("START + SELECT held: asking the game to quit");
+            {
+                static int watching;
+                pthread_t t;
+                if (!watching && pthread_create(&t, NULL, quit_request_watchdog, NULL) == 0) { pthread_detach(t); watching = 1; }
+            }
         }
         if (now - S.quit_hold >= 2000) {
+            /* exit() runs the program's own cleanup, and some hang in it (Luanti, Lugaru HD and Red
+             * Alert stayed alive, the PSP never given back): a thread ends the process outright
+             * 1.5 s later if it is still there */
+            pthread_t t;
             logf_("START + SELECT held 2 s: leaving");
+            if (pthread_create(&t, NULL, quit_watchdog, NULL) == 0) pthread_detach(t);
             exit(0);
         }
     } else { S.quit_hold = 0; S.quit_sent = 0; }
@@ -2936,6 +3025,7 @@ static void log_event(const SDL_Event *ev)
     case SDL_JOYBUTTONDOWN: case SDL_JOYBUTTONUP: logf_("event: joystick %d button %d %s", (int)ev->jbutton.which, ev->jbutton.button, ev->type == SDL_JOYBUTTONDOWN ? "down" : "up"); break;
     case SDL_JOYAXISMOTION: if (ev->jaxis.value > 16000 || ev->jaxis.value < -16000) logf_("event: joystick %d axis %d %d", (int)ev->jaxis.which, ev->jaxis.axis, ev->jaxis.value); break;
     case SDL_JOYHATMOTION: logf_("event: joystick %d hat %d", (int)ev->jhat.which, ev->jhat.value); break;
+    case SDL_CONTROLLERAXISMOTION: if (ev->caxis.value > 16000 || ev->caxis.value < -16000) logf_("event: controller %d axis %s %d", (int)ev->caxis.which, SDL_GameControllerGetStringForAxis((SDL_GameControllerAxis)ev->caxis.axis), ev->caxis.value); break;
     case SDL_CONTROLLERBUTTONDOWN: case SDL_CONTROLLERBUTTONUP: logf_("event: controller %d %s %s", (int)ev->cbutton.which, SDL_GameControllerGetStringForButton((SDL_GameControllerButton)ev->cbutton.button), ev->type == SDL_CONTROLLERBUTTONDOWN ? "down" : "up"); break;
     case SDL_JOYDEVICEREMOVED: logf_("event: joystick %d removed", (int)ev->jdevice.which); break;
     case SDL_JOYDEVICEADDED: case SDL_CONTROLLERDEVICEADDED: logf_("event: %s device %d added", ev->type == SDL_JOYDEVICEADDED ? "joystick" : "controller", (int)ev->jdevice.which); break;

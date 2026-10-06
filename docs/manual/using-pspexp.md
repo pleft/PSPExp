@@ -77,8 +77,9 @@ Cross on a game starts it. The launcher shows "Starting" and hands the PSP
 over; when the game ends, the launcher comes back by itself.
 
 **To leave any game, hold START + SELECT.** After a second the game is
-asked to quit; still held after two, it is ended. Many games also have
-their own Quit in their menus.
+asked to quit; still held after two, it is ended, and a game that hangs
+while closing is ended a moment later. Many games also have their own
+Quit in their menus.
 
 Each game comes with its buttons mapped for the PSP (the analog nub as a
 mouse pointer in the point-and-click adventures and strategy games, as the
