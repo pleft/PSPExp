@@ -186,7 +186,7 @@ three views; **START** goes from one to the next:
 | square | stop |
 | triangle | play order: shuffle, repeat (off, all, one song) |
 | START | the next view |
-| circle | close Music; the music goes on |
+| circle | close Music (back to Files, if you came from there); the music goes on |
 | ♪ (note) | pause / play, from anywhere |
 
 The music goes on while you use the launcher, Files or the other apps;

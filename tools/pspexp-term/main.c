@@ -1538,6 +1538,7 @@ static int g_view_launcher, g_launcher_on;   /* --launcher: the menu tree as the
 static int g_view_files, g_files_from_launcher;   /* the file manager (files.c), and where it was opened from */
 static int g_launch_from_files;                   /* the running program was opened in the file manager */
 static const AppView *g_app;                      /* a built-in app shown instead of the launcher (appview.h) */
+static int g_app_from_files;                      /* it was opened by Files (a song): closing it goes back there */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself: no mirror while it runs */
@@ -1563,7 +1564,7 @@ static void view_cycle(void)
 static void app_show(const AppView *a)
 {
     if (!g_launcher_on || !a) return;   /* it draws with the launcher's graphics */
-    g_app = a;
+    g_app = a; g_app_from_files = 0;
     g_view_files = 0; g_view_launcher = 0; g_view_mirror = 0;
     swallow();
     a->open();
@@ -3288,7 +3289,10 @@ int main(int argc, char **argv)
             if (launcher_take_files()) { files_show(NULL, 1); swallow(); }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }
-        if (g_app && g_app->take_exit()) view_cycle();
+        if (g_app && g_app->take_exit()) {
+            if (g_app_from_files) { g_app = NULL; g_app_from_files = 0; g_view_files = 1; files_invalidate(); swallow(); }   /* Files as it was left */
+            else view_cycle();
+        }
         if (g_launcher_on) {   /* PSPExp's own file replaced by an upgrade (docs/Package_Manager.md §6): say so; restart only when asked */
             static char self[512]; static struct stat self_st; static int have_self = -1; static uint64_t self_check;
             if (have_self < 0) {
@@ -3314,7 +3318,7 @@ int main(int argc, char **argv)
             char dir[1024];
             if (files_take_exit()) {   /* closed, or a file handed to an app (Music): that app shown */
                 char id[16];
-                if (files_take_app(id, sizeof(id))) app_show(app_find(id));
+                if (files_take_app(id, sizeof(id))) { app_show(app_find(id)); g_app_from_files = g_app != NULL; }
                 else view_cycle();
             }
             if (files_take_terminal(dir, sizeof(dir))) {   /* "terminal here": cd in the shell shown */

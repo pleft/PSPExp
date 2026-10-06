@@ -1748,7 +1748,9 @@ program taking the PSP still stops it.
 **Files hands songs over.** A small registry (`appview.h`:
 `FileHandler`, `app_file_handler` in `apps.c`) names the app that opens a
 file by its name; Files asks it on cross, and for music closes and opens
-Music with the folder queued from that song (`files_take_app`). Files on
+Music with the folder queued from that song (`files_take_app`); closing
+Music then goes back to Files as it was left (2026-10-06; it went to the
+launcher at first). Files on
 the memory stick are copied to the board first (`files_fetch`), as before.
 Other apps can take other kinds of file the same way.
 
