@@ -175,7 +175,8 @@ three views; **START** goes from one to the next:
   what comes next;
 - **Browse**: your music folder, home, the drives, and the PSP's
   **MUSIC** folder. Cross opens a folder, or plays a song and the rest of
-  its folder; circle goes up;
+  its folder; **square adds** the song, or a folder's songs (with its
+  subfolders'), to the end of the queue; circle goes up;
 - **Queue**: the songs to come. Cross plays one, square takes it out.
 
 | Button | |
@@ -183,14 +184,18 @@ three views; **START** goes from one to the next:
 | cross | pause / play |
 | left / right | 10 seconds back / on |
 | L / R | the previous / next song |
-| square | stop |
+| square | stop (Browse: add to the queue; Queue: take out) |
 | triangle | play order: shuffle, repeat (off, all, one song) |
 | START | the next view |
 | circle | close Music (back to Files, if you came from there); the music goes on |
 | ♪ (note) | pause / play, from anywhere |
 
 The music goes on while you use the launcher, Files or the other apps;
-**Now playing** on the home screen, or Apps > Music, brings it back.
+**Now playing** on the home screen, or Apps > Music, brings it back. In
+**Files** the song playing has a note beside it and its title shows at the
+foot of the panel; cross on it (or START > Music) brings Music back
+without starting the song over. Files' triangle menu has **Add to the
+music queue**, for the highlighted or marked songs and folders.
 Starting a game stops it.
 
 The cover comes from the file, or a `cover.jpg` / `folder.jpg` beside it.

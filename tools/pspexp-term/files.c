@@ -7,6 +7,7 @@
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
 #include "launcher.h"
+#include "music.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -468,17 +469,18 @@ static void open_file(Panel *p, const FEntry *e)
 /* ---- menus ------------------------------------------------------------------- */
 
 typedef struct MItem { const char *icon, *label; int id; } MItem;
-enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS,
-       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_CLOSE };
+enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE,
+       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_MUSIC, P_CLOSE };
 static const MItem ACTIONS[] = {
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
     { "folder-plus", "New folder", A_MKDIR }, { "info", "Details", A_DETAILS },
+    { "list", "Add to the music queue", A_QUEUE },
 };
 static const MItem OPTIONS[] = {
     { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
     { "columns-2", "This folder in the other panel", P_SAME }, { "arrow-right-left", "Swap the panels", P_SWAP },
-    { "square-terminal", "Terminal here", P_TERMINAL }, { "x", "Close the file manager", P_CLOSE },
+    { "square-terminal", "Terminal here", P_TERMINAL }, { "music", "Music", P_MUSIC }, { "x", "Close the file manager", P_CLOSE },
 };
 #define NACT ((int)(sizeof(ACTIONS) / sizeof(ACTIONS[0])))
 #define NOPT ((int)(sizeof(OPTIONS) / sizeof(OPTIONS[0])))
@@ -571,6 +573,19 @@ static void run_action(int id)
         break;
     case A_MKDIR: ui_kbd_reset(&g_kbd, "", 0, "Create"); g_kmode = K_MKDIR; g_over = O_KBD; break;
     case A_DETAILS: details(); break;
+    case A_QUEUE: {   /* the marked (or highlighted) songs and folders, at the end of Music's queue */
+        FEntry *e = (FEntry *)malloc(sizeof(FEntry) * (size_t)(p->list.n ? p->list.n : 1));
+        int i, n = 0;
+        for (i = 0; e && i < p->list.n; i++) if (p->list.e[i].marked && !p->list.e[i].is_up) e[n++] = p->list.e[i];
+        if (e && !n && p->sel < p->list.n && !p->list.e[p->sel].is_up) e[n++] = p->list.e[p->sel];
+        if (n) music_add(p->path, e, n);
+        free(e);
+        snprintf(g_msg_title, sizeof(g_msg_title), "Music");
+        snprintf(g_msg, sizeof(g_msg), "%s", n ? music_note() : "Highlight or mark songs or folders first.");
+        g_over = O_MESSAGE;
+        { int k; for (k = 0; k < p->list.n; k++) p->list.e[k].marked = 0; }
+        break;
+    }
     case P_HIDDEN: g_hidden = !g_hidden; reload_all(); break;
     case P_SORT: g_sort = (g_sort + 1) % 3; reload_all(); break;
     case P_SAME: panel_cd(other(), p->path, NULL); break;
@@ -582,6 +597,7 @@ static void run_action(int id)
             g_over = O_MESSAGE;
         } else { g_term = 1; snprintf(g_term_path, sizeof(g_term_path), "%s", p->path); }
         break;
+    case P_MUSIC: snprintf(g_open_app, sizeof(g_open_app), "music"); g_exit = 1; break;   /* (circle there: back here) */
     case P_CLOSE: g_exit = 1; break;
     }
     g_dirty = 1;
@@ -831,7 +847,8 @@ static void draw_panel(int k)
         uint32_t tc = e->marked ? 0xffd479 : e->is_dir ? UI_TEXT : UI_SUB;
         if (sel && active && !p->on_drives) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, UI_ACCENT, 70);
         else if (sel) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, 0xffffff, 18);
-        gfx_icon(icon_for(e), 12, x + 8, y + 2, e->marked ? 0xffd479 : e->is_dir ? UI_ACCENT : UI_MUTED, 255);
+        int cur = !e->is_dir && music_is_current(p->path, e->name);   /* the song playing: a note, in the accent */
+        gfx_icon(cur ? "music" : icon_for(e), 12, x + 8, y + 2, e->marked ? 0xffd479 : e->is_dir || cur ? UI_ACCENT : UI_MUTED, 255);
         if (!e->is_dir && !e->is_up) {
             fops_human(e->size, s, sizeof(s));
             gfx_text(FONT_BADGE, x + PANEL_W - 10 - gfx_text_width(FONT_BADGE, s), y + 3, s, UI_MUTED, 255, 0);
@@ -845,6 +862,14 @@ static void draw_panel(int k)
     else if (marked) snprintf(s, sizeof(s), "%d marked", marked);
     else { int n = p->list.n - (p->list.n && p->list.e[0].is_up); snprintf(s, sizeof(s), "%d %s%s%s", n, n == 1 ? "item" : "items", p->space[0] ? "   " : "", p->space); }
     gfx_text(FONT_BADGE, x + 10, PANEL_Y + PANEL_H - 14, s, marked ? 0xffd479 : UI_MUTED, 255, 0);
+    if (active) {   /* the music going on, at the foot's right: cross on its song, or START > Music, shows it */
+        char t[160]; int paused, w = PANEL_W - 20 - gfx_text_width(FONT_BADGE, s) - 30;
+        if (music_now(t, sizeof(t), &paused) && w > 40) {
+            if (gfx_text_width(FONT_BADGE, t) < w) w = gfx_text_width(FONT_BADGE, t);
+            gfx_icon(paused ? "pause" : "music", 12, x + PANEL_W - 10 - w - 16, PANEL_Y + PANEL_H - 15, paused ? UI_SUB : UI_ACCENT, 255);
+            gfx_text(FONT_BADGE, x + PANEL_W - 10 - w, PANEL_Y + PANEL_H - 14, t, UI_SUB, 255, w);
+        }
+    }
 }
 
 static void draw_menu(const MItem *items, int n, const char *title)
@@ -981,7 +1006,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
             const FEntry *e = &p->list.e[p->sel];
             char path[FOPS_PATH], sys[16];
             fops_join(path, sizeof(path), p->path, e->name);
-            if (player_handles(e->name)) go = "Play";
+            if (player_handles(e->name)) go = music_is_current(p->path, e->name) ? "Now playing" : "Play";
             else if (fops_is_remote(p->path)) go = is_image(e) ? "View" : "Open";
             else if (launcher_system_for(path, sys, sizeof(sys))) { snprintf(play, sizeof(play), "Play (%s)", sys); go = play; }
             else if (is_package(e)) go = "Install";

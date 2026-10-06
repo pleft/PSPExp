@@ -18,8 +18,15 @@
 
 /* the context the sound goes through (pspexp-term's link) */
 void music_init(PspExpContext *ctx);
-/* play dir's playable entries (of the n given: folders and others are left out) from entries[start] */
+/* 1 when dir/name is the song loaded and not ended (Files: cross on it shows Music, not again) */
+int  music_is_current(const char *dir, const char *name);
+/* play dir's playable entries (of the n given: folders and others are left out) from entries[start];
+ * the song playing already: Music shown, nothing restarted */
 int  music_play_list(const char *dir, const FEntry *entries, int n, int start);
+/* add songs at the end of the queue: dir's entries, folders with the songs in them (4 deep);
+ * nothing playing, the first one added plays. How many were added (a note says so) */
+int  music_add(const char *dir, const FEntry *entries, int n);
+const char *music_note(void);   /* that note ("Added 3 songs to the queue") */
 /* each main-loop turn: the next track when one ends */
 void music_tick(uint64_t now);
 /* the note button and the launcher: pause or resume (a track that ended: from its start) */

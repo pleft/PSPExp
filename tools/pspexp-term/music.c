@@ -19,11 +19,12 @@ typedef struct Track { char dir[FOPS_PATH]; FEntry e; } Track;
 static PspExpContext *g_ctx;
 static Track *g_q;                 /* the queue: a folder's tracks, in the folder's order */
 static int *g_order;               /* the order they play in (shuffled or not): indices into g_q */
-static int g_qn, g_at = -1;        /* how many; the place in g_order of the one loaded (-1 none) */
+static int g_qn, g_qcap, g_at = -1;   /* how many (room for); the place in g_order of the one loaded (-1 none) */
 static int g_shuffle, g_repeat;
 static int g_ended_seen;           /* the end of the track loaded was acted on */
 static int g_view, g_dirty = 1, g_exit, g_opts, g_opt_sel;
 static char g_msg[300];            /* a track that would not play, shown until the next key */
+static char g_note[160];           /* what square added to the queue, shown until the next key */
 static char g_cover_key[300];
 
 /* ---- the queue -------------------------------------------------------------------------------- */
@@ -77,14 +78,79 @@ static int step(int d, int wrap)
 
 void music_init(PspExpContext *ctx) { g_ctx = ctx; }
 
+/* room for n tracks */
+static int q_room(int n)
+{
+    Track *q; int *o, cap = g_qcap ? g_qcap : 64;
+    if (n <= g_qcap) return 0;
+    while (cap < n) cap *= 2;
+    if (!(q = (Track *)realloc(g_q, sizeof(Track) * (size_t)cap))) return -1;
+    g_q = q;
+    if (!(o = (int *)realloc(g_order, sizeof(int) * (size_t)cap))) return -1;
+    g_order = o; g_qcap = cap;
+    return 0;
+}
+
+#define ADD_MAX 4000     /* tracks one add may bring (a whole drive is not a queue) */
+#define QUEUE_MAX 10000
+
+/* dir's playable files in its order, then its folders' (depth: how far down still) */
+static int add_tree(const char *dir, const FEntry *e, int depth)
+{
+    FList l = { 0 };
+    char p[FOPS_PATH];
+    int i, k, added = 0;
+    if (!e->is_dir) {
+        if (e->is_up || !player_handles(e->name) || g_qn >= QUEUE_MAX || q_room(g_qn + 1) < 0) return 0;
+        snprintf(g_q[g_qn].dir, sizeof(g_q[g_qn].dir), "%s", dir);
+        g_q[g_qn].e = *e;
+        g_order[g_qn] = g_qn;
+        g_qn++;
+        return 1;
+    }
+    if (depth <= 0) return 0;
+    fops_join(p, sizeof(p), dir, e->name);
+    if (fops_list(p, 0, 0, &l) < 0) return 0;
+    for (k = 0; k < 2; k++)   /* the files first, then the folders */
+        for (i = 0; i < l.n && added < ADD_MAX; i++)
+            if (!l.e[i].is_up && (k == 0) == !l.e[i].is_dir) added += add_tree(p, &l.e[i], depth - 1);
+    fops_free(&l);
+    return added;
+}
+
+int music_add(const char *dir, const FEntry *entries, int n)
+{
+    PlayerInfo pi;
+    int i, first = g_qn, added = 0, have = player_info(&pi);
+    for (i = 0; i < n && added < ADD_MAX; i++) added += add_tree(dir, &entries[i], 4);
+    if (added && (!have || g_at < 0 || pi.ended)) play_at(first);   /* nothing playing: the first one added */
+    if (added == 1) snprintf(g_note, sizeof(g_note), "Added to the queue: %s", g_q[g_order[g_qn - 1]].e.name);
+    else if (added) snprintf(g_note, sizeof(g_note), "Added %d songs to the queue", added);
+    else snprintf(g_note, sizeof(g_note), "No songs to add there");
+    g_dirty = 1;
+    return added;
+}
+
+const char *music_note(void) { return g_note; }
+
+int music_is_current(const char *dir, const char *name)
+{
+    PlayerInfo pi;
+    const Track *t;
+    if (g_at < 0 || !player_info(&pi) || pi.ended) return 0;
+    t = &g_q[g_order[g_at]];
+    return !strcmp(t->dir, dir) && !strcmp(t->e.name, name);
+}
+
 int music_play_list(const char *dir, const FEntry *entries, int n, int start)
 {
     int i, at = -1;
+    if (start >= 0 && start < n && music_is_current(dir, entries[start].name)) { g_view = V_NOW; g_dirty = 1; return 0; }   /* playing already: just shown */
     Track *q = (Track *)malloc(sizeof(Track) * (size_t)(n > 0 ? n : 1));
     int *o = (int *)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
     if (!q || !o) { free(q); free(o); return -1; }
     free(g_q); free(g_order);
-    g_q = q; g_order = o; g_qn = 0; g_at = -1;
+    g_q = q; g_order = o; g_qn = 0; g_qcap = n > 0 ? n : 1; g_at = -1;
     for (i = 0; i < n; i++) {
         const FEntry *f = &entries[i];
         if (f->is_dir || f->is_up || !player_handles(f->name)) continue;
@@ -224,6 +290,7 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     if (!pressed && !up && !down && !left && !right) return;
     g_dirty = 1;
     if (g_msg[0] && pressed) g_msg[0] = 0;
+    if (g_note[0] && pressed) g_note[0] = 0;
     if (g_opts) {   /* shuffle and repeat */
         if (up || down) g_opt_sel ^= 1;
         if (pressed & PSPEXP_BUTTON_CROSS) {
@@ -257,6 +324,8 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (right) g_bsel = g_bsel + 6 < n ? g_bsel + 6 : (n ? n - 1 : 0);
         if (pressed & PSPEXP_BUTTON_CROSS) browse_choose();
         if (pressed & PSPEXP_BUTTON_CIRCLE) browse_up();
+        if ((pressed & PSPEXP_BUTTON_SQUARE) && g_dir[0] && g_bsel < g_list.n && !g_list.e[g_bsel].is_up)
+            music_add(g_dir, &g_list.e[g_bsel], 1);   /* a song, or a folder's songs, at the end of the queue */
         break;
     }
     case V_QUEUE:
@@ -432,6 +501,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     else if (g_view == V_BROWSE) draw_browse();
     else draw_queue();
     if (g_msg[0]) gfx_text(FONT_BADGE, 16, 236, g_msg, 0xff9a9a, 255, UI_SCREEN_W - 32);
+    else if (g_note[0]) gfx_text(FONT_BADGE, 16, 236, g_note, UI_ACCENT, 255, UI_SCREEN_W - 32);
     x = 12;
     if (g_view == V_NOW) {
         PlayerInfo pi;
@@ -442,6 +512,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     } else if (g_view == V_BROWSE) {
         x = ui_hint_btn(x, 'x', "Open / play");
         x = ui_hint_btn(x, 'o', g_dir[0] ? "Up" : "Close");
+        if (g_dir[0]) x = ui_hint_btn(x, 's', "Add");
     } else {
         x = ui_hint_btn(x, 'x', "Play");
         x = ui_hint_btn(x, 's', "Remove");
@@ -462,9 +533,9 @@ static void mu_state(char *out, size_t n)
     static const char *vn[NVIEWS] = { "now", "browse", "queue" }, *rn[3] = { "off", "all", "one" };
     int have = player_info(&pi);
     size_t l = strlen(out);
-    if (l < n) snprintf(out + l, n - l, "music.view=%s\nmusic.track=%d/%d\nmusic.shuffle=%d\nmusic.repeat=%s\nmusic.playing=%d\nmusic.title=%s\nmusic.pos=%.1f\nmusic.dur=%.1f\nmusic.paused=%d\nmusic.ended=%d\nmusic.folder=%s\nmusic.error=%s\n",
+    if (l < n) snprintf(out + l, n - l, "music.view=%s\nmusic.track=%d/%d\nmusic.shuffle=%d\nmusic.repeat=%s\nmusic.playing=%d\nmusic.title=%s\nmusic.pos=%.1f\nmusic.dur=%.1f\nmusic.paused=%d\nmusic.ended=%d\nmusic.folder=%s\nmusic.error=%s\nmusic.note=%s\n",
              vn[g_view], g_at + 1, g_qn, g_shuffle, rn[g_repeat], have, have ? pi.title : "", have ? pi.pos : 0, have ? pi.dur : 0,
-             have ? pi.paused : 0, have ? pi.ended : 0, g_dir, g_msg);
+             have ? pi.paused : 0, have ? pi.ended : 0, g_dir, g_msg, g_note);
 }
 
 const AppView MUSIC_APP = { "music", mu_open, mu_input, mu_needs_frame, mu_render, mu_take_exit, mu_state };

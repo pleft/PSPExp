@@ -1740,12 +1740,19 @@ the fifth tile in Apps) with three views, START going round them:
 - **Queue**: the folder's tracks in play order; cross plays one, square
   removes one (not the one playing).
 
+Square in Browse (2026-10-06) adds the highlighted song, or a folder's
+songs and its subfolders' (4 deep, files before folders, at most 4000 at
+a time and 10000 in the queue), to the end of the queue; with nothing
+playing the first one added plays. A note at the foot says what was
+added. Files' actions (triangle) have **Add to the music queue** for the
+marked or highlighted entries (`music_add`).
+
 | | |
 |---|---|
 | cross | pause / play (Browse: open, play; Queue: play) |
 | left / right | 10 s back / on (Now playing) |
 | L / R | the previous / next track |
-| square | stop (Queue: remove) |
+| square | stop (Browse: add to the queue; Queue: remove) |
 | triangle | play order: Shuffle (the current track stays first), Repeat off / all / one |
 | START | the next view |
 | circle | close (Browse: up); the music goes on |
@@ -1761,7 +1768,10 @@ Music with the folder queued from that song (`files_take_app`); closing
 Music then goes back to Files as it was left (2026-10-06; it went to the
 launcher at first). Files on
 the memory stick are copied to the board first (`files_fetch`), as before.
-Other apps can take other kinds of file the same way.
+Other apps can take other kinds of file the same way. Cross on the song
+already playing only shows Music (`music_is_current`; it started over at
+first), and Files marks that song with a note and shows its title at the
+foot of the active panel; START > Music opens the app too (2026-10-06).
 
 **The launcher shows it.** The top bar has a note while music plays, a
 pause sign while paused. The home screen gains a **Now playing** (or
