@@ -1773,6 +1773,17 @@ already playing only shows Music (`music_is_current`; it started over at
 first), and Files marks that song with a note and shows its title at the
 foot of the active panel; START > Music opens the app too (2026-10-06).
 
+**Icons went blank** (found on the Pi the same day, after Music and
+Files): the launcher kept every icon it had drawn, each size apart, in 96
+textures on the PSP and never let one go; once Music's and Files' icons
+had filled them, icons not drawn before (the Settings tiles) were skipped
+without a word. The 96 are now reused, least recently drawn first, each
+new icon under a fresh id (900 in turn) so a texture still on screen is
+never overwritten, and one drawn in this frame or the last is never
+taken (`icon_slot_new` in `launcher_gfx.c`, as the covers already did).
+Checked with 12 slots in place of 96: Music, Files and Apps and back to
+Settings, every icon right.
+
 **The launcher shows it.** The top bar has a note while music plays, a
 pause sign while paused. The home screen gains a **Now playing** (or
 **Paused**) pill, next to Play again: down then cross opens Music.

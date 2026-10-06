@@ -35,7 +35,8 @@
 #define ID_BACKDROP   60   /* + 0..5 */
 #define ID_WAVE       70   /* + 0..1: the two light ribbons drifting over the backdrop */
 #define ID_ICON       3000 /* + slot */
-#define ICON_SLOTS    96
+#define ICON_SLOTS    96   /* icons kept on the PSP at a time (each size apart); the least used goes */
+#define ICON_IDS      900  /* ids they cycle through: a fresh one for each, as the old may still be on screen */
 #define ID_COVER      4000 /* + pool index */
 #define ID_IMAGE      5000 /* + 0..3: the picture shown full screen, in tiles */
 #define COVER_SLOTS   10
@@ -478,9 +479,29 @@ static int icon_cp(const char *name)
     return 0;
 }
 
-typedef struct IconSlot { int cp, px, w, h; } IconSlot;
+typedef struct IconSlot { int cp, px, w, h; uint16_t id; unsigned used; } IconSlot;
 static IconSlot islot[ICON_SLOTS];
 static int nislots;
+static unsigned g_frame_no = 1, next_icon_id;   /* frames drawn; the next id */
+
+/* a slot for a new icon: a free one, else the one drawn longest ago (not in this frame or the
+ * last), its texture released. Every icon, glyph or picture, at every size takes one: before
+ * 2026-10-06 they were never let go, and after Music and Files had drawn theirs the 96 were full
+ * and icons not drawn yet (the Settings tiles) stayed blank. -1 when all are on screen */
+static int icon_slot_new(void)
+{
+    int i, best = -1;
+    if (nislots < ICON_SLOTS) best = nislots++;
+    else {
+        for (i = 0; i < ICON_SLOTS; i++)
+            if (islot[i].used + 1 < g_frame_no && (best < 0 || islot[i].used < islot[best].used)) best = i;
+        if (best < 0) return -1;
+        pspexp_release(G, islot[best].id);
+    }
+    islot[best].cp = 0;
+    islot[best].id = (uint16_t)(ID_ICON + (next_icon_id++ % ICON_IDS));
+    return best;
+}
 
 /* renders the glyph centred in px x px (optionally into a caller buffer) */
 static uint8_t *icon_bitmap(int cp, int px)
@@ -515,17 +536,16 @@ int gfx_icon(const char *name, int px, int x, int y, uint32_t rgb, int alpha)
     for (i = 0; i < nislots; i++) if (islot[i].cp == cp && islot[i].px == px) { slot = i; break; }
     if (slot < 0) {
         uint8_t *cov = icon_bitmap(cp, px), *rgba;
-        if (!cov || nislots >= ICON_SLOTS) { free(cov); return 0; }
+        if (!cov || (slot = icon_slot_new()) < 0) { free(cov); return 0; }
         rgba = (uint8_t *)malloc((size_t)(px * px * 4));
         for (i = 0; i < px * px; i++) { rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 255; rgba[i * 4 + 3] = cov[i]; }
         free(cov);
-        slot = nislots;
-        if (upload_rgba((uint16_t)(ID_ICON + slot), rgba, px, px) < 0) { free(rgba); return 0; }
+        if (upload_rgba(islot[slot].id, rgba, px, px) < 0) { free(rgba); return 0; }
         free(rgba);
         islot[slot].cp = cp; islot[slot].px = px;
-        nislots++;
     }
-    quad((uint16_t)(ID_ICON + slot), x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
+    islot[slot].used = g_frame_no;
+    quad(islot[slot].id, x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
     return 1;
 }
 
@@ -541,7 +561,7 @@ int gfx_picon(const char *path, int px, int x, int y, uint32_t rgb, int alpha)
         uint8_t *file, *img, *rgba;
         size_t len;
         int w, h, n, dw, dh, ox, oy, xx, yy;
-        if (nislots >= ICON_SLOTS || read_file(path, &file, &len) < 0) return 0;
+        if (read_file(path, &file, &len) < 0) return 0;
         img = stbi_load_from_memory(file, (int)len, &w, &h, &n, 4);
         free(file);
         if (!img) return 0;
@@ -559,13 +579,12 @@ int gfx_picon(const char *path, int px, int x, int y, uint32_t rgb, int alpha)
                 rgba[((oy + yy) * px + ox + xx) * 4 + 3] = (uint8_t)lroundf(acc / cnt);
             }
         stbi_image_free(img);
-        slot = nislots;
-        if (upload_rgba((uint16_t)(ID_ICON + slot), rgba, px, px) < 0) { free(rgba); return 0; }
+        if ((slot = icon_slot_new()) < 0 || upload_rgba(islot[slot].id, rgba, px, px) < 0) { free(rgba); return 0; }
         free(rgba);
         islot[slot].cp = key; islot[slot].px = px;
-        nislots++;
     }
-    quad((uint16_t)(ID_ICON + slot), x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
+    islot[slot].used = g_frame_no;
+    quad(islot[slot].id, x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
     return 1;
 }
 
@@ -1211,7 +1230,7 @@ void gfx_disc_forget(const char *key)
 
 /* ---- init -------------------------------------------------------------------------------------------- */
 
-void gfx_frame(PspExpContext *ctx) { G = ctx; CLX = 0; CLY = 0; CLW = SCREEN_W; CLH = SCREEN_H; }
+void gfx_frame(PspExpContext *ctx) { G = ctx; CLX = 0; CLY = 0; CLW = SCREEN_W; CLH = SCREEN_H; g_frame_no++; }
 
 int gfx_init(PspExpContext *ctx, const char *assets)
 {
