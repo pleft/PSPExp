@@ -256,6 +256,14 @@ the terminal; START + SELECT held quits a game. The views now get SELECT
 as a tap, on its release: Files, Packages and the Monitor had closed on the
 press, so holding SELECT in them for the terminal closed them too.
 
+**Leaving an app** (2026-10-06, the user's choice): three ways out were
+one too many. Circle steps back one level everywhere and, on an app's
+first screen, returns where the app was opened from (the launcher; Files
+for Music opened on a song; the terminal for Files opened there). Held
+SELECT is home: from any app or Files straight to the launcher (from the
+launcher it is the terminal, as before). A SELECT tap closes nothing any
+more; in the terminal it still shows or hides the keyboard.
+
 **Step 2** (2026-10-03): a home screen, and the rail cut to five sections,
 the same on both: Favourites, Games, Emulators, Apps, Settings (System
 renamed; Recent gone, the home screen's **Play again** row starts the
@@ -1353,7 +1361,7 @@ button still held when a mode or menu changes is ignored until released.
 terminal, inspired by Midnight Commander and drawn like the launcher:
 two panels (folder, path, entries with an icon by type and their size,
 marks, a footer). Apps > Files opens it at home, the terminal menu's
-Files here at the shell's folder; select closes it.
+Files here at the shell's folder; circle at a drive's top goes back there.
 
 | | |
 |---|---|
@@ -1636,7 +1644,8 @@ Apps now holds four built-in apps: Terminal, Files, **System Monitor** and
 **Packages**, each with a cover of its own. The last two are views like the
 file manager, and share one small interface (`appview.h`: open, input, frame,
 render, exit, state). The console shows them in place of the launcher; hold
-select or circle closes them.
+circle closes them (held select: the launcher; a select tap also closed
+them until 2026-10-06).
 
 ### 10.1 System Monitor
 

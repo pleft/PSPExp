@@ -693,7 +693,6 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         else if (down || (pressed & PSPEXP_BUTTON_CIRCLE)) p->on_drives = 0;
         if (pressed & PSPEXP_BUTTON_TRIANGLE) { p->on_drives = 0; g_over = O_ACTIONS; g_msel = 0; }
         if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }
-        if (pressed & PSPEXP_BUTTON_SELECT) g_exit = 1;
         g_dirty = 1;
         return;
     }
@@ -718,7 +717,6 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) { g_over = O_ACTIONS; g_msel = 0; }
     if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }
-    if (pressed & PSPEXP_BUTTON_SELECT) g_exit = 1;
     g_dirty = 1;
 }
 

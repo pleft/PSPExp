@@ -322,7 +322,7 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     /* square removes (square deletes everywhere: a letter, a Bluetooth pairing); triangle stays for showing more */
     if ((pressed & PSPEXP_BUTTON_SQUARE) && p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local"))) g_mode = S_CONFIRM;
     if (pressed & PSPEXP_BUTTON_START) { if (g_local) load_catalogue(); else catalogue_job("update", NULL); }
-    if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_SELECT)) g_exit = 1;
+    if (pressed & PSPEXP_BUTTON_CIRCLE) g_exit = 1;
 }
 
 static int st_needs_frame(uint64_t now)

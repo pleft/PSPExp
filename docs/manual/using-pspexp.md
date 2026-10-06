@@ -8,11 +8,11 @@ buttons; the board needs no screen, keyboard or mouse.
 | Button | What it does, on every screen |
 |---|---|
 | cross | choose: open, play, confirm, type the highlighted key |
-| circle | back: close, cancel, the folder above (in the terminal: Esc) |
+| circle | back one step: cancel, the folder above; on an app's first screen, out to where you came from (in the terminal: Esc) |
 | triangle | show more: details, the actions menu, a hidden password (in the terminal: Space) |
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
 | START | search, refresh or rescan, options |
-| SELECT | close an app; held, the terminal |
+| SELECT, held | home: the launcher, from any app (from the launcher: the terminal) |
 | L / R | the other tab, panel or page |
 | ♪ (note) | pause or resume the music, from anywhere (not during a game) |
 
@@ -157,7 +157,7 @@ Only use ROMs of games you own.
 | square | mark several files |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
 | START | options: hidden files, sorting, the same folder in both panels, a terminal here |
-| SELECT | close |
+| SELECT, held | the launcher |
 
 The drives include the board's storage, any USB stick plugged into it, and
 **the PSP's own memory stick** (drive **PSP**), while PSPExp runs. Copying

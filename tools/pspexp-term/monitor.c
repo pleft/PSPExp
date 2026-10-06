@@ -100,7 +100,7 @@ static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, 
     }
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_page = PAGE_OVERVIEW;
     if (pressed & PSPEXP_BUTTON_RTRIGGER) g_page = PAGE_PROGRAMS;
-    if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_SELECT)) { g_exit = 1; return; }
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { g_exit = 1; return; }
     if (g_page != PAGE_PROGRAMS) return;
     if (up && g_sel > 0) g_sel--;
     if (down && g_sel < g_s.nproc - 1) g_sel++;

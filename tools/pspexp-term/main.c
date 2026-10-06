@@ -1657,7 +1657,10 @@ static void handle_input(void)
         if (pressed & PSPEXP_BUTTON_SELECT) { sel_down = now; sel_used = 0; }
         if ((b & PSPEXP_BUTTON_SELECT) && !sel_used && now - sel_down >= 700000u && (mirror_available() || g_launcher_on)) {
             sel_used = 1;
-            view_cycle();
+            if ((g_app || g_view_files) && g_launcher_on) {   /* home: the launcher, from any app or Files (circle steps back) */
+                swallow();
+                g_app = NULL; g_app_from_files = 0; g_view_files = 0; g_view_launcher = 1; launcher_invalidate();
+            } else view_cycle();
         }
         if ((g_prev_select_released = (!(b & PSPEXP_BUTTON_SELECT) && g_prev_select_held))) sel_tap = !sel_used;
         g_prev_select_held = (b & PSPEXP_BUTTON_SELECT) != 0;
@@ -1665,8 +1668,8 @@ static void handle_input(void)
         if (!mirror_available() && !g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
     }
     if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
-    /* the views get SELECT as a tap, on its release: a press closing Files, Packages or the Monitor
-     * also closed them when the user was holding it for the terminal */
+    /* the views get SELECT as a tap, on its release (a press acted on also when the user was
+     * holding it for the launcher); none closes on it now: circle steps back, held SELECT goes home */
     if (g_app || g_view_files || g_view_launcher) pressed = (pressed & ~(uint32_t)PSPEXP_BUTTON_SELECT) | (g_select_tap ? PSPEXP_BUTTON_SELECT : 0);
     /* the PSP's note button: the music paused or resumed, from anywhere (runtimes that send it: 2026-10-06) */
     if ((pressed & PSPEXP_BUTTON_NOTE) && g_launch_pid <= 0) { music_toggle(); launcher_invalidate(); if (g_app) g_redraw_app = 1; }
