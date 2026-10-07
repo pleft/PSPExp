@@ -484,6 +484,20 @@ Steel Sky in play, pointer on the nub. Played by hand on 2026-10-01: playable, a
 it: after `publish`, `pspexp-pkg install ID` on the Omega installs from the
 card.
 
+On the Pi and the GameShell (Debian's ScummVM, with OpenGL) the four went
+black, or showed a corner blown up, from 2026-09-30 to 2026-10-07, found in
+the screenshots of the real-PSP test (§8.4). They had been added that
+morning and drew right; the OpenGL support of that afternoon lets a
+program make an OpenGL window on the headless board, so ScummVM's check of
+what OpenGL can do, a 32x32 window made and destroyed several times,
+succeeded, and the layer took that window for the game's: everything
+scaled 8.5 times from a corner. The layer now lets go of a window the
+program destroys and takes the next (`SDL_DestroyWindow`); checked on the
+Pi with the layer alone (no PSP): each game's 320x240 window and its
+pages. Clearing the layer's OpenGL context on `SDL_GL_DeleteContext` as
+well made Beneath a Steel Sky stop at start (`SDL_BlitSurface failed`):
+left as it was. The Omega's ScummVM, built without OpenGL, never had it.
+
 The static builds' rename header now lists only the hooks the static SDL
 layer defines (its OpenGL ones are left out): ScummVM asks
 `SDL_GL_GetDrawableSize` without using OpenGL and failed to link.
@@ -1642,6 +1656,15 @@ game that reads its input as state (`SDL_GetKeyboardState`,
 `SDL_GameControllerGetAxis`) or the nub as a mouse shows no input events
 while working; the numbers are from the first half minute (menus mostly);
 each screenshot stalls the PSP a moment, its sound queue jumping then.
+
+The screenshots, looked at on 2026-10-07 (the PSP away): the ScummVM games
+black or a corner blown up (fixed, above in §3); Command & Conquer's
+dotted intro (its interlaced movies, as on 2026-10-04); Hurrican's stripes
+(its intro's raster bars); Perfect Dark black (its intro); X-Moto's first
+notice too small to read at 800x600 shrunk; and Celeste 64 black in the
+last run: its pictures stopped 5 s in (pages sent 0, at 60 fps), not in
+the run before nor with the layer alone, so the board-GPU layer now says
+why a frame is not read back or sent, for the next run on the PSP.
 
 ## 9. The PSP's clock from the board (2026-09-28)
 

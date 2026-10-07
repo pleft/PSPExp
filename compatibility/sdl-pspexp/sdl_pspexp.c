@@ -2079,8 +2079,25 @@ HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, in
     } else
 #endif
     win = REAL(SDL_CreateWindow)(title, x, y, w, h, flags);
-    if (win && !S.win) { S.win = win; S.win_w = w; S.win_h = h; S.px = w / 2.0f; S.py = h / 2.0f; }   /* the pointer starts centred */
+    if (win && !S.win) {
+        S.win = win; S.win_w = w; S.win_h = h; S.px = w / 2.0f; S.py = h / 2.0f;   /* the pointer starts centred */
+        if (S.inited) update_scale();   /* a window after one destroyed (ScummVM's): its own size */
+    }
     return win;
+}
+
+/* a window let go: the next one is the program's. ScummVM makes a 32x32 OpenGL window first to see
+ * what OpenGL can do and destroys it; the layer kept that one, so the real window's size never came
+ * (its games stayed black, or a corner of them blown up 8.5 times) */
+HOOK(void, SDL_DestroyWindow, (SDL_Window *win))
+{
+    if (win && win == S.win) {
+        if (S.ren && REAL(SDL_GetRenderer)(win) == S.ren) S.ren = NULL;
+        S.win = NULL;
+        logf_("window %p destroyed: the next one is taken", (void *)win);
+    }
+    if (win && win == S.gl_window) S.gl_window = NULL;
+    REAL(SDL_DestroyWindow)(win);
 }
 
 HOOK(SDL_Renderer *, SDL_CreateRenderer, (SDL_Window *win, int index, Uint32 flags))
@@ -2832,6 +2849,13 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
         link_unlock();
     }
     SDL_GL_GetDrawableSize(win, &w, &h);
+    {   /* why a frame is not read back, once each (Celeste 64 on the PSP once stopped sending its
+         * picture after 5 s, at 60 fps, and nothing said why) */
+        static int said_size, said_link;
+        if ((w <= 0 || h <= 0) && !said_size) { said_size = 1; logf_("host GL: drawable %dx%d: frames not read back", w, h); }
+        if (S.active && !link_up() && !said_link) { said_link = 1; logf_("host GL: the link is down: frames not sent"); }
+        if (link_up()) said_link = 0;
+    }
     if (hg_ReadPixels && w > 0 && h > 0) {
         size_t row = (size_t)w * 4, n = row * (size_t)h;
         int fb = 0, y;
@@ -3107,6 +3131,12 @@ static void stream_frame_locked(SDL_Window *win, const Frame *surf)
     Tex *x;
     if (!S.inited) { S.win = win; S.win_w = surf->w; S.win_h = surf->h; connect_once(); update_scale(); }
     if (!link_up()) { end_frame(); return; }
+#ifdef PSPEXP_HOST_GL
+    {   /* a frame of another size than the window's drops the page cache each time: say so once */
+        static int said;
+        if (S.surface_tex && (S.win_w != surf->w || S.win_h != surf->h) && !said) { said = 1; logf_("host GL: frame %dx%d, window %dx%d", surf->w, surf->h, S.win_w, S.win_h); }
+    }
+#endif
     if (S.surface_tex && (S.win_w != surf->w || S.win_h != surf->h)) {
         release_pages(S.surface_tex); free(S.surface_tex->rgba); free(S.surface_tex); S.surface_tex = NULL;
     }

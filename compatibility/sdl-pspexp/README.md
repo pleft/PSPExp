@@ -35,6 +35,7 @@ scripts/dev/pspexp-run build/host/sdl-game --surface     # window-surface path
 
 | SDL2 | PSPExp |
 |---|---|
+| `SDL_DestroyWindow` | the layer lets go of the window and takes the next one made (ScummVM makes and destroys a 32x32 OpenGL window several times to see what OpenGL can do: the layer kept the first, and its games were scaled 8.5 times from a corner) |
 | `SDL_CreateWindow`, `SDL_CreateRenderer`, `SDL_CreateWindowAndRenderer` | connect to the PSP (once); a renderer that can't be had as asked (acceleration, vsync, a driver by index) is the software one; `SDL_CreateWindowAndRenderer` with `SDL_WINDOW_OPENGL` (Emilia Pinball, which then draws with OpenGL) makes the window, a software renderer and the layer's OpenGL context |
 | `SDL_GetDesktopDisplayMode`, `SDL_GetCurrentDisplayMode`, `SDL_GetDisplayBounds`, `SDL_GetDisplayUsableBounds`; a full-screen-desktop or zero-sized `SDL_CreateWindow` | on a headless board (SDL's dummy driver, whose display has no size): the PSP's screen, 480x272 at 60 Hz, so programs that size themselves to the display lay out for the PSP |
 | `SDL_RenderSetLogicalSize`, `SDL_RenderSetViewport`, `SDL_RenderSetClipRect` | the logical size (or window size) is fitted into 480x272 with letterboxing; viewport offsets and clip rectangles are applied |
