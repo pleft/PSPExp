@@ -1963,7 +1963,9 @@ programs) plays there instead of on the PSP, and the USB link carries none.
 can: `bluetoothctl`, PipeWire's `pw-play`, a controller) scans for 8 s and
 lists The PSP first, then the devices found, sound devices first, each
 "connected", "paired" or new. Cross uses one: `pspexp-bt use` pairs it when
-new (it must be in pairing mode), trusts and connects it, waits for its
+new (it must be in pairing mode), trusts and connects it (first letting go
+of the device in use and any other connected, untrusted and disconnected as
+for The PSP: one at a time, since 2026-10-08), waits for its
 PipeWire node and remembers it in `~/.config/pspexp/audio-out`; the first
 time, its volume is set to 40 % (at the device's own 100 % earbuds were far
 too loud). Square forgets a paired device, START scans again; cross on The

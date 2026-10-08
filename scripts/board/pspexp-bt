@@ -8,7 +8,8 @@
 #
 #   pspexp-bt devices [SECS]   scan SECS seconds (default 8), then one line per device:
 #                              ADDRESS|NAME|paired|connected|audio (0/1 each)
-#   pspexp-bt use ADDRESS      pair (when new), trust and connect it; sound goes to it
+#   pspexp-bt use ADDRESS      pair (when new), trust and connect it; sound goes to it. The
+#                              device in use before, and any other connected, is let go first
 #   pspexp-bt psp              sound back to the PSP; the device stays paired but is let go
 #                              (disconnected, not trusted: free for a phone or tablet)
 #   pspexp-bt forget ADDRESS   unpair it (and sound back to the PSP if it was the one)
@@ -62,6 +63,15 @@ devices)
 use)
 	A="${2:?address}"
 	power_on
+	# one device at a time: the one in use, and any other connected, let go first (untrusted, so
+	# earbuds out of their case do not come back by themselves, then disconnected), as Sound
+	# output's "The PSP" does
+	{ P=$(chosen); [ "$P" != psp ] && echo "$P"; bluetoothctl devices Connected 2>/dev/null | awk '{print $2}'; } | sort -u |
+	while read -r O; do
+		[ -n "$O" ] && [ "$O" != "$A" ] || continue
+		bluetoothctl untrust "$O" >/dev/null 2>&1
+		bluetoothctl disconnect "$O" >/dev/null 2>&1
+	done
 	if [ "$(flag "$A" Paired)" = 0 ]; then
 		timeout 12 bluetoothctl --timeout 8 scan on >/dev/null 2>&1   # it must be seen before it pairs
 		bluetoothctl --timeout 25 pair "$A" >/dev/null 2>&1   # (its exit status does not say whether it paired)

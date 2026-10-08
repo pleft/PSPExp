@@ -229,6 +229,8 @@ From then on:
   seconds; out again, it moves back to them.
 - **The PSP** in Sound output brings the sound back for good and lets the
   headphones go, so your phone or tablet can have them.
+- **Other headphones** chosen in Sound output take over: the ones before are
+  let go first, as with The PSP. One device plays at a time.
 - Square on a device in the list forgets it; START scans again.
 
 Bluetooth always adds a little delay. PSPExp keeps its own part small;
