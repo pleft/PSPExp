@@ -6,6 +6,8 @@ runs the games; the PSP does what it is good at, drawing them with its own
 graphics chip, playing their sound and taking your input. Together they play
 games the PSP never had, and even a tiny board keeps up.
 
+<p align="center"><img src="docs/images/launcher-games.png" width="640" alt="The PSPExp launcher on the PSP: the Games shelf, with Cave Story highlighted"></p>
+
 What you get on the PSP:
 
 - **A launcher made for it**: games, emulators, apps and settings, with
@@ -18,6 +20,15 @@ What you get on the PSP:
   WonderSwan and, on a Pi, the Nintendo 64. Bring your own ROMs.
 - **A music player, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
+
+| | |
+|---|---|
+| <img src="docs/images/launcher-home.png" width="400" alt="The launcher's home screen"> | <img src="docs/images/packages.png" width="400" alt="The Packages app"> |
+| The launcher's home screen | Packages: install games from the PSP |
+| <img src="docs/images/celeste64.png" width="400" alt="Celeste 64 on the PSP"> | <img src="docs/images/supertuxkart.png" width="400" alt="SuperTuxKart on the PSP"> |
+| Celeste 64, drawn by a Raspberry Pi's GPU | SuperTuxKart, the same way |
+
+<sub>What the PSP shows, captured from the stream the board sends it.</sub>
 
 ## What you need
 

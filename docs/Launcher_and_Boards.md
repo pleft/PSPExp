@@ -527,6 +527,19 @@ replay keys into System on a slow link: a dropped press can land on Restart
 or Power off. A game started with `PSPEXP=tcp:<mac>:3838` draws to the same
 server, which is enough to check it runs but not its frame rate.
 
+Games too: the temporary console passes its connection to the games it
+starts, so `PSPEXP_SHOT_EVERY=60` in its environment saves a game's frames
+as well, and `PSPEXP_SCRIPT` (for example `10000:pad:cross`) gets past a
+title screen, since a running game has the stand-in to itself and the
+control port's presses do not reach it. The stand-in is the SDL executor:
+it draws what the SDL layer sends as sprites and pictures (2D games, and
+games drawn by the board's GPU such as Celeste 64 and SuperTuxKart), not the
+3D commands the PSP's GE draws for OpenGL games (Quake comes out black).
+The README's screenshots (`docs/images/`) were taken this way on the Pi 400
+(2026-10-08). When starting and stopping such a console over SSH, match it
+with `pgrep -x pspexp-term`: a `pgrep -f` pattern also matches the SSH
+command that carries it, and kills that shell.
+
 ## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
 
 The goal is a card image: the PSPExp launcher with preinstalled games,
