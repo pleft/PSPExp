@@ -1,0 +1,86 @@
+#!/bin/sh
+# pspexp-wargus: Warcraft II on Wargus (GPL-2.0) at a fixed master commit,
+# unmodified, built by scripts/packages/build-stratagus.sh ARCH; the engine is
+# pspexp-stratagus. The game's data is the player's own copy (Warcraft II is
+# sold, not free: none of it is in the package or downloaded), copied into
+# ~/Warcraft2 (the folder is made for it): the DOS CD's files (its DATA
+# folder, or the whole CD), the Battle.net Edition's folder, or GOG's
+# installer .exe, unpacked with innoextract. /usr/games/warcraft2 finds the
+# data by the files wartool itself looks for, extracts it once into
+# ~/.local/share/pspexp-warcraft2 beside Wargus's scripts (no -v: videos
+# need ffmpeg, and War1gus's tool crashed joining videos that were not there;
+# no -r: it rips music from a real CD drive), then runs Stratagus through the
+# SDL layer. Without the data, the launcher says where it goes
+# (PSPEXP_MESSAGE).
+# Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/stratagus/wargus"
+[ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
+V=3.3.3~git20260629-pspexp2
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
+mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
+install -m 755 "$B/wartool" "$W/root$L/"
+cp -r "$B/share/"* "$W/root$S/"
+install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-wargus/copyright"
+cat > "$W/root/usr/games/warcraft2" <<'S'
+#!/bin/sh
+# Warcraft II (package pspexp-wargus): the player's own copy in ~/Warcraft2,
+# extracted once, then Stratagus + Wargus through the SDL layer
+L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
+D="$HOME/.local/share/pspexp-warcraft2"
+say() { echo "warcraft2: $1" >&2; [ -n "$PSPEXP_MESSAGE" ] && echo "$1" > "$PSPEXP_MESSAGE"; }
+# the folder wartool takes: the DOS data (rezdat.war), the Battle.net Edition's
+# (support/tomes/tome.1, three folders up) or the Mac CD's (War Resources)
+find_data() {
+	f=$(find "$1" -maxdepth 5 -iname rezdat.war 2>/dev/null | head -1)
+	[ -n "$f" ] && { dirname "$f"; return; }
+	f=$(find "$1" -maxdepth 6 -ipath "*/support/tomes/tome.1" 2>/dev/null | head -1)
+	[ -n "$f" ] && { dirname "$(dirname "$(dirname "$f")")"; return; }
+	f=$(find "$1" -maxdepth 5 -name "War Resources" 2>/dev/null | head -1)
+	[ -n "$f" ] && dirname "$f"
+}
+if [ ! -f "$D/.pspexp-extracted" ]; then
+	mkdir -p "$HOME/Warcraft2"
+	SRC=$(find_data "$HOME/Warcraft2")
+	X="$HOME/.cache/pspexp-warcraft2-installer"
+	if [ -z "$SRC" ]; then   # GOG's installer: unpacked first
+		for e in "$HOME/Warcraft2"/*.exe "$HOME/Warcraft2"/*.EXE; do
+			[ -f "$e" ] && innoextract -q -i "$e" >/dev/null 2>&1 || continue
+			echo "warcraft2: unpacking $e" >&2
+			rm -rf "$X"; mkdir -p "$X"
+			innoextract -q -m -d "$X" "$e" >&2 && SRC=$(find_data "$X")
+			break
+		done
+	fi
+	[ -n "$SRC" ] || { rm -rf "$X"; say "Warcraft II needs your own copy: its CD's DATA folder, Battle.net Edition folder or GOG installer, in the Warcraft2 folder (Apps > Files)"; exit 1; }
+	echo "warcraft2: extracting from $SRC (once)" >&2
+	rm -rf "$D"; mkdir -p "$D"
+	"$L/wartool" "$SRC" "$D" >&2 || { say "Warcraft II could not read the files in $SRC"; rm -rf "$D" "$X"; exit 1; }
+	rm -rf "$X"
+	for c in campaigns maps scripts shaders; do [ -d "$S/$c" ] && cp -r "$S/$c" "$D/"; done
+	[ -d "$S/contrib" ] && { mkdir -p "$D/graphics/ui"; cp -r "$S/contrib/." "$D/graphics/ui/"; }   # as Wargus's starter does
+	touch "$D/.pspexp-extracted"
+fi
+exec pspexp-run /usr/lib/pspexp/stratagus/stratagus -d "$D" "$@"
+S
+chmod 755 "$W/root/usr/games/warcraft2"
+echo "Warcraft II on Wargus (https://github.com/Wargus/wargus, commit cde1a07) and Stratagus, GPL-2.0, built by PSPExp, unmodified. The game's data is the player's own copy." > "$W/root/usr/share/doc/pspexp-wargus/README"
+cat > "$W/control" <<C
+Package: pspexp-wargus
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/wartool.depends"), pspexp-stratagus (>= 3.3.3~git20260622), innoextract
+Description: Warcraft II on Wargus (Stratagus), for PSPExp
+ Blizzard's 1995 real-time strategy game on the Wargus game scripts and
+ the Stratagus engine, built from the projects' sources (2026-06-29).
+ Needs the player's own copy (the DOS CD, the Battle.net Edition or GOG's
+ installer) placed in ~/Warcraft2; it is extracted on the first start.
+ Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-wargus_${V}_$ARCH.deb"

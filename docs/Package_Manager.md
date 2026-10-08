@@ -280,8 +280,10 @@ installer does, after id's licence agreement is accepted. Diablo
 (`devilutionx`) downloads DevilutionX's own AArch64 build and the shareware
 `spawn.mpq` from the project's assets release, after DevilutionX's licence
 (Sustainable Use: accepted by using it) is accepted. Warcraft (`warcraft`)
-downloads nothing: the game is sold, so its launch script uses the player's
-own DATA.WAR from `~/Warcraft`, and when it is not there writes why to
+and Warcraft II (`warcraft2`) download nothing: the games are sold, so
+their launch scripts use the player's own copy (`~/Warcraft`,
+`~/Warcraft2`; GOG's installer unpacked with innoextract), and when it is
+not there write why to
 `PSPEXP_MESSAGE`, which the launcher shows (any recipe's program may; the
 launcher's §3.6). Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses

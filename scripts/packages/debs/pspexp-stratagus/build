@@ -1,0 +1,33 @@
+#!/bin/sh
+# pspexp-stratagus: the Stratagus engine (GPL-2.0) at a fixed master commit,
+# unmodified, built by scripts/packages/build-stratagus.sh ARCH; shared by
+# pspexp-war1gus (Warcraft: Orcs & Humans) and pspexp-wargus (Warcraft II),
+# which bring the games' scripts and their launch scripts. Installs
+# /usr/lib/pspexp/stratagus/stratagus. The games' MIDI music plays through
+# SDL_mixer's fluidsynth and the TimGM6mb soundfont.
+# Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/stratagus"
+[ -x "$B/stratagus" ] && [ -s "$B/stratagus.depends" ] || { echo "no $B/stratagus: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
+V=3.3.3~git20260622-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/lib/pspexp/stratagus" "$W/root/usr/share/doc/pspexp-stratagus"
+install -m 755 "$B/stratagus" "$W/root/usr/lib/pspexp/stratagus/stratagus"
+install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-stratagus/copyright"
+echo "Stratagus (https://github.com/Wargus/stratagus, commit 3d87c93), GPL-2.0, built by PSPExp, unmodified." > "$W/root/usr/share/doc/pspexp-stratagus/README"
+cat > "$W/control" <<C
+Package: pspexp-stratagus
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/stratagus.depends"), timgm6mb-soundfont
+Description: Stratagus real-time strategy engine, for PSPExp
+ The engine behind War1gus (Warcraft: Orcs & Humans) and Wargus
+ (Warcraft II), built from the project's sources (2026-06-22).
+ Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-stratagus_${V}_$ARCH.deb"

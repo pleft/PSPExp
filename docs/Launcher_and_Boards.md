@@ -546,7 +546,8 @@ A game that ends at once used to leave only "Warcraft stopped (status 1)".
 The console now gives every program it starts `PSPEXP_MESSAGE`, the path of
 a file (`/tmp/pspexp-message-<uid>`, cleared before each start): a program
 or its launch script may write one line there before it ends, and the
-launcher shows that line instead, for 8 s, scrolling when it is long.
+launcher shows that line instead, for 8 s, scrolling when it is long. One
+line of up to 159 characters: a longer one is cut.
 Warcraft's launch script uses it when DATA.WAR is missing ("Warcraft needs
 your own copy's DATA.WAR: put it in the Warcraft folder of your home folder
 (Apps > Files), then start it again").
@@ -860,9 +861,10 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   strategy game on Stratagus and War1gus, through the SDL layer like any
   other game (not the v0.2 renderer backend in `compatibility/stratagus`,
   which needs the engine patched). Debian has neither, so
-  `scripts/packages/build-war1gus.sh` builds both in a container at their
-  master's newest commits (2026-06-22: the last tags, 3.3.2, are from 2022)
-  into `pspexp-war1gus`. Warcraft is sold, so the player brings DATA.WAR
+  `scripts/packages/build-stratagus.sh` builds both in a container at their
+  master's newest commits (2026-06-22: the last tags, 3.3.2, are from 2022):
+  the engine is `pspexp-stratagus` (shared with Warcraft II), the game's
+  scripts and war1tool `pspexp-war1gus`. Warcraft is sold, so the player brings DATA.WAR
   (DOS CD or GOG) into `~/Warcraft`; the launch script extracts it once
   with war1tool (6.5 s on the Pi 400) into `~/.local/share/pspexp-warcraft` beside War1gus's
   scripts, or says where it goes (§3.6). war1tool crashed twice with only
@@ -884,6 +886,20 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   logs mouse buttons), START + SELECT back to the launcher. Not yet on the
   real PSP (away for repair) nor heard: the sound only reached the
   stand-in. Arm64 (Pi) for now.
+- **Warcraft II** (`warcraft2`, 2026-10-08): the same way on Wargus
+  (`pspexp-wargus`, its newest commit, 2026-06-29), on the shared
+  `pspexp-stratagus`. The player's copy goes in `~/Warcraft2` in any of the
+  three shapes wartool reads, which the launch script finds by wartool's
+  own marker files: the DOS CD's (`rezdat.war`, in its DATA folder or the
+  whole CD), the Battle.net Edition's (`support/tomes/tome.1`), the Mac
+  CD's (`War Resources`); or GOG's installer `.exe`, unpacked first with
+  `innoextract` as Wargus's own starter does. No `-v` (videos need ffmpeg)
+  nor `-r` (it rips music from a real CD drive): the DOS CD's music is CD
+  audio, so a copy from it plays without music. Wargus's own size, 640x480,
+  shrunk to the PSP: its interface is laid out for 640x480 and up, so a
+  smaller size waits for a copy to try it with. Only the package and the
+  missing-copy message are tried (no copy at hand); Warcraft on the shared
+  engine was tried again from the launcher (60 fps, START + SELECT).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,
@@ -1720,7 +1736,7 @@ why a frame is not read back or sent, for the next run on the PSP.
 
 Next run on the PSP: Warcraft (`tests/psp/all-games.sh` with its entry;
 added 2026-10-08 with only the stand-in to try it on), its sound and MIDI
-music heard.
+music heard; Warcraft II once a copy of it is at hand.
 
 ## 9. The PSP's clock from the board (2026-09-28)
 

@@ -63,6 +63,12 @@ it starts straight away. The nub moves the pointer, cross selects and gives orde
 circle is the right mouse button, the d-pad scrolls the map, square adds to
 the selection, START is the game menu.
 
+**Warcraft II** works the same way, with your own copy in the
+**Warcraft2** folder: the files of the DOS CD (its DATA folder, or the whole
+CD), the folder of the Battle.net Edition, or the installer GOG sells (the
+`.exe` file itself). A copy of the DOS CD plays without music: its music is
+on the CD as audio tracks.
+
 ## What it plays like
 
 Measured on the PSP-1000 with a Pi 400:
@@ -90,12 +96,13 @@ Measured on the PSP-1000 with a Pi 400:
 | Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): its menus about 58 fps on the PSP-1000 |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); 51-60 fps in their first seconds on the PSP-1000 |
 | Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |
+| Warcraft II | drawn by the PSP; your own copy (above); not yet tried with a copy |
 
 Every game here was started on the PSP-1000 from the launcher on 6
 October 2026, its sound heard, its nub and START + SELECT tried
-(`tests/psp/all-games.sh`), except Warcraft, added on 8 October while the
-PSP was away: tried from the launcher with a stand-in for the PSP, not yet
-on the PSP itself.
+(`tests/psp/all-games.sh`), except the Warcraft games, added on 8 October
+while the PSP was away: Warcraft tried from the launcher with a stand-in for
+the PSP, not yet on the PSP itself; Warcraft II not yet played at all.
 
 ## Games drawn by the Pi's graphics chip
 

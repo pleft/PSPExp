@@ -1,25 +1,26 @@
 #!/bin/sh
-# pspexp-war1gus: Warcraft: Orcs & Humans on Stratagus + War1gus
-# (GPL-2.0) at fixed master commits (war1tool with one fix), built by
-# scripts/packages/build-war1gus.sh ARCH. The
+# pspexp-war1gus: Warcraft: Orcs & Humans on War1gus (GPL-2.0) at a fixed
+# master commit (war1tool with one fix), built by
+# scripts/packages/build-stratagus.sh ARCH; the engine is pspexp-stratagus. The
 # game's data is the player's own DATA.WAR (Warcraft is sold, not free: none
 # of it is in the package or downloaded). /usr/games/warcraft looks for it in
 # ~/Warcraft (the folder is made for it, so Apps > Files shows where it goes),
 # extracts it once with war1tool into ~/.local/share/pspexp-warcraft beside
 # War1gus's scripts, then runs Stratagus through the SDL layer. Without it,
 # the launcher says where to put it (PSPEXP_MESSAGE). The music is MIDI,
-# played by SDL_mixer through the TimGM6mb soundfont (War1gus's own choice).
+# played by SDL_mixer through the TimGM6mb soundfont (War1gus's own choice;
+# pspexp-stratagus depends on it).
 # Usage: build OUTDIR ARCH
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
-B="$ROOT/build/$ARCH/war1gus"
-[ -x "$B/stratagus" ] && [ -x "$B/war1tool" ] && [ -s "$B/depends.txt" ] || { echo "no $B: scripts/packages/build-war1gus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260622-pspexp1
+B="$ROOT/build/$ARCH/stratagus/war1gus"
+[ -x "$B/war1tool" ] && [ -s "$B/war1tool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
+V=3.3.3~git20260622-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/war1gus; S=/usr/share/pspexp/war1gus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-war1gus"
-install -m 755 "$B/stratagus" "$B/war1tool" "$W/root$L/"
+install -m 755 "$B/war1tool" "$W/root$L/"
 cp -r "$B/share/"* "$W/root$S/"
 install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-war1gus/copyright"
 cat > "$W/root/usr/games/warcraft" <<'S'
@@ -48,7 +49,7 @@ fi
 # stretched to 4:3, which the PSP showed with black bars); Stratagus keeps what Options changes
 P="$HOME/.config/stratagus/wc1/preferences.lua"
 [ -f "$P" ] || { mkdir -p "$(dirname "$P")"; printf 'if (wc1 == nil) then wc1 = {} end\nwc1.preferences = {VideoWidth = 480, VideoHeight = 272, OriginalPixelRatio = false, VideoFullScreen = false}\n' > "$P"; }
-exec pspexp-run "$L/stratagus" -d "$D" "$@"
+exec pspexp-run /usr/lib/pspexp/stratagus/stratagus -d "$D" "$@"
 S
 chmod 755 "$W/root/usr/games/warcraft"
 echo "Warcraft: Orcs & Humans on Stratagus (3d87c93) and War1gus (8ec7576) from https://github.com/Wargus, GPL-2.0, built by PSPExp; war1tool with compatibility/war1gus/war1tool-optional-cutscenes.patch. The game's data is the player's own DATA.WAR." > "$W/root/usr/share/doc/pspexp-war1gus/README"
@@ -59,8 +60,8 @@ Architecture: $ARCH
 Maintainer: PSPExp <pspexp@localhost>
 Section: games
 Priority: optional
-Depends: $(cat "$B/depends.txt"), timgm6mb-soundfont
-Description: Warcraft: Orcs & Humans on Stratagus and War1gus, for PSPExp
+Depends: $(cat "$B/war1tool.depends"), pspexp-stratagus (>= 3.3.3~git20260622)
+Description: Warcraft: Orcs & Humans on War1gus (Stratagus), for PSPExp
  Blizzard's 1994 real-time strategy game on the Stratagus engine and the
  War1gus game scripts, built from the projects' sources (2026-06-22). Needs
  the player's own DATA.WAR from Warcraft: Orcs & Humans (DOS), placed in
