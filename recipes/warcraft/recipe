@@ -2,7 +2,7 @@
 # package pspexp-war1gus, built by PSPExp), through the SDL layer like any
 # other SDL2 game. Warcraft is sold, not free: the player brings DATA.WAR from
 # their own copy (the DOS CD, or GOG's), copied into ~/Warcraft (Apps > Files);
-# the first start extracts it (about a minute on a Pi 400), and without it the
+# the first start extracts it (6.5 s on a Pi 400), and without it the
 # launcher says where it goes. Nothing of the game is hosted, not even a cover.
 # Drawn by the PSP at 480x272 (the launch script's first-run preferences): its
 # 8-bit graphics go as CLUT8 pages, only what changes, 4.5 KB a frame on a

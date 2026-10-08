@@ -58,8 +58,8 @@ or the version GOG sells): its file `DATA.WAR`. Install Warcraft from
 Packages, then copy `DATA.WAR` into the **Warcraft** folder of your home
 folder on the Pi (Apps > Files; the folder appears after the first try,
 and the launcher reminds you if the file is missing). The first start
-prepares the game from it, which takes a minute; after that it starts
-straight away. The nub moves the pointer, cross selects and gives orders,
+prepares the game from it, a few seconds longer than usual; after that
+it starts straight away. The nub moves the pointer, cross selects and gives orders,
 circle is the right mouse button, the d-pad scrolls the map, square adds to
 the selection, START is the game menu.
 

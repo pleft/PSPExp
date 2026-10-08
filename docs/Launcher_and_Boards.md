@@ -864,7 +864,7 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   master's newest commits (2026-06-22: the last tags, 3.3.2, are from 2022)
   into `pspexp-war1gus`. Warcraft is sold, so the player brings DATA.WAR
   (DOS CD or GOG) into `~/Warcraft`; the launch script extracts it once
-  with war1tool into `~/.local/share/pspexp-warcraft` beside War1gus's
+  with war1tool (6.5 s on the Pi 400) into `~/.local/share/pspexp-warcraft` beside War1gus's
   scripts, or says where it goes (§3.6). war1tool crashed twice with only
   DATA.WAR: copying the CD's cutscene archives (fixed by
   `compatibility/war1gus/war1tool-optional-cutscenes.patch`, from the
