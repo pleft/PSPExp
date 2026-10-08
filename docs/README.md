@@ -27,3 +27,6 @@
 The technical documents are also a record of the work: they say what was
 tried, what was measured and when, so some sections describe the state at
 a given date.
+
+Licences: PSPExp is MIT ([LICENSE](../LICENSE)); the files under their own
+licences are listed in [THIRD_PARTY.md](../THIRD_PARTY.md).
