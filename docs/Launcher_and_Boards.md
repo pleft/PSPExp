@@ -946,17 +946,32 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
 - **Warcraft II** (`warcraft2`, 2026-10-08): the same way on Wargus
   (`pspexp-wargus`, its newest commit, 2026-06-29), on the shared
   `pspexp-stratagus`. The player's copy goes in `~/Warcraft2` in any of the
-  three shapes wartool reads, which the launch script finds by wartool's
-  own marker files: the DOS CD's (`rezdat.war`, in its DATA folder or the
-  whole CD), the Battle.net Edition's (`support/tomes/tome.1`), the Mac
-  CD's (`War Resources`); or GOG's installer `.exe`, unpacked first with
-  `innoextract` as Wargus's own starter does. No `-v` (videos need ffmpeg)
-  nor `-r` (it rips music from a real CD drive): the DOS CD's music is CD
-  audio, so a copy from it plays without music. Wargus's own size, 640x480,
-  shrunk to the PSP: its interface is laid out for 640x480 and up, so a
-  smaller size waits for a copy to try it with. Only the package and the
-  missing-copy message are tried (no copy at hand); Warcraft on the shared
-  engine was tried again from the launcher (60 fps, START + SELECT).
+  shapes wartool reads, which the launch script finds by wartool's own
+  marker files: the DOS CD's (`rezdat.war`, with `snddat.war` beside it: a
+  DOSBox install's DATA has the rest but not the speech, and wartool then
+  stopped), the Battle.net Edition's (`support/tomes/tome.1`), the Mac
+  CD's (`War Resources`); GOG's installer `.exe`, unpacked first with
+  `innoextract` as Wargus's own starter does; and first of all a disc image
+  (a `.cue` naming one `.img` or `.bin`, as DOSBox copies have): split with
+  `bchunk` into its data track, unpacked with `bsdtar`, and its audio
+  tracks, the CD's music, encoded with `oggenc` under the names wartool's
+  own CD rip gives them (track 2 "Human Battle 1"...), the game then set to
+  `.ogg` (`wc2-config.lua`); otherwise the MIDI music wartool takes from the
+  data. Of several images the one with the most audio tracks: Beyond the
+  Dark Portal's (17 songs) also gives the whole game (wartool: "expansion
+  DOS CD", the four campaigns; the original CD gives two). No `-v` (videos
+  need ffmpeg) nor `-r` (it rips from a real CD drive). wartool shows its
+  errors in a desktop dialog (zenity): with the console's `DISPLAY=:0` it
+  waited for ever, on a board with no screen, for a missing `SNDDAT.WAR`;
+  it now runs with no display and a 15-minute limit (war1tool too). The
+  user's copy (a DOSBox folder with both CDs' images, 2026-10-08) from the
+  launcher: 4 min 7 s to the first frames on the Pi 400 (splitting 1.2 GB,
+  extracting, an hour of music to OGG; later starts straight away), 244 MB
+  extracted, menus 50-58 fps at 1.5 KB a frame to the stand-in PSP.
+  Wargus's own size, 640x480, shrunk to 57 %: 640x360 (75 %, filling the
+  screen) cut its game setup off at the left and the bottom, laid out for
+  480 lines. Warcraft on the shared engine was tried again from the
+  launcher (60 fps, START + SELECT).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,
@@ -1793,7 +1808,7 @@ why a frame is not read back or sent, for the next run on the PSP.
 
 Next run on the PSP: Warcraft (`tests/psp/all-games.sh` with its entry;
 added 2026-10-08 with only the stand-in to try it on), its sound and MIDI
-music heard; Warcraft II once a copy of it is at hand.
+music heard; Warcraft II, its text at 57 % and its CD music.
 
 ## 9. The PSP's clock from the board (2026-09-28)
 

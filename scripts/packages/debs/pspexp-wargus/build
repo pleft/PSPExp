@@ -5,7 +5,9 @@
 # sold, not free: none of it is in the package or downloaded), copied into
 # ~/Warcraft2 (the folder is made for it): the DOS CD's files (its DATA
 # folder, or the whole CD), the Battle.net Edition's folder, or GOG's
-# installer .exe, unpacked with innoextract. /usr/games/warcraft2 finds the
+# installer .exe, unpacked with innoextract; or a disc image of the CD (.cue with its
+# .img or .bin, as DOSBox copies have), split with bchunk: its audio tracks become the
+# game's music as OGG (the CD's own recordings; without them, the game's MIDI). /usr/games/warcraft2 finds the
 # data by the files wartool itself looks for, extracts it once into
 # ~/.local/share/pspexp-warcraft2 beside Wargus's scripts (no -v: videos
 # need ffmpeg, and War1gus's tool crashed joining videos that were not there;
@@ -18,7 +20,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp2
+V=3.3.3~git20260629-pspexp4
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
@@ -35,17 +37,63 @@ say() { echo "warcraft2: $1" >&2; [ -n "$PSPEXP_MESSAGE" ] && echo "$1" > "$PSPE
 # the folder wartool takes: the DOS data (rezdat.war), the Battle.net Edition's
 # (support/tomes/tome.1, three folders up) or the Mac CD's (War Resources)
 find_data() {
-	f=$(find "$1" -maxdepth 5 -iname rezdat.war 2>/dev/null | head -1)
-	[ -n "$f" ] && { dirname "$f"; return; }
+	for f in $(find "$1" -maxdepth 5 -iname rezdat.war 2>/dev/null | tr ' ' '\001'); do   # with its speech beside it:
+		d=$(dirname "$(echo "$f" | tr '\001' ' ')")                                       # an installed game's DATA
+		[ -n "$(find "$d" -maxdepth 1 -iname snddat.war 2>/dev/null)" ] && { echo "$d"; return; }   # may lack it
+	done
 	f=$(find "$1" -maxdepth 6 -ipath "*/support/tomes/tome.1" 2>/dev/null | head -1)
 	[ -n "$f" ] && { dirname "$(dirname "$(dirname "$f")")"; return; }
 	f=$(find "$1" -maxdepth 5 -name "War Resources" 2>/dev/null | head -1)
 	[ -n "$f" ] && dirname "$f"
 }
+# a disc image of the CD (a .cue and the one .img or .bin it names, as DOSBox copies have): split
+# with bchunk into its data track (an ISO) and its audio tracks (WAV) in $T; the one with the
+# most audio tracks (the expansion's has the 17th song)
+image_cue() {
+	best= most=0
+	for c in $(find "$1" -maxdepth 5 -iname '*.cue' 2>/dev/null | tr ' ' '\001'); do
+		c=$(echo "$c" | tr '\001' ' ')
+		[ "$(grep -ci '^ *FILE' "$c")" = 1 ] || continue
+		f=$(sed -n 's/^ *FILE "\(.*\)".*/\1/p' "$c" | tr -d '\r' | head -1)
+		[ -f "$(dirname "$c")/$f" ] || continue
+		n=$(grep -ci 'TRACK .* AUDIO' "$c")
+		[ "$n" -gt "$most" ] && { best=$c; most=$n; }
+	done
+	[ -n "$best" ] && echo "$best"
+}
+split_image() {   # $1 the .cue; tracks into $T as track01.iso, track02.wav...
+	f=$(sed -n 's/^ *FILE "\(.*\)".*/\1/p' "$1" | tr -d '\r' | head -1)
+	rm -rf "$T"; mkdir -p "$T"
+	tr -d '\r' < "$1" > "$T/image.cue"
+	(cd "$T" && bchunk -w "$(dirname "$1")/$f" image.cue track >/dev/null 2>&1)
+	ls "$T"/track* >/dev/null 2>&1
+}
+# the CD's music is its audio tracks (wartool rips them only from a real drive): track 2 is
+# "Human Battle 1" and so on, the names wartool's own rip gives them; as OGG into $1
+music_from_tracks() {
+	i=2 n=0
+	mkdir -p "$1"
+	for name in "Human Battle 1" "Human Battle 2" "Human Battle 3" "Human Battle 4" "Human Battle 5" \
+	            "Human Briefing" "Human Victory" "Human Defeat" "Orc Battle 1" "Orc Battle 2" "Orc Battle 3" \
+	            "Orc Battle 4" "Orc Battle 5" "Orc Briefing" "Orc Victory" "Orc Defeat" "I'm a Medieval Man"; do
+		w=$(printf '%s/track%02d.wav' "$T" $i)
+		if [ -f "$w" ] && oggenc -Q -q 4 -o "$1/$name.ogg" "$w" 2>/dev/null; then n=$((n + 1)); fi
+		rm -f "$w"
+		i=$((i + 1))
+	done
+	[ $n -gt 0 ]
+}
+T="$HOME/.cache/pspexp-warcraft2-image"
 if [ ! -f "$D/.pspexp-extracted" ]; then
 	mkdir -p "$HOME/Warcraft2"
-	SRC=$(find_data "$HOME/Warcraft2")
 	X="$HOME/.cache/pspexp-warcraft2-installer"
+	SRC=
+	CUE=$(image_cue "$HOME/Warcraft2")
+	if [ -n "$CUE" ]; then   # a disc image first: the whole CD, and the expansion's has everything
+		echo "warcraft2: reading the disc image $CUE" >&2
+		split_image "$CUE" && rm -rf "$X" && mkdir -p "$X" && bsdtar -xf "$T/track01.iso" -C "$X" 2>/dev/null && SRC=$(find_data "$X")
+	fi
+	[ -n "$SRC" ] || SRC=$(find_data "$HOME/Warcraft2")
 	if [ -z "$SRC" ]; then   # GOG's installer: unpacked first
 		for e in "$HOME/Warcraft2"/*.exe "$HOME/Warcraft2"/*.EXE; do
 			[ -f "$e" ] && innoextract -q -i "$e" >/dev/null 2>&1 || continue
@@ -55,11 +103,18 @@ if [ ! -f "$D/.pspexp-extracted" ]; then
 			break
 		done
 	fi
-	[ -n "$SRC" ] || { rm -rf "$X"; say "Warcraft II needs your own copy: its CD's DATA folder, Battle.net Edition folder or GOG installer, in the Warcraft2 folder (Apps > Files)"; exit 1; }
+	[ -n "$SRC" ] || { rm -rf "$X" "$T"; say "Warcraft II needs your own copy: its CD's DATA folder or disc image, Battle.net Edition folder or GOG installer, in the Warcraft2 folder (Apps > Files)"; exit 1; }
 	echo "warcraft2: extracting from $SRC (once)" >&2
 	rm -rf "$D"; mkdir -p "$D"
-	"$L/wartool" "$SRC" "$D" >&2 || { say "Warcraft II could not read the files in $SRC"; rm -rf "$D" "$X"; exit 1; }
-	rm -rf "$X"
+	# no desktop for it (the console gives programs DISPLAY=:0): wartool shows its errors in a dialog
+	# (zenity) that nobody could close on a board without a screen, and waited for it for ever
+	env -u DISPLAY -u WAYLAND_DISPLAY timeout 900 "$L/wartool" "$SRC" "$D" < /dev/null >&2 || { say "Warcraft II could not read the files in $SRC"; rm -rf "$D" "$X" "$T"; exit 1; }
+	if [ -n "$CUE" ]; then   # the CD's own music, instead of the MIDI wartool made
+		echo "warcraft2: the music from the disc image's audio tracks" >&2
+		{ [ -f "$T/track02.wav" ] || split_image "$CUE"; } && music_from_tracks "$D/music" &&
+			sed -i 's/^wargus.music_extension = .*/wargus.music_extension = ".ogg"/' "$D/scripts/wc2-config.lua"
+	fi
+	rm -rf "$X" "$T"
 	for c in campaigns maps scripts shaders; do [ -d "$S/$c" ] && cp -r "$S/$c" "$D/"; done
 	[ -d "$S/contrib" ] && { mkdir -p "$D/graphics/ui"; cp -r "$S/contrib/." "$D/graphics/ui/"; }   # as Wargus's starter does
 	touch "$D/.pspexp-extracted"
@@ -75,7 +130,7 @@ Architecture: $ARCH
 Maintainer: PSPExp <pspexp@localhost>
 Section: games
 Priority: optional
-Depends: $(cat "$B/wartool.depends"), pspexp-stratagus (>= 3.3.3~git20260622), innoextract
+Depends: $(cat "$B/wartool.depends"), pspexp-stratagus (>= 3.3.3~git20260622), innoextract, bchunk, vorbis-tools, libarchive-tools
 Description: Warcraft II on Wargus (Stratagus), for PSPExp
  Blizzard's 1995 real-time strategy game on the Wargus game scripts and
  the Stratagus engine, built from the projects' sources (2026-06-29).

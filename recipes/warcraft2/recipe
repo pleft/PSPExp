@@ -2,22 +2,23 @@
 # (GPL-2.0; packages pspexp-wargus and pspexp-stratagus, built by PSPExp),
 # through the SDL layer like any other SDL2 game. Warcraft II is sold, not
 # free: the player brings their own copy into ~/Warcraft2 (Apps > Files): the
-# DOS CD's files, the Battle.net Edition's folder, or GOG's installer .exe
-# (unpacked with innoextract); the first start extracts it, and without it
-# the launcher says what goes there. Nothing of the game is hosted, not even
-# a cover. Wargus's own size, 640x480, shrunk to the PSP's screen (a smaller
-# one to be tried once a copy is at hand: its interface is laid out for
-# 640x480 and up). The music: what the copy has (the DOS CD's is CD audio,
-# which wartool can only rip from a real drive). The PSP's controls, as
+# DOS CD's files or a disc image of it (.cue with .img/.bin: its audio tracks
+# become the music), the Battle.net Edition's folder, or GOG's installer .exe
+# (unpacked with innoextract); the first start extracts it (4 min on a Pi 400
+# from a disc image), and without it the launcher says what goes there. Nothing of the game is hosted, not even
+# a cover. Wargus's own size, 640x480, shrunk to the PSP's screen (640x360
+# cut its game setup off). The music: the CD's recordings from a disc image,
+# else the game's MIDI. The PSP's controls, as
 # Warcraft's: the nub is the mouse (cross selects and orders, circle the
 # right button), the d-pad scrolls the map, square Shift, triangle Ctrl,
-# START the game menu (F10), SELECT Escape. Arm64 boards (Pi). Built and the
-# missing-copy path tried on 2026-10-08; not yet played (no copy at hand).
+# START the game menu (F10), SELECT Escape. Arm64 boards (Pi). Tried on
+# 2026-10-08 from the launcher with the stand-in PSP: the user's copy (both
+# CDs' images) extracted, menus and a game's setup reached.
 
 [package]
 id=warcraft2
 title=Warcraft II
-description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD, Battle.net Edition or GOG). Drawn by the PSP.
+description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD or its image, Battle.net Edition or GOG). Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, Wargus); the game's data is your own copy's (Blizzard)
 version=1

@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/war1gus"
 [ -x "$B/war1tool" ] && [ -s "$B/war1tool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260622-pspexp2
+V=3.3.3~git20260622-pspexp3
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/war1gus; S=/usr/share/pspexp/war1gus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-war1gus"
@@ -39,7 +39,9 @@ if [ ! -f "$D/.pspexp-extracted" ]; then
 	[ -n "$SRC" ] || { say "Warcraft needs your own copy's DATA.WAR: put it in the Warcraft folder of your home folder (Apps > Files), then start it again"; exit 1; }
 	echo "warcraft: extracting $SRC/DATA.WAR (once)" >&2
 	rm -rf "$D"; mkdir -p "$D"
-	"$L/war1tool" "$SRC" "$D" >&2 || { say "Warcraft could not read $SRC/DATA.WAR: is it from Warcraft: Orcs & Humans (DOS)?"; rm -rf "$D"; exit 1; }
+	# no desktop for it (the console gives programs DISPLAY=:0): a dialog nobody could close on a
+	# board without a screen would wait for ever (wartool did; war1tool has the same dialogs)
+	env -u DISPLAY -u WAYLAND_DISPLAY timeout 900 "$L/war1tool" "$SRC" "$D" < /dev/null >&2 || { say "Warcraft could not read $SRC/DATA.WAR: is it from Warcraft: Orcs & Humans (DOS)?"; rm -rf "$D"; exit 1; }
 	for c in campaigns contrib maps scripts shaders; do [ -d "$S/$c" ] && cp -r "$S/$c" "$D/"; done
 	mkdir -p "$D/music"
 	[ -f /usr/share/sounds/sf2/TimGM6mb.sf2 ] && ln -sf /usr/share/sounds/sf2/TimGM6mb.sf2 "$D/music/TimGM6mb.sf2"
