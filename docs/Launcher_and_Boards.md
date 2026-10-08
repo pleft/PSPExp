@@ -540,6 +540,17 @@ The README's screenshots (`docs/images/`) were taken this way on the Pi 400
 with `pgrep -x pspexp-term`: a `pgrep -f` pattern also matches the SSH
 command that carries it, and kills that shell.
 
+### 3.6 What a game says when it cannot start (2026-10-08)
+
+A game that ends at once used to leave only "Warcraft stopped (status 1)".
+The console now gives every program it starts `PSPEXP_MESSAGE`, the path of
+a file (`/tmp/pspexp-message-<uid>`, cleared before each start): a program
+or its launch script may write one line there before it ends, and the
+launcher shows that line instead, for 8 s, scrolling when it is long.
+Warcraft's launch script uses it when DATA.WAR is missing ("Warcraft needs
+your own copy's DATA.WAR: put it in the Warcraft folder of your home folder
+(Apps > Files), then start it again").
+
 ## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
 
 The goal is a card image: the PSPExp launcher with preinstalled games,
@@ -845,6 +856,34 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   fps into PPSSPP, 0.4-87 KB a frame (CLUT8 pages). Tested unattended with
   `PSPEXP_SCRIPT`'s new `pad:` buttons. Arm64 only (no official 32-bit ARM
   build; a build for the GameShell is possible later).
+- **Warcraft: Orcs & Humans** (`warcraft`, 2026-10-08): Blizzard's 1994
+  strategy game on Stratagus and War1gus, through the SDL layer like any
+  other game (not the v0.2 renderer backend in `compatibility/stratagus`,
+  which needs the engine patched). Debian has neither, so
+  `scripts/packages/build-war1gus.sh` builds both in a container at their
+  master's newest commits (2026-06-22: the last tags, 3.3.2, are from 2022)
+  into `pspexp-war1gus`. Warcraft is sold, so the player brings DATA.WAR
+  (DOS CD or GOG) into `~/Warcraft`; the launch script extracts it once
+  with war1tool into `~/.local/share/pspexp-warcraft` beside War1gus's
+  scripts, or says where it goes (§3.6). war1tool crashed twice with only
+  DATA.WAR: copying the CD's cutscene archives (fixed by
+  `compatibility/war1gus/war1tool-optional-cutscenes.patch`, from the
+  WarCraft PSP port) and, with `-v` (videos, which War1gus's own starter
+  passes), joining intro videos that are not there (so no `-v`). The first
+  start also writes `~/.config/stratagus/wc1/preferences.lua`: 480x272 game
+  pixels and square ones (War1gus's default, 480x300 stretched 1.2x to 4:3,
+  was letterboxed). Its 8-bit screen goes as CLUT8 pages, only what
+  changes: on the Pi 400 to the stand-in PSP 60 fps in the menus and in a
+  skirmish, 4.5 KB a frame on a still map, 14-16 KB scrolling. The music
+  is the game's MIDI through fluidsynth and TimGM6mb. The nub is the mouse
+  (`PSPEXP_NUB_SPEED=500`: Stratagus's window is twice the game's size and
+  the speed is in window pixels), cross / circle its buttons, the d-pad
+  scrolls, square Shift, triangle Ctrl, START F10 (the game menu), SELECT
+  Escape. Checked from the launcher: the missing-data message, extraction,
+  the nub moving the pointer and cross clicking (`PSPEXP_LOG_EVENTS` now
+  logs mouse buttons), START + SELECT back to the launcher. Not yet on the
+  real PSP (away for repair) nor heard: the sound only reached the
+  stand-in. Arm64 (Pi) for now.
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,
@@ -1678,6 +1717,10 @@ notice too small to read at 800x600 shrunk; and Celeste 64 black in the
 last run: its pictures stopped 5 s in (pages sent 0, at 60 fps), not in
 the run before nor with the layer alone, so the board-GPU layer now says
 why a frame is not read back or sent, for the next run on the PSP.
+
+Next run on the PSP: Warcraft (`tests/psp/all-games.sh` with its entry;
+added 2026-10-08 with only the stand-in to try it on), its sound and MIDI
+music heard.
 
 ## 9. The PSP's clock from the board (2026-09-28)
 

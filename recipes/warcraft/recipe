@@ -1,0 +1,41 @@
+# Warcraft: Orcs & Humans (Blizzard, 1994) on Stratagus and War1gus (GPL-2.0;
+# package pspexp-war1gus, built by PSPExp), through the SDL layer like any
+# other SDL2 game. Warcraft is sold, not free: the player brings DATA.WAR from
+# their own copy (the DOS CD, or GOG's), copied into ~/Warcraft (Apps > Files);
+# the first start extracts it (about a minute on a Pi 400), and without it the
+# launcher says where it goes. Nothing of the game is hosted, not even a cover.
+# Drawn by the PSP at 480x272 (the launch script's first-run preferences): its
+# 8-bit graphics go as CLUT8 pages, only what changes, 4.5 KB a frame on a
+# still map and 14-16 KB scrolling, 60 fps from the Pi (2026-10-08, the
+# stand-in PSP). The music is the game's MIDI through fluidsynth and the
+# TimGM6mb soundfont. The PSP's controls: the nub is the mouse (cross selects
+# and orders, circle is the right button), the d-pad scrolls the map, square
+# Shift (add to the selection), triangle Ctrl, START the game menu (F10),
+# SELECT Escape. Stratagus's window is twice the game's size, so the
+# pointer's speed (window pixels a second) is doubled. Arm64 boards (Pi).
+
+[package]
+id=warcraft
+title=Warcraft: Orcs & Humans
+description=Blizzard's 1994 real-time strategy game on Stratagus and War1gus: humans against orcs, campaigns and skirmishes. Needs DATA.WAR from your own copy. Drawn by the PSP.
+category=game
+license=GPL-2.0 (Stratagus, War1gus); the game's data is your own copy's (Blizzard)
+version=1
+
+[debian]
+apt=pspexp-war1gus
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Warcraft: Orcs & Humans
+type=game
+description=Blizzard's 1994 strategy game on Stratagus: humans against orcs. Put DATA.WAR from your own copy in the Warcraft folder of your home folder first.
+icon=swords
+exec=/usr/games/warcraft
+native=1
+keys=square=lshift,triangle=lctrl,up=up,down=down,left=left,right=right,start=f10,select=escape,l=none,r=none
+nub=mouse
+env=PSPEXP_NUB_SPEED=500
+graphics=sdl

@@ -31,7 +31,8 @@ void launcher_invalidate(void);
  * the directory to run it in. `pspexp_aware` = the script hands the PSP over
  * itself (pspexp-run / pspexp-exec), so the console need not mirror it. */
 int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, int *pspexp_aware);
-void launcher_child_exited(int status);
+/* a program the launcher started ended; message: the line it left in PSPEXP_MESSAGE (or "") */
+void launcher_child_exited(int status, const char *message);
 /* 1 once when the user opened Apps > Terminal: show the terminal view */
 int launcher_take_console(void);
 /* 1 once when the user opened Apps > Files: show the file manager */

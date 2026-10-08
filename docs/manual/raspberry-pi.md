@@ -53,6 +53,16 @@ and appear as their own tiles once you have ROMs for them.
 stick or from the PSP's memory stick, or over the network as you would to
 any Linux machine. Only use ROMs of games you own.
 
+**Warcraft: Orcs & Humans** needs the data of your own copy (the DOS CD,
+or the version GOG sells): its file `DATA.WAR`. Install Warcraft from
+Packages, then copy `DATA.WAR` into the **Warcraft** folder of your home
+folder on the Pi (Apps > Files; the folder appears after the first try,
+and the launcher reminds you if the file is missing). The first start
+prepares the game from it, which takes a minute; after that it starts
+straight away. The nub moves the pointer, cross selects and gives orders,
+circle is the right mouse button, the d-pad scrolls the map, square adds to
+the selection, START is the game menu.
+
 ## What it plays like
 
 Measured on the PSP-1000 with a Pi 400:
@@ -79,10 +89,13 @@ Measured on the PSP-1000 with a Pi 400:
 | Quake II (demo) | drawn by the PSP, like Quake: 31-60 fps in its first seconds on the PSP-1000 |
 | Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): its menus about 58 fps on the PSP-1000 |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); 51-60 fps in their first seconds on the PSP-1000 |
+| Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |
 
 Every game here was started on the PSP-1000 from the launcher on 6
 October 2026, its sound heard, its nub and START + SELECT tried
-(`tests/psp/all-games.sh`).
+(`tests/psp/all-games.sh`), except Warcraft, added on 8 October while the
+PSP was away: tried from the launcher with a stand-in for the PSP, not yet
+on the PSP itself.
 
 ## Games drawn by the Pi's graphics chip
 

@@ -76,6 +76,9 @@ one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
 Cross on a game starts it. The launcher shows "Starting" and hands the PSP
 over; when the game ends, the launcher comes back by itself.
 
+A game that cannot start says why at the bottom of the screen: Warcraft,
+for example, when the data from your own copy is not on the board yet.
+
 **To leave any game, hold START + SELECT.** After a second the game is
 asked to quit; still held after two, it is ended, and a game that hangs
 while closing is ended a moment later. Many games also have their own

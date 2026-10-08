@@ -343,7 +343,7 @@ static int mtext(int font, int x, int y, const char *s, uint32_t rgb, int alpha,
 static uint64_t g_last_frame, g_sel_since;
 static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_toast[160], g_toast_icon[32];
-static uint64_t g_toast_until;
+static uint64_t g_toast_until, g_toast_at;
 static float g_toast_a;
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
@@ -360,6 +360,7 @@ static void toast(const char *icon, const char *s, uint64_t now)
 {
     snprintf(g_toast, sizeof(g_toast), "%s", s);
     snprintf(g_toast_icon, sizeof(g_toast_icon), "%s", icon ? icon : "");
+    g_toast_at = now;
     g_toast_until = now + 2600000u;
     g_dirty = 1;
 }
@@ -831,10 +832,13 @@ int launcher_system_for(const char *path, char *name, size_t n)
     return 1;
 }
 
-void launcher_child_exited(int status)
+void launcher_child_exited(int status, const char *message)
 {
     char s[160];
-    if (g_running && status != 0) {
+    if (g_running && message && message[0]) {   /* what the program said, for longer than a toast */
+        toast("info", message, pspexp_time_us());
+        g_toast_until = pspexp_time_us() + 8000000u;
+    } else if (g_running && status != 0) {
         snprintf(s, sizeof(s), "%s stopped (status %d)", g_running_e.title, status);
         toast("info", s, pspexp_time_us());
     }
@@ -2416,7 +2420,7 @@ static void draw_toast(float dt, uint64_t now)
     gfx_shadow(NINE_SHADOW10, x, y + 3, w, 26, 0x000000, a * 170 / 255);
     gfx_nine(NINE_R10, x, y, w, 26, 0x1e2c4a, a * 245 / 255);
     if (ic) gfx_icon(g_toast_icon, 14, x + 12, y + 6, C_ACCENT, a);
-    mtext(FONT_BODY, x + 14 + ic, y + (26 - gfx_line_height(FONT_BODY)) / 2, g_toast, C_TEXT, a, w - 28 - ic, g_toast_until - 2600000u);
+    mtext(FONT_BODY, x + 14 + ic, y + (26 - gfx_line_height(FONT_BODY)) / 2, g_toast, C_TEXT, a, w - 28 - ic, g_toast_at);
 }
 
 static void draw_running(void)

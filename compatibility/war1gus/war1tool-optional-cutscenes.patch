@@ -1,0 +1,25 @@
+# war1tool: cutscene archives are optional, skip the missing ones. With only
+# DATA.WAR (no CD's cutscene files) war1tool 3.3.2 crashes (segmentation fault)
+# copying them. From the WarCraft PSP port (psp/war1gus-psp.patch); GPL-2.0
+# like War1gus. Applied by scripts/packages/build-war1gus.sh.
+diff --git a/war1tool.cpp b/war1tool.cpp
+index 03c0d54..1ac0ba2 100644
+--- a/war1tool.cpp
++++ b/war1tool.cpp
+@@ -3983,6 +3983,16 @@ int main(int argc, char** argv)
+ 					sprintf(buf, "%s/%s", ArchiveDir, todoFile);
+ 					ConvertFLC_Manual(buf, todoFile, Todo[u].Arg1, Todo[u].Arg2, Todo[u].Arg3);
+ 				}
++				{
++					// cutscene archives are optional: skip them when only data.war is available
++					struct stat flcst;
++					sprintf(buf, "%s/%s", ArchiveDir, todoFile);
++					if (stat(buf, &flcst)) {
++						printf("skipping missing %s\n", buf);
++						free(todoFile);
++						break;
++					}
++				}
+ 				copyArchive(todoFile);
+ 				free(todoFile);
+ 				break;

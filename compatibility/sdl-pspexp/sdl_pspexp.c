@@ -3046,6 +3046,8 @@ static void log_event(const SDL_Event *ev)
     if (!on) return;
     switch (ev->type) {
     case SDL_KEYDOWN: case SDL_KEYUP: logf_("event: key %s %s", SDL_GetKeyName(ev->key.keysym.sym), ev->type == SDL_KEYDOWN ? "down" : "up"); break;
+    /* the button and where the pointer was: with the nub as the mouse, a click shows the nub moved it too */
+    case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: logf_("event: mouse button %d %s at %d,%d", ev->button.button, ev->type == SDL_MOUSEBUTTONDOWN ? "down" : "up", ev->button.x, ev->button.y); break;
     case SDL_JOYBUTTONDOWN: case SDL_JOYBUTTONUP: logf_("event: joystick %d button %d %s", (int)ev->jbutton.which, ev->jbutton.button, ev->type == SDL_JOYBUTTONDOWN ? "down" : "up"); break;
     case SDL_JOYAXISMOTION: if (ev->jaxis.value > 16000 || ev->jaxis.value < -16000) logf_("event: joystick %d axis %d %d", (int)ev->jaxis.which, ev->jaxis.axis, ev->jaxis.value); break;
     case SDL_JOYHATMOTION: logf_("event: joystick %d hat %d", (int)ev->jhat.which, ev->jhat.value); break;

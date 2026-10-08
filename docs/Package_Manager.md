@@ -279,7 +279,11 @@ downloads ET: Legacy's official AArch64 release and id's ET 2.60 for Linux
 installer does, after id's licence agreement is accepted. Diablo
 (`devilutionx`) downloads DevilutionX's own AArch64 build and the shareware
 `spawn.mpq` from the project's assets release, after DevilutionX's licence
-(Sustainable Use: accepted by using it) is accepted. Data a
+(Sustainable Use: accepted by using it) is accepted. Warcraft (`warcraft`)
+downloads nothing: the game is sold, so its launch script uses the player's
+own DATA.WAR from `~/Warcraft`, and when it is not there writes why to
+`PSPEXP_MESSAGE`, which the launcher shows (any recipe's program may; the
+launcher's §3.6). Data a
 recipe downloads itself goes in `data=URL sha256=HEX ...` (the check refuses
 it without the checksum; §4.3).
 

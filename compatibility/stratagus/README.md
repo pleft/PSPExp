@@ -1,5 +1,10 @@
 # Stratagus renderer backend (v0.2)
 
+> The boards' Warcraft package (`recipes/warcraft`, 2026-10-08) does not use
+> this backend: it runs unmodified Stratagus through the SDL layer, which
+> sends its 8-bit screen as CLUT8 pages and holds 60 fps from a Pi. This
+> backend stays as the v0.2 experiment and a reference.
+
 Stratagus (the engine behind War1gus / Warcraft: Orcs & Humans) is a pure
 software renderer: every tile, unit, glyph, fog tile and primitive is an
 `SDL_BlitSurface` or a pixel loop into one 32-bit CPU surface, `TheScreen`,

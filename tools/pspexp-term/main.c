@@ -2452,9 +2452,16 @@ static void draw_pointer(void) {}
 /* ---- programs started from the launcher ------------------------------------------- */
 
 static void release_psp(void);
+/* PSPEXP_MESSAGE: a file a program may write one line into before it ends ("Warcraft needs your
+ * own DATA.WAR: ..."); the launcher shows that line instead of "stopped (status N)" */
+static void message_path(char *p, size_t n) { snprintf(p, n, "/tmp/pspexp-message-%u", (unsigned)getuid()); }
 static void launch_child(const char *cmd, const char *cwd, int aware)
 {
-    pid_t pid = fork();
+    char msg[64];
+    pid_t pid;
+    message_path(msg, sizeof(msg));
+    unlink(msg);
+    pid = fork();
     if (pid < 0) return;
     if (pid == 0) {
         /* the programs' output, kept small: it lives in RAM (/tmp), and a
@@ -2477,6 +2484,7 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
             snprintf(v, sizeof(v), "tcp:%s:%u", g_tcp.host ? g_tcp.host : "127.0.0.1", g_tcp.port ? g_tcp.port : 3838);
             setenv("PSPEXP", v, 1);
         } else if (g_want_usb) setenv("PSPEXP", "usb", 1);
+        setenv("PSPEXP_MESSAGE", msg, 1);
         setsid();
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);
@@ -2500,7 +2508,17 @@ static void launch_done(int status)
     if (g_view_mirror) { keypad_release_all(); g_view_mirror = 0; }
     if (g_launch_from_files) { g_view_files = 1; g_view_launcher = 0; files_invalidate(); }   /* back where it was opened */
     else g_view_launcher = 1;
-    launcher_child_exited(code);
+    {
+        char p[64], line[160] = "";
+        FILE *f;
+        message_path(p, sizeof(p));
+        if ((f = fopen(p, "r"))) {
+            if (fgets(line, sizeof(line), f)) line[strcspn(line, "\r\n")] = 0;
+            fclose(f);
+            unlink(p);
+        }
+        launcher_child_exited(code, line);
+    }
 }
 
 /* ---- main ------------------------------------------------------------------------ */

@@ -1,0 +1,69 @@
+#!/bin/sh
+# pspexp-war1gus: Warcraft: Orcs & Humans on Stratagus + War1gus
+# (GPL-2.0) at fixed master commits (war1tool with one fix), built by
+# scripts/packages/build-war1gus.sh ARCH. The
+# game's data is the player's own DATA.WAR (Warcraft is sold, not free: none
+# of it is in the package or downloaded). /usr/games/warcraft looks for it in
+# ~/Warcraft (the folder is made for it, so Apps > Files shows where it goes),
+# extracts it once with war1tool into ~/.local/share/pspexp-warcraft beside
+# War1gus's scripts, then runs Stratagus through the SDL layer. Without it,
+# the launcher says where to put it (PSPEXP_MESSAGE). The music is MIDI,
+# played by SDL_mixer through the TimGM6mb soundfont (War1gus's own choice).
+# Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/war1gus"
+[ -x "$B/stratagus" ] && [ -x "$B/war1tool" ] && [ -s "$B/depends.txt" ] || { echo "no $B: scripts/packages/build-war1gus.sh $ARCH first" >&2; exit 1; }
+V=3.3.3~git20260622-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L=/usr/lib/pspexp/war1gus; S=/usr/share/pspexp/war1gus
+mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-war1gus"
+install -m 755 "$B/stratagus" "$B/war1tool" "$W/root$L/"
+cp -r "$B/share/"* "$W/root$S/"
+install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-war1gus/copyright"
+cat > "$W/root/usr/games/warcraft" <<'S'
+#!/bin/sh
+# Warcraft: Orcs & Humans (package pspexp-war1gus): the player's own DATA.WAR,
+# extracted once, then Stratagus + War1gus through the SDL layer
+L=/usr/lib/pspexp/war1gus; S=/usr/share/pspexp/war1gus
+D="$HOME/.local/share/pspexp-warcraft"
+say() { echo "warcraft: $1" >&2; [ -n "$PSPEXP_MESSAGE" ] && echo "$1" > "$PSPEXP_MESSAGE"; }
+if [ ! -f "$D/.pspexp-extracted" ]; then
+	mkdir -p "$HOME/Warcraft"
+	SRC=""
+	for d in "$HOME/Warcraft" "$HOME/warcraft" "$HOME/Warcraft/DATA" "$HOME"; do
+		for f in DATA.WAR data.war; do [ -f "$d/$f" ] && { SRC=$d; break 2; }; done
+	done
+	[ -n "$SRC" ] || { say "Warcraft needs your own copy's DATA.WAR: put it in the Warcraft folder of your home folder (Apps > Files), then start it again"; exit 1; }
+	echo "warcraft: extracting $SRC/DATA.WAR (once)" >&2
+	rm -rf "$D"; mkdir -p "$D"
+	"$L/war1tool" "$SRC" "$D" >&2 || { say "Warcraft could not read $SRC/DATA.WAR: is it from Warcraft: Orcs & Humans (DOS)?"; rm -rf "$D"; exit 1; }
+	for c in campaigns contrib maps scripts shaders; do [ -d "$S/$c" ] && cp -r "$S/$c" "$D/"; done
+	mkdir -p "$D/music"
+	[ -f /usr/share/sounds/sf2/TimGM6mb.sf2 ] && ln -sf /usr/share/sounds/sf2/TimGM6mb.sf2 "$D/music/TimGM6mb.sf2"
+	touch "$D/.pspexp-extracted"
+fi
+# the PSP's screen, the first time: 480x272 game pixels, square (War1gus's default is 480x300
+# stretched to 4:3, which the PSP showed with black bars); Stratagus keeps what Options changes
+P="$HOME/.config/stratagus/wc1/preferences.lua"
+[ -f "$P" ] || { mkdir -p "$(dirname "$P")"; printf 'if (wc1 == nil) then wc1 = {} end\nwc1.preferences = {VideoWidth = 480, VideoHeight = 272, OriginalPixelRatio = false, VideoFullScreen = false}\n' > "$P"; }
+exec pspexp-run "$L/stratagus" -d "$D" "$@"
+S
+chmod 755 "$W/root/usr/games/warcraft"
+echo "Warcraft: Orcs & Humans on Stratagus (3d87c93) and War1gus (8ec7576) from https://github.com/Wargus, GPL-2.0, built by PSPExp; war1tool with compatibility/war1gus/war1tool-optional-cutscenes.patch. The game's data is the player's own DATA.WAR." > "$W/root/usr/share/doc/pspexp-war1gus/README"
+cat > "$W/control" <<C
+Package: pspexp-war1gus
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <pspexp@localhost>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt"), timgm6mb-soundfont
+Description: Warcraft: Orcs & Humans on Stratagus and War1gus, for PSPExp
+ Blizzard's 1994 real-time strategy game on the Stratagus engine and the
+ War1gus game scripts, built from the projects' sources (2026-06-22). Needs
+ the player's own DATA.WAR from Warcraft: Orcs & Humans (DOS), placed in
+ ~/Warcraft; it is extracted on the first start. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-war1gus_${V}_$ARCH.deb"

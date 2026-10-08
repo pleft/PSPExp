@@ -43,7 +43,7 @@ packages/          what the launcher offers, for any board
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
   build-mupen64plus.sh    Mupen64Plus (main branch) and GLideN64 for a Debian 13 board, in a
                      container (the N64; GLideN64 patched to ask for OpenGL ES 3.0)
-  build-opensurge.sh, build-hurrican.sh, build-egoboo.sh, build-solarus.sh, build-easyrpg.sh, build-luanti.sh, build-assaultcube.sh, build-vanillaconquer.sh, build-srb2kart.sh, build-srb2.sh, build-etlegacy.sh, build-openra.sh
+  build-opensurge.sh, build-hurrican.sh, build-egoboo.sh, build-solarus.sh, build-easyrpg.sh, build-luanti.sh, build-assaultcube.sh, build-vanillaconquer.sh, build-srb2kart.sh, build-srb2.sh, build-etlegacy.sh, build-openra.sh, build-war1gus.sh
                      engines Debian lacks, the same way
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board
   check-recipes      check the catalogue's recipes (docs/Package_Manager.md §4)
