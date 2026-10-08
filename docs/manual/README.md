@@ -64,5 +64,5 @@ the setup and the list of packages differ.
 | The launcher offers "Update the PSP" or "Restart PSPExp" | A newer version was installed: choose it, it takes seconds. |
 
 More: the [cheatsheet](../cheatsheet.md) for command-line use, and the
-[technical documents](../PSPExp_Technical_Architecture.md) for how it all
-works.
+[other documents](../README.md) for how it all works and how to
+build it.
