@@ -75,5 +75,12 @@ instead, and each finished frame is sent as a picture.
 | understand the design | [the technical architecture](docs/PSPExp_Technical_Architecture.md) |
 | find any other document | [docs/README.md](docs/README.md) |
 
+## Licence
+
+PSPExp is under the [MIT licence](LICENSE). A few files keep their own
+(patches to other projects, fonts, the GameShell's Wi-Fi settings): the
+licence file lists them. Games come from their authors, under their own
+terms; none are in this repository.
+
 PSPExp is not made by or affiliated with Sony. "PSP" names the console it
 runs on.
