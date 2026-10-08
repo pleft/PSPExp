@@ -64,7 +64,10 @@
 #include "files.h"
 #include "player.h"
 #include "music.h"
+#include "notify.h"
 #include "btaudio.h"
+#include "launcher_gfx.h"
+#include <sys/statvfs.h>
 #include "files_psp.h"
 #include "control.h"
 #include "../../host/libpspexp/pspexp_slots.h"
@@ -1268,6 +1271,7 @@ static void draw_scrollbar(int rows)
     pspexp_fill_rect(ctx, 477, (int16_t)pos, 3, (int16_t)len, rgb565(theme()->accent), 255);
 }
 
+static int g_launcher_on;   /* (declared again below with the views) */
 static void render(void)
 {
     int rows = term_rows();
@@ -1289,6 +1293,7 @@ static void render(void)
         if (g_help_open) draw_help();
         if (g_batch.n) pspexp_draw_sprite_batch(ctx, font.atlas, g_batch.r, (uint32_t)g_batch.n);
     }
+    if (g_launcher_on) { gfx_frame(ctx); notify_draw(pspexp_time_us()); }   /* a notification over the terminal too */
     draw_pointer();
     pspexp_present(ctx);
     T.dirty = 0;
@@ -1534,7 +1539,8 @@ static int g_prev_select_held, g_prev_select_released, g_select_tap;
 static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons drive the keypad */
 static int mirror_available(void);
 static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
-static int g_view_launcher, g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
+static int g_view_launcher;
+static int g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
 static int g_view_files, g_files_from_launcher;   /* the file manager (files.c), and where it was opened from */
 static int g_launch_from_files;                   /* the running program was opened in the file manager */
 static const AppView *g_app;                      /* a built-in app shown instead of the launcher (appview.h) */
@@ -1579,6 +1585,91 @@ static void files_show(const char *path, int from_launcher)
     g_view_files = 1; g_view_launcher = 0; g_view_mirror = 0;
     swallow();
     files_open(path);
+}
+
+/* where a notification's action goes (the notification centre, cross) */
+static void notify_go(const char *a)
+{
+    if (!strncmp(a, "app:", 4) && app_find(a + 4)) app_show(app_find(a + 4));
+    else if (!strcmp(a, "files")) files_show(NULL, 1);
+    else if (!strncmp(a, "category:", 9)) {
+        g_app = NULL; g_view_files = 0; g_view_mirror = 0; g_view_launcher = 1;
+        launcher_category(a + 9);
+        launcher_invalidate();
+        swallow();
+    }
+}
+
+/* a battery's warnings: at 15 % and at 5 %, once each until it charges or is back over 25 % */
+static void battery_watch(const char *key, const char *what, int pct, int charging, int *warned)
+{
+    char t[96], d[96];
+    if (charging || pct >= 25) { *warned = 0; return; }
+    if (pct <= 5 && *warned < 2) {
+        snprintf(t, sizeof(t), "%s is almost empty", what);
+        snprintf(d, sizeof(d), "%d%% left: plug it in now", pct);
+        notify(NOTE_WARN, "battery-warning", t, d, NULL, key);
+        *warned = 2;
+    } else if (pct <= 15 && *warned < 1) {
+        snprintf(t, sizeof(t), "%s is low", what);
+        snprintf(d, sizeof(d), "%d%% left", pct);
+        notify(NOTE_WARN, "battery-low", t, d, NULL, key);
+        *warned = 1;
+    }
+}
+
+/* what the board and the PSP say without being asked, as notifications: their batteries, the
+ * network gone and back, the Bluetooth device gone, storage nearly full. Once a second; the
+ * first readings only set where things stand */
+static void watch_tick(uint64_t now)
+{
+    static uint64_t at, disk_at, offline_since;
+    static int psp_warned, board_warned, offline_said, bt_was = -1, disk_warned;
+    int bat, chg, online;
+    if (now - at < 1000000u) return;
+    at = now;
+    {
+        PspExpPowerStatus p;
+        if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED && pspexp_power_status(ctx, &p, NULL) == 0 && p.percent >= 0)
+            battery_watch("psp-battery", "The PSP's battery", p.percent, (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) != 0, &psp_warned);
+    }
+    launcher_status(now, &bat, &chg, &online);
+    if (bat >= 0) battery_watch("board-battery", "This board's battery", bat, chg, &board_warned);
+    if (online == 0 && !offline_since) offline_since = now;
+    if (online == 0 && !offline_said && now - offline_since > 15000000u) {   /* (a moment's loss, a Wi-Fi switch: not worth one) */
+        notify(NOTE_WARN, "wifi-off", "The board is offline", "Packages, box art and online games wait for the network", "category:Settings", "network");
+        offline_said = 1;
+    }
+    if (online != 0) {
+        if (online == 1 && offline_said) notify(NOTE_INFO, "wifi", "The board is online again", NULL, NULL, "network");
+        offline_said = 0; offline_since = 0;
+    }
+    {
+        int v, on = bt_indicator(&v);
+        char chosen[64], label[96];
+        if (bt_was >= 0 && on != bt_was) {
+            bt_chosen(chosen, sizeof(chosen));
+            bt_route_label(label, sizeof(label));
+            if (on) notify(NOTE_INFO, "headphones", "Sound on Bluetooth", label, "category:Settings", "bt");
+            else if (chosen[0]) notify(NOTE_INFO, "speaker", "Sound back on the PSP", "The Bluetooth device went away (out of reach, or back in its case)", "category:Settings", "bt");
+        }
+        bt_was = on;
+    }
+    if (!disk_at || now - disk_at > 300000000u) {   /* storage: every 5 minutes */
+        struct statvfs v;
+        const char *home = getenv("HOME");
+        disk_at = now;
+        if (statvfs(home && *home ? home : "/", &v) == 0 && v.f_blocks) {
+            unsigned long long fr = (unsigned long long)v.f_bavail * v.f_frsize, tot = (unsigned long long)v.f_blocks * v.f_frsize;
+            int low = fr < 300ull * 1000 * 1000 || fr * 100 < tot * 3;
+            if (low && !disk_warned) {
+                char d[96];
+                snprintf(d, sizeof(d), "%llu MB free: remove packages or files", fr / 1000000ull);
+                notify(NOTE_WARN, "hard-drive", "This board's storage is almost full", d, "app:store", "disk");
+                disk_warned = 1;
+            } else if (!low && fr > 600ull * 1000 * 1000) disk_warned = 0;
+        }
+    }
 }
 
 /* the shell's current folder (Linux: /proc; macOS: libproc), or "" */
@@ -2564,7 +2655,7 @@ static int psp_runtime_update(const char *dir, char *msg, size_t n)
     int r = pspexp_slots_update(ctx, dir && *dir ? dir : runtime_dir(), getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
     if (r == 0) snprintf(msg, n, "PSP updated: quit PSPExp on the PSP and start it again");
     else snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
-    if (g_launcher_on) { launcher_notice(r == 0 ? "download" : "circle-x", msg); if (r == 0) launcher_set_psp_update(0); }
+    if (g_launcher_on) { notify(r == 0 ? NOTE_DONE : NOTE_FAIL, r == 0 ? "download" : "circle-x", r == 0 ? "PSP updated" : "The PSP update did not finish", r == 0 ? "Quit PSPExp on the PSP and start it again" : strchr(msg, ':') ? strchr(msg, ':') + 2 : msg, NULL, "psp-runtime"); if (r == 0) launcher_set_psp_update(0); }
     if (r == 0 && g_launcher_on) {   /* About: the update now waiting in the other slot */
         PspExpSlots s;
         if (pspexp_slots_read(ctx, &s) == 0) launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
@@ -2584,8 +2675,8 @@ static void psp_slots_check(void)
     if (s.fallback[0] && strcmp(s.fallback, reported)) {   /* the loader fell back: say so once */
         snprintf(reported, sizeof(reported), "%s", s.fallback);
         fprintf(stderr, "[pspexp-term] PSP runtime fallback: %s\n", s.fallback);
-        if (g_launcher_on) launcher_notice("circle-x", strstr(s.fallback, "not valid") ? "The PSP's new runtime did not check out; the previous one is running"
-                                                                                      : "The PSP's new runtime did not start; the previous one is running");
+        if (g_launcher_on) notify(NOTE_FAIL, "circle-x", strstr(s.fallback, "not valid") ? "The PSP's new runtime did not check out" : "The PSP's new runtime did not start",
+                                  "The previous one is running", NULL, "psp-runtime");
         {   /* reported (this log keeps it): gone from the stick, so the next console doesn't report it again */
             char path[200];
             snprintf(path, sizeof(path), "%s/fallback", s.dir);
@@ -2594,13 +2685,13 @@ static void psp_slots_check(void)
     }
     runtime_version(have, sizeof(have));
     if (!have[0] || !s.current) return;
-    if (s.pending) { if (g_launcher_on) launcher_notice("download", "PSP updated: quit PSPExp on the PSP and start it again"); return; }
+    if (s.pending) { if (g_launcher_on) notify(NOTE_ATTN, "download", "PSP updated", "Quit PSPExp on the PSP and start it again", NULL, "psp-runtime"); return; }
     if (pspexp_link_maintenance(ctx)) { psp_runtime_update(NULL, msg, sizeof(msg)); return; }   /* nothing else works anyway */
     /* only a newer one is an update (versions start with their build time,
      * so they sort): a PSP with a newer runtime than this board's keeps it */
     if (strcmp(have, s.version[s.current - 'a']) <= 0) { if (g_launcher_on) launcher_set_psp_update(0); return; }
     fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: Settings > Update the PSP\n", s.version[s.current - 'a'], have);
-    if (g_launcher_on) { launcher_set_psp_update(1); launcher_notice("download", "A newer PSP runtime is here: Settings > Update the PSP"); }
+    if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSP runtime is here", "Settings > Update the PSP", "category:Settings", "psp-runtime"); }
 }
 
 /* this board's clock comes from the network (NTP) and is believed */
@@ -2682,7 +2773,7 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
         if (st.result == 1) snprintf(msg, sizeof(msg), "The PSP's clock was %s %s: set from this board%s%s", span, diff < 0 ? "behind" : "ahead", note[0] ? "; " : "", note);
         else snprintf(msg, sizeof(msg), "The PSP's %s, as this board's", note);
         fprintf(stderr, "[pspexp-term] %s\n", msg);
-        if (g_launcher_on && (llabs(diff) > 90 || st.zone_result == 1)) launcher_notice("clock", msg);
+        if (g_launcher_on && (llabs(diff) > 90 || st.zone_result == 1)) notify(NOTE_INFO, "clock", "The PSP's clock was set", msg, NULL, "psp-clock");
     } else if (note[0]) fprintf(stderr, "[pspexp-term] the PSP: %s\n", note);
     if (st.result < 0) fprintf(stderr, "[pspexp-term] the PSP could not set its clock (%d)\n", st.result);
     else if (st.result == 0 && llabs(diff) > 90) fprintf(stderr, "[pspexp-term] the PSP's clock is %s %s; left (%s)\n", span, diff < 0 ? "behind" : "ahead",
@@ -2729,7 +2820,7 @@ static void pkg_check_tick(uint64_t now)
             else if (nw > 0) snprintf(msg, sizeof(msg), "%d new in Apps > Packages", nw);
             else snprintf(msg, sizeof(msg), "%d update%s in Apps > Packages", upd, upd == 1 ? "" : "s");
             fprintf(stderr, "[pspexp-term] %s\n", msg);
-            if (g_launcher_on) launcher_notice("package-plus", msg);
+            if (g_launcher_on) notify(NOTE_ATTN, "package-plus", upd > 0 ? "Updates for your packages" : "New packages", msg, "app:store", "pkgcheck");
         }
         fclose(f);
         return;
@@ -2799,6 +2890,7 @@ static void ctl_state(char *o, size_t n)
     if (g_app && g_app->state) g_app->state(o, n);
     if (g_app != &MUSIC_APP) MUSIC_APP.state(o, n);   /* the music plays on behind the other views */
     files_state(o, n);
+    if (g_launcher_on) notify_state(o, n);
     ctl_add(o, n, "psp_clock=%s\nprogram_pid=%d\n", g_clock_report, (int)g_launch_pid);
     ctl_add(o, n, "term.session=%d\nterm.cursor=%d,%d\nterm.scrolled=%d\n", g_sess_cur, T.cx, T.cy, T.view);
     for (y = 0; y < T.rows; y++) {   /* the screen's text, lines with something on them */
@@ -2960,7 +3052,7 @@ static void ctl_step(uint64_t now, int connected)
         return;
     }
     if (!(cmd = ctl_take())) return;
-    if (strcmp(cmd, "end")) { launcher_set_test_mode(1); g_pkgchk_quiet = 1; }   /* from the first command on: no Restart, Power off, Wi-Fi switch or catalogue check */
+    if (strcmp(cmd, "end") && strncmp(cmd, "notify ", 7)) { launcher_set_test_mode(1); g_pkgchk_quiet = 1; }   /* (a notification from pspexp-notify is no test) */   /* from the first command on: no Restart, Power off, Wi-Fi switch or catalogue check */
     if (!strncmp(cmd, "press ", 6) || !strncmp(cmd, "hold ", 5)) {
         char what[128] = "";
         int ms = 0;
@@ -3038,13 +3130,26 @@ static void ctl_step(uint64_t now, int connected)
         snprintf(reply, sizeof(reply), "ok current=%c pending=%c slot-a=%s slot-b=%s fallback=%s", sl.current ? sl.current : '-', sl.pending ? sl.pending : '-',
                  sl.version[0], sl.version[1], sl.fallback);
         ctl_reply(reply);
+    } else if (!strncmp(cmd, "notify ", 7)) {   /* pspexp-notify: LEVEL|ICON|TITLE|DETAIL|ACTION|KEY */
+        char f[6][160];
+        const char *p = cmd + 7;
+        int k, lv;
+        for (k = 0; k < 6; k++) {
+            size_t l = strcspn(p, "|");
+            snprintf(f[k], sizeof(f[k]), "%.*s", (int)(l < sizeof(f[k]) ? l : sizeof(f[k]) - 1), p);
+            p += l; if (*p == '|') p++;
+        }
+        lv = notify_level(f[0]);
+        if (lv < 0 || !f[2][0]) ctl_reply("error notify LEVEL|ICON|TITLE|DETAIL|ACTION|KEY (LEVEL: info, done, fail, attention, warning, hint)");
+        else if (!g_launcher_on) ctl_reply("error notifications need --launcher");
+        else { unsigned id = notify(lv, f[1], f[2], f[3], f[4], f[5]); snprintf(reply, sizeof(reply), "ok %u", id); ctl_reply(reply); }
     } else if (!strcmp(cmd, "ping")) {
         ctl_reply("ok pong");
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
         launcher_set_test_mode(0);
         g_pkgchk_quiet = 0;
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., ping, end");
 }
 
 int main(int argc, char **argv)
@@ -3204,7 +3309,7 @@ int main(int argc, char **argv)
             }
         }
         if (launcher_init(ctx, g_launcher_assets) < 0) g_launcher_on = 0;
-        else { g_view_launcher = 1; g_view_mirror = 0; }   /* the home view; the mirror shows the programs it starts */
+        else { g_view_launcher = 1; g_view_mirror = 0; notify_init(); }   /* the home view; the mirror shows the programs it starts */
         {   /* screenshots: PSPEXP_LAUNCHER_OPEN=files or files:/some/folder */
             const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
             if (g_launcher_on && o && !strncmp(o, "files", 5)) files_show(o[5] == ':' ? o + 6 : NULL, 1);
@@ -3313,6 +3418,13 @@ int main(int argc, char **argv)
         if (g_app && g_app->take_exit()) {
             if (g_app_from_files) { g_app = NULL; g_app_from_files = 0; g_view_files = 1; files_invalidate(); swallow(); }   /* Files as it was left */
             else view_cycle();
+        }
+        if (g_launcher_on) {   /* notifications: held while a program has the PSP; the board watched; the banner's frames */
+            char act[48];
+            notify_set_quiet(g_launch_pid > 0);
+            watch_tick(now);
+            if (notify_tick(now)) { T.dirty = 1; g_redraw_app = 1; launcher_invalidate(); files_invalidate(); }
+            if (notify_take_action(act, sizeof(act))) notify_go(act);
         }
         if (g_launcher_on) {   /* PSPExp's own file replaced by an upgrade (docs/Package_Manager.md §6): say so; restart only when asked */
             static char self[512]; static struct stat self_st; static int have_self = -1; static uint64_t self_check;

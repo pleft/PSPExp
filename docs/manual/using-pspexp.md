@@ -26,7 +26,7 @@ the game's own saves are there as always) and, while music is loaded,
 music playing, a pause sign that it is paused.
 
 ```
- 12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
+ 12:04 Sat 03 Oct (bell)2          PSP 76%  |  headphones 40%  wifi  plug  board
      (star)    (GAMES)   (joystick)   (apps)   (gear)
    Favourites   Games    Emulators     Apps   Settings
                          34 games
@@ -70,6 +70,32 @@ one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
 | triangle | details: description, how it draws, size, when last played |
 | START | search everything: games, apps and every ROM, by name |
 | SELECT, held | the terminal (and back) |
+
+## Notifications
+
+What PSPExp has to tell you shows as a **banner** at the top of the screen,
+whatever you are in (the launcher, an app, Files, the terminal), one after
+another when several come: updates for your packages or for the PSP, a
+game that could not start, a battery running low (the PSP's or the
+board's), the board losing its network, Bluetooth headphones gone,
+storage nearly full, an install or a Wi-Fi join that finished.
+
+Nothing is lost when you look away: the **bell** next to the date in the
+top bar counts what you have not seen. On the home screen press **up**
+from the tiles to reach it and **cross** to open the list, the last 50,
+newest first:
+
+- **cross**: go where it is about (Packages for updates, Settings for the
+  network or Bluetooth), when there is somewhere to go;
+- **square**: remove it; **START** twice: clear them all;
+- **circle**: close.
+
+While you play, nothing interrupts the game: what came meanwhile is
+summed up in one banner when you are back ("3 notifications while you
+played") and waits under the bell.
+
+Scripts and programs on the board can send their own (`pspexp-notify`:
+see the cheatsheet).
 
 ## Playing
 

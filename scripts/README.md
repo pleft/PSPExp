@@ -22,6 +22,7 @@ board/             installed on every board (/usr/local/bin; the Omega's SD card
   pspexp-pkg         install, remove and list packages on the board
   pspexp-pkg-apt     the root helper pspexp-pkg calls through sudo (recipes through apt)
   pspexp-bt          Bluetooth headphones or speakers for the sound: scan, pair, choose, volume
+  pspexp-notify      a notification on the PSP from any script (a banner, kept under the bell)
   80-pspexp-bluez.conf  WirePlumber: Bluetooth audio with nobody logged in (pspexp-core puts it in /etc)
   pspexp-apt-setup   set a Debian board up for the repository: board kind, key, apt source, sudo rule
 

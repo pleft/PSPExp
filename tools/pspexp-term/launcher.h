@@ -60,6 +60,9 @@ int  launcher_psp_clock(void);
 /* PSPExp's own program file was replaced (a package upgrade): say so, offer a restart;
  * 1 once when the user chose System > Restart PSPExp */
 void launcher_set_core_updated(void);
+/* the board's battery (-1: none), charging, and whether it is online (-1: it is the PSP's own
+ * access point), polled every few seconds whatever is shown: notification watchers */
+void launcher_status(uint64_t now, int *bat, int *chg, int *online);
 int  launcher_take_console_restart(void);
 /* a newer PSP runtime is on the board: System > Update the PSP (1 once when chosen) */
 void launcher_set_psp_update(int available);
@@ -67,7 +70,6 @@ int  launcher_take_psp_update(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);
 /* a message at the bottom of the launcher, as its own ones */
-void launcher_notice(const char *icon, const char *text);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);

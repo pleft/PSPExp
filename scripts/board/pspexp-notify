@@ -1,0 +1,22 @@
+#!/bin/sh
+# pspexp-notify: a notification on the PSP, from any program or script on the board
+# (docs/Launcher_and_Boards.md §3.7): a banner over whatever the PSP shows, kept in the
+# notification centre (the bell in the launcher's top bar). Needs the console running
+# (pspexp-term --launcher) as the same user, or PSPEXP_TERM_CONTROL naming its control port.
+#   pspexp-notify [-l LEVEL] [-i ICON] [-a ACTION] [-k KEY] TITLE [DETAIL]
+#     LEVEL   info (default), done, fail, attention, warning; hint (shown, not kept)
+#     ICON    a launcher icon name (download, package, hard-drive, ...)
+#     ACTION  where cross in the centre goes: app:store, app:music, app:monitor, files,
+#             category:Settings
+#     KEY     a later notification with the same key replaces this one
+#   pspexp-notify -l done -i download "Download finished" "debian-13.iso, 680 MB"
+set -u
+L=info I= A= K=
+while getopts l:i:a:k: o; do
+	case $o in l) L=$OPTARG ;; i) I=$OPTARG ;; a) A=$OPTARG ;; k) K=$OPTARG ;; *) sed -n '2,13p' "$0" >&2; exit 2 ;; esac
+done
+shift $((OPTIND - 1))
+[ $# -ge 1 ] && [ -n "$1" ] || { sed -n '2,13p' "$0" >&2; exit 2; }
+f() { printf '%s' "$1" | tr '|\n\t' '/  '; }   # the fields are |-separated: none inside one
+r=$(pspexp-term --ctl "notify $(f "$L")|$(f "$I")|$(f "$1")|$(f "${2:-}")|$(f "$A")|$(f "$K")" 2>&1)
+case "$r" in ok*) exit 0 ;; *) echo "pspexp-notify: ${r:-no console answered}" >&2; exit 1 ;; esac

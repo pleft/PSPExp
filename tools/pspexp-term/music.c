@@ -1,6 +1,7 @@
 /* The console's Music app: see music.h */
 #include "music.h"
 #include "appview.h"
+#include "notify.h"
 #include "player.h"
 #include "files.h"
 #include "files_psp.h"
@@ -522,6 +523,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     x = ui_hint_cap(x, "START", "View", UI_SUB);
     if (g_view != V_BROWSE) x = ui_hint_btn(x, 'o', "Close");
     if (g_opts) draw_opts();
+    notify_draw(now);
     pspexp_present(ctx);
 }
 

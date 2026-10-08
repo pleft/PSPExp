@@ -18,6 +18,7 @@
  * folders. Every movement is eased by time; a still screen sends nothing.
  */
 #include "launcher.h"
+#include "notify.h"
 #include "music.h"
 #include "btaudio.h"
 #include "launcher_lib.h"
@@ -342,9 +343,6 @@ static int mtext(int font, int x, int y, const char *s, uint32_t rgb, int alpha,
 }
 static uint64_t g_last_frame, g_sel_since;
 static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
-static char g_toast[160], g_toast_icon[32];
-static uint64_t g_toast_until, g_toast_at;
-static float g_toast_a;
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
 static LEntry g_running_e;
@@ -356,14 +354,9 @@ static int g_wired;   /* the default route goes over a cable (Ethernet, USB netw
 static uint64_t g_status_at;
 static int g_nofetch;
 
-static void toast(const char *icon, const char *s, uint64_t now)
-{
-    snprintf(g_toast, sizeof(g_toast), "%s", s);
-    snprintf(g_toast_icon, sizeof(g_toast_icon), "%s", icon ? icon : "");
-    g_toast_at = now;
-    g_toast_until = now + 2600000u;
-    g_dirty = 1;
-}
+/* the answer to a press ("Added to favourites", "Press X again to power off"): a hint, drawn by
+ * notify.c over every view and not kept; what is worth keeping goes to notify() */
+static void toast(const char *icon, const char *s, uint64_t now) { (void)now; notify_hint(icon, s); }
 
 /* ---- box art: libretro thumbnails, fetched in the background -------------------------------- */
 
@@ -599,7 +592,13 @@ static void bg_poll(uint64_t now)
     g_bg_pid = 0;
     board_refresh();
     bt_route_soon();   /* a sound device may have been chosen */   /* a setting may have changed: the rows show the new values */
-    toast(g_bg_icon, WIFEXITED(st) && WEXITSTATUS(st) == 0 ? g_bg_ok : g_bg_fail, now);
+    {   /* a job's result (joined a network, paired headphones, set the time zone): kept */
+        int ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+        char key[48];
+        snprintf(key, sizeof(key), "job:%s", g_bg_icon);
+        (void)now;
+        notify(ok ? NOTE_DONE : NOTE_FAIL, g_bg_icon, ok ? g_bg_ok : g_bg_fail, NULL, NULL, key);
+    }
 }
 
 static int wifi_mode_psp(void)
@@ -759,6 +758,14 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
     return 1;
 }
 
+static void status_poll(uint64_t now);
+void launcher_status(uint64_t now, int *bat, int *chg, int *online)
+{
+    status_poll(now);
+    *bat = g_bat; *chg = g_chg;
+    *online = wifi_mode_psp() ? -1 : g_wired || g_wifi > 0;   /* -1: the board is the PSP's own access point */
+}
+
 int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
 int launcher_take_files(void) { int r = g_files_req; g_files_req = 0; return r; }
 int launcher_take_app(char *id, size_t n) { if (!g_app_req[0]) return 0; snprintf(id, n, "%s", g_app_req); g_app_req[0] = 0; return 1; }
@@ -799,13 +806,12 @@ void launcher_set_core_updated(void)
     if (g_core_updated) return;
     g_core_updated = 1;
     cats_build();   /* System gains Restart PSPExp */
-    toast("package", "PSPExp was updated: Settings > Restart PSPExp starts the new version", pspexp_time_us());
+    notify(NOTE_ATTN, "package", "PSPExp was updated", "Settings > Restart PSPExp starts the new version", "category:Settings", "core-updated");
 }
 int  launcher_take_console_restart(void) { int r = g_console_restart_req; g_console_restart_req = 0; return r; }
 void launcher_set_psp_update(int available) { if (g_psp_update != available) { g_psp_update = available; cats_build(); } }
 int  launcher_take_psp_update(void) { int r = g_psp_update_req; g_psp_update_req = 0; return r; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
-void launcher_notice(const char *icon, const char *text) { toast(icon, text, pspexp_time_us()); }
 
 void launcher_state(char *out, size_t n)
 {
@@ -820,7 +826,7 @@ void launcher_state(char *out, size_t n)
     for (i = 0; i < g_ncat && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[i].name);
     if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.systems=");   /* the sections that are emulated systems (with ROMs) */
     for (i = 0, e = NULL; i < g_ncat && l < n; i++) if (g_cat[i].kind == CK_SYSTEM) l += (size_t)snprintf(out + l, n - l, "%s%s", e ? "|" : "", g_cat[i].name), e = (LEntry *)1;
-    if (l < n) snprintf(out + l, n - l, "\nlauncher.toast=%s\n", pspexp_time_us() < g_toast_until ? g_toast : "");
+    if (l < n) snprintf(out + l, n - l, "\nlauncher.toast=%s\n", notify_showing());   /* (the banner or the hint shown: tests read it) */
 }
 
 int launcher_system_for(const char *path, char *name, size_t n)
@@ -835,12 +841,13 @@ int launcher_system_for(const char *path, char *name, size_t n)
 void launcher_child_exited(int status, const char *message)
 {
     char s[160];
-    if (g_running && message && message[0]) {   /* what the program said, for longer than a toast */
-        toast("info", message, pspexp_time_us());
-        g_toast_until = pspexp_time_us() + 8000000u;
-    } else if (g_running && status != 0) {
-        snprintf(s, sizeof(s), "%s stopped (status %d)", g_running_e.title, status);
-        toast("info", s, pspexp_time_us());
+    char key[64];
+    snprintf(key, sizeof(key), "exit:%s", g_running_e.title);
+    if (g_running && message && message[0])   /* what the program said (PSPEXP_MESSAGE) */
+        notify(NOTE_FAIL, g_running_e.icon[0] ? g_running_e.icon : "circle-x", g_running_e.title, message, NULL, key);
+    else if (g_running && status != 0) {
+        snprintf(s, sizeof(s), "Stopped with status %d", status);
+        notify(NOTE_FAIL, "circle-x", g_running_e.title, s, NULL, key);
     }
     g_running = 0;
     cats_build();
@@ -1588,10 +1595,12 @@ static void home_input(uint32_t pressed, int up, int down, int left, int right, 
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
     if (left && g_home_row == 0) { g_home_sel = (g_home_sel + n - 1) % n; g_dirty = 1; }
     if (right && g_home_row == 0) { g_home_sel = (g_home_sel + 1) % n; g_dirty = 1; }
-    if (down && (home_continue() || g_np_on)) { g_home_row = 1; g_home_pill = g_np_on ? 0 : 1; g_dirty = 1; }
-    if (up) { g_home_row = 0; g_dirty = 1; }
+    if (down && g_home_row == -1) { g_home_row = 0; g_dirty = 1; }
+    else if (down && (home_continue() || g_np_on)) { g_home_row = 1; g_home_pill = g_np_on ? 0 : 1; g_dirty = 1; }
+    if (up) { g_home_row = g_home_row == 1 ? 0 : -1; g_dirty = 1; }   /* above the tiles: the bell */
     if (g_home_row == 1 && (left || right) && g_np_on && home_continue()) { g_home_pill ^= 1; g_dirty = 1; }   /* the two pills */
     if (pressed & PSPEXP_BUTTON_CROSS) {
+        if (g_home_row == -1) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }
         if (g_home_row == 1 && g_home_pill == 0 && g_np_on) { snprintf(g_app_req, sizeof(g_app_req), "music"); return; }
         if (g_home_row == 1) { LEntry *e = home_continue(); if (e) launch(e, now); return; }
         g_mode = M_BROWSE;
@@ -1814,8 +1823,7 @@ int launcher_needs_frame(uint64_t now)
     if ((g_mode == M_SEARCH || g_mode == M_TEXT) && !launcher_still(now) && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
     if (g_mode == M_PICK && g_scanning && (int)((now / 300000u) & 3) != g_caret) { g_caret = (int)((now / 300000u) & 3); g_dirty = 1; }
     if (g_mode == M_ABOUT && now - g_about_at > 3000000u) { about_collect(); g_about_at = now; g_dirty = 1; }
-    if (g_toast[0] && now >= g_toast_until && g_toast_a <= 0.01f) { g_toast[0] = 0; g_dirty = 1; }
-    return g_dirty || g_anim || g_toast[0] != 0;
+    return g_dirty || g_anim;
 }
 
 /* ---- drawing ------------------------------------------------------------------------------ */
@@ -1857,7 +1865,17 @@ static void draw_status(void)
     strftime(s, sizeof(s), "%H:%M", &tmv);
     w = gfx_text(FONT_TITLE, 16, 4, s, C_TEXT, 255, 0);
     strftime(s, sizeof(s), "%a %d %b", &tmv);
-    gfx_text(FONT_SMALL, 16 + w + 8, 8, s, C_MUTED, 255, 0);
+    x = 16 + w + 8;
+    x += gfx_text(FONT_SMALL, x, 8, s, C_MUTED, 255, 0) + 12;
+    {   /* the bell: the notification centre (up from the home screen's tiles); its unread count */
+        int unread = notify_unread(), on = g_mode == M_HOME && g_home_row == -1 && !g_running;
+        if (on) { gfx_shadow(NINE_SHADOW10, x - 5, 2, 26 + (unread ? 14 : 0), 24, 0x40a0ff, 220); gfx_nine(NINE_R10, x - 5, 2, 26 + (unread ? 14 : 0), 24, 0x1e3a6e, 235); }
+        gfx_icon(unread ? "bell-dot" : "bell", 16, x, 6, on ? 0xffffff : unread ? C_ACCENT : C_MUTED, 255);
+        if (unread) {
+            snprintf(s, sizeof(s), "%d", unread > 99 ? 99 : unread);
+            gfx_text(FONT_BADGE, x + 19, 9, s, on ? 0xffffff : C_ACCENT, 255, 0);
+        }
+    }
     /* right to left: the board (always last, so it never moves), power, network; then, past a
      * separator, the PSP's own battery */
     x = SCREEN_W - 16;
@@ -2125,7 +2143,7 @@ static void draw_home(float dt)
     Cat *sel;
     g_home_anim = ease(g_home_anim, 1.0f, 12.0f, dt, 0.01f);
     if (g_home_sel >= n) g_home_sel = n - 1;
-    if (!cont && !g_np_on) g_home_row = 0;
+    if (!cont && !g_np_on && g_home_row == 1) g_home_row = 0;
     for (i = 0; i < n && i < 8; i++) {
         Cat *c = &g_cat[rail_cat(i)];
         int on = i == g_home_sel && g_home_row == 0;
@@ -2180,7 +2198,7 @@ static void draw_home(float dt)
     {
         int x = 16;
         gfx_button('x', x, HINT_Y); x += 18;
-        gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row && g_home_pill == 1 ? "Play" : "Open", C_SUB, 255, 0);
+        gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row == -1 ? "Notifications" : g_home_row == 1 && g_home_pill == 1 ? "Play" : "Open", C_SUB, 255, 0);
         x = SCREEN_W - 16 - gfx_text_width(FONT_SMALL, "Search");
         gfx_text(FONT_SMALL, x, HINT_Y - 1, "Search", C_SUB, 255, 0);
         x -= gfx_text_width(FONT_BADGE, "START") + 16;
@@ -2405,22 +2423,6 @@ static void draw_details(float dt)
         gfx_button('s', bx, by); bx += 18; bx += gfx_text(FONT_SMALL, bx, by - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, a, 0) + 14;
         gfx_button('o', bx, by); bx += 18; gfx_text(FONT_SMALL, bx, by - 1, "Close", C_SUB, a, 0);
     }
-}
-
-static void draw_toast(float dt, uint64_t now)
-{
-    int w, x, y = HINT_Y - 36, a, ic = g_toast_icon[0] ? 20 : 0;
-    g_toast_a = ease(g_toast_a, g_toast[0] && now < g_toast_until ? 1.0f : 0.0f, 14.0f, dt, 0.01f);
-    if (!g_toast[0] || g_toast_a <= 0.01f) return;
-    a = (int)(g_toast_a * 255);
-    w = gfx_text_width(FONT_BODY, g_toast) + 28 + ic;
-    if (w > SCREEN_W - 40) w = SCREEN_W - 40;
-    x = (SCREEN_W - w) / 2;
-    y += (int)lroundf((1 - g_toast_a) * 8);
-    gfx_shadow(NINE_SHADOW10, x, y + 3, w, 26, 0x000000, a * 170 / 255);
-    gfx_nine(NINE_R10, x, y, w, 26, 0x1e2c4a, a * 245 / 255);
-    if (ic) gfx_icon(g_toast_icon, 14, x + 12, y + 6, C_ACCENT, a);
-    mtext(FONT_BODY, x + 14 + ic, y + (26 - gfx_line_height(FONT_BODY)) / 2, g_toast, C_TEXT, a, w - 28 - ic, g_toast_at);
 }
 
 static void draw_running(void)
@@ -2652,7 +2654,7 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
         draw_hints();
         if (g_mode == M_DETAILS) draw_details(dt);
     }
-    draw_toast(dt, now);
+    notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;
 }

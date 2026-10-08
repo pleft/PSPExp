@@ -8,6 +8,7 @@
  *   square         sort by CPU / memory circle, select   close
  */
 #include "appview.h"
+#include "notify.h"
 #include "sysinfo.h"
 #include "files_ops.h"
 #include "files_psp.h"
@@ -333,6 +334,7 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
         }
         x = ui_hint_btn(x, 'o', "Close");
     }
+    notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;
 }

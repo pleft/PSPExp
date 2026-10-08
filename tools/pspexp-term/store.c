@@ -16,6 +16,7 @@
  *   circle      close
  */
 #include "appview.h"
+#include "notify.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
 
@@ -514,6 +515,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         box(g_result_title, g_result, 90);
         gfx_button('x', (UI_SCREEN_W + 320) / 2 - 60, (UI_SCREEN_H - 90) / 2 - 8 + 68); gfx_text(FONT_SMALL, (UI_SCREEN_W + 320) / 2 - 42, (UI_SCREEN_H - 90) / 2 - 8 + 67, "OK", UI_TEXT, 255, 0);
     }
+    notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;
 }

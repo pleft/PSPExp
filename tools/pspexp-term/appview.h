@@ -22,7 +22,7 @@ typedef struct AppView {
     void (*state)(char *out, size_t n);   /* "<id>.key=value" lines for the control port */
 } AppView;
 
-extern const AppView MONITOR_APP, STORE_APP, MUSIC_APP;
+extern const AppView MONITOR_APP, STORE_APP, MUSIC_APP, NOTIFY_APP;
 const AppView *app_find(const char *id);
 
 /* Apps that open files (a plugin of sorts): Files asks which app takes a file

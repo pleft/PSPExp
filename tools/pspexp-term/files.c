@@ -2,6 +2,7 @@
 #include "files.h"
 #include "player.h"
 #include "appview.h"
+#include "notify.h"
 #include "files_ops.h"
 #include "files_psp.h"
 #include "launcher_gfx.h"
@@ -952,6 +953,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
     gfx_backdrop();
     if (g_over == O_KBD) {
         ui_kbd_draw(&g_kbd, g_kmode == K_MKDIR ? "folder-plus" : "pencil", g_kmode == K_MKDIR ? "New folder" : "Rename", "Type a name", g_caret, 255);
+        notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
         return;
@@ -974,6 +976,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = 16;
         if (n > 1) x = ui_hint_cap(x, "LEFT/RIGHT", "Previous / next", UI_SUB);
         x = ui_hint_btn(x, 'o', "Close");
+        notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
         return;
@@ -991,6 +994,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_cap(x, "UP/DOWN", "Scroll", UI_SUB);
         x = ui_hint_cap(x, "LEFT/RIGHT", "Page", UI_SUB);
         x = ui_hint_btn(x, 'o', "Close");
+        notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
         return;
@@ -1069,6 +1073,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         snprintf(s, sizeof(s), "%s is starting; the PSP shows it when it is ready.", launcher_running_title());
         draw_box("Starting", s, 70);
     }
+    notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;
 }

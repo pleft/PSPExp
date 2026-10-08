@@ -549,11 +549,65 @@ A game that ends at once used to leave only "Warcraft stopped (status 1)".
 The console now gives every program it starts `PSPEXP_MESSAGE`, the path of
 a file (`/tmp/pspexp-message-<uid>`, cleared before each start): a program
 or its launch script may write one line there before it ends, and the
-launcher shows that line instead, for 8 s, scrolling when it is long. One
-line of up to 159 characters: a longer one is cut.
+launcher shows that line instead, as a notification under the game's
+name (§3.7). One line of up to 159 characters: a longer one is cut.
 Warcraft's launch script uses it when DATA.WAR is missing ("Warcraft needs
 your own copy's DATA.WAR: put it in the Warcraft folder of your home folder
 (Apps > Files), then start it again").
+
+### 3.7 Notifications (2026-10-08)
+
+Until now the launcher had one toast: one line for 2.6 s, replaced by the
+next, drawn only by the launcher, kept nowhere. An update noticed while the
+player was in Files or Music, or in a game, was simply lost. Now
+`tools/pspexp-term/notify.c` is one service for every part of the console:
+
+- **A notification** has a level (info, done, fail, attention, warning),
+  an icon, a title, a detail line, an action (where cross in the centre
+  goes: `app:<id>`, `files`, `category:<name>`) and a key: one with a key
+  already in the list replaces it, counted ("x2") and moved to the top,
+  so a daily check or a battery does not pile up.
+- **Banners**, at the top of whatever is shown (`notify_draw` before each
+  view's present: the launcher, every app, Files, the terminal), one at a
+  time from a queue of 8, 3-6 s by level, longer for a long text (it
+  scrolls); a job's progress as a bar (`notify_job`). The main loop
+  redraws the view shown while one is up: the views draw only on change.
+- **Hints** are what was there before for the answer to a press ("Press X
+  again to power off", "Added to favourites"): a line at the bottom, not
+  kept, now also over every view.
+- **The centre** (`NOTIFY_APP`, "notifications"): the last 50, newest
+  first, kept across restarts in `~/.config/pspexp/notifications` (a
+  tab-separated line each); reached from the bell in the top bar, next to
+  the date, with the unread count (home screen: up from the tiles). Cross
+  goes to the action, square removes, START twice clears, circle closes;
+  opening it marks them read and clears the banners.
+- **Quiet while a program has the PSP** (`notify_set_quiet`): banners
+  are held, and when the launcher is back one says how many came. Showing
+  something critical over a game (a battery about to run out) would need
+  the SDL layer to draw it into the game's frames: left for later, by the
+  user's choice, until this is settled.
+- **Sources:** the console's own (package updates found by the daily
+  check, PSPExp or the PSP's runtime updated, the PSP's clock set, a job
+  such as a Wi-Fi join or a pairing finished or failed, a game that ended
+  with an error or its `PSPEXP_MESSAGE` line, §3.6), and watchers in the
+  main loop (`watch_tick`, once a second): the PSP's and the board's
+  battery at 15 % and 5 % (once each until it charges or passes 25 %), the
+  board offline for 15 s and back (not while it is the PSP's own access
+  point), the Bluetooth device gone while still chosen, the home
+  folder's storage under 300 MB or 3 % (every 5 minutes).
+- **From anything on the board:** `pspexp-notify [-l LEVEL] [-i ICON] [-a
+  ACTION] [-k KEY] TITLE [DETAIL]`, which sends the control port's
+  `notify LEVEL|ICON|TITLE|DETAIL|ACTION|KEY`; unlike the port's other
+  commands it does not put the console in test mode (no Restart).
+- **Control port:** `state` has `notify.count`, `unread`, `latest`,
+  `banner`, `hint`, `waiting`, `quiet`; `launcher.toast` now says what the
+  banner or the hint shows.
+
+Checked on the Mac with the stand-in PSP: banners queued and shown in
+turn, the bell and its count, up to it and into the centre, cross to
+Packages, square, START twice, the history after a restart (a repeated key
+counted x2), and a program running: nothing shown, then "3 notifications
+while you played".
 
 ## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
 

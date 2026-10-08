@@ -30,7 +30,7 @@ install -m 755 "$W/b/pspexp-term" "$R/usr/bin/pspexp-term"
 [ -f "$W/b/pspexp-ms" ] && install -m 755 "$W/b/pspexp-ms" "$R/usr/bin/pspexp-ms"
 [ -f "$W/b/libsdl-pspexp.so" ] && install -m 644 "$W/b/libsdl-pspexp.so" "$R/usr/lib/pspexp/libsdl-pspexp.so"
 [ -f "$W/b/libsdl-pspexp-hostgl.so" ] && install -m 644 "$W/b/libsdl-pspexp-hostgl.so" "$R/usr/lib/pspexp/libsdl-pspexp-hostgl.so"
-for f in pspexp-exec pspexp-run pspexp-pkg pspexp-bt; do install -m 755 "$ROOT/scripts/board/$f" "$R/usr/bin/$f"; done
+for f in pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-notify; do install -m 755 "$ROOT/scripts/board/$f" "$R/usr/bin/$f"; done
 install -m 755 "$ROOT/scripts/board/pspexp-pkg-apt" "$R/usr/sbin/pspexp-pkg-apt"
 mkdir -p "$R/etc/wireplumber/wireplumber.conf.d"   # (macOS install has no -D)
 install -m 644 "$ROOT/scripts/board/80-pspexp-bluez.conf" "$R/etc/wireplumber/wireplumber.conf.d/80-pspexp-bluez.conf"   # Bluetooth audio without a login

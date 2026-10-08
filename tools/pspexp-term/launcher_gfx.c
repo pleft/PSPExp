@@ -449,6 +449,7 @@ static const IconName ICONS[] = {
     { "battery-medium", 0xe057 }, { "battery-low", 0xe056 }, { "battery-charging", 0xe054 }, { "battery-warning", 0xe3ac },
     { "monitor", 0xe11d }, { "cpu", 0xe0a9 }, { "folder", 0xe0d7 }, { "terminal", 0xe181 }, { "disc", 0xe0af }, { "disc-3", 0xe494 },
     { "cassette-tape", 0xe4ca }, { "save", 0xe14d }, { "tv", 0xe195 }, { "smartphone", 0xe163 }, { "gamepad-directional", 0xe69b },
+    { "bell", 0xe059 }, { "bell-off", 0xe05a }, { "bell-dot", 0xe42b }, { "alert-triangle", 0xe193 }, { "check-circle", 0xe07c },
     { "puzzle", 0xe29c }, { "swords", 0xe2b4 }, { "ghost", 0xe20e }, { "trophy", 0xe373 }, { "sparkles", 0xe412 },
     { "layout-grid", 0xe0ff }, { "app-window", 0xe426 }, { "package", 0xe129 }, { "play", 0xe13c }, { "circle-play", 0xe080 },
     { "info", 0xe0f9 }, { "search", 0xe151 }, { "zap", 0xe1b4 }, { "usb", 0xe356 }, { "heart", 0xe0f2 },
