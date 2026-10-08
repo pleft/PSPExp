@@ -3382,6 +3382,11 @@ int main(int argc, char **argv)
         }
         files_psp_service(ctx, 12000);   /* the file manager's requests to the PSP's stick (a copy on its thread) */
         if (g_ctl_on) ctl_step(now, connected);
+        if (g_launcher_on && !connected) {   /* no PSP: notifications still kept and the board still watched; banners wait for it */
+            notify_set_quiet(g_launch_pid > 0);
+            watch_tick(now);
+            notify_idle(now);
+        }
         if (!connected) continue;
         if (g_slots_pending) { g_slots_pending = 0; psp_slots_check(); }
         if (g_launcher_on && launcher_take_psp_update()) { char m[300]; psp_runtime_update(NULL, m, sizeof(m)); }

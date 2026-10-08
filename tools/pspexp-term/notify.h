@@ -46,6 +46,8 @@ int  notify_level(const char *name);
 /* each main-loop turn: 1 while a banner or a hint is on screen or moving (the view
  * shown redraws: they draw only on change) */
 int  notify_tick(uint64_t now);
+/* with no PSP connected: the list saved, the banners left waiting for it */
+void notify_idle(uint64_t now);
 /* the banner and the hint over the view just drawn, before its present (launcher_gfx) */
 void notify_draw(uint64_t now);
 /* a program has the PSP: banners held; when it ends, what came meanwhile is summed up */

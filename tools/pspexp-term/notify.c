@@ -257,9 +257,14 @@ void notify_set_quiet(int quiet)
     g_held = 0;
 }
 
-int notify_tick(uint64_t now)
+void notify_idle(uint64_t now)
 {
     if (g_save_due && now - g_save_at > 1000000u) { g_save_due = 0; g_save_at = now; save(); }
+}
+
+int notify_tick(uint64_t now)
+{
+    notify_idle(now);
     if (g_quiet) return 0;
     if (!g_cur_on && g_qn) {   /* the next banner */
         int k;
