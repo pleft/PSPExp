@@ -494,7 +494,10 @@ succeeded, and the layer took that window for the game's: everything
 scaled 8.5 times from a corner. The layer now lets go of a window the
 program destroys and takes the next (`SDL_DestroyWindow`); checked on the
 Pi with the layer alone (no PSP): each game's 320x240 window and its
-pages. Clearing the layer's OpenGL context on `SDL_GL_DeleteContext` as
+pages; on the GameShell (2026-10-08, its packages upgraded to that day's)
+from the launcher to the stand-in PSP: Beneath a Steel Sky's 320x240
+window taken after three probe windows, its intro drawn, START + SELECT
+back to the launcher. Clearing the layer's OpenGL context on `SDL_GL_DeleteContext` as
 well made Beneath a Steel Sky stop at start (`SDL_BlitSurface failed`):
 left as it was. The Omega's ScummVM, built without OpenGL, never had it.
 
