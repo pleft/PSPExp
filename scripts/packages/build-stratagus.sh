@@ -3,11 +3,12 @@
 # (Warcraft II), all GPL-2.0, built in a Debian 13 container of the board's
 # architecture (as build-srb2.sh) from their master branches at fixed
 # commits: their newest on 2026-10-08 (the last release tags, 3.3.2, are
-# from 2022). Stratagus and Wargus are unmodified; War1gus's war1tool gets
-# one fix (compatibility/war1gus/war1tool-optional-cutscenes.patch: it
-# crashed with only DATA.WAR). The games run through the SDL layer like any
-# other SDL2 program; their data is the player's own copy, extracted on the
-# board by war1tool / wartool. Writes build/<arch>/stratagus/: stratagus,
+# from 2022). Stratagus is unmodified; War1gus's war1tool gets one fix
+# (compatibility/war1gus/war1tool-optional-cutscenes.patch: it crashed with
+# only DATA.WAR); Wargus's scripts play maps at the PSP's 480x272 with a
+# layout for it (compatibility/wargus/wargus-small-screen.patch). The games
+# run through the SDL layer like any other SDL2 program; their data is the
+# player's own copy, extracted on the board by war1tool / wartool. Writes build/<arch>/stratagus/: stratagus,
 # war1gus/ and wargus/ (the extraction tool, the game's scripts and maps in
 # share/), depends.txt, COPYING; for scripts/packages/debs/pspexp-stratagus,
 # pspexp-war1gus and pspexp-wargus.
@@ -21,7 +22,7 @@ WAR1GUS=8ec75764c7b4706a4405004438e810c050228b94
 WARGUS=cde1a0718a0058cc651ecd56ff8149fc39f624e9
 OUT="$ROOT/build/$ARCH/stratagus"
 rm -rf "$OUT"; mkdir -p "$OUT"
-docker run --rm --platform "$PLAT" -v "$OUT:/out" -v "$ROOT/compatibility/war1gus:/patches:ro" debian:trixie sh -ec "
+docker run --rm --platform "$PLAT" -v "$OUT:/out" -v "$ROOT/compatibility:/compat:ro" debian:trixie sh -ec "
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends build-essential cmake git ca-certificates pkg-config dpkg-dev \
@@ -31,7 +32,8 @@ for r in stratagus:$STRATAGUS war1gus:$WAR1GUS wargus:$WARGUS; do
 	n=\${r%%:*}; c=\${r#*:}
 	git init -q \$n && git -C \$n fetch -q --depth 1 https://github.com/Wargus/\$n.git \$c && git -c advice.detachedHead=false -C \$n checkout -q FETCH_HEAD
 done
-git -C war1gus apply /patches/war1tool-optional-cutscenes.patch
+git -C war1gus apply /compat/war1gus/war1tool-optional-cutscenes.patch
+git -C wargus apply /compat/wargus/wargus-small-screen.patch
 git -C stratagus submodule update -q --init --depth 1 2>/dev/null || true
 cmake -S stratagus -B bs -DCMAKE_BUILD_TYPE=Release -DENABLE_DEV=ON -DCMAKE_INSTALL_PREFIX=/usr > cfg.log 2>&1 || { tail -20 cfg.log; exit 1; }
 cmake --build bs -j\$(nproc) 2>&1 | grep -m5 -B2 'error:' || true

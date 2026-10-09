@@ -1,7 +1,9 @@
 #!/bin/sh
 # pspexp-wargus: Warcraft II on Wargus (GPL-2.0) at a fixed master commit,
-# unmodified, built by scripts/packages/build-stratagus.sh ARCH; the engine is
-# pspexp-stratagus. The game's data is the player's own copy (Warcraft II is
+# built by scripts/packages/build-stratagus.sh ARCH with one patch: maps are
+# played at the PSP's 480x272, pixel for pixel, with a layout made for it
+# (compatibility/wargus/wargus-small-screen.patch; the menus stay 640x480).
+# The engine is pspexp-stratagus. The game's data is the player's own copy (Warcraft II is
 # sold, not free: none of it is in the package or downloaded), copied into
 # ~/Warcraft2 (the folder is made for it): the DOS CD's files (its DATA
 # folder, or the whole CD), the Battle.net Edition's folder, or GOG's
@@ -20,12 +22,13 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp4
+V=3.3.3~git20260629-pspexp5
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
 install -m 755 "$B/wartool" "$W/root$L/"
 cp -r "$B/share/"* "$W/root$S/"
+echo "$V" > "$W/root$S/.pspexp-version"
 install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-wargus/copyright"
 cat > "$W/root/usr/games/warcraft2" <<'S'
 #!/bin/sh
@@ -115,14 +118,19 @@ if [ ! -f "$D/.pspexp-extracted" ]; then
 			sed -i 's/^wargus.music_extension = .*/wargus.music_extension = ".ogg"/' "$D/scripts/wc2-config.lua"
 	fi
 	rm -rf "$X" "$T"
+	touch "$D/.pspexp-extracted"
+fi
+# Wargus's scripts and maps beside the data: the first time and after each upgrade of the package
+# (its version in .pspexp-scripts); the extracted data and wartool's wc2-config.lua are kept
+if ! cmp -s "$S/.pspexp-version" "$D/.pspexp-scripts"; then
 	for c in campaigns maps scripts shaders; do [ -d "$S/$c" ] && cp -r "$S/$c" "$D/"; done
 	[ -d "$S/contrib" ] && { mkdir -p "$D/graphics/ui"; cp -r "$S/contrib/." "$D/graphics/ui/"; }   # as Wargus's starter does
-	touch "$D/.pspexp-extracted"
+	cp "$S/.pspexp-version" "$D/.pspexp-scripts"
 fi
 exec pspexp-run /usr/lib/pspexp/stratagus/stratagus -d "$D" "$@"
 S
 chmod 755 "$W/root/usr/games/warcraft2"
-echo "Warcraft II on Wargus (https://github.com/Wargus/wargus, commit cde1a07) and Stratagus, GPL-2.0, built by PSPExp, unmodified. The game's data is the player's own copy." > "$W/root/usr/share/doc/pspexp-wargus/README"
+echo "Warcraft II on Wargus (https://github.com/Wargus/wargus, commit cde1a07) and Stratagus, GPL-2.0, built by PSPExp, with compatibility/wargus/wargus-small-screen.patch (maps played at 480x272 with a layout for it). The game's data is the player's own copy." > "$W/root/usr/share/doc/pspexp-wargus/README"
 cat > "$W/control" <<C
 Package: pspexp-wargus
 Version: $V

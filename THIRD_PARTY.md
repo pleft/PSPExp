@@ -5,6 +5,7 @@ These keep the licence of the project they come from or change; PSPExp's MIT lic
 - compatibility/stratagus/stratagus-pspexp.patch: changes to Stratagus, GPL-2.0.
 - compatibility/etlegacy/pspexp.patch: changes to ET: Legacy, GPL-3.0.
 - compatibility/war1gus/war1tool-optional-cutscenes.patch: a fix to War1gus's war1tool, GPL-2.0.
+- compatibility/wargus/wargus-small-screen.patch: Wargus's scripts for the PSP's screen, GPL-2.0.
 - scripts/gameshell/base/uboot-cpi3.patch: changes to U-Boot, GPL-2.0.
 - scripts/gameshell/base/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt: the
   GameShell's Wi-Fi settings (Ampak's NVRAM file), GPL-2.0.

@@ -976,7 +976,36 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   strokes of its letters are dropped with the rows and columns left out;
   and two pointers showed, the layer's white arrow beside the game's own
   (Stratagus hides the system pointer with a transparent cursor, which the
-  layer now takes as hidden: one pointer, the game's).
+  layer now takes as hidden: one pointer, the game's). So maps are now
+  played at the PSP's 480x272, pixel for pixel
+  (`compatibility/wargus/wargus-small-screen.patch`, Wargus's scripts
+  only): `StartMap`, `StartSavedGame` and `StartReplay` resize the screen
+  (`Video:ResizeScreen`) to `wc2.preferences.GameVideoWidth/Height`
+  (480x272 by default here; 0: the menus' size) and back when the game
+  ends (`pspexp.lua`), and under 400 lines `ui_small.lua` lays the game
+  out: a 152-wide left column with a 92-pixel minimap, the unit's panel
+  (name, health, portrait and four short lines in the small font: damage,
+  armour, range, production, supply; what a building makes beside its
+  portrait with a progress bar; three portraits and "+N" for a group) and
+  the 3x3 command buttons; the top line with gold, lumber, oil, food and a
+  Menu button; the map 328x240 (about 10 x 7.5 tiles, against 14 x 14 at
+  640x480). Wargus's own layout sized its button panel's background
+  `144 + Video.Height - 480` (negative: Stratagus stopped with
+  `bad_alloc`); the panel's 176x176 background is a 1-pixel graphic
+  (Stratagus refuses nil). Checked on the stand-in PSP in a skirmish and
+  orc mission 1: the briefing (readable, its Continue button 4 lines cut),
+  selecting, training a peon, a group, the game menu and End Scenario (the
+  game menu's lowest button a few lines cut), the results back at 640x480;
+  58-60 fps; and from the launcher through the menus (Single Player,
+  Standard Game, Start Game) into a skirmish at 480x272. The demo battle
+  before the main menu is a map too: it plays at 480x272 as well. The
+  menus stay 640x480 shrunk: the layer keeps a streaming
+  texture wider than 512 at half size (the GE's largest texture is 512),
+  320x240 shown at 362x272, so they are blurred twice; splitting it into
+  two textures instead is the next step for them. Existing installs get
+  the new scripts: the launch script copies Wargus's scripts again when
+  the package's version changes (`.pspexp-scripts`; the extracted data and
+  wartool's `wc2-config.lua` are kept).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,

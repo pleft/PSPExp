@@ -1,0 +1,312 @@
+diff --git a/scripts/human/ui.lua b/scripts/human/ui.lua
+index a2546d3..c9432f8 100644
+--- a/scripts/human/ui.lua
++++ b/scripts/human/ui.lua
+@@ -28,4 +28,8 @@
+ --
+ 
+ Load("scripts/human/ui_pandora.lua")
++if (Video.Height < 400) then
++	SmallUIRace = "human"
++	Load("scripts/ui_small.lua")
++end
+ SetDefaultTextColors(UI.NormalFontColor, UI.ReverseFontColor)
+diff --git a/scripts/human/ui_pandora.lua b/scripts/human/ui_pandora.lua
+index 74c9af3..c25cf21 100644
+--- a/scripts/human/ui_pandora.lua
++++ b/scripts/human/ui_pandora.lua
+@@ -108,7 +108,7 @@ end
+ AddResizedFiller("ui/human/filler-right.png", Video.Width - 16, 0, 16, Video.Height)
+ AddResizedFiller("ui/human/resource.png", 176, 0, Video.Width - 192, 16)
+ AddResizedFiller("ui/human/statusline.png", 176, Video.Height - 16, Video.Width - 192, 16)
+-AddResizedFiller("ui/human/buttonpanel.png", 0, 336, 176, 144 + Video.Height - 480)
++AddResizedFiller("ui/human/buttonpanel.png", 0, 336, 176, math.max(1, 144 + Video.Height - 480)) -- (negative under 480 lines: ui_small.lua)
+ 
+ AddFiller("ui/human/menubutton.png", 0, 0)
+ AddFiller("ui/human/minimap.png", 0, 24)
+diff --git a/scripts/orc/ui.lua b/scripts/orc/ui.lua
+index 87f9344..015dd69 100644
+--- a/scripts/orc/ui.lua
++++ b/scripts/orc/ui.lua
+@@ -28,4 +28,8 @@
+ --
+ 
+ Load("scripts/orc/ui_pandora.lua")
++if (Video.Height < 400) then
++	SmallUIRace = "orc"
++	Load("scripts/ui_small.lua")
++end
+ SetDefaultTextColors(UI.NormalFontColor, UI.ReverseFontColor)
+diff --git a/scripts/orc/ui_pandora.lua b/scripts/orc/ui_pandora.lua
+index e5fffa8..69eb62c 100644
+--- a/scripts/orc/ui_pandora.lua
++++ b/scripts/orc/ui_pandora.lua
+@@ -108,7 +108,7 @@ end
+ AddResizedFiller("ui/orc/filler-right.png", Video.Width - 16, 0, 16, Video.Height)
+ AddResizedFiller("ui/orc/resource.png", 176, 0, Video.Width - 192, 16)
+ AddResizedFiller("ui/orc/statusline.png", 176, Video.Height - 16, Video.Width - 192, 16)
+-AddResizedFiller("ui/orc/buttonpanel.png", 0, 336, 176, 144 + Video.Height - 480)
++AddResizedFiller("ui/orc/buttonpanel.png", 0, 336, 176, math.max(1, 144 + Video.Height - 480)) -- (negative under 480 lines: ui_small.lua)
+ 
+ AddFiller("ui/orc/menubutton.png", 0, 0)
+ AddFiller("ui/orc/minimap.png", 0, 24)
+diff --git a/scripts/pspexp.lua b/scripts/pspexp.lua
+new file mode 100644
+index 0000000..52fa338
+--- /dev/null
++++ b/scripts/pspexp.lua
+@@ -0,0 +1,31 @@
++--      pspexp.lua - maps played at their own screen size (PSPExp)
++--
++--      The menus are laid out for 640x480; a map can be played at another
++--      size, wc2.preferences.GameVideoWidth x GameVideoHeight (0: the menus'
++--      own): PSPExp plays at the PSP's 480x272, drawn pixel for pixel, with
++--      ui_small.lua's layout. The screen is resized before a map, a saved
++--      game or a replay starts, and back when it ends.
++--
++--      This program is free software; you can redistribute it and/or modify
++--      it under the terms of the GNU General Public License as published by
++--      the Free Software Foundation; either version 2 of the License, or
++--      (at your option) any later version.
++
++local function game_screen(on)
++  local w, h = wc2.preferences.GameVideoWidth or 0, wc2.preferences.GameVideoHeight or 0
++  if w <= 0 or h <= 0 then return end
++  if not on then w, h = wc2.preferences.VideoWidth, wc2.preferences.VideoHeight end
++  if Video.Width ~= w or Video.Height ~= h then Video:ResizeScreen(w, h) end
++end
++
++for _, name in ipairs({"StartMap", "StartSavedGame", "StartReplay"}) do
++  local start = _G[name]
++  if start then
++    _G[name] = function(...)
++      game_screen(true)
++      local r = start(...)
++      game_screen(false)
++      return r
++    end
++  end
++end
+diff --git a/scripts/stratagus.lua b/scripts/stratagus.lua
+index 4811fa6..64589d6 100644
+--- a/scripts/stratagus.lua
++++ b/scripts/stratagus.lua
+@@ -433,6 +433,8 @@ local defaultPreferences = {
+ 	VideoFullScreen = false,
+ 	VideoHeight = 480,
+ 	VideoWidth = 640,
++	GameVideoHeight = 272,         --  maps played at this size (0: the menus' own; pspexp.lua)
++	GameVideoWidth = 480,
+ 	VideoShader = "none",
+ 	ViewportMode = 0,
+ 	ServerList = {},
+@@ -512,6 +514,7 @@ SetMusicVolume(wc2.preferences.MusicVolume)
+ SetTranslationsFiles(wc2.preferences.StratagusTranslation, wc2.preferences.GameTranslation)
+ SetVideoFullScreen(wc2.preferences.VideoFullScreen)
+ SetVideoResolution(wc2.preferences.VideoWidth, wc2.preferences.VideoHeight)
++Load("scripts/pspexp.lua")
+ 
+ UI.ButtonPanel.ShowCommandKey = wc2.preferences.ShowCommandKey
+ Preference.MineNotifications = wc2.preferences.MineNotifications
+diff --git a/scripts/ui_small.lua b/scripts/ui_small.lua
+new file mode 100644
+index 0000000..2568e79
+--- /dev/null
++++ b/scripts/ui_small.lua
+@@ -0,0 +1,196 @@
++--      ui_small.lua - the in-game interface on a small screen (480x272, the PSP's)
++--
++--      Loaded by human/ui.lua and orc/ui.lua after their own layout when the
++--      screen is under 400 lines (see pspexp.lua: maps are played at the
++--      size in wc2.preferences.GameVideoWidth/Height). The usual layout's left
++--      column is 176 wide and reaches line 480: here it is 152 wide, the
++--      minimap smaller, the unit's panel compact (name, health, portrait and
++--      four short lines) and the 3x3 command buttons below it; the map takes
++--      the rest. SmallUIRace ("human" or "orc") picks the graphics.
++--
++--      This program is free software; you can redistribute it and/or modify
++--      it under the terms of the GNU General Public License as published by
++--      the Free Software Foundation; either version 2 of the License, or
++--      (at your option) any later version.
++
++local race = SmallUIRace or "human"
++local W, H = Video.Width, Video.Height
++local L = 152                 -- the left column
++local PY = 96                 -- the unit's panel
++local BY = H - 3 * 38         -- the command buttons (3 rows of 38)
++
++UI.Fillers:clear()
++AddResizedFiller("ui/" .. race .. "/buttonpanel.png", 0, 0, L, H)
++AddResizedFiller("ui/" .. race .. "/resource.png", L, 0, W - L, 16)
++AddResizedFiller("ui/" .. race .. "/statusline.png", L, H - 16, W - L, 16)
++
++UI.Minimap.X = 30
++UI.Minimap.Y = 2
++UI.Minimap.W = 92
++UI.Minimap.H = 92
++
++UI.MapArea.X = L
++UI.MapArea.Y = 16
++UI.MapArea.EndX = W - 1
++UI.MapArea.EndY = H - 16 - 1
++
++UI.StatusLine.TextX = L + 2
++UI.StatusLine.TextY = H - 16 + 2
++UI.StatusLine.Width = W - L - 4
++
++-- the panel's 176x176 background would cover the map's edge: one pixel of the
++-- column's own stone instead (the engine wants a graphic there; nil is refused)
++UI.InfoPanel.X = 0
++UI.InfoPanel.Y = PY
++UI.InfoPanel.G = CGraphic:New("ui/" .. race .. "/buttonpanel.png", 1, 1)
++
++UI.SingleSelectedButton.X = 4
++UI.SingleSelectedButton.Y = PY + 21
++
++-- several units: three icons, "+N" for the rest
++UI.SelectedButtons:clear()
++AddSelectedButton(4, PY + 4)
++AddSelectedButton(53, PY + 4)
++AddSelectedButton(102, PY + 4)
++UI.MaxSelectedTextX = 6
++UI.MaxSelectedTextY = PY + 49
++
++-- what a building makes, beside its portrait
++UI.SingleTrainingButton.X = 54
++UI.SingleTrainingButton.Y = PY + 21
++UI.TrainingButtons:clear()
++AddTrainingButton(54, PY + 21)
++AddTrainingButton(100, PY + 21)
++UI.UpgradingButton.X = 54
++UI.UpgradingButton.Y = PY + 21
++UI.ResearchingButton.X = 54
++UI.ResearchingButton.Y = PY + 21
++UI.TransportingButtons:clear()
++AddTransportingButton(54, PY + 21)
++AddTransportingButton(100, PY + 21)
++
++UI.ButtonPanel.Buttons:clear()
++for row = 0, 2 do
++  for col = 0, 2 do
++    AddButtonPanelButton(4 + col * 49, BY + row * 38)
++  end
++end
++UI.ButtonPanel.X = 0
++UI.ButtonPanel.Y = BY
++
++-- the top line: gold, wood, oil, food, then the menu
++local function resource(i, x)
++  UI.Resources[i].IconX = x
++  UI.Resources[i].IconY = 0
++  UI.Resources[i].TextX = x + 18
++  UI.Resources[i].TextY = 1
++end
++resource(1, L + 2)
++resource(2, L + 62)
++resource(3, L + 122)
++resource(FoodCost, L + 182)
++for _, i in ipairs({ScoreCost, FreeWorkersCount}) do
++  UI.Resources[i].IconX = -100
++  UI.Resources[i].IconY = -100
++  UI.Resources[i].TextX = -1
++end
++
++UI.MenuButton.X = W - 82
++UI.MenuButton.Y = 0
++UI.MenuButton.Text = _("Menu")
++UI.MenuButton.Style = FindButtonStyle(race == "orc" and "network-orc" or "network")
++UI.NetworkMenuButton.X = W - 82
++UI.NetworkMenuButton.Y = 0
++UI.NetworkDiplomacyButton.X = W - 164
++UI.NetworkDiplomacyButton.Y = 0
++
++-- the unit's panel: name; health; portrait, and beside it up to four short
++-- lines (x 54, lines 9 apart from PY + 22; a label before "~|" ends at
++-- the position, so those lines are placed at xr)
++local min_damage = Div(ActiveUnitVar("PiercingDamage", "Value", "Initial"), 2)
++local max_damage = Add(ActiveUnitVar("PiercingDamage", "Value", "Initial"), ActiveUnitVar("BasicDamage", "Value", "Initial"))
++local damage_bonus = Sub(ActiveUnitVar("PiercingDamage", "Value", "Type"), ActiveUnitVar("PiercingDamage", "Value", "Initial"))
++local damage = {"Text", {Text = Concat(_("Damage~|: "), String(min_damage), "-", String(max_damage),
++	If(Equal(0, damage_bonus), "", InverseVideo(Concat("+", String(damage_bonus)))))}}
++local function income(name, res)
++  return {"Text", {Text = Concat(name, If(GreaterThan(PlayerData(ActiveUnitVar("Player", "Value"), "Incomes", res), 100),
++	InverseVideo(Concat("+", String(Sub(PlayerData(ActiveUnitVar("Player", "Value"), "Incomes", res), 100)))), ""))}}
++end
++local x, xr, l1, l2, l3, l4 = 54, 96, 22, 31, 40, 49
++
++DefinePanelContents(
++  {
++  Ident = "panel-general-contents",
++  Pos = {0, PY}, DefaultFont = "small",
++  Contents = {
++	{ Pos = {76, 1}, More = {"Text", {Text = Line(1, UnitName("Active"), 148, "game"), Centered = true, Font = "game"}} },
++	{ Pos = {4, 14}, Condition = {ShowOpponent = false, HideNeutral = true},
++		More = {"LifeBar", {Variable = "HitPoints", Height = 6, Width = 88}} },
++	{ Pos = {122, 13}, Condition = {ShowOpponent = false, HideNeutral = true},
++		More = {"FormattedText2", {Variable = "HitPoints", Format = "%d/%d", Component1 = "Value", Component2 = "Max", Centered = true}} },
++	{ Pos = {x, l1}, Condition = {ShowOpponent = false, GiveResource = "only", Build = "false"},
++		More = {"Text", {Text = Concat(function() return _(ResourcesOnUI[GetUnitVariable(-1, "GiveResourceType", "Value") + 1]) end,
++			String(ActiveUnitVar("GiveResource", "Value")))}} },
++	{ Pos = {x, l2}, Condition = {ShowOpponent = false, HideNeutral = true, Build = "only"},
++		More = {"CompleteBar", {Variable = "Build", Width = 92, Height = 8, Border = false}} },
++	{ Pos = {x, l1}, Condition = {ShowOpponent = false, HideNeutral = true, Build = "only"}, More = {"Text", _("% Complete")} },
++  } },
++  {
++  Ident = "panel-building-contents",
++  Pos = {0, PY}, DefaultFont = "small",
++  Condition = {ShowOpponent = false, HideNeutral = true, Center = "false", Build = "false", Supply = "only", Training = "false", UpgradeTo = "false"},
++  Contents = {
++	{ Pos = {xr, l1}, More = {"Text", {Text = Concat(_("Supply~|: "), String(PlayerData(ActiveUnitVar("Player", "Value"), "Supply", "")))}} },
++	{ Pos = {xr, l2}, More = {"Text", {Text = Concat(_("Demand~|: "),
++		If(GreaterThan(PlayerData(ActiveUnitVar("Player", "Value"), "Demand", ""), PlayerData(ActiveUnitVar("Player", "Value"), "Supply", "")),
++			InverseVideo(String(PlayerData(ActiveUnitVar("Player", "Value"), "Demand", ""))),
++			String(PlayerData(ActiveUnitVar("Player", "Value"), "Demand", ""))))}} },
++  } },
++  {
++  Ident = "panel-center-contents",
++  Pos = {0, PY}, DefaultFont = "small",
++  Condition = {ShowOpponent = false, HideNeutral = true, Center = "only", Build = "false", Supply = "only", Training = "false", UpgradeTo = "false"},
++  Contents = {
++	{ Pos = {x, l1}, More = {"Text", _("Production")} },
++	{ Pos = {xr, l2}, More = income(_("Gold~|: 100"), "gold") },
++	{ Pos = {xr, l3}, Condition = {WoodImprove = "only"}, More = income(_("Lumber~|: 100"), "wood") },
++	{ Pos = {xr, l4}, Condition = {OilImprove = "only"}, More = income(_("Oil~|: 100"), "oil") },
++  } },
++  {
++  Ident = "panel-resimrove-contents",
++  Pos = {0, PY}, DefaultFont = "small",
++  Condition = {ShowOpponent = false, HideNeutral = true, Center = "false", Build = "false", Training = "false", UpgradeTo = "false", Research = "false"},
++  Contents = {
++	{ Pos = {x, l1}, Condition = {WoodImprove = "only"}, More = {"Text", _("Production")} },
++	{ Pos = {x, l1}, Condition = {OilImprove = "only"}, More = {"Text", _("Production")} },
++	{ Pos = {xr, l2}, Condition = {WoodImprove = "only"}, More = income(_("Lumber~|: 100"), "wood") },
++	{ Pos = {xr, l2}, Condition = {OilImprove = "only"}, More = income(_("Oil~|: 100"), "oil") },
++  } },
++  {
++  Ident = "panel-all-unit-contents",
++  Pos = {0, PY}, DefaultFont = "small",
++  Condition = {ShowOpponent = false, HideNeutral = true, Build = "false"},
++  Contents = {
++	{ Pos = {xr, l1}, Condition = {BasicDamage = "only"}, More = damage },
++	{ Pos = {xr, l1}, Condition = {PiercingDamage = "only"}, More = damage },
++	{ Pos = {xr, l2}, Condition = {PiercingDamage = "only", Armor = "only", Building = "only"},
++		More = {"Text", {Text = _("Armor~|: "), Variable = "Armor", Stat = true}} },
++	{ Pos = {xr, l3}, Condition = {AttackRange = "only"},
++		More = {"Text", {Text = _("Range~|: "), Variable = "AttackRange", Stat = true}} },
++	-- making something: its icon at x 54, the progress bar beside it (no room for "% Complete")
++	{ Pos = {102, l2}, Condition = {Research = "only"}, More = {"CompleteBar", {Variable = "Research", Width = 46, Height = 10, Border = false}} },
++	{ Pos = {102, l2}, Condition = {Training = "only"}, More = {"CompleteBar", {Variable = "Training", Width = 46, Height = 10, Border = false}} },
++	{ Pos = {102, l2}, Condition = {UpgradeTo = "only"}, More = {"CompleteBar", {Variable = "UpgradeTo", Width = 46, Height = 10, Border = false}} },
++	{ Pos = {xr, l4}, Condition = {CarryResource = "only"},
++		More = {"FormattedText2", {Format = _("Carry~|: %d %s"), Variable = "CarryResource", Component1 = "Value", Component2 = "Name"}} },
++  } },
++  {
++  Ident = "panel-attack-unit-contents",
++  Pos = {0, PY}, DefaultFont = "small",
++  Condition = {ShowOpponent = true, HideNeutral = true, Building = "false", Build = "false"},
++  Contents = {
++	{ Pos = {xr, l2}, Condition = {Armor = "only"}, More = {"Text", {Text = _("Armor~|: "), Variable = "Armor", Stat = true}} },
++	{ Pos = {x, l4}, Condition = {Mana = "only"},
++		More = {"CompleteBar", {Color = "light-blue", Variable = "Mana", Height = 7, Width = 60, Border = true}} },
++	{ Pos = {x + 64, l4}, Condition = {Mana = "only"}, More = {"Text", {Variable = "Mana"}} },
++  } })

@@ -71,7 +71,13 @@ Battle.net Edition, or the installer GOG sells (the `.exe` file itself).
 From a disc image the music is the CD's own recordings; otherwise the
 game's MIDI version. The first start prepares it all and takes a few
 minutes (about 4 on a Pi 400 from a disc image); after that it starts
-straight away.
+straight away. The game itself is drawn at the PSP's own size, pixel for
+pixel, so its text is sharp: the minimap, the selected unit and its
+command buttons down the left, the map on the right, your gold, lumber,
+oil and food along the top, the Menu button top right. You see less of
+the map at once than on a PC; scroll with the d-pad, or click the
+minimap. The game's menus (before and after a game) are still shrunk from
+640x480 and hard to read.
 
 ## What it plays like
 
@@ -100,7 +106,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): its menus about 58 fps on the PSP-1000 |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); 51-60 fps in their first seconds on the PSP-1000 |
 | Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |
-| Warcraft II | drawn by the PSP: about 58 fps from the Pi in its menus; your own copy (above); 640x480 shrunk to the PSP |
+| Warcraft II | drawn by the PSP: about 58 fps from the Pi; your own copy (above); played at the PSP's 480x272, its menus 640x480 shrunk |
 
 Every game here was started on the PSP-1000 from the launcher on 6
 October 2026, its sound heard, its nub and START + SELECT tried
