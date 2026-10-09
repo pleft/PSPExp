@@ -1007,6 +1007,20 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
     columns 60 apart and each player's line as high as there is room for,
     the multiplayer menus and the lobby (no unavailable slots listed, no
     map heading or file name: no room);
+  - the map lists Standard Game offers besides Skirmish Modern
+    (`scripts/lists/maps`, added 2026-10-09 after the user met them in
+    PPSSPP on the GameShell): Skirmish Classic, Front Lines and For the
+    Motherland bring their own game setup and scenario list, made for
+    640x480, the buttons below the screen and Cancel on C, a key the PSP
+    has not. Their scenario lists are now the game's own, laid out for the
+    small screen, over their folders (`SelectScenarioMenu(dir)`); their
+    setups placed as the game setup's (`SmallSetupScenario`,
+    `SmallSetupOption`, `SmallSetupButton` in `guichan.lua`), For the
+    Motherland's two teams of character and race one under the other.
+    Checked on the stand-in PSP from the GameShell: each list's setup,
+    scenario list, Escape and Cancel Game, a For the Motherland map with
+    teams (Coastal Crusade) started; pspexp-wargus pspexp8. The lists'
+    files have Windows line endings, kept in the patch;
   - left out there: Video options (the size is fixed), the Hardware
     cursor box (the layer draws no colour cursor), and the Map Editor from
     the main menu (its tools and dialogs, Player Properties 500x480, are

@@ -75,7 +75,10 @@ straight away, and its tile shows the game's title screen. Everything is drawn a
 pixel, so the text is sharp, and laid out for its screen: the menus, and
 in a game the minimap, the selected unit and its command buttons down the
 left, the map on the right, your gold, lumber, oil and food along the
-top, the Menu button top right. You see less of the map at once than on a
+top, the Menu button top right. **Standard Game** first asks which map
+list to play: Skirmish Modern is Warcraft II's usual one; Skirmish
+Classic, Front Lines and For the Motherland are Wargus's extra sets, each
+with its own maps and settings. You see less of the map at once than on a
 PC; scroll with the d-pad, or click the minimap. The Map Editor is left
 out on the PSP: it is made for a large screen and a keyboard.
 

@@ -1,8 +1,8 @@
 diff --git a/scripts/guichan.lua b/scripts/guichan.lua
-index b3535f3..90bef12 100644
+index b3535f3..d0a340e 100644
 --- a/scripts/guichan.lua
 +++ b/scripts/guichan.lua
-@@ -41,6 +41,35 @@ dark = Color(38, 38, 78)
+@@ -41,6 +41,58 @@ dark = Color(38, 38, 78)
  clear = Color(200, 200, 120)
  black = Color(0, 0, 0)
  
@@ -35,10 +35,33 @@ index b3535f3..90bef12 100644
 +  return math.min(h, Video.Height)
 +end
 +
++-- the map lists' own game setups (scripts/lists/maps: Skirmish Classic, Front
++-- Lines, For the Motherland) on a small screen, placed as the game setup's:
++-- the scenario along the top, the settings down the left with their labels
++-- beside them (k from 0), the three buttons down the right (i from 0)
++function SmallSetupScenario(menu)
++  menu:addLabel(_("Scenario:"), 4, 2, Fonts["game"], false)
++  local mapl = menu:addLabel(string.sub(mapname, 6), 4, 13, Fonts["game"], false)
++  local descriptionl = menu:addLabel("descriptionl", 70, 2, Fonts["game"], false)
++  return mapl, descriptionl
++end
++
++function SmallSetupButton(i)
++  return Video.Width - 224, Video.Height - 4 - 28 - 34 * (2 - i)
++end
++
++function SmallSetupOption(menu, k, label, list)
++  local y = 30 + 24 * k
++  menu:addLabel(label, 8, y + 6, Fonts["small"], false)
++  local dd = menu:addDropDown(list, 92, y, function(dd) end)
++  dd:setSize(148, 20)
++  return dd
++end
++
  bckground = CGraphic:New("ui/Menu_background_with_title.png")
  bckground:Load()
  if wc2.preferences.KeepRatio then
-@@ -799,7 +828,11 @@ function WarMenu(title, background, resize)
+@@ -799,7 +851,11 @@ function WarMenu(title, background, resize)
      bg = ImageWidget(bgg)
    end
    local offset
@@ -51,9 +74,14 @@ index b3535f3..90bef12 100644
      offset = {(Video.Width - bg:getWidth()) / 2, (Video.Height - bg:getHeight()) / 2}
    else
      offset = {0, 0}
-@@ -1043,17 +1076,20 @@ end
+@@ -1041,19 +1097,24 @@ function GetMapInfo(mapname)
+   PresentMap = OldPresentMap
+ end
  
- function RunSelectScenarioMenu()
+-function RunSelectScenarioMenu()
++-- the scenarios under dir; the map lists' own (scripts/lists/maps) use it on
++-- a small screen, their own 352-high panel being cut off there
++function SelectScenarioMenu(dir)
    buttonStatut = 0
 -  local menu = WarMenu(nil, panel(5), false)
 -  menu:setSize(352, 352)
@@ -68,9 +96,9 @@ index b3535f3..90bef12 100644
 -    24, 140, 300, 108, mapname)
 +  local browser
 +  if SmallScreen then
-+    browser = menu:addBrowser("maps/", "^.*%.smp%.?g?z?$", 24, 32, 300, 140, mapname)
++    browser = menu:addBrowser(dir, "^.*%.smp%.?g?z?$", 24, 32, 300, 140, mapname)
 +  else
-+    browser = menu:addBrowser("maps/", "^.*%.smp%.?g?z?$", 24, 140, 300, 108, mapname)
++    browser = menu:addBrowser(dir, "^.*%.smp%.?g?z?$", 24, 140, 300, 108, mapname)
 +  end
  
 -  local l = menu:addLabel(browser:getSelectedItem(), 24, 260, Fonts["game"], false)
@@ -78,7 +106,7 @@ index b3535f3..90bef12 100644
  
    local function cb(s)
      l:setCaption(browser:getSelectedItem())
-@@ -1074,8 +1110,8 @@ function RunSelectScenarioMenu()
+@@ -1074,13 +1135,17 @@ function RunSelectScenarioMenu()
  
    browser:setDoubleClickAction(okFunc)
  
@@ -89,7 +117,16 @@ index b3535f3..90bef12 100644
      function() buttonStatut = 2; menu:stop() end)
  
    menu:run()
-@@ -1094,6 +1130,16 @@ function RunSinglePlayerTypeMenu()
+ end
+ 
++function RunSelectScenarioMenu()
++  SelectScenarioMenu("maps/")
++end
++
+ function RunSinglePlayerTypeMenu()
+ 
+   wargus.playlist = { "music/Orc Briefing" .. wargus.music_extension }
+@@ -1094,6 +1159,16 @@ function RunSinglePlayerTypeMenu()
    local offx = (Video.Width - 640) / 2
    local offy = (Video.Height - 480) / 2
  
@@ -106,7 +143,7 @@ index b3535f3..90bef12 100644
    menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
    menu:addLabel(_("~<Single Player~>"), offx + 320, offy + 212 - 25)
  
-@@ -1111,14 +1157,13 @@ end
+@@ -1111,14 +1186,13 @@ end
  function RunSinglePlayerGameModeMenu()
  
    buttonStatut = 0
@@ -124,7 +161,7 @@ index b3535f3..90bef12 100644
  
    local okFunc = function()
       if (browser:getSelected() < 0) then
-@@ -1130,8 +1175,8 @@ function RunSinglePlayerGameModeMenu()
+@@ -1130,8 +1204,8 @@ function RunSinglePlayerGameModeMenu()
  
    browser:setDoubleClickAction(okFunc)
  
@@ -135,7 +172,7 @@ index b3535f3..90bef12 100644
      function() buttonStatut = 2; menu:stop(1); RunSinglePlayerTypeMenu() end)
  
    menu:run()
-@@ -1157,6 +1202,7 @@ function RunSinglePlayerGameMenu()
+@@ -1157,6 +1231,7 @@ function RunSinglePlayerGameMenu()
    local colorlist = {_("~red~Red"),_("~blue~Blue"),_("~green~Green"),_("~violet~Violet"),_("~orange~Orange"),_("~black~Black"),
  	_("~white~White"),_("~yellow~Yellow")}
    local sidelist = {_("Map Default"), _("Human"),_("Orc"),_("Random")}
@@ -143,7 +180,7 @@ index b3535f3..90bef12 100644
    local teamlist = {"-","1","2","3","4"}
    local playerlist = {_("Player"),_("Computer"),_("Rescue-passive"),_("Rescue-active"),_("None")}
    local reveal_list = {_("Hidden"),_("Known"),_("Revealed")}
-@@ -1176,10 +1222,41 @@ function RunSinglePlayerGameMenu()
+@@ -1176,10 +1251,41 @@ function RunSinglePlayerGameMenu()
    local max_score = nil
    local reveal_type = nil
  
@@ -189,7 +226,7 @@ index b3535f3..90bef12 100644
    
    -- Error handling function
    function ErrorMessage(errmsg)
-@@ -1260,12 +1337,12 @@ function RunSinglePlayerGameMenu()
+@@ -1260,12 +1366,12 @@ function RunSinglePlayerGameMenu()
  	mapname = "maps/skirmish/singleplayer/(2)blick-nach-oben.sms.gz"
    end
    
@@ -206,7 +243,7 @@ index b3535f3..90bef12 100644
      function()
        local oldmapname = mapname
        RunSelectScenarioMenu()
-@@ -1274,7 +1351,7 @@ function RunSinglePlayerGameMenu()
+@@ -1274,7 +1380,7 @@ function RunSinglePlayerGameMenu()
          MapChanged()
        end
      end)
@@ -215,7 +252,7 @@ index b3535f3..90bef12 100644
      function()
  	  InitGameSettings()
  		local errorlevel = CheckCorrect()
-@@ -1366,21 +1443,21 @@ function RunSinglePlayerGameMenu()
+@@ -1366,21 +1472,21 @@ function RunSinglePlayerGameMenu()
  	  end
  	  for i=0,15 do
  	    if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil then
@@ -242,7 +279,7 @@ index b3535f3..90bef12 100644
  		  pcolor[i+1]:setActionCallback(
  		  function()
  		  	sk_pcolor[i+1] = pcolor[i+1]:getSelected()
-@@ -1388,14 +1465,14 @@ function RunSinglePlayerGameMenu()
+@@ -1388,14 +1494,14 @@ function RunSinglePlayerGameMenu()
  		  if sk_pcolor[i+1]~=-1 then
  			pcolor[i+1]:setSelected(sk_pcolor[i+1])
  		  end
@@ -260,7 +297,7 @@ index b3535f3..90bef12 100644
  			if mapinfo.playertypes[i+1] == "computer" then
  				ptype[i+1]:setSelected(1)
  			elseif mapinfo.playertypes[i+1] == "rescue-passive" then
-@@ -1403,7 +1480,7 @@ function RunSinglePlayerGameMenu()
+@@ -1403,7 +1509,7 @@ function RunSinglePlayerGameMenu()
  			elseif mapinfo.playertypes[i+1] == "rescue-active" then
  				ptype[i+1]:setSelected(3)
  			end
@@ -269,7 +306,7 @@ index b3535f3..90bef12 100644
  			ptype[i+1]:setActionCallback(
  			function()
  				sk_ptype[i+1] = ptype[i+1]:getSelected()
-@@ -1411,20 +1488,20 @@ function RunSinglePlayerGameMenu()
+@@ -1411,20 +1517,20 @@ function RunSinglePlayerGameMenu()
  			if sk_ptype[i+1]~=-1 then
  				ptype[i+1]:setSelected(sk_ptype[i+1])
  			end
@@ -294,7 +331,7 @@ index b3535f3..90bef12 100644
  		pside[i+1]:setActionCallback(
  		function()
  			sk_pside[i+1] = pside[i+1]:getSelected()
-@@ -1432,15 +1509,15 @@ function RunSinglePlayerGameMenu()
+@@ -1432,15 +1538,15 @@ function RunSinglePlayerGameMenu()
  		if sk_pside[i+1]~=-1 then
  			pside[i+1]:setSelected(sk_pside[i+1])
  		end
@@ -314,7 +351,7 @@ index b3535f3..90bef12 100644
  		teams[i+1]:setActionCallback(
  		function()
  			sk_teams[i+1] = teams[i+1]:getSelected()
-@@ -1448,14 +1525,17 @@ function RunSinglePlayerGameMenu()
+@@ -1448,14 +1554,17 @@ function RunSinglePlayerGameMenu()
  		if sk_teams[i+1]~=-1 then
  			teams[i+1]:setSelected(sk_teams[i+1])
  		end
@@ -335,7 +372,7 @@ index b3535f3..90bef12 100644
  		for cc = 1, table.getn(AIStrategyTypes) do
  			if mapinfo.playerais[i+1] == AIStrategyTypes[cc] then
  				
-@@ -1471,7 +1551,7 @@ function RunSinglePlayerGameMenu()
+@@ -1471,7 +1580,7 @@ function RunSinglePlayerGameMenu()
  		if sk_paitype[i+1]~=-1 then
  			paitype[i+1]:setSelected(sk_paitype[i+1])
  		end
@@ -344,7 +381,7 @@ index b3535f3..90bef12 100644
  		end
  	  end
  	  
-@@ -1500,12 +1580,10 @@ function RunSinglePlayerGameMenu()
+@@ -1500,12 +1609,10 @@ function RunSinglePlayerGameMenu()
  	  end
    end
    
@@ -359,7 +396,7 @@ index b3535f3..90bef12 100644
    reveal_type:setActionCallback(
  	function()
  		sk_reveal_type = reveal_type:getSelected()
-@@ -1514,10 +1592,8 @@ function RunSinglePlayerGameMenu()
+@@ -1514,10 +1621,8 @@ function RunSinglePlayerGameMenu()
  		reveal_type:setSelected(sk_reveal_type)
  	end
  
@@ -371,7 +408,7 @@ index b3535f3..90bef12 100644
    game_type:setActionCallback(
  	function()
  		sk_game_type = game_type:getSelected()
-@@ -1526,10 +1602,8 @@ function RunSinglePlayerGameMenu()
+@@ -1526,10 +1631,8 @@ function RunSinglePlayerGameMenu()
  		game_type:setSelected(sk_game_type)
  	end
  
@@ -383,7 +420,7 @@ index b3535f3..90bef12 100644
    rescount:setActionCallback(
  	function()
  		sk_rescount = rescount:getSelected()
-@@ -1538,10 +1612,8 @@ function RunSinglePlayerGameMenu()
+@@ -1538,10 +1641,8 @@ function RunSinglePlayerGameMenu()
  		rescount:setSelected(sk_rescount)
  	end
  
@@ -395,7 +432,7 @@ index b3535f3..90bef12 100644
    difficulty:setSelected(2)
    difficulty:setActionCallback(
  	function()
-@@ -1552,10 +1624,8 @@ function RunSinglePlayerGameMenu()
+@@ -1552,10 +1653,8 @@ function RunSinglePlayerGameMenu()
  	end
  
    Load("scripts/tilesets/tilesetsList.lua") -- Load tilesets helper
@@ -407,7 +444,7 @@ index b3535f3..90bef12 100644
    tilesetdd:setActionCallback(
  	  function()
  		  sk_tileset = tilesetdd:getSelectedItem()
-@@ -1563,10 +1633,8 @@ function RunSinglePlayerGameMenu()
+@@ -1563,10 +1662,8 @@ function RunSinglePlayerGameMenu()
  	if sk_tileset ~= -1 then
  		tilesetdd:setSelectedItem(sk_tileset)
  	end
@@ -419,7 +456,7 @@ index b3535f3..90bef12 100644
    numunits:setActionCallback(
  	function()
  		sk_numunits = numunits:getSelected()
-@@ -1606,6 +1674,17 @@ function BuildProgramStartMenu()
+@@ -1606,6 +1703,17 @@ function BuildProgramStartMenu()
    local offx = (Video.Width - 640) / 2
    local offy = (Video.Height - 480) / 2
    
@@ -437,7 +474,7 @@ index b3535f3..90bef12 100644
    menu:addLabel(wargus.Name .. _(" V") .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
    
    menu:addFullButton(_("~!Single Player Game"), "s", offx + 208, offy + 104 + 36*0,
-@@ -1624,6 +1703,7 @@ function BuildProgramStartMenu()
+@@ -1624,6 +1732,7 @@ function BuildProgramStartMenu()
  
    menu:addFullButton(_("E~!xit Program"), "x", offx + 208, offy + 104 + 36*7,
      function() menu:stop() end)
@@ -445,7 +482,7 @@ index b3535f3..90bef12 100644
  
    local time = 0
    function checkRunDemo()
-@@ -1657,14 +1737,13 @@ end
+@@ -1657,14 +1766,13 @@ end
  
  function RunLoadModMenu()
    buttonStatut = 0
@@ -463,7 +500,7 @@ index b3535f3..90bef12 100644
  
    local okFunc = function()
       if (browser:getSelected() < 0) then
-@@ -1676,8 +1755,8 @@ function RunLoadModMenu()
+@@ -1676,8 +1784,8 @@ function RunLoadModMenu()
  
    browser:setDoubleClickAction(okFunc)
  
@@ -474,7 +511,7 @@ index b3535f3..90bef12 100644
      function() buttonStatut = 2; menu:stop() end)
  
    menu:run()
-@@ -1693,12 +1772,13 @@ function RunModCampaignGameMenu()
+@@ -1693,12 +1801,13 @@ function RunModCampaignGameMenu()
    local lastCampaign = 0
    local currentPrefix = nil
    local usedAccellerators = {}
@@ -489,7 +526,7 @@ index b3535f3..90bef12 100644
             currentPrefix = prefix
             local label = menu:addLabel(currentPrefix, Video.Width / 2, offy + 104 + 36*lastCampaign)
             label:setAlignment(MultiLineLabel.CENTER)
-@@ -1725,13 +1805,49 @@ function RunModCampaignGameMenu()
+@@ -1725,13 +1834,49 @@ function RunModCampaignGameMenu()
             accell = ""
          end
       end
@@ -567,6 +604,259 @@ index 74c9af3..c25cf21 100644
  
  AddFiller("ui/human/menubutton.png", 0, 0)
  AddFiller("ui/human/minimap.png", 0, 24)
+diff --git a/scripts/lists/maps/For the Motherland b/scripts/lists/maps/For the Motherland
+index 0d44dc5..2b1d20f 100644
+--- a/scripts/lists/maps/For the Motherland	
++++ b/scripts/lists/maps/For the Motherland	
+@@ -2362,6 +2362,7 @@ function CleanCustomGame_Lua()
+ }
+ -- Resetting the default map directory.
+ function RunSelectScenarioMenu()
++  if SmallScreen then return SelectScenarioMenu("maps/skirmish") end -- PSPExp: the game's own, laid out for it (guichan.lua)
+   buttonStatut = 0
+   local menu = WarMenu(nil, panel(5), false)
+   menu:setSize(352, 352)
+@@ -2427,6 +2428,7 @@ function StartCustomGame_Lua()
+ }
+ -- Selecting the map directory.
+ function RunSelectScenarioMenu()
++  if SmallScreen then return SelectScenarioMenu("maps/ftm") end -- PSPExp: the game's own, laid out for it (guichan.lua)
+   buttonStatut = 0
+   local menu = WarMenu(nil, panel(5), false)
+   menu:setSize(352, 352)
+@@ -2478,6 +2480,12 @@ function NewRunSinglePlayerGameMenu()
+   local descriptionl
+   local tilesetdd
+ 
++  -- PSPExp: on a small screen placed as the game setup's (guichan.lua)
++  local bx, by = offx + 640 - 224 - 16, {offy + 360, offy + 360 + 36, offy + 360 + 72}
++  if SmallScreen then
++    for i = 0, 2 do bx, by[i + 1] = SmallSetupButton(i) end
++    mapl, descriptionl = SmallSetupScenario(menu)
++  else
+   menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"]) -- Copyright information.
+   
+   menu:addLabel(_("Scenario:"), offx + 16, offy + 360, Fonts["game"], false)
+@@ -2485,7 +2493,8 @@ function NewRunSinglePlayerGameMenu()
+   descriptionl = menu:addLabel("descriptionl", offx + 16 + 70, offy + 360, Fonts["game"], false)
+ 
+   menu:addLabel(_("~<For the Motherland~>"), (Video.Width / 2), offy + 192, nil, true)
+-  menu:addFullButton(_("S~!elect Scenario"), "e", offx + 640 - 224 - 16, offy + 360 + 36*0,
++  end
++  menu:addFullButton(_("S~!elect Scenario"), "e", bx, by[1],
+     function()
+       local oldmapname = mapname
+ 	  menu:stop()
+@@ -2499,7 +2508,7 @@ function NewRunSinglePlayerGameMenu()
+       end
+ 	  NewRunSinglePlayerGameMenu()
+     end)
+-  menu:addFullButton(_("~!Start Game"), "s", offx + 640 - 224 - 16, offy + 360 + 36*1,
++  menu:addFullButton(_("~!Start Game"), "s", bx, by[2],
+     function()
+ 
+ 	for player=0,15 do
+@@ -2537,7 +2546,7 @@ function NewRunSinglePlayerGameMenu()
+       menu:stop()
+     end)
+ 	--TODO: Cancel Game button doesn't work.
+-  menu:addFullButton(_("~!Cancel Game"), "c", offx + 640 - 224 - 16, offy + 360 + 36*2, function() menu:stop(1); RunSinglePlayerTypeMenu(); CleanCustomGame_Lua(); end)		
++  menu:addFullButton(_("~!Cancel Game"), "c", bx, by[3], function() menu:stop(1); RunSinglePlayerTypeMenu(); CleanCustomGame_Lua(); end)		
+ 				
+   local team1x = (Video.Width / 2) - 175
+   local team1y = offy + 10 + 240
+@@ -2547,6 +2556,9 @@ function NewRunSinglePlayerGameMenu()
+   local team3y = offy + (10 + 240) - 20 + 400
+   local team4x = offx + 40 + 300
+   local team4y = offy + (10 + 240) - 20 + 400
++  if SmallScreen then   -- PSPExp: the teams one under the other, left of the buttons (moved below)
++    team1x, team1y, team2x, team2y = 116, 52, 116, 170
++  end
+   
+   for player=0,15 do
+ 	if (GameDefinition["Map"][player]["Team"] ~= nil) then
+@@ -2626,6 +2638,18 @@ function NewRunSinglePlayerGameMenu()
+ 	end
+   end
+   
++  if SmallScreen then   -- each player's character and race side by side under the team's name
++    for player=0,15 do
++      local t, p = GameDefinition["Map"][player]["Team"], GameDefinition["Map"][player]["Player"]
++      if (t == 1 or t == 2) and p ~= nil then
++        local y = (t == 1 and team1y or team2y) + 25 * (p - 1)
++        local char, race = _G["t" .. t .. "p" .. p .. "char"], _G["t" .. t .. "p" .. p .. "race"]
++        if char then char:setPosition(4, y); char:setSize(110, 20) end
++        if race then race:setPosition(118, y); race:setSize(110, 20) end
++      end
++    end
++  end
++
+   function MapChanged()
+     mapl:setCaption(string.sub(mapname, 6))
+     mapl:adjustSize()
+diff --git a/scripts/lists/maps/Front Lines b/scripts/lists/maps/Front Lines
+index f0086f6..421d29d 100644
+--- a/scripts/lists/maps/Front Lines	
++++ b/scripts/lists/maps/Front Lines	
+@@ -142,6 +142,7 @@ function CleanCustomGame_Lua()
+ }
+ -- Resetting the default map directory.
+ function RunSelectScenarioMenu()
++  if SmallScreen then return SelectScenarioMenu("maps/skirmish") end -- PSPExp: the game's own, laid out for it (guichan.lua)
+   buttonStatut = 0
+   local menu = WarMenu(nil, panel(5), false)
+   menu:setSize(352, 352)
+@@ -195,6 +196,7 @@ function StartCustomGame_Lua()
+ }
+ -- Selecting the map directory.
+ function RunSelectScenarioMenu()
++  if SmallScreen then return SelectScenarioMenu("maps/fl") end -- PSPExp: the game's own, laid out for it (guichan.lua)
+   buttonStatut = 0
+   local menu = WarMenu(nil, panel(5), false)
+   menu:setSize(352, 352)
+@@ -246,6 +248,12 @@ function NewRunSinglePlayerGameMenu()
+   local descriptionl
+   local tilesetdd
+ 
++  -- PSPExp: on a small screen placed as the game setup's (guichan.lua)
++  local bx, by = offx + 640 - 224 - 16, {offy + 360, offy + 360 + 36, offy + 360 + 72}
++  if SmallScreen then
++    for i = 0, 2 do bx, by[i + 1] = SmallSetupButton(i) end
++    mapl, descriptionl = SmallSetupScenario(menu)
++  else
+   menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"]) -- Copyright information.
+   
+   menu:addLabel(_("Scenario:"), offx + 16, offy + 360, Fonts["game"], false)
+@@ -253,7 +261,8 @@ function NewRunSinglePlayerGameMenu()
+   descriptionl = menu:addLabel("descriptionl", offx + 16 + 70, offy + 360, Fonts["game"], false)
+ 
+   menu:addLabel(_("~<Single Player Game Setup~>"), offx + 640/2 + 12, offy + 192)
+-  menu:addFullButton(_("S~!elect Scenario"), "e", offx + 640 - 224 - 16, offy + 360 + 36*0,
++  end
++  menu:addFullButton(_("S~!elect Scenario"), "e", bx, by[1],
+     function()
+       local oldmapname = mapname
+       RunSelectScenarioMenu()
+@@ -262,15 +271,19 @@ function NewRunSinglePlayerGameMenu()
+         MapChanged()
+       end
+     end)
+-  menu:addFullButton(_("~!Start Game"), "s", offx + 640 - 224 - 16, offy + 360 + 36*1,
++  menu:addFullButton(_("~!Start Game"), "s", bx, by[2],
+     function()
+       GameSettings.Resources = resources:getSelected()
+       GameSettings.Tileset = Tilesets:getTilesetByLabel(tilesetdd:getSelectedItem())
+       RunMap(mapname, nil, wc2.preferences.FogOfWar, 0)
+       menu:stop()
+     end)
+-  menu:addFullButton(_("~!Cancel Game"), "c", offx + 640 - 224 - 16, offy + 360 + 36*2, function() CleanCustomGame_Lua(); menu:stop(1); RunSinglePlayerTypeMenu() end)
++  menu:addFullButton(_("~!Cancel Game"), "c", bx, by[3], function() CleanCustomGame_Lua(); menu:stop(1); RunSinglePlayerTypeMenu() end)
+ 
++  if SmallScreen then
++    resources = SmallSetupOption(menu, 0, _("~<Resources:~>"), {_("Map Default"), _("Low"), _("Medium"), _("High")})
++    tilesetdd = SmallSetupOption(menu, 1, _("~<Tileset:~>"), {_("Map Default"), _("Summer"), _("Swamp"), _("Wasteland"), _("Winter")})
++  else
+   menu:addLabel(_("~<Resources:~>"), offx + 40, offy + (10 + 240) - 20, Fonts["game"], false)
+   resources = menu:addDropDown({_("Map Default"), _("Low"), _("Medium"), _("High")}, offx + 40, offy + 10 + 240,
+     function(dd) end)
+@@ -280,6 +293,7 @@ function NewRunSinglePlayerGameMenu()
+   tilesetdd = menu:addDropDown({_("Map Default"), _("Summer"), _("Swamp"), _("Wasteland"), _("Winter")}, offx + 220, offy + 10 + 240,
+     function(dd) end)
+   tilesetdd:setSize(190, 20)
++  end
+ 
+   function MapChanged()
+     mapl:setCaption(string.sub(mapname, 6))
+diff --git a/scripts/lists/maps/Skirmish Classic b/scripts/lists/maps/Skirmish Classic
+index 503ff66..59074e6 100644
+--- a/scripts/lists/maps/Skirmish Classic	
++++ b/scripts/lists/maps/Skirmish Classic	
+@@ -54,6 +54,12 @@ function NewRunSinglePlayerGameMenu()
+   local descriptionl
+   local tilesetdd
+ 
++  -- PSPExp: on a small screen placed as the game setup's (guichan.lua)
++  local bx, by = offx + 640 - 224 - 16, {offy + 360, offy + 360 + 36, offy + 360 + 72}
++  if SmallScreen then
++    for i = 0, 2 do bx, by[i + 1] = SmallSetupButton(i) end
++    mapl, descriptionl = SmallSetupScenario(menu)
++  else
+   menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"]) -- Copyright information.
+   
+   menu:addLabel(_("Scenario:"), offx + 16, offy + 360, Fonts["game"], false)
+@@ -61,7 +67,8 @@ function NewRunSinglePlayerGameMenu()
+   descriptionl = menu:addLabel("descriptionl", offx + 16 + 70, offy + 360, Fonts["game"], false)
+ 
+   menu:addLabel(_("~<Single Player Game Setup~>"), offx + 640/2 + 12, offy + 192)
+-  menu:addFullButton(_("S~!elect Scenario"), "e", offx + 640 - 224 - 16, offy + 360 + 36*0,
++  end
++  menu:addFullButton(_("S~!elect Scenario"), "e", bx, by[1],
+     function()
+       local oldmapname = mapname
+       RunSelectScenarioMenu()
+@@ -70,7 +77,7 @@ function NewRunSinglePlayerGameMenu()
+         MapChanged()
+       end
+     end)
+-  menu:addFullButton(_("~!Start Game"), "s", offx + 640 - 224 - 16, offy + 360 + 36*1,
++  menu:addFullButton(_("~!Start Game"), "s", bx, by[2],
+     function()
+ 
+       GameSettings.Presets[0].Race = race:getSelected()
+@@ -83,8 +90,20 @@ function NewRunSinglePlayerGameMenu()
+       RunMap(mapname, nil, wc2.preferences.FogOfWar, 0)
+       menu:stop()
+     end)
+-  menu:addFullButton(_("~!Cancel Game"), "c", offx + 640 - 224 - 16, offy + 360 + 36*2, function() CleanCustomGame_Lua(); menu:stop(1); RunSinglePlayerTypeMenu() end)
++  menu:addFullButton(_("~!Cancel Game"), "c", bx, by[3], function() CleanCustomGame_Lua(); menu:stop(1); RunSinglePlayerTypeMenu() end)
++
++  local opponents_list = {_("Map Default"), _("1 Opponent"), _("2 Opponents"),
++    _("3 Opponents"), _("4 Opponents"), _("5 Opponents"), _("6 Opponents"), _("7 Opponents")}
++  Load("scripts/tilesets/tilesetsList.lua") -- Load tilesets helper
+ 
++  if SmallScreen then
++    race = SmallSetupOption(menu, 0, _("~<Your Race:~>"), {_("Map Default"), _("Human"), _("Orc")})
++    resources = SmallSetupOption(menu, 1, _("~<Resources:~>"), {_("Map Default"), _("Low"), _("Medium"), _("High")})
++    numunits = SmallSetupOption(menu, 2, _("~<Units:~>"), {_("Map Default"), _("One Peasant Only")})
++    opponents = SmallSetupOption(menu, 3, _("~<Opponents:~>"), opponents_list)
++    gametype = SmallSetupOption(menu, 4, _("~<Game Type:~>"), {_("Use map settings"), _("Melee"), _("Free for all"), _("Top vs bottom"), _("Left vs right"), _("Man vs Machine")})
++    tilesetdd = SmallSetupOption(menu, 5, _("~<Tileset:~>"), Tilesets:getLabels(mapinfo.highgrounds, true))
++  else
+   menu:addLabel(_("~<Your Race:~>"), offx + 40, offy + (10 + 240) - 20, Fonts["game"], false)
+   race = menu:addDropDown({_("Map Default"), _("Human"), _("Orc")}, offx + 40, offy + 10 + 240,
+     function(dd) end)
+@@ -100,9 +119,6 @@ function NewRunSinglePlayerGameMenu()
+     function(dd) end)
+   numunits:setSize(190, 20)
+ 
+-  local opponents_list = {_("Map Default"), _("1 Opponent"), _("2 Opponents"),
+-    _("3 Opponents"), _("4 Opponents"), _("5 Opponents"), _("6 Opponents"), _("7 Opponents")}
+-
+   menu:addLabel(_("~<Opponents:~>"), offx + 40, offy + (10 + 300) - 20, Fonts["game"], false)
+   opponents = menu:addDropDown(opponents_list, offx + 40, offy + 10 + 300,
+     function(dd) end)
+@@ -113,11 +129,11 @@ function NewRunSinglePlayerGameMenu()
+     function(dd) end)
+   gametype:setSize(152, 20)
+ 
+-  Load("scripts/tilesets/tilesetsList.lua") -- Load tilesets helper
+   menu:addLabel(_("~<Tileset:~>"), offx + 640 - 224 - 16, offy + (10 + 300) - 20, Fonts["game"], false)
+   tilesetdd = menu:addDropDown(Tilesets:getLabels(mapinfo.highgrounds, true), offx + 640 - 224 - 16, offy + 10 + 300,
+     function(dd) end)
+   tilesetdd:setSize(190, 20)
++  end
+ 
+   function MapChanged()
+     mapl:setCaption(string.sub(mapname, 6))
+@@ -132,7 +148,7 @@ function NewRunSinglePlayerGameMenu()
+       table.insert(o, opponents_list[i])
+     end
+     opponents:setList(o)
+-	opponents:setSize(152, 20)
++	opponents:setSize(SmallScreen and 148 or 152, 20)
+   end
+ 
+   GetMapInfo(mapname)
 diff --git a/scripts/menus/campaign.lua b/scripts/menus/campaign.lua
 index 216f4d0..8eaeb49 100644
 --- a/scripts/menus/campaign.lua
