@@ -5,8 +5,8 @@
 # commits: their newest on 2026-10-08 (the last release tags, 3.3.2, are
 # from 2022). Stratagus is unmodified; War1gus's war1tool gets one fix
 # (compatibility/war1gus/war1tool-optional-cutscenes.patch: it crashed with
-# only DATA.WAR); Wargus's scripts play maps at the PSP's 480x272 with a
-# layout for it (compatibility/wargus/wargus-small-screen.patch). The games
+# only DATA.WAR); Wargus's scripts run at the PSP's 480x272, the menus and
+# the maps laid out for it (compatibility/wargus/wargus-small-screen.patch). The games
 # run through the SDL layer like any other SDL2 program; their data is the
 # player's own copy, extracted on the board by war1tool / wartool. Writes build/<arch>/stratagus/: stratagus,
 # war1gus/ and wargus/ (the extraction tool, the game's scripts and maps in

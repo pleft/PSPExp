@@ -1,3 +1,546 @@
+diff --git a/scripts/guichan.lua b/scripts/guichan.lua
+index b3535f3..90bef12 100644
+--- a/scripts/guichan.lua
++++ b/scripts/guichan.lua
+@@ -41,6 +41,35 @@ dark = Color(38, 38, 78)
+ clear = Color(200, 200, 120)
+ black = Color(0, 0, 0)
+ 
++-- PSPExp: on a screen under 400 lines (the PSP's 480x272, pspexp.lua) the
++-- menus are laid out for it rather than for 640x480
++SmallScreen = Video.Height < 400
++
++-- a full-screen menu's buttons on a small screen (224x28, 34 apart), in one
++-- column or, past five, two read down, ending 8 above the bottom (under the
++-- background's title); buttons = {{caption, hotkey, callback}, ...}; a
++-- title above them; the top row's y
++function AddSmallMenuButtons(menu, buttons, title)
++  local cols = (#buttons > 5) and 2 or 1
++  local rows = math.ceil(#buttons / cols)
++  local y = Video.Height - 8 - 28 - (rows - 1) * 34
++  local x = (Video.Width - cols * 224 - (cols - 1) * 8) / 2
++  if title then
++    menu:addLabel(title, Video.Width / 2, y - 24)
++  end
++  for i, b in ipairs(buttons) do
++    local col, row = math.floor((i - 1) / rows), (i - 1) % rows
++    menu:addFullButton(b[1], b[2], x + col * 232, y + row * 34, b[3])
++  end
++  return y
++end
++
++-- a panel menu (panel(n), w x h) on a small screen: the panel's picture
++-- squeezed to the screen's height and the menu centred; the height used
++function SmallPanelHeight(h)
++  return math.min(h, Video.Height)
++end
++
+ bckground = CGraphic:New("ui/Menu_background_with_title.png")
+ bckground:Load()
+ if wc2.preferences.KeepRatio then
+@@ -799,7 +828,11 @@ function WarMenu(title, background, resize)
+     bg = ImageWidget(bgg)
+   end
+   local offset
+-  if resize == nil or resize == true then
++  if resize == nil or resize == true or (background == nil and SmallScreen) then
++    -- (the previous menu showed through the bare sides of a small screen;
++    -- a layout's menu has the background too, kept in proportion there)
++    menu:setOpaque(true)
++    menu:setBaseColor(black)
+     offset = {(Video.Width - bg:getWidth()) / 2, (Video.Height - bg:getHeight()) / 2}
+   else
+     offset = {0, 0}
+@@ -1043,17 +1076,20 @@ end
+ 
+ function RunSelectScenarioMenu()
+   buttonStatut = 0
+-  local menu = WarMenu(nil, panel(5), false)
+-  menu:setSize(352, 352)
+-  menu:setPosition((Video.Width - 352) / 2, (Video.Height - 352) / 2)
++  local h = SmallPanelHeight(352)
++  local menu = WarMenu(nil, panel(5), {352, h})
+   menu:setDrawMenusUnder(true)
+ 
+   menu:addLabel(_("Select scenario"), 176, 8)
+ 
+-  local browser = menu:addBrowser("maps/", "^.*%.smp%.?g?z?$",
+-    24, 140, 300, 108, mapname)
++  local browser
++  if SmallScreen then
++    browser = menu:addBrowser("maps/", "^.*%.smp%.?g?z?$", 24, 32, 300, 140, mapname)
++  else
++    browser = menu:addBrowser("maps/", "^.*%.smp%.?g?z?$", 24, 140, 300, 108, mapname)
++  end
+ 
+-  local l = menu:addLabel(browser:getSelectedItem(), 24, 260, Fonts["game"], false)
++  local l = menu:addLabel(browser:getSelectedItem(), 24, h - 92, Fonts["game"], false)
+ 
+   local function cb(s)
+     l:setCaption(browser:getSelectedItem())
+@@ -1074,8 +1110,8 @@ function RunSelectScenarioMenu()
+ 
+   browser:setDoubleClickAction(okFunc)
+ 
+-  menu:addHalfButton("~!OK", "o", 48, 318, okFunc)
+-  menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 198, 318,
++  menu:addHalfButton("~!OK", "o", 48, h - 34, okFunc)
++  menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 198, h - 34,
+     function() buttonStatut = 2; menu:stop() end)
+ 
+   menu:run()
+@@ -1094,6 +1130,16 @@ function RunSinglePlayerTypeMenu()
+   local offx = (Video.Width - 640) / 2
+   local offy = (Video.Height - 480) / 2
+ 
++  if SmallScreen then
++    AddSmallMenuButtons(menu, {
++      {_("~!Standard Game"), "s", function() RunSinglePlayerGameModeMenu(); menu:stop(1) end},
++      {_("~!Campaign Game"), "c", function() RunModCampaignGameMenu(); menu:stop(1) end},
++      {_("~!Load Game"), "l", function() RunLoadGameMenu(); menu:stop(1) end},
++      {_("Previous Menu (~<Esc~>)"), "escape", function() menu:stop() end}},
++      _("~<Single Player~>"))
++    return menu:run()
++  end
++
+   menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
+   menu:addLabel(_("~<Single Player~>"), offx + 320, offy + 212 - 25)
+ 
+@@ -1111,14 +1157,13 @@ end
+ function RunSinglePlayerGameModeMenu()
+ 
+   buttonStatut = 0
+-  local menu = WarMenu(nil, panel(5), false)
+-  menu:setSize(352, 352)
+-  menu:setPosition((Video.Width - 352) / 2, (Video.Height - 352) / 2)
++  local h = SmallPanelHeight(352)
++  local menu = WarMenu(nil, panel(5), {352, h})
+   menu:setDrawMenusUnder(true)
+ 
+   menu:addLabel(_("Standard Game"), 176, 8)
+ 
+-  local browser = menu:addBrowser("scripts/lists/maps/", "", 24, (24+8+8), (300+5), (318-24-8-8-24), "Skirmish Modern", true)
++  local browser = menu:addBrowser("scripts/lists/maps/", "", 24, (24+8+8), (300+5), (h-34-24-8-8-24), "Skirmish Modern", true)
+ 
+   local okFunc = function()
+      if (browser:getSelected() < 0) then
+@@ -1130,8 +1175,8 @@ function RunSinglePlayerGameModeMenu()
+ 
+   browser:setDoubleClickAction(okFunc)
+ 
+-  menu:addHalfButton("~!OK", "o", 48, 318, okFunc)
+-  menu:addHalfButton(_("~!Cancel"), "c", 198, 318,
++  menu:addHalfButton("~!OK", "o", 48, h - 34, okFunc)
++  menu:addHalfButton(_("~!Cancel"), "c", 198, h - 34,
+     function() buttonStatut = 2; menu:stop(1); RunSinglePlayerTypeMenu() end)
+ 
+   menu:run()
+@@ -1157,6 +1202,7 @@ function RunSinglePlayerGameMenu()
+   local colorlist = {_("~red~Red"),_("~blue~Blue"),_("~green~Green"),_("~violet~Violet"),_("~orange~Orange"),_("~black~Black"),
+ 	_("~white~White"),_("~yellow~Yellow")}
+   local sidelist = {_("Map Default"), _("Human"),_("Orc"),_("Random")}
++  if SmallScreen then sidelist[1] = _("Map") end
+   local teamlist = {"-","1","2","3","4"}
+   local playerlist = {_("Player"),_("Computer"),_("Rescue-passive"),_("Rescue-active"),_("None")}
+   local reveal_list = {_("Hidden"),_("Known"),_("Revealed")}
+@@ -1176,10 +1222,41 @@ function RunSinglePlayerGameMenu()
+   local max_score = nil
+   local reveal_type = nil
+ 
+-  -- Logo
+-  menu:addLabel(_("~<Single Player Game Setup~>"), offx + 640/2 + 12, offy + 35)
+-  -- Copyright information.
+-  menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
++  -- where things go: on a small screen the scenario along the top, the
++  -- players down the left (no AI script column), the settings and the
++  -- buttons down the right, labels beside the settings
++  local P
++  if SmallScreen then
++    P = {row = 40, pitch = 22, head = 30, num = 2, color = 16, ctype = 72, race = 158, team = 228,
++         wcolor = 54, wtype = 84, wrace = 68, wteam = 34, font = Fonts["small"],
++         optlabel = 268, opt = 340, wopt = 138, opty = 26, optpitch = 22, optlabelbeside = true,
++         scen = {4, 2}, desc = {70, 2}, map = {4, 13},
++         btnx = Video.Width - 224, btny = {Video.Height - 4 - 28 - 68, Video.Height - 4 - 28 - 34, Video.Height - 4 - 28}}
++  else
++    P = {row = offy + 10 + 80, pitch = 25, head = offy + 10 + 60, num = offx + 2, color = offx + 20, ctype = offx + 85, race = offx + 170, team = offx + 245, ai = offx + 290,
++         wcolor = 60, wtype = 80, wrace = 70, wteam = 40,
++         optlabel = offx + 450, opt = offx + 450, wopt = 170, opty = offy + 74, optpitch = 40,
++         scen = {offx + 16, offy + 360}, desc = {offx + 16 + 70, offy + 360}, map = {offx + 16, offy + 360 + 24},
++         btnx = offx + 640 - 224 - 16, btny = {offy + 360, offy + 360 + 36, offy + 360 + 72}, font = Fonts["game"]}
++    -- Logo
++    menu:addLabel(_("~<Single Player Game Setup~>"), offx + 640/2 + 12, offy + 35)
++    -- Copyright information.
++    menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
++  end
++  -- a setting: its label (above it, or beside it) and its drop-down
++  local function addOption(k, label, list, callback)
++    local y = P.opty + P.optpitch * k
++    local dd
++    if P.optlabelbeside then
++      menu:addLabel(label, P.optlabel, y + 6, P.font, false)
++      dd = menu:addDropDown(list, P.opt, y, callback)
++    else
++      menu:addLabel(label, P.optlabel, y, Fonts["game"], false)
++      dd = menu:addDropDown(list, P.opt, y + 16, callback)
++    end
++    dd:setSize(P.wopt, 20)
++    return dd
++  end
+   
+   -- Error handling function
+   function ErrorMessage(errmsg)
+@@ -1260,12 +1337,12 @@ function RunSinglePlayerGameMenu()
+ 	mapname = "maps/skirmish/singleplayer/(2)blick-nach-oben.sms.gz"
+   end
+   
+-  menu:addLabel(_("Scenario:"), offx + 16, offy + 360, Fonts["game"], false)
+-  mapl = menu:addLabel(string.sub(mapname, 6), offx + 16, offy + 360 + 24, Fonts["game"], false)
+-  descriptionl = menu:addLabel("descriptionl", offx + 16 + 70, offy + 360, Fonts["game"], false)
++  menu:addLabel(_("Scenario:"), P.scen[1], P.scen[2], Fonts["game"], false)
++  mapl = menu:addLabel(string.sub(mapname, 6), P.map[1], P.map[2], Fonts["game"], false)
++  descriptionl = menu:addLabel("descriptionl", P.desc[1], P.desc[2], Fonts["game"], false)
+ 
+   
+-  menu:addFullButton(_("S~!elect Scenario"), "e", offx + 640 - 224 - 16, offy + 360 + 36*0,
++  menu:addFullButton(_("S~!elect Scenario"), "e", P.btnx, P.btny[1],
+     function()
+       local oldmapname = mapname
+       RunSelectScenarioMenu()
+@@ -1274,7 +1351,7 @@ function RunSinglePlayerGameMenu()
+         MapChanged()
+       end
+     end)
+-  menu:addFullButton(_("~!Start Game"), "s", offx + 640 - 224 - 16, offy + 360 + 36*1,
++  menu:addFullButton(_("~!Start Game"), "s", P.btnx, P.btny[2],
+     function()
+ 	  InitGameSettings()
+ 		local errorlevel = CheckCorrect()
+@@ -1366,21 +1443,21 @@ function RunSinglePlayerGameMenu()
+ 	  end
+ 	  for i=0,15 do
+ 	    if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil then
+-		  nms[i+1] = menu:addLabel(nameslist[i+1], offx + 2 , offy + 80+offset+15,Fonts["game"], false)
+-		  offset=offset+25
++		  nms[i+1] = menu:addLabel(nameslist[i+1], P.num, P.row+offset+5,Fonts["game"], false)
++		  offset=offset+P.pitch
+ 	    end
+ 	  end
+ 	  offset=0
+-	  menu:addLabel(_("~<Color:~>"), offx+25, offy +10+60,Fonts["game"], false)
++	  menu:addLabel(_("~<Color:~>"), P.color+5, P.head,P.font, false)
+ 	  for i=0,15 do
+ 	    if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil then
+-		  pcolor[i+1] = menu:addDropDown(colorlist, offx + 20, offy + 10 + 80+ offset, function(dd) end)
++		  pcolor[i+1] = menu:addDropDown(colorlist, P.color, P.row+ offset, function(dd) end)
+ 		  if (i > 7) then
+ 		    pcolor[i+1]:setSelected(i-8)
+ 		  else
+ 		    pcolor[i+1]:setSelected(i)
+ 		  end
+-		  pcolor[i+1]:setSize(60, 20)
++		  pcolor[i+1]:setSize(P.wcolor, 20)
+ 		  pcolor[i+1]:setActionCallback(
+ 		  function()
+ 		  	sk_pcolor[i+1] = pcolor[i+1]:getSelected()
+@@ -1388,14 +1465,14 @@ function RunSinglePlayerGameMenu()
+ 		  if sk_pcolor[i+1]~=-1 then
+ 			pcolor[i+1]:setSelected(sk_pcolor[i+1])
+ 		  end
+-		  offset=offset+25
++		  offset=offset+P.pitch
+ 	    end
+ 	  end
+ 	  offset=0
+-	  menu:addLabel(_("~<Type:~>"), offx+100, offy +10+60,Fonts["game"], false)
++	  menu:addLabel(_("~<Type:~>"), P.ctype+15, P.head,P.font, false)
+ 	  for i=0,15 do
+ 		if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil  then
+-			ptype[i+1] = menu:addDropDown(playerlist, offx + 85, offy + 10 + 80+ offset, function(dd) end)
++			ptype[i+1] = menu:addDropDown(playerlist, P.ctype, P.row+ offset, function(dd) end)
+ 			if mapinfo.playertypes[i+1] == "computer" then
+ 				ptype[i+1]:setSelected(1)
+ 			elseif mapinfo.playertypes[i+1] == "rescue-passive" then
+@@ -1403,7 +1480,7 @@ function RunSinglePlayerGameMenu()
+ 			elseif mapinfo.playertypes[i+1] == "rescue-active" then
+ 				ptype[i+1]:setSelected(3)
+ 			end
+-			ptype[i+1]:setSize(80, 20)
++			ptype[i+1]:setSize(P.wtype, 20)
+ 			ptype[i+1]:setActionCallback(
+ 			function()
+ 				sk_ptype[i+1] = ptype[i+1]:getSelected()
+@@ -1411,20 +1488,20 @@ function RunSinglePlayerGameMenu()
+ 			if sk_ptype[i+1]~=-1 then
+ 				ptype[i+1]:setSelected(sk_ptype[i+1])
+ 			end
+-			offset=offset+25
++			offset=offset+P.pitch
+ 		end
+ 	  end
+ 	  offset=0
+-	  menu:addLabel(_("~<Race:~>"), offx+170, offy +10+60,Fonts["game"], false)
++	  menu:addLabel(_("~<Race:~>"), P.race, P.head,P.font, false)
+ 	  for i=0,15 do
+ 		if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil  then
+-		pside[i+1] = menu:addDropDown(sidelist, offx + 170, offy + 10 + 80+ offset, function(dd) end)
++		pside[i+1] = menu:addDropDown(sidelist, P.race, P.row+ offset, function(dd) end)
+ 		if mapinfo.playerrace[i+1] == "human" then
+ 			pside[i+1]:setSelected(1)
+ 		elseif mapinfo.playerrace[i+1] == "orc" then
+ 			pside[i+1]:setSelected(2)
+ 		end
+-		pside[i+1]:setSize(70, 20)
++		pside[i+1]:setSize(P.wrace, 20)
+ 		pside[i+1]:setActionCallback(
+ 		function()
+ 			sk_pside[i+1] = pside[i+1]:getSelected()
+@@ -1432,15 +1509,15 @@ function RunSinglePlayerGameMenu()
+ 		if sk_pside[i+1]~=-1 then
+ 			pside[i+1]:setSelected(sk_pside[i+1])
+ 		end
+-		offset=offset+25
++		offset=offset+P.pitch
+ 		end
+ 	  end
+ 	  offset=0
+-	  menu:addLabel(_("~<Teams:~>"), offx+238, offy +10+60,Fonts["game"], false)
++	  menu:addLabel(_("~<Teams:~>"), P.team-7, P.head,P.font, false)
+ 	  for i=0,15 do
+ 		if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil  then
+-		teams[i+1] = menu:addDropDown(teamlist, offx + 245, offy + 10 + 80 +offset, function(dd) end)
+-		teams[i+1]:setSize(40, 20)
++		teams[i+1] = menu:addDropDown(teamlist, P.team, P.row +offset, function(dd) end)
++		teams[i+1]:setSize(P.wteam, 20)
+ 		teams[i+1]:setActionCallback(
+ 		function()
+ 			sk_teams[i+1] = teams[i+1]:getSelected()
+@@ -1448,14 +1525,17 @@ function RunSinglePlayerGameMenu()
+ 		if sk_teams[i+1]~=-1 then
+ 			teams[i+1]:setSelected(sk_teams[i+1])
+ 		end
+-		offset=offset+25
++		offset=offset+P.pitch
+ 		end
+ 	  end
+ 	  offset=0
+-	  menu:addLabel(_("~<AI Script:~>"), offx+320, offy +10+60,Fonts["game"], false)
++	  if P.ai then
++	  menu:addLabel(_("~<AI Script:~>"), P.ai+30, P.head,P.font, false)
++	  end
+ 	  for i=0,15 do
++		if not P.ai then break end
+ 		if mapinfo.playertypes[i+1] ~= "nobody" and mapinfo.playertypes[i+1] ~= nil  then
+-		paitype[i+1] = menu:addDropDown(AIStrategyTypes, offx + 290, offy + 10 + 80 +offset, function(dd) end)
++		paitype[i+1] = menu:addDropDown(AIStrategyTypes, P.ai, P.row +offset, function(dd) end)
+ 		for cc = 1, table.getn(AIStrategyTypes) do
+ 			if mapinfo.playerais[i+1] == AIStrategyTypes[cc] then
+ 				
+@@ -1471,7 +1551,7 @@ function RunSinglePlayerGameMenu()
+ 		if sk_paitype[i+1]~=-1 then
+ 			paitype[i+1]:setSelected(sk_paitype[i+1])
+ 		end
+-		offset=offset+25
++		offset=offset+P.pitch
+ 		end
+ 	  end
+ 	  
+@@ -1500,12 +1580,10 @@ function RunSinglePlayerGameMenu()
+ 	  end
+   end
+   
+-  menu:addFullButton(_("~!Cancel Game"), "c", offx + 640 - 224 - 16, offy + 360 + 36*2, function()  menu:stop(1); RunSinglePlayerTypeMenu() end)
++  menu:addFullButton(_("~!Cancel Game"), "c", P.btnx, P.btny[3], function()  menu:stop(1); RunSinglePlayerTypeMenu() end)
+ 
+-  menu:addLabel(_("~<Terrain:~>"), offx + 450, offy + 74, Fonts["game"], false)
+-  reveal_type = menu:addDropDown(reveal_list, offx + 450, offy + 90,
++  reveal_type = addOption(0, _("~<Terrain:~>"), reveal_list,
+     function(dd) end)
+-  reveal_type:setSize(170, 20)
+   reveal_type:setActionCallback(
+ 	function()
+ 		sk_reveal_type = reveal_type:getSelected()
+@@ -1514,10 +1592,8 @@ function RunSinglePlayerGameMenu()
+ 		reveal_type:setSelected(sk_reveal_type)
+ 	end
+ 
+-  menu:addLabel(_("~<Game Type:~>"), offx + 450, offy + 114, Fonts["game"], false)
+-  game_type = menu:addDropDown(game_types, offx + 450, offy + 130,
++  game_type = addOption(1, _("~<Game Type:~>"), game_types,
+    function(dd) TimerRedraw() end)
+-  game_type:setSize(170, 20)
+   game_type:setActionCallback(
+ 	function()
+ 		sk_game_type = game_type:getSelected()
+@@ -1526,10 +1602,8 @@ function RunSinglePlayerGameMenu()
+ 		game_type:setSelected(sk_game_type)
+ 	end
+ 
+-  menu:addLabel(_("~<Resources:~>"), offx + 450, offy + 154, Fonts["game"], false)
+-  rescount = menu:addDropDown(resource_types, offx + 450, offy + 170,
++  rescount = addOption(2, _("~<Resources:~>"), resource_types,
+     function(dd) end)
+-  rescount:setSize(170, 20)
+   rescount:setActionCallback(
+ 	function()
+ 		sk_rescount = rescount:getSelected()
+@@ -1538,10 +1612,8 @@ function RunSinglePlayerGameMenu()
+ 		rescount:setSelected(sk_rescount)
+ 	end
+ 
+-  menu:addLabel(_("~<AI Difficulty:~>"), offx + 450, offy + 194, Fonts["game"], false)
+-  difficulty = menu:addDropDown(difficulty_types, offx + 450, offy + 210,
++  difficulty = addOption(3, _("~<AI Difficulty:~>"), difficulty_types,
+     function(dd) end)
+-  difficulty:setSize(170, 20)
+   difficulty:setSelected(2)
+   difficulty:setActionCallback(
+ 	function()
+@@ -1552,10 +1624,8 @@ function RunSinglePlayerGameMenu()
+ 	end
+ 
+   Load("scripts/tilesets/tilesetsList.lua") -- Load tilesets helper
+-  menu:addLabel(_("~<Tileset:~>"), offx + 450, offy + 234, Fonts["game"], false)
+-  tilesetdd = menu:addDropDown(Tilesets:getLabels(mapinfo.highgrounds, true), offx + 450, offy + 250,
++  tilesetdd = addOption(4, _("~<Tileset:~>"), Tilesets:getLabels(mapinfo.highgrounds, true),
+     function(dd) end)
+-  tilesetdd:setSize(170, 20)
+   tilesetdd:setActionCallback(
+ 	  function()
+ 		  sk_tileset = tilesetdd:getSelectedItem()
+@@ -1563,10 +1633,8 @@ function RunSinglePlayerGameMenu()
+ 	if sk_tileset ~= -1 then
+ 		tilesetdd:setSelectedItem(sk_tileset)
+ 	end
+-  menu:addLabel(_("~<Units:~>"), offx + 450, offy + 274, Fonts["game"], false)
+-  numunits = menu:addDropDown(numunit_types, offx + 450, offy + 290,
++  numunits = addOption(5, _("~<Units:~>"), numunit_types,
+     function(dd) end)
+-  numunits:setSize(170, 20)
+   numunits:setActionCallback(
+ 	function()
+ 		sk_numunits = numunits:getSelected()
+@@ -1606,6 +1674,17 @@ function BuildProgramStartMenu()
+   local offx = (Video.Width - 640) / 2
+   local offy = (Video.Height - 480) / 2
+   
++  if SmallScreen then
++    -- (no Map Editor: its tools and dialogs are laid out for a large screen)
++    AddSmallMenuButtons(menu, {
++      {_("~!Single Player Game"), "s", function() RunSinglePlayerTypeMenu(); menu:stop(1) end},
++      {_("~!Multi Player Game"), "m", function() RunMultiPlayerGameMenu(); menu:stop(1) end},
++      {_("~!Replay Game"), "r", function() RunReplayGameMenu(); menu:stop(1) end},
++      {_("~!Options"), "o", function() RunOptionsSubMenu(); menu:stop(1) end},
++      {_("~!Load Mod"), "l", function() RunLoadModMenu(); menu:stop(1) end},
++      {_("S~!how Credits"), "h", RunShowCreditsMenu},
++      {_("E~!xit Program"), "x", function() menu:stop() end}})
++  else
+   menu:addLabel(wargus.Name .. _(" V") .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
+   
+   menu:addFullButton(_("~!Single Player Game"), "s", offx + 208, offy + 104 + 36*0,
+@@ -1624,6 +1703,7 @@ function BuildProgramStartMenu()
+ 
+   menu:addFullButton(_("E~!xit Program"), "x", offx + 208, offy + 104 + 36*7,
+     function() menu:stop() end)
++  end
+ 
+   local time = 0
+   function checkRunDemo()
+@@ -1657,14 +1737,13 @@ end
+ 
+ function RunLoadModMenu()
+   buttonStatut = 0
+-  local menu = WarMenu(nil, panel(5), false)
+-  menu:setSize(352, 352)
+-  menu:setPosition((Video.Width - 352) / 2, (Video.Height - 352) / 2)
++  local h = SmallPanelHeight(352)
++  local menu = WarMenu(nil, panel(5), {352, h})
+   menu:setDrawMenusUnder(true)
+ 
+   menu:addLabel(_("Load Mod"), 176, 8)
+   
+-  local browser = menu:addBrowser("scripts/lists/mods/", "", 24, (24+8+8), (300+5), (318-24-8-8-24), "", true)
++  local browser = menu:addBrowser("scripts/lists/mods/", "", 24, (24+8+8), (300+5), (h-34-24-8-8-24), "", true)
+ 
+   local okFunc = function()
+      if (browser:getSelected() < 0) then
+@@ -1676,8 +1755,8 @@ function RunLoadModMenu()
+ 
+   browser:setDoubleClickAction(okFunc)
+ 
+-  menu:addHalfButton("~!OK", "o", 48, 318, okFunc)
+-  menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 198, 318,
++  menu:addHalfButton("~!OK", "o", 48, h - 34, okFunc)
++  menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 198, h - 34,
+     function() buttonStatut = 2; menu:stop() end)
+ 
+   menu:run()
+@@ -1693,12 +1772,13 @@ function RunModCampaignGameMenu()
+   local lastCampaign = 0
+   local currentPrefix = nil
+   local usedAccellerators = {}
++  local small = {}
+ 
+   for i,f in ipairs(campaignList) do
+      local prefix = string.match(f, "^([%w%s]+%w)")
+      local btn = string.match(f, "%(([%w%s]+%w)%)$")
+      if btn and prefix then
+-        if prefix ~= currentPrefix then
++        if prefix ~= currentPrefix and not SmallScreen then
+            currentPrefix = prefix
+            local label = menu:addLabel(currentPrefix, Video.Width / 2, offy + 104 + 36*lastCampaign)
+            label:setAlignment(MultiLineLabel.CENTER)
+@@ -1725,13 +1805,49 @@ function RunModCampaignGameMenu()
+            accell = ""
+         end
+      end
+-     menu:addFullButton(btn, accell, offx + 208, offy + 104 + 36*lastCampaign, function()
++     local load = function()
+                            Load(path .. f)
+                            menu:stop()
+-     end)
++     end
++     if SmallScreen then
++        table.insert(small, {prefix = prefix, btn = btn, accell = accell, cb = load})
++     else
++     menu:addFullButton(btn, accell, offx + 208, offy + 104 + 36*lastCampaign, load)
++     end
+      lastCampaign = lastCampaign + 1
+   end
+ 
++  if SmallScreen then
++     -- rows of two, a title above each series; the last row at the bottom
++     local rows = {}
++     for _, c in ipairs(small) do
++        local r = rows[#rows]
++        if r == nil or #r.items == 2 or r.prefix ~= c.prefix then
++           r = {prefix = c.prefix, items = {}, title = (r == nil or r.prefix ~= c.prefix) and c.prefix}
++           table.insert(rows, r)
++        end
++        table.insert(r.items, c)
++     end
++     local height = 34
++     for _, r in ipairs(rows) do height = height + 34 + (r.title and 18 or 0) end
++     local y = Video.Height - 8 - height + 6
++     for _, r in ipairs(rows) do
++        if r.title then
++           menu:addLabel(r.title, Video.Width / 2, y)
++           y = y + 18
++        end
++        local x = (Video.Width - #r.items * 224 - (#r.items - 1) * 8) / 2
++        for i, c in ipairs(r.items) do
++           menu:addFullButton(c.btn, c.accell, x + (i - 1) * 232, y, c.cb)
++        end
++        y = y + 34
++     end
++     menu:addFullButton(_("Previous Menu (~<Esc~>)"), "escape", (Video.Width - 224) / 2, y,
++       function() menu:stop() end)
++     menu:run()
++     return
++  end
++
+   menu:addFullButton(_("Previous Menu (~<Esc~>)"), "escape", offx + 208, offy + 104 + 36*(lastCampaign + 2),
+     function() menu:stop() end)
+ 
 diff --git a/scripts/human/ui.lua b/scripts/human/ui.lua
 index a2546d3..c9432f8 100644
 --- a/scripts/human/ui.lua
@@ -24,6 +567,721 @@ index 74c9af3..c25cf21 100644
  
  AddFiller("ui/human/menubutton.png", 0, 0)
  AddFiller("ui/human/minimap.png", 0, 24)
+diff --git a/scripts/menus/campaign.lua b/scripts/menus/campaign.lua
+index 216f4d0..8eaeb49 100644
+--- a/scripts/menus/campaign.lua
++++ b/scripts/menus/campaign.lua
+@@ -82,7 +82,8 @@ function Briefing(title, objs, bg, text, voices)
+   local voice = 0
+   local channel = -1
+ 
+-  local ctbtn = menu:addContinueButton(_("~!Continue"), "c", 455 * Video.Width / 640, 440 * Video.Height / 480,
++  -- (on a small screen 440/480 of it left the button partly below the bottom)
++  local ctbtn = menu:addContinueButton(_("~!Continue"), "c", 455 * Video.Width / 640, math.min(440 * Video.Height / 480, Video.Height - 32),
+     function()
+       if (channel ~= -1) then
+         voice = table.getn(voices)
+@@ -211,7 +212,7 @@ function CreatePictureStep(bg, sound, title, text)
+      local listener = LuaActionListener(fadeBlack)
+      menu:addLogicCallback(listener)
+      
+-     local btn = menu:addHalfButton(_("~!Continue"), "c", 455 * Video.Width / 640, 440 * Video.Height / 480,
++     local btn = menu:addHalfButton(_("~!Continue"), "c", 455 * Video.Width / 640, math.min(440 * Video.Height / 480, Video.Height - 32),
+                                     function()  menu:stop(1) end)
+      btn:requestFocus()
+      menu:run()
+@@ -313,31 +314,44 @@ function RunCampaignSubmenu(campaign)
+   local offy = (Video.Height - 480) / 2
+   local difficulty_types = {_("Easy"), _("Normal"), _("Hard"),_("Nightmare"),_("Hell")}
+   
+-  menu:addLabel(_("~<Mission list~>"), offx + 640/2 + 12, offy + 45)
++  -- where things go (on a small screen: the list across it, the buttons side by side at the bottom)
++  local P
++  if SmallScreen then
++    P = {title = {Video.Width / 2, 6}, list = {16, 30, Video.Width - 32, Video.Height - 30 - 74},
++         difflabel = {16, Video.Height - 66}, diff = {136, Video.Height - 68},
++         start = {Video.Width / 2 - 228, Video.Height - 36}, prev = {Video.Width / 2 + 4, Video.Height - 36}}
++  else
++    P = {title = {offx + 640/2 + 12, offy + 45}, list = {offx + 80, offy + 100, 480, 250},
++         difflabel = {offx + 80, offy + 214 + (36 * 4)}, diff = {offx + 200, offy + 212 + (36 * 4)},
++         start = {offx + 208, offy + 212 + (36 * 5)}, prev = {offx + 208, offy + 212 + (36 * 6)}}
++  end
++  menu:addLabel(_("~<Mission list~>"), P.title[1], P.title[2])
+ 
+   local missionList = {}
+   for i = 1, GetCampaignState(campaign) do
+ 	missionList[i] = CampaignButtonTitle(i)
+   end
+-  local missionListBox = menu:addImageListBox(offx + 80, offy + 100, 480, 250, missionList)
++  local missionListBox = menu:addImageListBox(P.list[1], P.list[2], P.list[3], P.list[4], missionList)
+   missionListBox:setSelected(#missionList - 1)
+-  menu:addLabel(_("~<AI Difficulty:~>"), offx + 80, offy + 214 + (36 * 4), Fonts["game"], false)
+-  difficulty = menu:addDropDown(difficulty_types, offx + 200, offy + 212 + (36 * 4),
++  menu:addLabel(_("~<AI Difficulty:~>"), P.difflabel[1], P.difflabel[2], Fonts["game"], false)
++  difficulty = menu:addDropDown(difficulty_types, P.diff[1], P.diff[2],
+     function(dd) end)
+   difficulty:setSize(170, 20)
+   difficulty:setSelected(1)
+ 
+-  local goButton = menu:addFullButton(_("~!Start mission"), "s", offx + 208, offy + 212 + (36 * 5),  
++  local goButton = menu:addFullButton(_("~!Start mission"), "s", P.start[1], P.start[2],  
+ 			function() 
+ 				GameSettings.Difficulty = difficulty:getSelected() + 1
+ 				wc2.preferences.LastDifficulty = GameSettings.Difficulty
+ 				SavePreferences()
+ 				return CampaignButtonFunction(campaign, missionListBox:getSelected() + 1, menu) 
+ 			end)
+-  menu:addFullButton(_("Previous Menu (~<Esc~>)"), "escape", offx + 208, offy + 212 + (36 * 6),
++  menu:addFullButton(_("Previous Menu (~<Esc~>)"), "escape", P.prev[1], P.prev[2],
+     function()  menu:stop(1); RunSinglePlayerTypeMenu(); currentCampaign = nil; currentState = nil; end)
+ 
++  if not SmallScreen then
+   menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"]) -- Copyright information.
++  end
+   
+   menu:run()
+ 
+diff --git a/scripts/menus/diplomacy.lua b/scripts/menus/diplomacy.lua
+index 49456ec..d02b8c7 100644
+--- a/scripts/menus/diplomacy.lua
++++ b/scripts/menus/diplomacy.lua
+@@ -1,6 +1,15 @@
+ function RunDiplomacyMenu()
+   local menu = WarGameMenu(panel(5))
++  if SmallScreen then
++    -- PSPExp: as high as the screen, the buttons at its bottom (the players fit above)
++    menu:resize(352, Video.Height)
++    menu.place = function(widget, x, y)
++      if y == 352 - 40 then return x, Video.Height - 36 end
++      return x, y
++    end
++  else
+   menu:resize(352, 352)
++  end
+ 
+   menu:addLabel(_("Diplomacy"), 176, 11)
+ 
+diff --git a/scripts/menus/game.lua b/scripts/menus/game.lua
+index ff06077..0ea5987 100644
+--- a/scripts/menus/game.lua
++++ b/scripts/menus/game.lua
+@@ -1,20 +1,51 @@
+ function WarGameMenu(background, w, h)
+   local menu = MenuScreen()
++  local bgg, bg
+ 
+   if (background == nil) then
+     menu:setOpaque(true)
+     menu:setBaseColor(dark)
+   else
+-    local bgg = CGraphic:New(background)
++    if SmallScreen then
++      bgg = CGraphic:ForceNew(background) -- resized below, the shared copy left alone
++    else
++      bgg = CGraphic:New(background)
++    end
+     bgg:Load()
+ 	if (w ~= nil and h ~= nil) then
+ 		bgg:Resize(w, h)
+ 	end
+-    local bg = ImageWidget(bgg)
++    bg = ImageWidget(bgg)
+     menu:add(bg, 0, 0)
+   end
+ 
++  -- PSPExp: on a small screen the panel's picture takes the menu's size; a
++  -- menu taller than the screen is squeezed to it, what is added to it moved
++  -- up in proportion (the panels 288 high lose 16 lines; the menus laid out
++  -- for a small screen ask for its height themselves); menu.place(widget, x,
++  -- y), when a menu sets it, moves what is added
++  local add = menu.add
++  function menu:add(widget, x, y)
++    if self.place then
++      x, y = self.place(widget, x, y)
++    elseif self.squeeze then
++      y = math.floor(y * self.squeeze + 0.5)
++    end
++    return add(self, widget, x, y)
++  end
++
+   function menu:resize(w, h)
++    if SmallScreen then
++      menu.squeeze = nil
++      if h > Video.Height then
++        menu.squeeze = Video.Height / h
++        h = Video.Height
++      end
++      if bgg then
++        bgg:Resize(w, h)
++        bg:setSize(w, h) -- (it draws no further than its own size)
++      end
++    end
+     menu:setSize(w, h)
+     menu:setPosition((Video.Width - menu:getWidth()) / 2,
+       (Video.Height - menu:getHeight()) / 2)
+diff --git a/scripts/menus/help.lua b/scripts/menus/help.lua
+index 658d10d..58355a7 100644
+--- a/scripts/menus/help.lua
++++ b/scripts/menus/help.lua
+@@ -57,7 +57,8 @@ local keystrokes = {
+ 
+ function RunKeystrokeHelpMenu()
+   local menu = WarGameMenu(panel(5))
+-  menu:resize(352, 352)
++  local h = math.min(352, Video.Height)
++  menu:resize(352, h)
+ 
+   local c = Container()
+   c:setOpaque(false)
+@@ -78,13 +79,19 @@ function RunKeystrokeHelpMenu()
+   s:setBaseColor(dark)
+   s:setBackgroundColor(dark)
+   s:setForegroundColor(clear)
++  if h < 352 then
++    s:setSize(320, h - 40 - 40)
++    s:setContent(c)
++    menu:add(s, 16, 36)
++  else
+   s:setSize(320, 216)
+   s:setContent(c)
+   menu:add(s, 16, 60)
++  end
+ 
+   menu:addLabel(_("Keystroke Help Menu"), 352 / 2, 11)
+   menu:addFullButton(_("Previous (~<Esc~>)"), "escape",
+-    (352 / 2) - (224 / 2), 352 - 40, function() menu:stop() end)
++    (352 / 2) - (224 / 2), h - 36 - (h < 352 and 0 or 4), function() menu:stop() end)
+ 
+   menu:run(false)
+ end
+diff --git a/scripts/menus/network.lua b/scripts/menus/network.lua
+index 3012cf6..85d87ca 100644
+--- a/scripts/menus/network.lua
++++ b/scripts/menus/network.lua
+@@ -196,12 +196,14 @@ function RunJoiningGameMenu(optRace, optReady)
+ end
+ 
+ function RunJoinIpMenu()
+-  local menu = WarMenu(nil, panel(5), false)
++  local h = SmallPanelHeight(352)
++  local menu = WarMenu(nil, panel(5), {352, h})
+   local serverlist = nil
+-  menu:setSize(352, 352)
+-  menu:setPosition((Video.Width - 352) / 2, (Video.Height - 352) / 2)
+   menu:setDrawMenusUnder(true)
+-  menu:addLabel(_("Servers: "), 176, 20)
++  -- (on a small screen a shorter list, the buttons closer: y0 the first's)
++  local small = h < 352
++  local y0 = small and 120 or 180
++  menu:addLabel(_("Servers: "), 176, small and 10 or 20)
+   local servers = {}
+   local function ServerListUpdate()
+     servers = {}
+@@ -215,13 +217,13 @@ function RunJoinIpMenu()
+        table.insert(servers, v .. " | (auto-discovered)")
+     end
+     if serverlist == nil then
+-       serverlist = menu:addImageListBox(20, 50, 300, 120, servers)
++       serverlist = menu:addImageListBox(20, small and 38 or 50, 300, small and 74 or 120, servers)
+     else
+        serverlist:setList(servers)
+     end
+   end
+   ServerListUpdate()
+-  menu:addFullButton(_("Co~!nnect"), "n", 60, 180, function()
++  menu:addFullButton(_("Co~!nnect"), "n", 60, y0, function()
+       local selected = serverlist:getSelected()
+       local selectedserver = selected ~= nil and servers[selected + 1] or nil
+       local ip = selectedserver and string.match(selectedserver, "[0-9%.]+") or nil
+@@ -241,14 +243,14 @@ function RunJoinIpMenu()
+          return
+       end
+     end)
+-  menu:addFullButton(_("~!Add server"), "a", 60, 210, function() RunAddServerMenu(); ServerListUpdate() end)
++  menu:addFullButton(_("~!Add server"), "a", 60, y0 + 30, function() RunAddServerMenu(); ServerListUpdate() end)
+   -- We need to stop this from loading when there are no servers.
+-  menu:addFullButton(_("~!Edit server"), "a", 60, 240, function()
++  menu:addFullButton(_("~!Edit server"), "a", 60, y0 + 60, function()
+       if serverlist:getSelected() ~= nil then
+         RunEditServerMenu(serverlist:getSelected()); ServerListUpdate()
+       end
+     end)
+-  menu:addFullButton(_("~!Delete server"), "d", 60, 270, function()
++  menu:addFullButton(_("~!Delete server"), "d", 60, y0 + 90, function()
+       if serverlist:getSelected() ~= nil then
+         table.remove(wc2.preferences.ServerList, serverlist:getSelected()*2+1)
+         table.remove(wc2.preferences.ServerList, serverlist:getSelected()*2+1)
+@@ -268,7 +270,7 @@ function RunJoinIpMenu()
+   end)
+   menu:addLogicCallback(listener)
+ 
+-  menu:addFullButton(_("Cancel (~<Esc~>)"), "escape", 60, 300, function() menu:stop() end)
++  menu:addFullButton(_("Cancel (~<Esc~>)"), "escape", 60, y0 + 120, function() menu:stop() end)
+   menu:run()
+ end
+ 
+@@ -451,7 +453,7 @@ function CreateOnlineLobby(map, numplayers, isserver)
+   local teams = {""}
+   for i=1,PlayerMax do
+     if Map.Info.PlayerType[i - 1] == PlayerPerson then
+-      playerTable[i + 1] = HBox({
++      playerTable[#playerTable + 1] = HBox({
+         LDropDown(playerNames, function(dd)
+           local newIdx = dd:getSelected()
+           if newIdx < 2 then
+@@ -504,16 +506,25 @@ function CreateOnlineLobby(map, numplayers, isserver)
+         LLabel("", "game"):id("player_status[" .. i .. "]"),
+       })
+       teams[#teams + 1] = tostring(#teams)
+-    else
+-      playerTable[i + 1] = LLabel(string.format(_("Slot %d unavailable"), i), "small")
++    elseif not SmallScreen then -- (no room for them on a small screen)
++      playerTable[#playerTable + 1] = LLabel(string.format(_("Slot %d unavailable"), i), "small")
++    end
++  end
++
++  -- on a small screen the map's heading and file left out (no room)
++  local function gameProperties(t)
++    if SmallScreen then
++      table.remove(t, 1)
++      table.remove(t, 1)
+     end
++    return t
+   end
+ 
+   menu = WarMenuWithLayout(_("Create MultiPlayer game"), nil, VBox({
+     LFiller(),
+     HBox({ -- screen split
+       LFiller(),
+-      VBox({ -- game properties
++      VBox(gameProperties({ -- game properties
+         HBox({ _("Map") }),
+         HBox({ LLabel(_("File:"), "game"), LLabel(map, "game") }),
+         HBox({ LLabel(_("Players:"), "game"), LLabel(numplayers, "game") }),
+@@ -567,7 +578,7 @@ function CreateOnlineLobby(map, numplayers, isserver)
+             NetworkServerResyncClients()
+           end):id("option_dedicated_ai_server"),
+         }), -- end of game options
+-      }), -- end of game properties
++      })), -- end of game properties
+       LFiller(),
+       VBox(playerTable):withPadding(2, true),
+       LFiller(),
+@@ -595,7 +606,7 @@ function CreateOnlineLobby(map, numplayers, isserver)
+       end):id("button_start_game"),
+       LFiller(),
+     }),
+-  }):withPadding(4, true))
++  }):withPadding(SmallScreen and 2 or 4, true))
+ 
+   for i=1,PlayerMax do
+      if menu.player_team[i] then
+@@ -847,6 +858,17 @@ function RunMultiPlayerGameMenu(s)
+   local menu = WarMenu()
+   local offx = (Video.Width - 640) / 2
+   local offy = ((Video.Height - 480) / 2) - 70
++  -- where things go (on a small screen under the title art, the two game
++  -- buttons side by side)
++  local P
++  if SmallScreen then
++    local x = (Video.Width - 224) / 2
++    P = {title = {Video.Width / 2, 84}, nick = {x, 108}, pass = {x, 134}, login = {x, 160},
++         join = {Video.Width / 2 - 228, 198}, create = {Video.Width / 2 + 4, 198}, prev = {x, 236}}
++  else
++    P = {title = {offx + 640/2 + 12, offy + 192}, nick = {208 + offx, 248 + offy}, pass = {208 + offx, 248 + offy + 28}, login = {208 + offx, 298 + offy},
++         join = {208 + offx, 298 + (36 * 2) + offy}, create = {208 + offx, 298 + (36 * 3) + offy}, prev = {208 + offx, 298 + (36 * 5) + offy}}
++  end
+ 
+   local function FixMusic()
+     wargus.playlist = { "music/Orc Briefing" .. wargus.music_extension }
+@@ -859,18 +881,20 @@ function RunMultiPlayerGameMenu(s)
+   InitGameSettings()
+   InitNetwork1()
+ 
++  if not SmallScreen then
+   menu:addLabel(wargus.Name .. " V" .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"]) -- Copyright information.
++  end
+ 
+-  menu:addLabel(_("~<Multiplayer Network Game~>"), offx + 640/2 + 12, offy + 192)
++  menu:addLabel(_("~<Multiplayer Network Game~>"), P.title[1], P.title[2])
+ 
+-  menu:writeText(_("Nickname :"), 208 + offx, 248 + offy)
+-  local nick = menu:addTextInputField(GetLocalPlayerName(), offx + 298, 244 + offy)
++  menu:writeText(_("Nickname :"), P.nick[1], P.nick[2])
++  local nick = menu:addTextInputField(GetLocalPlayerName(), P.nick[1] + 90, P.nick[2] - 4)
+ 
+-  menu:writeText(_("Password :"), 208 + offx, 248 + offy + 28)
+-  local pass = menu:addTextInputField("", offx + 298, 244 + offy + 28)
++  menu:writeText(_("Password :"), P.pass[1], P.pass[2])
++  local pass = menu:addTextInputField("", P.pass[1] + 90, P.pass[2] - 4)
+   pass:setPassword(true);
+ 
+-  local loginBtn = menu:addHalfButton(_("Go ~!Online"), "o", 208 + offx, 298 + (36 * 0) + offy,
++  local loginBtn = menu:addHalfButton(_("Go ~!Online"), "o", P.login[1], P.login[2],
+     function()
+       if nick:getText() ~= GetLocalPlayerName() then
+         SetLocalPlayerName(nick:getText())
+@@ -956,7 +980,7 @@ function RunMultiPlayerGameMenu(s)
+   local signUpListener = LuaActionListener(signUpCb)
+   signupLabel:addMouseListener(signUpListener)
+ 
+-  menu:addFullButton(_("~!Join Local Game"), "j", 208 + offx, 298 + (36 * 2) + offy,
++  menu:addFullButton(_("~!Join Local Game"), "j", P.join[1], P.join[2],
+     function()
+       if nick:getText() ~= GetLocalPlayerName() then
+         SetLocalPlayerName(nick:getText())
+@@ -966,7 +990,7 @@ function RunMultiPlayerGameMenu(s)
+       RunJoinIpMenu()
+       FixMusic()
+     end)
+-  menu:addFullButton(_("~!Create Game"), "c", 208 + offx, 298 + (36 * 3) + offy,
++  menu:addFullButton(_("~!Create Game"), "c", P.create[1], P.create[2],
+     function()
+       if nick:getText() ~= GetLocalPlayerName() then
+         SetLocalPlayerName(nick:getText())
+@@ -977,7 +1001,7 @@ function RunMultiPlayerGameMenu(s)
+       FixMusic()
+     end)
+ 
+-  menu:addFullButton(_("Previous Menu (~<Esc~>)"), "escape", 208 + offx, 298 + (36 * 5) + offy,
++  menu:addFullButton(_("Previous Menu (~<Esc~>)"), "escape", P.prev[1], P.prev[2],
+     function() menu:stop() end)
+ 
+   menu:run()
+diff --git a/scripts/menus/options.lua b/scripts/menus/options.lua
+index 130b9fa..581ec3e 100644
+--- a/scripts/menus/options.lua
++++ b/scripts/menus/options.lua
+@@ -197,7 +197,27 @@ end
+ 
+ function RunPreferencesMenu()
+    local menu = WarGameMenu(panel(5))
++   if SmallScreen then
++      -- PSPExp: the whole small screen, the check boxes (x 10, rows 2 to 15)
++      -- in two columns, the drop-downs (x 225) on the right, the rest
++      -- moved to the middle (the buttons 40 from the bottom)
++      menu:resize(Video.Width, Video.Height)
++      menu.place = function(widget, x, y)
++         if x == 10 and y >= 10 + 18 * 2 and y < 10 + 18 * 16 then
++            local r = (y - 10) / 18 - 2
++            return 6 + math.floor(r / 7) * 180, 30 + (r % 7) * 20
++         elseif x == 10 then
++            return 8, 30 + 7 * 20 + 4
++         elseif x == 225 then
++            return 356, y
++         elseif y == 352 - 40 then
++            return (x == 40) and 122 or 252, Video.Height - 36
++         end
++         return x + (Video.Width - 352) / 2, y
++      end
++   else
+    menu:resize(352, 352)
++   end
+    menu:addLabel(_("Preferences"), 352 / 2, 11, Fonts["large"], true)
+    
+    local row = 2;
+@@ -399,6 +419,8 @@ function RunPreferencesMenu()
+          SetFogOfWarBilinear(fowBilinear:isMarked())
+    end)
+    
++   -- (not on a small screen: no room, and PSPExp's SDL layer draws no colour cursor)
++   if not SmallScreen then
+    local hwCursor = menu:addImageCheckBox(_("Hardware cursor"), 225, 28 + 19 * 9 + 10, offi, offi2, oni, oni2, function()end)
+    hwCursor:setMarked(wc2.preferences.HardwareCursor)
+    hwCursor:setActionCallback(
+@@ -407,6 +429,7 @@ function RunPreferencesMenu()
+          Preference.HardwareCursor = hwCursor:isMarked()
+          SavePreferences()
+    end)
++   end
+ 
+    menu:addLabel(_("~!* - requires restart"), 10, 10 + 18 * 16, Fonts["game"], false)
+ 
+@@ -785,7 +808,8 @@ end
+ 
+ function RunLanguageMenu()
+    local menu = WarGameMenu(panel(5))
+-   menu:resize(352, 352)
++   local h = math.min(352, Video.Height)
++   menu:resize(352, h)
+    local b
+    local languageList
+ 
+@@ -799,9 +823,13 @@ function RunLanguageMenu()
+    menu:addLabel(_("Language Options"), 176, 10)
+ 
+    menu:addLabel(_("Available languages:"), 16, 34, Fonts["game"], false)
++   if SmallScreen then
++      languageList = menu:addImageListBox(16, 50, 300, h - 50 - 44, langlist)
++   else
+    languageList = menu:addImageListBox(16, 50, 300, math.max(250, 8*(table.getn(LanguageTable)/3+1)), langlist)
++   end
+ 
+-   menu:addHalfButton("~!OK", "o", 40, 320, function()
++   menu:addHalfButton("~!OK", "o", 40, h - 32, function()
+ 			 if (languageList:getSelected() >= 0) then
+ 			    wc2.preferences.StratagusTranslation = LanguageTable[languageList:getSelected()*3 + 2]
+ 			    wc2.preferences.GameTranslation = LanguageTable[languageList:getSelected()*3 + 3]
+@@ -812,7 +840,7 @@ function RunLanguageMenu()
+ 			 menu:stop()
+    end)
+ 
+-   menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 206, 320, function()
++   menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 206, h - 32, function()
+ 			 menu:stop()
+    end)
+ 
+@@ -848,6 +876,10 @@ function RunGameOptionsMenu()
+          menu:addFullButton(_("~<D~>ebug"), "d", 16, 40 + 36*4,
+             function() RunDebugMenu() end)
+       end
++   elseif SmallScreen then
++      -- (no Video: the screen's size is fixed, pspexp.lua)
++      menu:addFullButton(_("Language"), "f13", 16, 40 + 36*3,
++			 function() RunLanguageMenu() end)
+    else
+       menu:addFullButton(_("Video (~<F9~>)"), "f9", 16, 40 + 36*3,
+ 			 function() RunVideoOptionsMenu() end)
+@@ -875,6 +907,18 @@ function RunOptionsSubMenu()
+    local offx = (Video.Width - 640) / 2
+    local offy = (Video.Height - 480) / 2
+    
++   if SmallScreen then
++     -- (no Video: the screen's size is fixed, pspexp.lua)
++     AddSmallMenuButtons(menu, {
++       {_("Speeds (~<F6~>)"), "f6", function() RunSpeedsMenu() end},
++       {_("Sound (~<F7~>)"), "f7", function() RunGameSoundOptionsMenu(); end},
++       {_("Preferences (~<F8~>)"), "f8", function() RunPreferencesMenu(); end},
++       {_("Language"), "f13", function() RunLanguageMenu();  end},
++       {_("Previous (~<Esc~>)"), "escape", function() menu:stop() end}},
++       _("~<Game Options~>"))
++     return menu:run()
++   end
++
+    menu:addLabel(wargus.Name .. _(" V") .. wargus.Version .. ", " .. wargus.Copyright, offx + 320, (Video.Height - 90) + 18*4, Fonts["small"])
+    
+    menu:addLabel(_("~<Game Options~>"), offx + 640/2, offy + 104 + 10)
+diff --git a/scripts/menus/replay.lua b/scripts/menus/replay.lua
+index 17d08fa..662ca3e 100644
+--- a/scripts/menus/replay.lua
++++ b/scripts/menus/replay.lua
+@@ -1,15 +1,16 @@
+ function RunReplayGameMenu()
+-  local menu = WarMenu(nil, panel(5), false)
+-  menu:setSize(352, 352)
+-  menu:setPosition((Video.Width - 352) / 2, (Video.Height - 352) / 2)
++  local h = SmallPanelHeight(352)
++  local menu = WarMenu(nil, panel(5), {352, h})
+   menu:setDrawMenusUnder(true)
+ 
+   menu:addLabel(_("Select Game"), 352 / 2, 11)
+ 
++  -- (on a small screen the list starts higher)
++  local top = (h < 352) and 36 or (11 + 98)
+   local browser = menu:addBrowser("~logs/", "%.log%.?g?z?$",
+-    (352 - 18 - 288) / 2, 11 + 98, 306, 108)
++    (352 - 18 - 288) / 2, top, 306, (h < 352) and (h - 96 - top) or 108)
+ 
+-  local reveal = menu:addImageCheckBox(_("Reveal Map"), 23, 264, offi, offi2, oni, oni2, function() end)
++  local reveal = menu:addImageCheckBox(_("Reveal Map"), 23, h - 88, offi, offi2, oni, oni2, function() end)
+ 
+   local okFunc = function()
+      if (browser:getSelected() < 0) then
+@@ -24,8 +25,8 @@ function RunReplayGameMenu()
+ 
+   browser:setDoubleClickAction(okFunc)
+ 
+-  menu:addHalfButton("~!OK", "o", 48, 308, okFunc)
+-  menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 198, 308, function() menu:stop() end)
++  menu:addHalfButton("~!OK", "o", 48, h - 44, okFunc)
++  menu:addHalfButton(_("Cancel (~<Esc~>)"), "escape", 198, h - 44, function() menu:stop() end)
+ 
+   menu:run()
+ end
+diff --git a/scripts/menus/results.lua b/scripts/menus/results.lua
+index 3d4322e..79f38ce 100644
+--- a/scripts/menus/results.lua
++++ b/scripts/menus/results.lua
+@@ -98,6 +98,22 @@ function RunResultsMenu()
+   local menu = WarMenu(nil, background)
+   local offx = (Video.Width - 640) / 2
+   local offy = (Video.Height - 480) / 2
++
++  -- where things go: on a small screen the outcome, rank and score along the
++  -- top, the eight columns 60 apart (their captions in the small font), each
++  -- player's line as high as there is room for, the buttons side by side
++  local P
++  if SmallScreen then
++    P = {outcome = 80, rank = 240, score = 400, top = 2, bars = 190,
++         caption = function(i) return 31 + 60 * (i - 1) end, captiony = 64, font = Fonts["small"],
++         box = function(i) return 3 + 60 * (i - 1) end, boxw = 54,
++         buttons = {{Video.Width / 2 - 228, Video.Height - 32}, {Video.Width / 2 + 4, Video.Height - 32}}}
++  else
++    P = {outcome = offx + 114, rank = offx + 330, score = offx + 546, top = offy + top_offset, bars = offx + 280,
++         caption = function(i) return offx + ({42, 120, 202, 281, 361, 442, 520, 600})[i] end, captiony = offy + bottom_offset, font = Fonts["game"],
++         box = function(i) return offx + 8 + 80 * (i - 1) end, boxw = 70,
++         buttons = {{offx + 150, offy + 440}, {offx + 400, offy + 440}}}
++  end
+   
+   -- score and rank
+   
+@@ -147,7 +163,7 @@ function RunResultsMenu()
+   currentLevelRanking:setForegroundColor(Color(0, 0, 215))
+   currentLevelRanking:setVisible(false)
+   currentLevelRanking:setBaseColor(Color(215, 215, 215))
+-  menu:add(currentLevelRanking, offx + 280, offy + top_offset + 39)
++  menu:add(currentLevelRanking, P.bars, P.top + 39)
+   
+   local currentOverallRanking = StatBoxWidget(100, 10)
+   currentOverallRanking:setCaption("")
+@@ -156,7 +172,7 @@ function RunResultsMenu()
+   currentOverallRanking:setForegroundColor(Color(215, 0, 0))
+   currentOverallRanking:setVisible(false)
+   currentOverallRanking:setBaseColor(Color(215, 215, 215))
+-  menu:add(currentOverallRanking, offx + 280, offy + top_offset + 50)
++  menu:add(currentOverallRanking, P.bars, P.top + 50)
+   -- player label and color setup
+   local playerCount = 0      -- overall number of players
+   local playerLabels = {}    -- all player name labels
+@@ -189,40 +205,56 @@ function RunResultsMenu()
+ 		  else
+ 			name = name .. _(" - Neutral")
+ 		  end 
+-		playerLabels[playerCount] = menu:addLabel(name, offx + 320, offy + 82 + playerCount*42, Fonts["game"], true)
+-		playerLabels[playerCount]:setVisible(false)
++		playerLabels[playerCount] = name
+ 		playerColors[playerCount] = Color(playerColorIndex[i+1][1], playerColorIndex[i+1][2], playerColorIndex[i+1][3])
+ 		playerNumbers[playerCount] = i
+     end
+   end
+   
++  -- each player's line: the name, the boxes under it (42 apart on a large
++  -- screen; on a small one as many as fit between the captions and the buttons)
++  local pitch, boxh, rowtop = 42, 20, offy + 82
++  if SmallScreen then
++    rowtop = P.captiony + 12
++    pitch = math.min(30, math.floor((Video.Height - 36 - rowtop) / math.max(playerCount, 1)))
++    boxh = math.max(8, math.min(16, pitch - 12))
++  end
++  for j = 1, playerCount do
++    if SmallScreen then
++      playerLabels[j] = menu:addLabel(playerLabels[j], Video.Width / 2, rowtop + pitch * (j - 1), Fonts["game"], true)
++    else
++      playerLabels[j] = menu:addLabel(playerLabels[j], offx + 320, offy + 82 + j*42, Fonts["game"], true)
++    end
++    playerLabels[j]:setVisible(false)
++  end
++
+   local length = 0
+   local captionLabels = {}
+   local captionOffsets = {}
+   -- Label setup part
+-  captionLabels[1] = menu:addLabel(_("Units:"), offx + 42, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[1] = menu:addLabel(_("Units:"), P.caption(1), P.captiony, P.font, true)
+   captionOffsets[1] = 0
+   length = length + captionLabels[1]:getWidth() + 20
+   
+-  captionLabels[2] = menu:addLabel(_("Buildings:"), offx + 120, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[2] = menu:addLabel(_("Buildings:"), P.caption(2), P.captiony, P.font, true)
+   captionOffsets[2] = length
+   length = length + captionLabels[2]:getWidth() + 20
+-  captionLabels[3] = menu:addLabel(_("Gold:"), offx + 202, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[3] = menu:addLabel(_("Gold:"), P.caption(3), P.captiony, P.font, true)
+   captionOffsets[3] = length
+   length = length + captionLabels[3]:getWidth() + 20
+-  captionLabels[4] = menu:addLabel(_("Lumber:"), offx + 281, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[4] = menu:addLabel(_("Lumber:"), P.caption(4), P.captiony, P.font, true)
+   captionOffsets[4] = length
+   length = length + captionLabels[4]:getWidth() + 20
+-  captionLabels[5] = menu:addLabel(_("Oil:"), offx + 361, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[5] = menu:addLabel(_("Oil:"), P.caption(5), P.captiony, P.font, true)
+   captionOffsets[5] = length
+   length = length + captionLabels[5]:getWidth() + 20
+-  captionLabels[6] = menu:addLabel(_("Kills:"), offx + 442, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[6] = menu:addLabel(_("Kills:"), P.caption(6), P.captiony, P.font, true)
+   captionOffsets[6] = length
+   length = length + captionLabels[6]:getWidth() + 20
+-  captionLabels[7] = menu:addLabel(_("Razings:"), offx + 520, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[7] = menu:addLabel(_("Razings:"), P.caption(7), P.captiony, P.font, true)
+   captionOffsets[7] = length
+   length = length + captionLabels[7]:getWidth() + 20
+-  captionLabels[8] = menu:addLabel(_("Score:"), offx + 600, offy + bottom_offset, Fonts["game"], true)
++  captionLabels[8] = menu:addLabel(_("Score:"), P.caption(8), P.captiony, P.font, true)
+   captionOffsets[8] = length
+ 
+   for i=1,table.getn(captionLabels) do
+@@ -234,7 +266,7 @@ function RunResultsMenu()
+   for i=1,table.getn(captionLabels) do
+ 	counterWidgets[i] = {}
+ 	for j=1,playerCount do
+-		counterWidgets[i][j] = StatBoxWidget(70, 20)
++		counterWidgets[i][j] = StatBoxWidget(P.boxw, boxh)
+ 		counterWidgets[i][j]:setCaption("")
+ 		counterWidgets[i][j]:setPercent(0)
+ 		counterWidgets[i][j]:setBackgroundColor(black)
+@@ -242,7 +274,11 @@ function RunResultsMenu()
+ 		counterWidgets[i][j]:setVisible(false)
+ 		counterWidgets[i][j]:setFont(Fonts["game"])
+ 		counterWidgets[i][j]:setBaseColor(Color(215, 215, 0))
++		if SmallScreen then
++			menu:add(counterWidgets[i][j], P.box(i), rowtop + pitch * (j - 1) + 11)
++		else
+ 		menu:add(counterWidgets[i][j], offx + 8 + 80* (i - 1), offy + 60 + 42*j)
++		end
+ 	end
+   end
+ 
+@@ -306,7 +342,7 @@ function RunResultsMenu()
+   menu:add(regenWidget, -50, -50)
+   local ticking = false
+   local currect_player_score = 0
+-  local currect_player_score_label = menu:addLabel(currect_player_score, offx + 530, offy + top_offset + 21, Fonts["small-title"], true)
++  local currect_player_score_label = menu:addLabel(currect_player_score, P.score - 16, P.top + 21, Fonts["small-title"], true)
+   currect_player_score_label:setVisible(false)
+   local function ResultsMainLoop()
+ 	regenWidget:setPercent(GameCycle)
+@@ -318,15 +354,15 @@ function RunResultsMenu()
+ 		return
+ 	end
+ 	if (r_stage == 0) then -- Results
+-		menu:addLabel(_("Outcome"), offx + 114, offy + top_offset)
+-		menu:addLabel(result, offx + 114, offy + top_offset + 21, Fonts["large-title"])
++		menu:addLabel(_("Outcome"), P.outcome, P.top)
++		menu:addLabel(result, P.outcome, P.top + 21, Fonts["large-title"])
+ 		StopAllChannels()
+ 		PlaySound("statsthump", true)
+ 		wait = 24
+ 		r_stage = r_stage + 1 -- next stage
+ 	elseif (r_stage == 1) then -- Rank
+-		menu:addLabel(_("Rank"), offx + 330, offy + top_offset)
+-		menu:addLabel(currentRank, offx + 330, offy + top_offset + 21)
++		menu:addLabel(_("Rank"), P.rank, P.top)
++		menu:addLabel(currentRank, P.rank, P.top + 21)
+ 		StopAllChannels()
+ 		PlaySound("statsthump", true)
+ 		wait = 24
+@@ -335,7 +371,7 @@ function RunResultsMenu()
+ 		r_stage = r_stage + 1 -- next stage
+ 	elseif (r_stage == 2) then -- Your score
+ 		if (ticking == false) then
+-			menu:addLabel(_("Score"), offx + 546, offy + top_offset)
++			menu:addLabel(_("Score"), P.score, P.top)
+ 			StopAllChannels()
+ 			PlaySound("statsthump", true)
+ 			currect_player_score_label:setVisible(true)
+@@ -402,10 +438,10 @@ function RunResultsMenu()
+ 
+   menu:addLogicCallback(screenUpdate)
+ 
+-  menu:addFullButton(_("~!Save Replay"), "s", offx + 150, offy + 440,
++  menu:addFullButton(_("~!Save Replay"), "s", P.buttons[1][1], P.buttons[1][2],
+     function() RunSaveReplayMenu() end)
+ 
+-  menu:addFullButton(_("~!Continue"), "c", offx + 400, offy + 440,
++  menu:addFullButton(_("~!Continue"), "c", P.buttons[2][1], P.buttons[2][2],
+     function() 
+ 		StopMusic()
+ 		menu:stop() 
 diff --git a/scripts/orc/ui.lua b/scripts/orc/ui.lua
 index 87f9344..015dd69 100644
 --- a/scripts/orc/ui.lua
@@ -52,62 +1310,50 @@ index e5fffa8..69eb62c 100644
  AddFiller("ui/orc/minimap.png", 0, 24)
 diff --git a/scripts/pspexp.lua b/scripts/pspexp.lua
 new file mode 100644
-index 0000000..52fa338
+index 0000000..914ff68
 --- /dev/null
 +++ b/scripts/pspexp.lua
-@@ -0,0 +1,31 @@
-+--      pspexp.lua - maps played at their own screen size (PSPExp)
+@@ -0,0 +1,19 @@
++--      pspexp.lua - Wargus on a screen of its own size (PSPExp)
 +--
-+--      The menus are laid out for 640x480; a map can be played at another
-+--      size, wc2.preferences.GameVideoWidth x GameVideoHeight (0: the menus'
-+--      own): PSPExp plays at the PSP's 480x272, drawn pixel for pixel, with
-+--      ui_small.lua's layout. The screen is resized before a map, a saved
-+--      game or a replay starts, and back when it ends.
++--      wc2.preferences.FixedVideoWidth x FixedVideoHeight (0: off), when set,
++--      is the screen's size whatever VideoWidth/Height say: PSPExp plays at
++--      the PSP's 480x272, drawn pixel for pixel (shrunk from 640x480 its text
++--      was unreadable). Under 400 lines the menus (SmallScreen in guichan.lua
++--      and the menus' files) and the game (ui_small.lua) are laid out for it.
++--      Loaded by stratagus.lua before SetVideoResolution: the first size set
++--      is the one kept.
 +--
 +--      This program is free software; you can redistribute it and/or modify
 +--      it under the terms of the GNU General Public License as published by
 +--      the Free Software Foundation; either version 2 of the License, or
 +--      (at your option) any later version.
 +
-+local function game_screen(on)
-+  local w, h = wc2.preferences.GameVideoWidth or 0, wc2.preferences.GameVideoHeight or 0
-+  if w <= 0 or h <= 0 then return end
-+  if not on then w, h = wc2.preferences.VideoWidth, wc2.preferences.VideoHeight end
-+  if Video.Width ~= w or Video.Height ~= h then Video:ResizeScreen(w, h) end
-+end
-+
-+for _, name in ipairs({"StartMap", "StartSavedGame", "StartReplay"}) do
-+  local start = _G[name]
-+  if start then
-+    _G[name] = function(...)
-+      game_screen(true)
-+      local r = start(...)
-+      game_screen(false)
-+      return r
-+    end
-+  end
++local w, h = wc2.preferences.FixedVideoWidth or 0, wc2.preferences.FixedVideoHeight or 0
++if w > 0 and h > 0 then
++  SetVideoResolution(w, h)
 +end
 diff --git a/scripts/stratagus.lua b/scripts/stratagus.lua
-index 4811fa6..64589d6 100644
+index 4811fa6..87a005e 100644
 --- a/scripts/stratagus.lua
 +++ b/scripts/stratagus.lua
 @@ -433,6 +433,8 @@ local defaultPreferences = {
  	VideoFullScreen = false,
  	VideoHeight = 480,
  	VideoWidth = 640,
-+	GameVideoHeight = 272,         --  maps played at this size (0: the menus' own; pspexp.lua)
-+	GameVideoWidth = 480,
++	FixedVideoHeight = 272,        --  the screen's size whatever VideoWidth/Height say (0: off; pspexp.lua)
++	FixedVideoWidth = 480,
  	VideoShader = "none",
  	ViewportMode = 0,
  	ServerList = {},
-@@ -512,6 +514,7 @@ SetMusicVolume(wc2.preferences.MusicVolume)
+@@ -511,6 +513,7 @@ SetMusicEnabled(wc2.preferences.MusicEnabled)
+ SetMusicVolume(wc2.preferences.MusicVolume)
  SetTranslationsFiles(wc2.preferences.StratagusTranslation, wc2.preferences.GameTranslation)
  SetVideoFullScreen(wc2.preferences.VideoFullScreen)
- SetVideoResolution(wc2.preferences.VideoWidth, wc2.preferences.VideoHeight)
 +Load("scripts/pspexp.lua")
+ SetVideoResolution(wc2.preferences.VideoWidth, wc2.preferences.VideoHeight)
  
  UI.ButtonPanel.ShowCommandKey = wc2.preferences.ShowCommandKey
- Preference.MineNotifications = wc2.preferences.MineNotifications
 diff --git a/scripts/ui_small.lua b/scripts/ui_small.lua
 new file mode 100644
 index 0000000..2568e79

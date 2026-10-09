@@ -1,8 +1,8 @@
 #!/bin/sh
 # pspexp-wargus: Warcraft II on Wargus (GPL-2.0) at a fixed master commit,
-# built by scripts/packages/build-stratagus.sh ARCH with one patch: maps are
-# played at the PSP's 480x272, pixel for pixel, with a layout made for it
-# (compatibility/wargus/wargus-small-screen.patch; the menus stay 640x480).
+# built by scripts/packages/build-stratagus.sh ARCH with one patch: the game
+# runs at the PSP's 480x272, pixel for pixel, menus and maps, each laid out
+# for it (compatibility/wargus/wargus-small-screen.patch).
 # The engine is pspexp-stratagus. The game's data is the player's own copy (Warcraft II is
 # sold, not free: none of it is in the package or downloaded), copied into
 # ~/Warcraft2 (the folder is made for it): the DOS CD's files (its DATA
@@ -22,7 +22,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp5
+V=3.3.3~git20260629-pspexp6
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
@@ -130,7 +130,7 @@ fi
 exec pspexp-run /usr/lib/pspexp/stratagus/stratagus -d "$D" "$@"
 S
 chmod 755 "$W/root/usr/games/warcraft2"
-echo "Warcraft II on Wargus (https://github.com/Wargus/wargus, commit cde1a07) and Stratagus, GPL-2.0, built by PSPExp, with compatibility/wargus/wargus-small-screen.patch (maps played at 480x272 with a layout for it). The game's data is the player's own copy." > "$W/root/usr/share/doc/pspexp-wargus/README"
+echo "Warcraft II on Wargus (https://github.com/Wargus/wargus, commit cde1a07) and Stratagus, GPL-2.0, built by PSPExp, with compatibility/wargus/wargus-small-screen.patch (played at 480x272, menus and maps laid out for it). The game's data is the player's own copy." > "$W/root/usr/share/doc/pspexp-wargus/README"
 cat > "$W/control" <<C
 Package: pspexp-wargus
 Version: $V

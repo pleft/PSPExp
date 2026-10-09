@@ -976,35 +976,57 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   strokes of its letters are dropped with the rows and columns left out;
   and two pointers showed, the layer's white arrow beside the game's own
   (Stratagus hides the system pointer with a transparent cursor, which the
-  layer now takes as hidden: one pointer, the game's). So maps are now
-  played at the PSP's 480x272, pixel for pixel
-  (`compatibility/wargus/wargus-small-screen.patch`, Wargus's scripts
-  only): `StartMap`, `StartSavedGame` and `StartReplay` resize the screen
-  (`Video:ResizeScreen`) to `wc2.preferences.GameVideoWidth/Height`
-  (480x272 by default here; 0: the menus' size) and back when the game
-  ends (`pspexp.lua`), and under 400 lines `ui_small.lua` lays the game
-  out: a 152-wide left column with a 92-pixel minimap, the unit's panel
-  (name, health, portrait and four short lines in the small font: damage,
-  armour, range, production, supply; what a building makes beside its
-  portrait with a progress bar; three portraits and "+N" for a group) and
-  the 3x3 command buttons; the top line with gold, lumber, oil, food and a
-  Menu button; the map 328x240 (about 10 x 7.5 tiles, against 14 x 14 at
-  640x480). Wargus's own layout sized its button panel's background
-  `144 + Video.Height - 480` (negative: Stratagus stopped with
-  `bad_alloc`); the panel's 176x176 background is a 1-pixel graphic
-  (Stratagus refuses nil). Checked on the stand-in PSP in a skirmish and
-  orc mission 1: the briefing (readable, its Continue button 4 lines cut),
-  selecting, training a peon, a group, the game menu and End Scenario (the
-  game menu's lowest button a few lines cut), the results back at 640x480;
-  58-60 fps; and from the launcher through the menus (Single Player,
-  Standard Game, Start Game) into a skirmish at 480x272. The demo battle
-  before the main menu is a map too: it plays at 480x272 as well. The
-  menus stay 640x480 shrunk: the layer keeps a streaming
-  texture wider than 512 at half size (the GE's largest texture is 512),
-  320x240 shown at 362x272, so they are blurred twice; splitting it into
-  two textures instead is the next step for them. Existing installs get
-  the new scripts: the launch script copies Wargus's scripts again when
-  the package's version changes (`.pspexp-scripts`; the extracted data and
+  layer now takes as hidden: one pointer, the game's). So the game now
+  runs at the PSP's 480x272, pixel for pixel, the menus and the maps each
+  laid out for it (`compatibility/wargus/wargus-small-screen.patch`,
+  Wargus's scripts only). `wc2.preferences.FixedVideoWidth/Height`
+  (480x272 by default here; 0: off) is the screen's size whatever
+  VideoWidth/Height say (`pspexp.lua`, loaded before
+  `SetVideoResolution`: the first size set is kept). Under 400 lines
+  (`SmallScreen` in `guichan.lua`) the menus have their own places:
+  - the full-screen menus' buttons in one or two columns below the title
+    art (`AddSmallMenuButtons`; the main menu in two columns of four, the
+    campaigns in rows of two under each series' title); the background
+    kept in proportion, the bare sides black (the previous menu showed
+    through them);
+  - the game setup: the scenario along the top, the players down the left
+    (colour, type, race, team; no AI script column, "Map" for the race's
+    "Map Default"), the settings with their labels beside them on the
+    right in the small font, the three buttons below;
+  - the panels 352 high (scenario, map lists, mods, replays, language,
+    keystroke help, servers) as high as the screen, their lists shorter;
+    the in-game panels 288 high (game menu, options, sound, speeds, help,
+    objectives, end scenario) squeezed to 272, what is on them moved up in
+    proportion (`WarGameMenu`, `menu.squeeze`); Preferences takes the whole
+    screen, its check boxes in two columns (`menu.place`);
+  - the mission list across the screen, the results with the eight
+    columns 60 apart and each player's line as high as there is room for,
+    the multiplayer menus and the lobby (no unavailable slots listed, no
+    map heading or file name: no room);
+  - left out there: Video options (the size is fixed), the Hardware
+    cursor box (the layer draws no colour cursor), and the Map Editor from
+    the main menu (its tools and dialogs, Player Properties 500x480, are
+    for a large screen).
+
+  The game itself (`ui_small.lua`): a 152-wide left column with a 92-pixel
+  minimap, the unit's panel (name, health, portrait and four short lines
+  in the small font: damage, armour, range, production, supply; what a
+  building makes beside its portrait with a progress bar; three portraits
+  and "+N" for a group) and the 3x3 command buttons; the top line with
+  gold, lumber, oil, food and a Menu button; the map 328x240 (about 10 x
+  7.5 tiles, against 14 x 14 at 640x480). Wargus's own layout sized its
+  button panel's background `144 + Video.Height - 480` (negative:
+  Stratagus stopped with `bad_alloc`); the panel's 176x176 background is a
+  1-pixel graphic (Stratagus refuses nil). Checked on the stand-in PSP
+  (2026-10-09): every menu above, a skirmish (tips, the game menu, options,
+  preferences, sound, speeds, help, keystroke help, objectives, save,
+  surrender, the results) and orc mission 1's act title and briefing; from
+  the launcher, the package upgraded, through the menus into a skirmish
+  and back to the main menu; 54-60 fps, under 1 KB a frame; with the size
+  set to 0, the 640x480 menus as before. The Save menu's name field keeps
+  Escape (SELECT): Cancel closes it. Existing installs get the new
+  scripts: the launch script copies Wargus's scripts again when the
+  package's version changes (`.pspexp-scripts`; the extracted data and
   wartool's `wc2-config.lua` are kept).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
