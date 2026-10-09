@@ -1071,7 +1071,15 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   rate change, FluidSynth works at half the rate, a fifth of a core, and
   the layer upsamples by two. Warcraft II does so only with MIDI music
   (`wc2-config.lua`; the CD's OGG keeps 44.1 kHz): with its MIDI, 55-60
-  fps in the skirmish, no underruns. Not yet on the real PSP.
+  fps in the skirmish, no underruns. Not yet on the real PSP. Selecting
+  a unit in Warcraft II then crashed the GameShell (the user, in PPSSPP;
+  every time, any map): the command buttons' bottom row was 1 pixel low,
+  and its icon frame (`CIcon::DrawUnitIcon` draws 4 pixels around the
+  icon, unclipped) wrote line 273 of the 272-line screen, past the
+  surface; the Pi's 64-bit build survived the stray write, the GameShell's
+  32-bit one did not (found with a debug build of Stratagus under gdb).
+  `ui_small.lua` now raises the grid 4 pixels (last frame line 271);
+  pspexp-wargus pspexp9.
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,

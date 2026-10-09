@@ -1646,10 +1646,10 @@ index 4811fa6..87a005e 100644
  UI.ButtonPanel.ShowCommandKey = wc2.preferences.ShowCommandKey
 diff --git a/scripts/ui_small.lua b/scripts/ui_small.lua
 new file mode 100644
-index 0000000..2568e79
+index 0000000..8a866b2
 --- /dev/null
 +++ b/scripts/ui_small.lua
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,199 @@
 +--      ui_small.lua - the in-game interface on a small screen (480x272, the PSP's)
 +--
 +--      Loaded by human/ui.lua and orc/ui.lua after their own layout when the
@@ -1669,7 +1669,10 @@ index 0000000..2568e79
 +local W, H = Video.Width, Video.Height
 +local L = 152                 -- the left column
 +local PY = 96                 -- the unit's panel
-+local BY = H - 3 * 38         -- the command buttons (3 rows of 38)
++-- the command buttons (3 rows of 38), raised 4: an icon's frame reaches 4
++-- below it (CIcon::DrawUnitIcon) and Stratagus does not clip it; on line 273
++-- of 272 it wrote past the screen and crashed the GameShell's 32-bit build
++local BY = H - 3 * 38 - 4
 +
 +UI.Fillers:clear()
 +AddResizedFiller("ui/" .. race .. "/buttonpanel.png", 0, 0, L, H)

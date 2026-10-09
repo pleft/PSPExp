@@ -22,7 +22,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp8
+V=3.3.3~git20260629-pspexp9
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
