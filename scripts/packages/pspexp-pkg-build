@@ -11,7 +11,7 @@
 #   scripts/packages/pspexp-pkg-build index         (re)write build/<board>/pkg/index and covers
 #   scripts/packages/pspexp-pkg-build publish       every built package, the index and covers to
 #                                                   <root>/repo on the board, and the catalogue
-#                                                   (build/apt/catalogue.tar.gz, apt-repo build) to
+#                                                   (apt-repo build's, else made from the recipes) to
 #                                                   <root>/catalogue: Apps > Packages offers its recipes
 # HOST=user@host is the Omega (default root@omega). A build script
 # is a shell script run as `recipe DIR` that fills DIR (the package's <id>/
@@ -76,9 +76,17 @@ index) index ;;
 publish)
 	# the catalogue: the same one the Debian boards get (the recipes and their serial);
 	# over SSH from here, so the Omega needs no signature check of its own
+	# (apt-repo build's when there is a current one); without it, as on a fresh checkout with no
+	# signing key, one made here from the recipes, in the same form (recipes/ and a serial):
+	# apt-repo would make a key of its own and rewrite the repository's public key
 	C="$ROOT/build/apt/catalogue.tar.gz"
-	[ -f "$C" ] || { echo "pspexp-pkg-build: no $C: run scripts/packages/apt-repo build" >&2; exit 1; }
-	[ -z "$(find "$ROOT/recipes" -newer "$C" -type f | head -1)" ] || { echo "pspexp-pkg-build: recipes changed since $C: run scripts/packages/apt-repo build" >&2; exit 1; }
+	if [ ! -f "$C" ] || [ -n "$(find "$ROOT/recipes" -newer "$C" -type f | head -1)" ]; then
+		mkdir -p "$OUT"; C="$OUT/catalogue.tar.gz"; T=$(mktemp -d)
+		date -u +%Y%m%d%H%M%S > "$T/serial"
+		COPYFILE_DISABLE=1 tar --exclude '.*' -czf "$C" -C "$ROOT" recipes -C "$T" serial
+		rm -rf "$T"
+		echo "catalogue made from the recipes: $C"
+	fi
 	index
 	R="$(board_root)"
 	ssh "$HOST" "mkdir -p '$R/repo' && rm -f '$R/repo'/*.tar.gz '$R/repo'/*.png '$R/repo'/index"

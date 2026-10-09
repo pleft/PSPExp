@@ -136,13 +136,16 @@ static int op_power_get(void *u, PspExpPowerStatus *p)
     return 0;
 }
 
-/* compressed audio, for the tests: an MP3 frame "decodes" to its sample count of 1000s */
+/* compressed audio, for the tests: an MP3 frame "decodes" to its sample count of 1000s, or,
+ * with 0xA5 after its header, of full-scale samples swinging from 32767 to -32768 and back
+ * (the resampler's largest steps) */
 static int op_audio_decode(void *u, int codec, const uint8_t *frame, uint32_t bytes, int16_t *stereo, uint32_t max_frames)
 {
     uint32_t n = ((frame[1] >> 3) & 3) == 3 ? 1152u : 576u, i;
-    (void)u; (void)bytes;
+    int swing = bytes > 4 && frame[4] == 0xA5;
+    (void)u;
     if (codec != PSPEXP_CODEC_MP3 || n > max_frames) return -1;
-    for (i = 0; i < n * 2; i++) stereo[i] = 1000;
+    for (i = 0; i < n * 2; i++) stereo[i] = swing ? ((i / 2) & 1 ? -32768 : 32767) : 1000;
     return (int)n;
 }
 

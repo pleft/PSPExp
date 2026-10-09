@@ -758,7 +758,9 @@ static uint32_t coded_resample(PspExpRuntime *rt, const int16_t *in, uint32_t n,
         uint32_t i = pos >> 16, f = pos & 0xFFFFu, c;
         for (c = 0; c < 2; c++) {
             int a = i == 0 ? rt->coded_prev[c] : in[(i - 1) * 2 + c], b = in[i * 2 + c];
-            rt_rs[out * 2 + c] = (int16_t)(a + (((b - a) * (int)f) >> 16));
+            /* 64-bit: full scale one way to the other (65535) times a fraction past
+             * one half does not fit an int */
+            rt_rs[out * 2 + c] = (int16_t)(a + (int32_t)(((int64_t)(b - a) * (int64_t)f) >> 16));
         }
         out++;
         pos += step;
@@ -830,7 +832,8 @@ static void handle_audio(PspExpRuntime *rt, const PspExpMessage *m)
         const PspExpAudioStream *as;
         if (pspexp_message_expect(m, sizeof(*as)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         as = (const PspExpAudioStream *)m->payload;
-        if (m->length < sizeof(*as) + as->frames * 4u) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        /* against what is left after the header: header + frames x 4 wraps 32 bits */
+        if (as->frames > (m->length - (uint32_t)sizeof(*as)) / 4u) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         rt->stats.stream_frames += as->frames;
         if (rt->audio_active) {
             audio_lock(rt);
@@ -846,7 +849,9 @@ static void handle_audio(PspExpRuntime *rt, const PspExpMessage *m)
         uint32_t left;
         if (pspexp_message_expect(m, sizeof(*ac)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         ac = (const PspExpAudioCoded *)m->payload;
-        if (m->length < sizeof(*ac) + ac->bytes) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        /* against what is left after the header: header + bytes wraps 32 bits on the PSP
+         * (0xFFFFFFF0 + 16 = 0) and the decoder would read past the message */
+        if (ac->bytes > m->length - (uint32_t)sizeof(*ac)) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         if (!rt->ops.audio_decode || ac->codec != PSPEXP_CODEC_MP3) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }
         d = m->payload + sizeof(*ac);
         left = ac->bytes;

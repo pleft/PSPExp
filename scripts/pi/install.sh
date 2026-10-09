@@ -23,8 +23,10 @@
 #       the opentyrian package ships (BOARD=pi scripts/packages/pspexp-pkg-build build opentyrian)
 #   HOST=user@host scripts/pi/install.sh retro    pspexp-retro and a libretro core,
 #       compiled on the Pi into build/pi/bin/, for the nes package
-# Needs on the Pi: sudo without a password prompt, and the build packages
-# (scripts/pi/build.sh installs them: cmake, libsdl2-dev, libusb-1.0-0-dev).
+# Needs on the Pi: sudo without a password prompt. Building there, it first
+# installs what the build needs (build-essential, cmake, pkg-config,
+# libusb-1.0-0-dev, libsdl2-dev). Without a repository Apps > Packages has no
+# catalogue: games come only through one (docs/Package_Manager.md §6).
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PI="${HOST:-${PI:-pi@raspberrypi.local}}"
@@ -77,6 +79,9 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 	cmake -DSRC="$ROOT" -DOUT="$VF" -P "$ROOT/cmake/pspexp_version.cmake" >/dev/null 2>&1
 	V=$(sed -n 's/^#define PSPEXP_VERSION "\(.*\)"$/\1/p' "$VF" 2>/dev/null); rm -f "$VF"
 	[ -n "$V" ] && echo "$V" | ssh "$PI" 'cat > ~/pspexp/src/.pspexp-version'
+	# what the build needs (a fresh Raspberry Pi OS has none of it)
+	ssh "$PI" 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends build-essential cmake pkg-config \
+		libusb-1.0-0-dev libsdl2-dev >/dev/null'
 	ssh "$PI" 'set -e; cd ~/pspexp/src
 		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
 		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp sdl-pspexp-hostgl pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
@@ -85,7 +90,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		echo "built on $PI (~/pspexp/src/build): package it with scripts/packages/debs/pspexp-core/build OUTDIR arm64 $PI"
 		exit 0
 	fi
-	[ -n "$REPO_URL" ] || echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): PSPExp from this build, into /usr/local"
+	[ -n "$REPO_URL" ] || echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): PSPExp from this build, into /usr/local; Apps > Packages has no catalogue to offer without one (docs/Package_Manager.md §6)"
 	ssh "$PI" 'set -e; S=~/pspexp/src
 		sudo install -d -m 0755 /usr/local/bin /usr/local/lib /usr/local/share/pspexp/launcher
 		for f in pspexp-term pspexp-bench pspexp-sprite-demo; do sudo install -m 0755 $S/build/$f /usr/local/bin/$f.new && sudo mv /usr/local/bin/$f.new /usr/local/bin/$f; done
@@ -94,6 +99,8 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		sudo install -m 0755 $S/scripts/board/pspexp-pkg /usr/local/bin/pspexp-pkg
 		sudo install -m 0755 $S/scripts/board/pspexp-bt /usr/local/bin/pspexp-bt
 		sudo install -m 0644 $S/build/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp.so.new && sudo mv /usr/local/lib/libsdl-pspexp.so.new /usr/local/lib/libsdl-pspexp.so
+		# the board-GPU layer (pspexp-run PSPEXP_HOSTGL=1: SuperTuxKart, Celeste 64...), as the package installs it
+		if [ -f $S/build/libsdl-pspexp-hostgl.so ]; then sudo install -m 0644 $S/build/libsdl-pspexp-hostgl.so /usr/local/lib/libsdl-pspexp-hostgl.so.new && sudo mv /usr/local/lib/libsdl-pspexp-hostgl.so.new /usr/local/lib/libsdl-pspexp-hostgl.so; fi
 		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 			sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
 		done
@@ -109,7 +116,7 @@ else
 		rm -f /tmp/keyring.gpg /tmp/pspexp-apt-setup /tmp/pspexp-pkg-apt
 		# copies from the older way would come first in PATH and shadow the package's
 		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
-		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/share/pspexp/launcher
+		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp-hostgl.so /usr/local/share/pspexp/launcher
 		dpkg-query -W pspexp-core pspexp-runtime"
 	CONSOLE=/usr/bin/pspexp-term
 fi

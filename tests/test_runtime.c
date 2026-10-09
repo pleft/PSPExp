@@ -410,6 +410,55 @@ int main(void)
             pspexp_pump(ctx, 0);
             CHECK_EQ(as->received_frames - before, 2 * 1152);
         }
+        /* A length past the payload is refused, also one that wraps 32 bits
+         * with the header added (0xFFFFFFF0 + 16 = 0 on the PSP), for coded
+         * audio and for plain stream frames (0x40000001 x 4 = 4). */
+        {
+            PspExpRuntime *rt = pspexp_null_runtime(nul);
+            const PspExpAudioStatus *as = pspexp_audio_status(ctx);
+            uint32_t errors = rt->stats.protocol_errors, before = as->received_frames;
+            struct { PspExpAudioCoded h; uint8_t d[16]; } coded;
+            struct { PspExpAudioStream h; int16_t d[8]; } plain;
+            memset(&coded, 0, sizeof(coded));
+            coded.h.codec = PSPEXP_CODEC_MP3;
+            coded.h.bytes = 0xFFFFFFF0u;
+            coded.d[0] = 0xFF; coded.d[1] = 0xFB; coded.d[2] = 0x90; coded.d[3] = 0x64;
+            CHECK_EQ(pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_CODED_STREAM, &coded, sizeof(coded)), 0);
+            coded.h.bytes = sizeof(coded.d) + 1;
+            CHECK_EQ(pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_CODED_STREAM, &coded, sizeof(coded)), 0);
+            memset(&plain, 0, sizeof(plain));
+            plain.h.frames = 0x40000001u;
+            CHECK_EQ(pspexp_send_raw(ctx, PSPEXP_CH_AUDIO, PSPEXP_OP_AUDIO_STREAM, &plain, sizeof(plain)), 0);
+            pspexp_audio_stream_reset(ctx);
+            pspexp_pump(ctx, 0);
+            CHECK_EQ(rt->stats.protocol_errors, errors + 3);
+            CHECK_EQ(as->received_frames, before);
+        }
+        /* Resampling the largest steps (full scale, from one sign to the
+         * other) at a rate that is not the stream's: 32 kHz into 44.1 kHz,
+         * where the position's fraction runs past one half: (b - a) x f no
+         * longer fits 32 bits (a sanitized build catches the overflow); the
+         * samples in between land between a peak and a trough. */
+        {
+            static uint8_t mp3[576];
+            PspExpMixer *mx = &pspexp_null_runtime(nul)->mixer;
+            uint32_t k, n, mid = 0;
+            memset(mp3, 0, sizeof(mp3));
+            mp3[0] = 0xFF; mp3[1] = 0xFB; mp3[2] = 0x98; mp3[3] = 0x64; mp3[4] = 0xA5;   /* MPEG-1, 128 kbps, 32 kHz */
+            pspexp_audio_stream_reset(ctx);
+            pspexp_pump(ctx, 0);
+            CHECK_EQ(pspexp_audio_coded(ctx, PSPEXP_CODEC_MP3, mp3, sizeof(mp3)), 0);
+            pspexp_pump(ctx, 0);
+            n = mx->buffered;
+            CHECK(n >= 1580 && n <= 1590);   /* 1152 x 44100 / 32000 = 1587.6 */
+            for (k = 1; k < n; k++) {        /* (the first starts from the silence before) */
+                int16_t v = mx->ring[((mx->tail + k) % mx->ring_frames) * 2];
+                if (v > -32000 && v < 32000) mid++;
+            }
+            CHECK(mid > n / 2);              /* most fall between a peak and a trough */
+            pspexp_audio_stream_reset(ctx);
+            pspexp_pump(ctx, 0);
+        }
         /* Rate adaptation: a slow source keeps the buffer under half the
          * target, so rendering consumes fewer frames than it outputs. */
         {

@@ -29,8 +29,8 @@ it uses a small kernel driver for the USB link.
 | | Raspberry Pi | ClockworkPi GameShell | Onion Omega2+ |
 |---|---|---|---|
 | Best for | the most games, the smoothest play | a handheld pair: the PSP on top of a pocket console | the smallest, cheapest setup |
-| Games | all packages, OpenGL and 3D games (Quake, OpenArena) included, and SuperTuxKart, Trackballs and Open Surge, drawn by the Pi's own graphics chip | all packages; heavy 3D slower | 12 packages: Doom, OpenTyrian, Cave Story, the adventures, NES, Game Boy, SNES, Mega Drive |
-| Bluetooth headphones | yes (Pi 400 tested) | yes (not yet tried with headphones) | no |
+| Games | all 58 packages, OpenGL and 3D games (Quake, OpenArena) included, and the ones drawn by the Pi's own graphics chip (SuperTuxKart, Celeste 64, Nintendo 64, Unreal Tournament and more) | 47 packages: not the nine drawn by the Pi's graphics chip, nor Diablo and Wolfenstein: Enemy Territory; heavy 3D slower | 12 packages: Doom, OpenTyrian, Cave Story, Jazz Jackrabbit, the adventures, NES, Game Boy, SNES, Mega Drive |
+| Bluetooth headphones | yes (Pi 400 tested) | yes (tried with earbuds) | no |
 | Setting up | install Raspberry Pi OS, then PSPExp | flash a card image | install from a computer over the network |
 | Guide | [Raspberry Pi](raspberry-pi.md) | [GameShell](gameshell.md) | [Omega2+](omega2.md) |
 

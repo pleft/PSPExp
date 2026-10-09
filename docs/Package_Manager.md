@@ -836,8 +836,12 @@ It keeps our own static builds, as archives, but reads the **same recipes**:
   warn (`warn=`) when the board plays it badly.
 - **Publishing, from the Mac over SSH:** `scripts/packages/pspexp-pkg-build
   build ID...` makes the archives; `publish` puts them in `<root>/repo` and
-  the same catalogue the Debian boards get (`build/apt/catalogue.tar.gz`,
-  refused when the recipes changed since) in `<root>/catalogue`. SSH from the
+  the catalogue in `<root>/catalogue`: the one the Debian boards get
+  (`build/apt/catalogue.tar.gz`) when it is current, else one made from the
+  recipes in the same form (`build/omega/pkg/catalogue.tar.gz`: `recipes/`
+  and a serial), so a fresh checkout with no signing key publishes too
+  (`apt-repo build` would make a key of its own and rewrite the repository's
+  public key; before, `publish` stopped there). SSH from the
   Mac is the trusted path, so the Omega checks no signature of its own (it
   has no gpgv).
 - **Installing:** `pspexp-pkg` (`PSPEXP_BOARD=omega`, set by its wrapper)

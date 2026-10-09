@@ -156,6 +156,39 @@ packages go to `/opt/pspexp`. Without a repository address
 `pspexp-pkg install freedoom opentyrian` on the Pi (recipes installed through
 apt, docs/Package_Manager.md).
 
+### Your own package repository (before the first release)
+
+Apps > Packages needs a package repository: the signed catalogue of recipes
+and the packages PSPExp builds itself. Until the release there is no public
+one, so a fresh setup makes its own:
+
+1. **The packages**, into `build/debs`:
+   - the console: `HOST=user@<pi> scripts/pi/install.sh build`, then
+     `scripts/packages/debs/pspexp-core/build build/debs arm64 user@<pi>`
+     (for the GameShell: `scripts/gameshell/build.sh`, then
+     `scripts/packages/debs/pspexp-core/build build/debs armhf`);
+   - the PSP's runtime: `scripts/build.sh`, then
+     `scripts/packages/debs/pspexp-runtime/build build/debs`;
+   - the games PSPExp builds itself: `scripts/packages/debs/<name>/build
+     build/debs ARCH`, after the `scripts/packages/build-*.sh` its header
+     names. A recipe whose `apt=` names only Debian's packages needs nothing.
+2. **The repository:** `scripts/packages/apt-repo build build/debs` writes
+   `build/apt`, signed with a key in `~/.pspexp/gnupg` (made the first time;
+   its public half is written into `scripts/packages/pspexp-archive-key.asc`,
+   which the board installers give the boards: your key, not the project's,
+   so leave that change out of commits).
+3. **Serving it** over plain HTTP: from another machine
+   (`scripts/packages/apt-repo push user@host` copies it to `~/pspexp-repo`
+   there, for any static web server), or from the computer itself:
+   `python3 -m http.server 8093 -d build/apt`.
+4. **Its address** (`http://<host>:8093`) as the first line of
+   `~/.pspexp/repo-url`; then `HOST=user@<pi> scripts/pi/install.sh` sets the
+   Pi up for it, and Packages offers the recipes.
+
+Without a repository the Pi installer builds PSPExp on the Pi (installing
+what the build needs first) and puts the console, both SDL layers and the
+launcher in `/usr/local`: the launcher works, Packages has nothing to offer.
+
 ## Onion Omega2+ as the host
 
 `scripts/omega/build.sh` cross-compiles static soft-float MIPS binaries of

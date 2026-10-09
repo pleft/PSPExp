@@ -38,7 +38,9 @@ HOST=root@<omega-address> scripts/packages/pspexp-pkg-build build freedoom opent
 HOST=root@<omega-address> scripts/packages/pspexp-pkg-build publish
 ```
 
-after which **Apps > Packages** on the PSP installs them.
+after which **Apps > Packages** on the PSP installs them (`publish` also
+sends the list of games Packages shows, made from this repository's
+recipes).
 
 ## The games
 
