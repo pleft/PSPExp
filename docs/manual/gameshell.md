@@ -48,6 +48,16 @@ with none, so you choose what takes space.
 memory stick, then in **Apps > Files** copy them from the **PSP** drive to
 the folder. Only use ROMs of games you own.
 
+**Warcraft: Orcs & Humans** and **Warcraft II** need your own copy, as on
+the Raspberry Pi: `DATA.WAR` in the **Warcraft** folder of the home folder,
+Warcraft II's files or disc image in **Warcraft2** (what each accepts and
+how they play: [the Raspberry Pi page](raspberry-pi.md#your-first-games)).
+The first start prepares the game: about 20 seconds for Warcraft, about
+10 minutes for Warcraft II from a disc image. The GameShell plays their
+MIDI music at a lower quality than the Pi (22 kHz), or the sound would
+skip in battles; Warcraft II's music from a disc image keeps the CD's
+quality.
+
 ## What it plays like
 
 Measured on the PSP-1000:
@@ -59,6 +69,12 @@ Measured on the PSP-1000:
 | Most OpenGL games | 40–60 fps |
 | Neverball, Chromium B.S.U. | about 22 fps |
 | Emilia Pinball | too slow to enjoy (7 fps): the GameShell's processor, not the PSP |
+| Warcraft: Orcs & Humans | menus 60 fps, battles 44–52 fps |
+| Warcraft II | 58–60 fps in a game, which runs a little slower than on a Pi (about 26 of its 30 steps a second) |
+
+The Warcraft figures were measured on 9 October 2026 with a stand-in for
+the PSP on the GameShell's USB cable, while the PSP was away; not yet on
+the PSP itself.
 
 ## Good to know
 

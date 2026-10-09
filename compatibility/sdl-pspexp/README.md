@@ -189,6 +189,7 @@ function; the tests check it is current).
 | `PSPEXP_FOCUS=host` | let the game see the host window's focus loss; by default the shim hides it (and fakes a focus gain), since games pause or mute when unfocused and the host window rarely is |
 | `PSPEXP_LOCAL_AUDIO=0` | silence the host's audio device |
 | `PSPEXP_AUDIO=psp` | drive the game's audio callback from the shim's own thread on a precise clock instead of the host device's cadence; the default when the host audio driver is SDL's `dummy` (headless hosts: the dummy driver runs slow and jittery and the PSP underruns) |
+| `PSPEXP_AUDIO_RATE=22050` | a program that opens its audio device letting the rate change (`SDL_AUDIO_ALLOW_FREQUENCY_CHANGE`, as SDL_mixer's `Mix_OpenAudio` does) mixes at this rate instead (22050 or 11025, below what it asked for); the layer upsamples it to the PSP's 44.1 kHz by whole numbers. For music synthesised as it plays: Warcraft's MIDI through FluidSynth took a whole core of the GameShell's Cortex-A7 at 44.1 kHz, the sound skipped (about 140 times in two minutes of battle) and the game fell to 15-30 fps; at 22050 Hz a fifth of a core, no skips, 44-52 fps (the war1gus and wargus launch scripts set it on the GameShell) |
 | `PSPEXP_SHOT_EVERY=N` | ask the PSP for a framebuffer dump (`pspexp-shot-N.bmp` next to the EBOOT) every N frames |
 | `PSPEXP_GL_TEXMAX=256` | OpenGL: the largest texture side sent to the PSP (a power of two up to 512) |
 | `PSPEXP_GL_LOG=1` | OpenGL: each frame's draws, meshes made, unknown queries; `2`: every draw, and why a draw was not a mesh |

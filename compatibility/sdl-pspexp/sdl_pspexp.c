@@ -3286,6 +3286,14 @@ HOOK(SDL_AudioDeviceID, SDL_OpenAudioDevice, (const char *device, int iscapture,
     for (slot = 2; slot < 8; slot++) if (!S.dev_open[slot]) break;   /* (1: SDL_OpenAudio's) */
     if (slot == 8) return REAL(SDL_OpenAudioDevice)(device, iscapture, desired, obtained, allowed);
     want = *desired;
+    {
+        /* PSPEXP_AUDIO_RATE=22050 (or 11025): a program that lets the rate change mixes at that rate,
+         * upsampled here by integers (audio_tap). Warcraft's MIDI music, synthesised by FluidSynth as it
+         * plays, took a whole core of the GameShell's Cortex-A7 at 44.1 kHz and the sound skipped */
+        const char *r = getenv("PSPEXP_AUDIO_RATE");
+        int rate = r ? atoi(r) : 0;
+        if ((allowed & SDL_AUDIO_ALLOW_FREQUENCY_CHANGE) && rate > 0 && rate < want.freq && 44100 % rate == 0) want.freq = rate;
+    }
     S.dev_cb[slot] = desired->callback;
     S.dev_ud[slot] = desired->userdata;
     if (desired->callback) { want.callback = audio_callback_wrapper; want.userdata = (void *)(intptr_t)slot; }

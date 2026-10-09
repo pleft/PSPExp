@@ -13,7 +13,11 @@
 # else the game's MIDI. The PSP's controls, as
 # Warcraft's: the nub is the mouse (cross selects and orders, circle the
 # right button), the d-pad scrolls the map, square Shift, triangle Ctrl,
-# START the game menu (F10), SELECT Escape. Arm64 boards (Pi). Tried on
+# START the game menu (F10), SELECT Escape. The Pi and the GameShell. On
+# the GameShell (2026-10-09, the stand-in PSP on its USB link): first start
+# 10 min from a disc image, menus 45-60 fps, a skirmish 58-60 fps, the game
+# about 26 of its 30 cycles a second (the Pi's 30); MIDI music is mixed at
+# 22050 Hz there (the launch script; the CD's OGG keeps 44.1 kHz). Tried on
 # 2026-10-08 from the launcher with the stand-in PSP: the user's copy (both
 # CDs' images) extracted, menus and a game's setup reached.
 
@@ -23,13 +27,10 @@ title=Warcraft II
 description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD or its image, Battle.net Edition or GOG). Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, Wargus); the game's data is your own copy's (Blizzard)
-version=2
+version=3
 
 [debian]
 apt=pspexp-wargus
-
-[debian:gameshell]
-apt=
 
 [entry]
 title=Warcraft II

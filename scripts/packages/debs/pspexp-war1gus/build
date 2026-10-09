@@ -9,14 +9,14 @@
 # War1gus's scripts, then runs Stratagus through the SDL layer. Without it,
 # the launcher says where to put it (PSPEXP_MESSAGE). The music is MIDI,
 # played by SDL_mixer through the TimGM6mb soundfont (War1gus's own choice;
-# pspexp-stratagus depends on it).
+# pspexp-stratagus depends on it), mixed at 22050 Hz on the GameShell.
 # Usage: build OUTDIR ARCH
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/war1gus"
 [ -x "$B/war1tool" ] && [ -s "$B/war1tool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260622-pspexp3
+V=3.3.3~git20260622-pspexp4
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/war1gus; S=/usr/share/pspexp/war1gus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-war1gus"
@@ -51,6 +51,10 @@ fi
 # stretched to 4:3, which the PSP showed with black bars); Stratagus keeps what Options changes
 P="$HOME/.config/stratagus/wc1/preferences.lua"
 [ -f "$P" ] || { mkdir -p "$(dirname "$P")"; printf 'if (wc1 == nil) then wc1 = {} end\nwc1.preferences = {VideoWidth = 480, VideoHeight = 272, OriginalPixelRatio = false, VideoFullScreen = false}\n' > "$P"; }
+# on the GameShell the sound is mixed at 22050 Hz (the SDL layer's PSPEXP_AUDIO_RATE): FluidSynth,
+# synthesising the MIDI music as it plays, took a whole Cortex-A7 core at 44.1 kHz in a battle, the
+# sound skipped and the game fell to 15-30 fps; at 22050 Hz a fifth of a core, 44-52 fps (2026-10-09)
+[ "$(cat /etc/pspexp/board 2>/dev/null)" = gameshell ] && export PSPEXP_AUDIO_RATE="${PSPEXP_AUDIO_RATE:-22050}"
 exec pspexp-run /usr/lib/pspexp/stratagus/stratagus -d "$D" "$@"
 S
 chmod 755 "$W/root/usr/games/warcraft"

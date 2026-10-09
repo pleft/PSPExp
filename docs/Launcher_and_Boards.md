@@ -946,7 +946,7 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   the nub moving the pointer and cross clicking (`PSPEXP_LOG_EVENTS` now
   logs mouse buttons), START + SELECT back to the launcher. Not yet on the
   real PSP (away for repair) nor heard: the sound only reached the
-  stand-in. Arm64 (Pi) for now.
+  stand-in. On the Pi and, since 2026-10-09, the GameShell (below).
 - **Warcraft II** (`warcraft2`, 2026-10-08): the same way on Wargus
   (`pspexp-wargus`, its newest commit, 2026-06-29), on the shared
   `pspexp-stratagus`. The player's copy goes in `~/Warcraft2` in any of the
@@ -1032,6 +1032,32 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   scripts: the launch script copies Wargus's scripts again when the
   package's version changes (`.pspexp-scripts`; the extracted data and
   wartool's `wc2-config.lua` are kept).
+- **Warcraft and Warcraft II on the GameShell** (2026-10-09): both recipes
+  now offer the armhf packages there too (built by
+  `build-stratagus.sh armhf`, the same data and scripts). Measured with the
+  stand-in PSP on the GameShell's own USB link (the Mac at the other end of
+  the cable): Warcraft's first start 18 s, menus 60 fps, a battle (the
+  demo its idle menu plays) 44-52 fps; Warcraft II's first start from the
+  user's disc images 10 min 16 s (within wartool's 15-minute limit; 4 min
+  on the Pi), menus 45-60 fps, a skirmish 58-60 fps scrolling and still,
+  the game about 26 of its 30 cycles a second (the Pi's 30; read off the
+  cycle counter half a minute apart), about 110 MB of memory. A first
+  measurement through the Pi (the GameShell's USB to the Pi, a relay over
+  Wi-Fi to the Mac: 13 ms a round trip against 1.5 ms) gave 22-30 fps and
+  17 cycles a second: the game waits for the PSP's reply each frame, so
+  the route, not the processor, was the limit. Warcraft's battle first
+  ran at 15-30 fps with the sound skipping (about 140 underruns in two
+  minutes): FluidSynth, synthesising the MIDI music as it plays, took the
+  whole audio thread (`perf`: 85 % in `fluid_rvoice_dsp_interpolate` and
+  `fluid_iir_filter_apply`); music off, 38-44 fps. Rendering the 104
+  minutes of music to OGG once would have added about 10 minutes to the
+  first start (FluidSynth renders 1.5x real time on one core), so the
+  launch scripts instead set the layer's `PSPEXP_AUDIO_RATE=22050` on the
+  GameShell (`/etc/pspexp/board`): SDL_mixer's `Mix_OpenAudio` lets the
+  rate change, FluidSynth works at half the rate, a fifth of a core, and
+  the layer upsamples by two. Warcraft II does so only with MIDI music
+  (`wc2-config.lua`; the CD's OGG keeps 44.1 kHz): with its MIDI, 55-60
+  fps in the skirmish, no underruns. Not yet on the real PSP.
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,

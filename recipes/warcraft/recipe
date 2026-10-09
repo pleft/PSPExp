@@ -10,11 +10,15 @@
 # 8-bit graphics go as CLUT8 pages, only what changes, 4.5 KB a frame on a
 # still map and 14-16 KB scrolling, 60 fps from the Pi (2026-10-08, the
 # stand-in PSP). The music is the game's MIDI through fluidsynth and the
-# TimGM6mb soundfont. The PSP's controls: the nub is the mouse (cross selects
-# and orders, circle is the right button), the d-pad scrolls the map, square
-# Shift (add to the selection), triangle Ctrl, START the game menu (F10),
-# SELECT Escape. Stratagus's window is twice the game's size, so the
-# pointer's speed (window pixels a second) is doubled. Arm64 boards (Pi).
+# TimGM6mb soundfont; on the GameShell mixed at 22050 Hz (the launch script:
+# at 44.1 kHz FluidSynth took a whole Cortex-A7 core in a battle and the
+# sound skipped). On the GameShell (2026-10-09, the stand-in PSP on its USB
+# link): first start 18 s, menus 60 fps, a battle 44-52 fps. The PSP's
+# controls: the nub is the mouse (cross selects and orders, circle is the
+# right button), the d-pad scrolls the map, square Shift (add to the
+# selection), triangle Ctrl, START the game menu (F10), SELECT Escape. Stratagus's window is twice the game's size, so the
+# pointer's speed (window pixels a second) is doubled. The Pi and the
+# GameShell.
 
 [package]
 id=warcraft
@@ -22,13 +26,10 @@ title=Warcraft: Orcs & Humans
 description=Blizzard's 1994 real-time strategy game on Stratagus and War1gus: humans against orcs, campaigns and skirmishes. Needs DATA.WAR from your own copy. Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, War1gus); the game's data is your own copy's (Blizzard)
-version=2
+version=3
 
 [debian]
 apt=pspexp-war1gus
-
-[debian:gameshell]
-apt=
 
 [entry]
 title=Warcraft: Orcs & Humans

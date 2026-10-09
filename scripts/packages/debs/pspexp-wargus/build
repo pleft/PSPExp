@@ -22,7 +22,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp6
+V=3.3.3~git20260629-pspexp7
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
@@ -126,6 +126,12 @@ if ! cmp -s "$S/.pspexp-version" "$D/.pspexp-scripts"; then
 	for c in campaigns maps scripts shaders; do [ -d "$S/$c" ] && cp -r "$S/$c" "$D/"; done
 	[ -d "$S/contrib" ] && { mkdir -p "$D/graphics/ui"; cp -r "$S/contrib/." "$D/graphics/ui/"; }   # as Wargus's starter does
 	cp "$S/.pspexp-version" "$D/.pspexp-scripts"
+fi
+# MIDI music on the GameShell: the sound mixed at 22050 Hz (the SDL layer's PSPEXP_AUDIO_RATE), or
+# FluidSynth, synthesising it as it plays, took a whole Cortex-A7 core at 44.1 kHz in a battle and the
+# sound skipped (Warcraft I, 2026-10-09); the CD's music, OGG, keeps 44.1 kHz
+if [ "$(cat /etc/pspexp/board 2>/dev/null)" = gameshell ] && grep -q '^wargus.music_extension = ".mid"' "$D/scripts/wc2-config.lua" 2>/dev/null; then
+	export PSPEXP_AUDIO_RATE="${PSPEXP_AUDIO_RATE:-22050}"
 fi
 exec pspexp-run /usr/lib/pspexp/stratagus/stratagus -d "$D" "$@"
 S
