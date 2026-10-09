@@ -971,7 +971,12 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   Wargus's own size, 640x480, shrunk to 57 %: 640x360 (75 %, filling the
   screen) cut its game setup off at the left and the bottom, laid out for
   480 lines. Warcraft on the shared engine was tried again from the
-  launcher (60 fps, START + SELECT).
+  launcher (60 fps, START + SELECT). In a skirmish (2026-10-09) its text
+  was unreadable on the stand-in PSP: shrunk without smoothing, the 1-pixel
+  strokes of its letters are dropped with the rows and columns left out;
+  and two pointers showed, the layer's white arrow beside the game's own
+  (Stratagus hides the system pointer with a transparent cursor, which the
+  layer now takes as hidden: one pointer, the game's).
 - **Sonic Robo Blast 2** (`srb2`, 2026-10-04): the SRB2 team's free 3D
   Sonic fan game (2.2.15); the PSP has only an unfinished port of an old
   version. Built from the release tag (`scripts/packages/build-srb2.sh`,

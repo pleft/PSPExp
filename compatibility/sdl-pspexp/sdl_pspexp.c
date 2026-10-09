@@ -199,6 +199,7 @@ static struct {
     int dev_open[8]; SDL_mutex *pace_mu;   /* slots in use; the pacer's lock against an open or a close */
     /* input */
     int nub_mouse, nub_keys, hide_window, cursor_hidden, relative;
+    SDL_Cursor *blank_cursor[4]; int cursor_blank;   /* see SDL_CreateCursor */
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
@@ -2519,6 +2520,33 @@ HOOK(int, SDL_ShowCursor, (int toggle))
     return REAL(SDL_ShowCursor)(toggle);
 }
 
+/* Some programs hide the pointer with a transparent cursor instead of
+ * SDL_ShowCursor (Stratagus: a 1x1 one, so SDL keeps absolute coordinates
+ * in fullscreen) and draw their own; the layer's pointer was then drawn
+ * beside theirs. A cursor made with no visible pixel is remembered, and the
+ * pointer is not drawn while it is set */
+HOOK(SDL_Cursor *, SDL_CreateCursor, (const Uint8 *data, const Uint8 *mask, int w, int h, int hot_x, int hot_y))
+{
+    SDL_Cursor *c = REAL(SDL_CreateCursor)(data, mask, w, h, hot_x, hot_y);
+    int i, n = (w + 7) / 8 * h, seen = 0;
+    for (i = 0; i < n && data && mask; i++) seen |= data[i] | mask[i];
+    if (c && data && mask && !seen)
+        for (i = 0; i < 4; i++) if (!S.blank_cursor[i]) { S.blank_cursor[i] = c; break; }
+    return c;
+}
+HOOK(void, SDL_SetCursor, (SDL_Cursor *c))
+{
+    int i;
+    if (c) for (S.cursor_blank = 0, i = 0; i < 4; i++) if (S.blank_cursor[i] == c) S.cursor_blank = 1;
+    REAL(SDL_SetCursor)(c);
+}
+HOOK(void, SDL_FreeCursor, (SDL_Cursor *c))
+{
+    int i;
+    for (i = 0; i < 4; i++) if (c && S.blank_cursor[i] == c) S.blank_cursor[i] = NULL;
+    REAL(SDL_FreeCursor)(c);
+}
+
 static void draw_pointer(void)
 {
     int r, x, y, ww = S.win_w > 0 ? S.win_w : 480, wh = S.win_h > 0 ? S.win_h : 272;
@@ -2681,7 +2709,7 @@ static void end_frame_locked(void)
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
     flush_quads();
-    if (S.nub_mouse && !S.cursor_hidden && !S.relative) draw_pointer();
+    if (S.nub_mouse && !S.cursor_hidden && !S.cursor_blank && !S.relative) draw_pointer();
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();
