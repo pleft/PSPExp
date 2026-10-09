@@ -122,7 +122,12 @@ Comments are whole lines starting with `#`: a `#` after a value is part of
 the value. Every `[entry]` and `[system]` says how it draws, `graphics=sdl`,
 `opengl` or `opengl-shaders` (the launcher's details card and the Packages
 app show it), and a `description` is at most 220 characters (the details
-card's lines). `scripts/packages/check-recipes` checks every recipe in
+card's lines). An entry's cover is the recipe's `cover.png`, or `art=`, a
+picture on the board (`~/...` or `/...`) for a game whose art cannot be
+hosted: Warcraft's and Warcraft II's title screens from the player's own
+copy, there once the first start has extracted it; until then the launcher
+draws a generated cover, and the picture replaces it when it appears.
+`scripts/packages/check-recipes` checks every recipe in
 `recipes/` (sections, keys, ids, button names); the three examples below are
 the repository's own recipes as they are, and pass it.
 

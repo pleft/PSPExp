@@ -312,7 +312,11 @@ samples with nearest filtering (`launcher_gfx.c`):
 - **Covers** (128x128 8888, an LRU of 10 on the PSP; on the shelf inside
   discs, `gfx_disc`): box art when there is
   some, else generated: a gradient chosen by the title, a large faint icon,
-  a badge (GBA, GAME, APP) and the title set in SemiBold.
+  a badge (GBA, GAME, APP) and the title set in SemiBold. Art that appears
+  later replaces a generated cover: a box art download, or an entry's
+  `art=` picture missing when the cover was drawn (Warcraft's title screen
+  from the player's own copy, extracted at the first start); the cover and
+  the disc remember that their picture was missing and look for it again.
 - **Box art**: for ROMs of systems with `thumbs=`, fetched in the background
   from thumbnails.libretro.com (curl, or wget on OpenWrt) once the selection
   rests for 0.5 s, cached in `~/.cache/pspexp-launcher/boxart/<system>/`.

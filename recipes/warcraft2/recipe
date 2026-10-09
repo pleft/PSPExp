@@ -6,8 +6,10 @@
 # become the music), the Battle.net Edition's folder, or GOG's installer .exe
 # (unpacked with innoextract); the first start extracts it (4 min on a Pi 400
 # from a disc image), and without it the launcher says what goes there. Nothing of the game is hosted, not even
-# a cover. Wargus's own size, 640x480, shrunk to the PSP's screen (640x360
-# cut its game setup off). The music: the CD's recordings from a disc image,
+# a cover: the launcher shows the title screen of the player's own copy once
+# it is extracted (art=), a generated cover before. Played at the PSP's
+# 480x272, the menus and the game laid out for it (the package's patch to
+# Wargus's scripts). The music: the CD's recordings from a disc image,
 # else the game's MIDI. The PSP's controls, as
 # Warcraft's: the nub is the mouse (cross selects and orders, circle the
 # right button), the d-pad scrolls the map, square Shift, triangle Ctrl,
@@ -21,7 +23,7 @@ title=Warcraft II
 description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD or its image, Battle.net Edition or GOG). Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, Wargus); the game's data is your own copy's (Blizzard)
-version=1
+version=2
 
 [debian]
 apt=pspexp-wargus
@@ -35,6 +37,7 @@ type=game
 description=Blizzard's 1995 strategy game on Stratagus: humans against orcs on land, sea and air. Put your own copy's files in the Warcraft2 folder of your home folder first.
 icon=swords
 exec=/usr/games/warcraft2
+art=~/.local/share/pspexp-warcraft2/graphics/ui/title.png
 native=1
 keys=square=lshift,triangle=lctrl,up=up,down=down,left=left,right=right,start=f10,select=escape,l=none,r=none
 nub=mouse

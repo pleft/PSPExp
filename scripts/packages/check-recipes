@@ -8,7 +8,7 @@ import os, re, sys
 SECTIONS = {"package", "debian", "omega", "entry", "system"}
 PACKAGE_KEYS = {"id", "title", "description", "category", "license", "version", "requires", "terms"}
 BOARD_KEYS = {"apt", "core", "build", "data", "warn"}
-ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover", "graphics"}
+ENTRY_KEYS = {"id", "title", "type", "description", "icon", "exec", "keys", "nub", "env", "first-run", "native", "cover", "art", "graphics"}
 SYSTEM_KEYS = {"id", "name", "short", "icon", "ext", "roms", "thumbs", "keys", "nub", "env", "native", "graphics", "exec"}
 GRAPHICS = {"sdl", "opengl", "opengl-shaders", "board-gpu"}   # how it draws: the launcher's details card and Packages say so
 DESCRIPTION_MAX = 220                            # what the details card shows over its lines
@@ -71,6 +71,8 @@ def check(dirpath):
             errs.append("%s: graphics=%s (one of %s)" % (where, v, ", ".join(sorted(GRAPHICS))))
         if k == "description" and len(v) > DESCRIPTION_MAX:
             errs.append("%s: description of %d characters (at most %d)" % (where, len(v), DESCRIPTION_MAX))
+        if k == "art" and not (v.startswith("~/") or v.startswith("/")):
+            errs.append("%s: art=%s: a picture on the board (~/... or /...); a cover hosted with the recipe is cover.png" % (where, v))
         if k == "data" and "sha256=" not in v:
             errs.append("%s: data without sha256=" % where)
         sections.setdefault(sec, {})[k] = v

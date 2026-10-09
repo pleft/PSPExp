@@ -836,7 +836,7 @@ void gfx_image_free(void)
 
 /* ---- covers ----------------------------------------------------------------------------------------- */
 
-typedef struct CoverSlot { char key[160]; uint16_t id; int from_art; uint64_t used; char art[256]; } CoverSlot;
+typedef struct CoverSlot { char key[160]; uint16_t id; int from_art, art_missing; uint64_t used; char art[256]; } CoverSlot;
 static CoverSlot cslot[COVER_SLOTS];
 static int next_cover_id;
 static uint64_t cover_clock;
@@ -1043,13 +1043,31 @@ static void cover_generate(const CoverSpec *c, uint8_t *px, int s)
     for (i = 0; i < n; i++) text_into(px, s, s, &TTF_SEMI, tp, 10, s - 10 - (n - i) * (int)(tp + 3) + 2, lines[i], 1.0f);
 }
 
+/* art that appeared since a cover was generated replaces it: a new path (a
+ * finished box art download), or the same path whose file was missing then
+ * (an entry's art= from the player's own copy of a game, there after its
+ * first start) */
+static int art_missing(const char *art)
+{
+    FILE *f;
+    if (!art || !art[0]) return 0;
+    if (!(f = fopen(art, "rb"))) return 1;
+    fclose(f);
+    return 0;
+}
+
+static int art_appeared(const char *had, int was_missing, const char *art)
+{
+    if (!art || !art[0] || (!strcmp(had, art) && !was_missing)) return 0;
+    return !art_missing(art);
+}
+
 static int cover_slot(const CoverSpec *c)
 {
     int i, best = 0;
     uint8_t *px;
     for (i = 0; i < COVER_SLOTS; i++) if (cslot[i].key[0] && !strcmp(cslot[i].key, c->key)) {
-        /* art that appeared since (a finished download) replaces the generated cover */
-        if (!cslot[i].from_art && c->art && c->art[0] && strcmp(cslot[i].art, c->art)) { FILE *f = fopen(c->art, "rb"); if (f) { fclose(f); break; } }
+        if (!cslot[i].from_art && art_appeared(cslot[i].art, cslot[i].art_missing, c->art)) break;
         cslot[i].used = ++cover_clock;
         return i;
     }
@@ -1057,6 +1075,7 @@ static int cover_slot(const CoverSpec *c)
     else for (i = 1; i < COVER_SLOTS; i++) if (!cslot[i].key[0] || cslot[i].used < cslot[best].used) best = i;
     px = (uint8_t *)calloc(COVER_SIZE * COVER_SIZE, 4);
     cslot[best].from_art = load_art(c->art, px, COVER_SIZE) == 0;
+    cslot[best].art_missing = !cslot[best].from_art && art_missing(c->art);
     if (!cslot[best].from_art) cover_generate(c, px, COVER_SIZE);
     rounded_mask(px, COVER_SIZE, 12.0f);
     if (cslot[best].key[0]) pspexp_release(G, cslot[best].id);
@@ -1091,7 +1110,7 @@ void gfx_cover_forget(const char *key)
  * Rendered here at its final size with its soft shadow; the large one (the
  * selection) also with its blue glow and a light ring round the window. The
  * PSP draws it 1:1, as everything else. */
-typedef struct DiscSlot { char key[200], art[320]; uint16_t id; int big, from_art; uint64_t used; } DiscSlot;
+typedef struct DiscSlot { char key[200], art[320]; uint16_t id; int big, from_art, art_missing; uint64_t used; } DiscSlot;
 static DiscSlot dslot[DISC_SLOTS];
 static int next_disc_id;
 
@@ -1194,12 +1213,9 @@ int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
     int i, best = -1, T = DISC_TEX;
     if (alpha <= 0) return 0;
     for (i = 0; i < DISC_SLOTS; i++) if (dslot[i].key[0] && dslot[i].big == big && !strcmp(dslot[i].key, c->key)) { best = i; break; }
-    /* art that appeared since (a finished download) replaces the generated cover */
-    if (best >= 0 && !dslot[best].from_art && c->art && c->art[0] && strcmp(dslot[best].art, c->art)) {
-        FILE *fp = fopen(c->art, "rb");
-        if (fp) { fclose(fp); dslot[best].key[0] = 0; pspexp_release(G, dslot[best].id); }
-        else dslot[best].used = ++cover_clock;
-        if (!fp) goto draw;
+    /* art that appeared since replaces the generated cover (art_appeared) */
+    if (best >= 0 && !dslot[best].from_art && art_appeared(dslot[best].art, dslot[best].art_missing, c->art)) {
+        dslot[best].key[0] = 0; pspexp_release(G, dslot[best].id);
     } else if (best >= 0) goto draw;
     {
         uint8_t *cov, *px;
@@ -1207,6 +1223,7 @@ int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
         cov = (uint8_t *)calloc(COVER_SIZE * COVER_SIZE, 4);
         px = (uint8_t *)calloc((size_t)T * T, 4);
         dslot[best].from_art = load_art(c->art, cov, COVER_SIZE) == 0;
+        dslot[best].art_missing = !dslot[best].from_art && art_missing(c->art);
         if (!dslot[best].from_art) cover_generate(c, cov, COVER_SIZE);
         disc_render(cov, px, T, big ? DISC_BIG : DISC_SMALL, big);
         if (dslot[best].key[0] && dslot[best].id) pspexp_release(G, dslot[best].id);

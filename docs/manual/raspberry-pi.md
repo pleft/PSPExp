@@ -59,7 +59,7 @@ Packages, then copy `DATA.WAR` into the **Warcraft** folder of your home
 folder on the Pi (Apps > Files; the folder appears after the first try,
 and the launcher reminds you if the file is missing). The first start
 prepares the game from it, a few seconds longer than usual; after that
-it starts straight away. The nub moves the pointer, cross selects and gives orders,
+it starts straight away, and its tile shows the game's title screen. The nub moves the pointer, cross selects and gives orders,
 circle is the right mouse button, the d-pad scrolls the map, square adds to
 the selection, START is the game menu.
 
@@ -71,7 +71,7 @@ Battle.net Edition, or the installer GOG sells (the `.exe` file itself).
 From a disc image the music is the CD's own recordings; otherwise the
 game's MIDI version. The first start prepares it all and takes a few
 minutes (about 4 on a Pi 400 from a disc image); after that it starts
-straight away. Everything is drawn at the PSP's own size, pixel for
+straight away, and its tile shows the game's title screen. Everything is drawn at the PSP's own size, pixel for
 pixel, so the text is sharp, and laid out for its screen: the menus, and
 in a game the minimap, the selected unit and its command buttons down the
 left, the map on the right, your gold, lumber, oil and food along the
