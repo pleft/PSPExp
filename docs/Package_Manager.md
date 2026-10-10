@@ -290,7 +290,20 @@ on the original site and the Internet Archive's raw captures; tried in a
 Debian 13 container: an upgrade from the hosted package with the first
 source blocked (the next one taken, the same save folder), every built-in
 source blocked but a catalogue mirror, every source blocked but a copy in
-`/opt/pspexp/downloads`, nothing at all (the message), and removal. `theia`,
+`/opt/pspexp/downloads`, nothing at all (the message), and removal. Cave
+Story split the same day: `pspexp-cavestory` keeps NXEngine-evo (GPL-3.0,
+its licence as the copyright file) and gains `nxextract` (built in a Debian
+13 container of the board's architecture), NXEngine's own files in
+`engine-data/`, and `data` as a link to `/usr/share/games/cavestory/data`
+(the engine reads `data/` beside its program); the installer
+`cavestory-data` downloads Pixel's `cavestoryen.zip` (three sources),
+unpacks it as released, and its `AFTER=` (shell code run on the unpacked
+game before it takes its place) extracts the data from `Doukutsu.exe` and
+puts the engine's files over it; the engine's `postinst` does that again at
+each upgrade. Tried in a Debian 13 container through PSPExp's SDL layer
+(null link): 489 frames in 10 s, 48 fps. The installers also make
+`/usr/share/games` when it is not there (a minimal system: every installer
+had failed at its last step there). `theia`,
 `hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way.
 EA's freeware discs (`cnc-freeware`, `redalert-freeware`) use
 `_discinstaller.sh`: the release (a RAR or an ISO) downloaded and checked,

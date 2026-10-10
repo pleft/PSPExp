@@ -1,0 +1,21 @@
+#!/bin/sh
+# cavestory-data: an installer for Cave Story (Studio Pixel, 2004, freeware; English translation by
+# Aeon Genesis), for pspexp-cavestory's NXEngine-evo. PSPExp hosts none of it (the user's rule,
+# 2026-10-11): the board downloads cavestoryen.zip from cavestory.org (or a mirror; the SHA-256
+# decides), unpacks it as released in /usr/share/games/cavestory, then extracts the game's data
+# from Doukutsu.exe with the engine's nxextract and puts the engine's own files over it, as the
+# engine reads them (_installer.sh). Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=cavestory-data TITLE="Cave Story" VERSION=2004-pspexp1 DIR=cavestory
+URL=https://www.cavestory.org/downloads/cavestoryen.zip
+MIRRORS="https://web.archive.org/web/2023id_/https://www.cavestory.org/downloads/cavestoryen.zip https://web.archive.org/web/2018id_/http://www.cavestory.org/downloads/cavestoryen.zip"
+SHA=aa87fa30bee9b4980640c7e104791354e0f1f6411ee0d45a70af70046aa0685f SIZE="1.1 MB" TOP=CaveStory
+AFTER='echo "Extracting the game data..."
+(cd "$G.new" && /usr/lib/pspexp/cavestory/nxextract >/dev/null)
+cp -R /usr/lib/pspexp/cavestory/engine-data/. "$G.new/data/"'
+RUN='exec /usr/games/pspexp-cavestory "$@"'
+DEPENDS=pspexp-cavestory
+ABOUT=" Studio Pixel's 2004 freeware platformer, with Aeon Genesis' English
+ translation, for NXEngine-evo (pspexp-cavestory)."
+build_installer "$1"

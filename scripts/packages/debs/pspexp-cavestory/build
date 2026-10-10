@@ -1,34 +1,59 @@
 #!/bin/sh
-# pspexp-cavestory: Cave Story on NXEngine-evo (GPL-3.0), which Debian does not
-# carry, with the freeware data (Studio Pixel 2004; Aeon Genesis translation).
+# pspexp-cavestory: NXEngine-evo (GPL-3.0), the Cave Story engine Debian does not carry, with
+# nothing of the game: the data comes from the installer cavestory-data (PSPExp hosts no game
+# data, the user's rule, 2026-10-11), which unpacks Studio Pixel's freeware release in
+# /usr/share/games/cavestory and extracts it there with this package's nxextract.
+# The engine reads ./data beside its program (built PORTABLE): /usr/lib/pspexp/cavestory/data is a
+# link to /usr/share/games/cavestory/data; the engine's own files (engine-data/) go there over the
+# game's when the game is installed (cavestory-data's AFTER) and again at each upgrade of this
+# package (postinst).
 # The engine: build/pi/bin/nxengine-evo (scripts/pi/install.sh cavestory) or
 # build/gameshell/bin/nxengine-evo (scripts/packages/cross-glibc.sh gameshell
-# scripts/packages/build-nxengine.sh nxengine-evo); the
-# data: build/cavestory-data (the recipes' cavestory_data). Installs
-# /usr/lib/pspexp/cavestory and /usr/games/pspexp-cavestory.
-# Usage: build OUTDIR ARCH   (arm64 | armhf)
+# scripts/packages/build-nxengine.sh nxengine-evo); nxextract: built here in a Debian 13
+# container of the board's architecture. Usage: build OUTDIR ARCH   (arm64 | armhf)
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-. "$ROOT/scripts/packages/recipes/_lib.sh"
-CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
-OUT="$1"; ARCH="$2"
-case "$ARCH" in arm64) B="$ROOT/build/pi/bin/nxengine-evo" ;; armhf) B="$ROOT/build/gameshell/bin/nxengine-evo" ;; *) echo "arch: arm64 | armhf" >&2; exit 2 ;; esac
+OUT="$1"; ARCH="$2"; S="$ROOT/../cavestory/nxengine-evo"
+case "$ARCH" in arm64) B="$ROOT/build/pi/bin/nxengine-evo" P=linux/arm64 ;; armhf) B="$ROOT/build/gameshell/bin/nxengine-evo" P=linux/arm/v7 ;; *) echo "arch: arm64 | armhf" >&2; exit 2 ;; esac
 [ -x "$B" ] || { echo "no $B: build it first" >&2; exit 1; }
-DATA=$(cavestory_data)
-V="$(git -C "$ROOT/../cavestory/nxengine-evo" log -1 --format=%cd --date=format:%Y.%m.%d 2>/dev/null || date +%Y.%m.%d)"
+X="$ROOT/build/cavestory/nx/nxextract-$ARCH"
+if [ ! -x "$X" ]; then   # the data extractor, for the board (it reads the game's Doukutsu.exe there)
+	mkdir -p "$(dirname "$X")"
+	docker run --rm --platform $P -v "$S":/s:ro -v "$(dirname "$X")":/o debian:trixie sh -ec '
+		apt-get -qq update >/dev/null; DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends g++ libsdl2-dev >/dev/null 2>&1
+		c++ -w -std=c++14 -O2 -DHAVE_UNIX_LIKE -I/s -I/s/deps -I/usr/include/SDL2 /s/src/extract/*.cpp /s/src/common/misc.cpp \
+			/s/src/Utils/Logger.cpp /s/src/stagedata.cpp -o /o/'"$(basename "$X")"
+fi
+V="$(git -C "$S" log -1 --format=%cd --date=format:%Y.%m.%d)+pspexp2"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L="$W/root/usr/lib/pspexp/cavestory"
-mkdir -p "$L/data" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-cavestory"
-cp "$B" "$L/nxengine-evo"; chmod 755 "$L/nxengine-evo"
-cp -R "$DATA/." "$L/data/"
+mkdir -p "$L/engine-data" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-cavestory"
+cp "$B" "$L/nxengine-evo"; cp "$X" "$L/nxextract"; chmod 755 "$L/nxengine-evo" "$L/nxextract"
+cp -R "$S/data/." "$L/engine-data/"
+ln -s /usr/share/games/cavestory/data "$L/data"
 cat > "$W/root/usr/games/pspexp-cavestory" <<'R'
 #!/bin/sh
-# Cave Story: NXEngine-evo reads its data from ./data
+# Cave Story: NXEngine-evo reads ./data (the game's, from the package cavestory-data)
+[ -f /usr/share/games/cavestory/data/Stage/Cave.pxm ] || { echo "Cave Story's data is not installed (package cavestory-data)" >&2; exit 1; }
 cd /usr/lib/pspexp/cavestory && exec ./nxengine-evo "$@"
 R
 chmod 755 "$W/root/usr/games/pspexp-cavestory"
-[ -f "$ROOT/../cavestory/nxengine-evo/LICENSE" ] && cp "$ROOT/../cavestory/nxengine-evo/LICENSE" "$W/root/usr/share/doc/pspexp-cavestory/COPYING.nxengine-evo"
-echo "Cave Story (Studio Pixel, 2004; freeware; English translation by Aeon Genesis) on NXEngine-evo. Packaged by PSPExp." > "$W/root/usr/share/doc/pspexp-cavestory/README"
+cat > "$W/postinst" <<'P'
+#!/bin/sh
+# the engine's own files over the game's, when the game is there (a new engine may bring new ones)
+set -e
+[ "$1" = configure ] || exit 0
+[ -d /usr/share/games/cavestory/data ] && cp -R /usr/lib/pspexp/cavestory/engine-data/. /usr/share/games/cavestory/data/
+exit 0
+P
+cp "$S/LICENSE" "$W/root/usr/share/doc/pspexp-cavestory/copyright"
+cat > "$W/root/usr/share/doc/pspexp-cavestory/README" <<D
+NXEngine-evo, the Cave Story engine (GPL-3.0: copyright, the licence; the source at
+https://github.com/nxengine/nxengine-evo, commit $(git -C "$S" rev-parse HEAD)), and nxextract,
+its tool that extracts the game's data from Doukutsu.exe. The game itself (Studio Pixel, 2004,
+freeware; English translation by Aeon Genesis) comes with the package cavestory-data, which
+downloads it from its own page. Packaged by PSPExp.
+D
 cat > "$W/control" <<C
 Package: pspexp-cavestory
 Version: $V
@@ -36,9 +61,9 @@ Architecture: $ARCH
 Maintainer: PSPExp <pspexp@localhost>
 Section: games
 Priority: optional
-Depends: libc6, libsdl2-2.0-0
-Description: Cave Story on NXEngine-evo, for PSPExp
- Studio Pixel's 2004 freeware platformer, with the NXEngine-evo engine,
- which Debian does not carry. Packaged by PSPExp.
+Depends: libc6, libsdl2-2.0-0, libstdc++6
+Description: Cave Story's engine (NXEngine-evo), for PSPExp
+ NXEngine-evo, which Debian does not carry, and its data extractor; the game
+ comes with cavestory-data. Packaged by PSPExp.
 C
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-cavestory_${V}_$ARCH.deb"

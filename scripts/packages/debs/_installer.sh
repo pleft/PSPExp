@@ -15,6 +15,8 @@
 #   FILE                   the release's file name (default: URL's); a copy placed by hand in
 #                          /opt/pspexp/downloads/FILE is taken first (the last resort when every
 #                          source is gone)
+#   AFTER                  shell code run on the unpacked game before it takes its place
+#                          ($G.new: Cave Story's data extracted from its program there)
 #   DIR, CMD               the folder under /usr/share/games and the command in /usr/games
 #                          (default: ID), where a recipe or a Debian program expects them
 #   ITCH=user/game/upload  an itch.io upload (a free game's link is asked for at
@@ -102,7 +104,9 @@ $_fetch
 echo "Unpacking..."
 mkdir -p "\$C/x"
 $_unpack
+mkdir -p /usr/share/games   # (not there on a minimal system: a fresh card, or no other game yet)
 rm -rf "\$G.new"; mv "\$C/x/$TOP" "\$G.new"
+$AFTER
 chmod -R u=rwX,go=rX "\$G.new"
 echo "$SHA" > "\$G.new/.pspexp-sha256"
 rm -rf "\$G"; mv "\$G.new" "\$G"
