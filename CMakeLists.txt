@@ -3,6 +3,9 @@
 # (see scripts/build.sh).
 cmake_minimum_required(VERSION 3.16)
 project(PSPExp C)
+# the static libraries go into shared ones (the SDL layer): position-independent everywhere
+# (x86-64 refused to link them otherwise; ARM64 had let it pass)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
