@@ -220,13 +220,21 @@ ssh)
 	status)
 		if systemctl -q is-active ssh.service; then st=on; else st=off; fi
 		if default_pw; then echo "$st default"; else echo "$st own"; fi ;;
-	on)
-		systemctl enable --now ssh.service
-		echo "ssh on" ;;
-	off)
-		systemctl disable --now ssh.service
-		systemctl stop ssh.socket 2>/dev/null || true
-		echo "ssh off" ;;
+	# started or stopped at once; kept so across restarts in the background: enable/disable also
+	# rewrites the init script's links (systemd-sysv-install), 9 s on the GameShell (enable --now
+	# took 20 s with its reloads). The latest wish is written first and applied under a lock,
+	# so quick presses end as the last one asked
+	on|off)
+		echo "$1" > /run/pspexp-ssh.want
+		# Debian's ssh.service stops only its main process (open sessions live on, as sshd-session);
+		# a listener left behind kept port 22 and every later start failed ("Address already in
+		# use", and the orphan, its /run/sshd gone, reset every login): off ends any sshd left
+		if [ "$1" = on ]; then systemctl reset-failed ssh.service 2>/dev/null || true; systemctl start ssh.service
+		else systemctl stop ssh.service; systemctl stop ssh.socket 2>/dev/null || true; pkill -x sshd || true; fi
+		( exec 9>/run/pspexp-ssh.lock; flock 9
+		  if [ "$(cat /run/pspexp-ssh.want 2>/dev/null)" = on ]; then systemctl enable --no-reload ssh.service
+		  else systemctl disable --no-reload ssh.service; fi ) >/dev/null 2>&1 </dev/null &
+		echo "ssh $1" ;;
 	*) die "ssh: status | on | off" ;;
 	esac ;;
 *) echo "usage: pspexp-pkg-apt update | prepare ID VERSION | resume ID VERSION | install ID | remove ID | upgrade | repair | ssh status|on|off" >&2; exit 2 ;;

@@ -402,7 +402,7 @@ complete list:
 | `remove <id>` | `apt-get remove pspexp-recipe-<id>`, then remove only the packages §5.4 allows | an installed recipe id |
 | `upgrade` | for each installed recipe: its meta-package rebuilt when the recipe changed and installed with `apt-get install` (new dependencies come in); then `apt-get install --only-upgrade` of the packages the installed meta-packages depend on, and `pspexp-*` (§5.6) | none (the list comes from the catalogue and apt's state) |
 | `repair` | `dpkg --configure -a`, then `apt-get -f install` | none |
-| `ssh status` / `ssh on` / `ssh off` | Settings > This board > SSH: whether the SSH server runs and whether sudo's user still has a card image's published password (`pspexp`, `cpi`, Raspberry Pi's old `raspberry`; compared through the system's `crypt` in Perl, the hash never leaves root); start and enable, or stop and disable, `ssh.service`. Here because this helper's sudo rule is already on every board; it never sets a password (the user's choice, the launcher warns, 2026-10-10) | none |
+| `ssh status` / `ssh on` / `ssh off` | Settings > This board > SSH: whether the SSH server runs and whether sudo's user still has a card image's published password (`pspexp`, `cpi`, Raspberry Pi's old `raspberry`; compared through the system's `crypt` in Perl, the hash never leaves root); start or stop `ssh.service` at once (off also ends a listener Debian's unit leaves behind, which held port 22: every later start failed), then enable or disable it for the next boot in the background (with the init script's links that takes 9 s on the GameShell; the last wish, written first, wins). Here because this helper's sudo rule is already on every board; it never sets a password (the user's choice, the launcher warns, 2026-10-10) | none |
 
 - **Package names never come from the user's side.** The helper takes
   recipe ids, which must match `[a-z0-9-]+` and exist in the root-owned
@@ -918,6 +918,14 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   Both images rebuilt with it (`pspexp-core` 4ba5e92): SSH enabled nowhere
   in them (no unit, no socket), the source `https://pkg.pspexp.dev`, no host
   keys, Wi-Fi connections or leftovers.
+- **SSH on the GameShell's new card, the first presses (2026-10-10):**
+  `enable --now` took 20 s (systemd reloading its configuration three
+  times, ~4.5 s each), which looked like no answer; quick off/on then left
+  the old listener running outside the unit, so every start failed until a
+  restart. Now: started or stopped at once, kept across restarts in the
+  background, the leftover listener ended; on the GameShell, four quick
+  presses ended with one listener and new logins working; a press while a
+  change is still running says so.
 - **First boot on the Pi 400 (2026-10-10, written with `dd`, an empty `ssh`
   file added to the boot partition):** up in about a minute, the card grown
   to 29 GB, the console running and the PSP's launcher on it, Ethernet up,

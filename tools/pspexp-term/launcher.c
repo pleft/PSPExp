@@ -567,10 +567,10 @@ static pid_t g_bg_pid;
 static char g_bg_ok[96], g_bg_fail[96], g_bg_icon[32], g_bg_warn[160];
 
 /* runs a command in the background; a toast says how it went */
-static void bg_run_env(const char *cmd, const char *icon, const char *ok, const char *fail, const char *env, const char *val)
+static int bg_run_env(const char *cmd, const char *icon, const char *ok, const char *fail, const char *env, const char *val)
 {
     pid_t pid;
-    if (g_bg_pid > 0) return;
+    if (g_bg_pid > 0) return 0;   /* one at a time: the caller says so */
     pid = fork();
     if (pid == 0) {
         int fd = open("/tmp/pspexp-launcher.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
@@ -580,12 +580,13 @@ static void bg_run_env(const char *cmd, const char *icon, const char *ok, const 
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);
     }
-    if (pid < 0) return;
+    if (pid < 0) return 0;
     g_bg_pid = pid;
     snprintf(g_bg_ok, sizeof(g_bg_ok), "%s", ok);
     snprintf(g_bg_fail, sizeof(g_bg_fail), "%s", fail);
     snprintf(g_bg_icon, sizeof(g_bg_icon), "%s", icon);
     g_bg_warn[0] = 0;
+    return 1;
 }
 
 /* a warning that goes with the started job's success (bg_run first) */
@@ -594,9 +595,9 @@ static void bg_warn(const char *s)
     if (g_bg_pid > 0) snprintf(g_bg_warn, sizeof(g_bg_warn), "%s", s);
 }
 
-static void bg_run(const char *cmd, const char *icon, const char *ok, const char *fail)
+static int bg_run(const char *cmd, const char *icon, const char *ok, const char *fail)
 {
-    bg_run_env(cmd, icon, ok, fail, NULL, NULL);
+    return bg_run_env(cmd, icon, ok, fail, NULL, NULL);
 }
 
 static void toast(const char *icon, const char *s, uint64_t now);
@@ -1478,6 +1479,7 @@ static void pick_open(int kind, uint64_t now)
  * image's published one, the result warns that anyone on the network could log in with it */
 static void ssh_action(uint64_t now)
 {
+    if (g_bg_pid > 0) { toast("terminal", "A change is still under way: a moment", now); return; }
     ssh_refresh();
     if (g_ssh_on) {
         bg_run("sudo -n /usr/sbin/pspexp-pkg-apt ssh off </dev/null", "terminal", "SSH off", "Could not turn SSH off (see /tmp/pspexp-launcher.log)");
