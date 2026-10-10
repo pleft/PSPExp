@@ -50,7 +50,9 @@ the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
 - **A tag `v*`:** a GitHub Release with that zip attached
   (`git tag v0.5 && git push origin v0.5`).
 
-Nothing in CI signs: the boards' packages are built and signed on the
+Weekly, `.github/workflows/check-downloads.yml` checks that every
+installer's game is still downloadable (`scripts/packages/check-downloads`,
+docs/Package_Manager.md §4.2). Nothing in CI signs: the boards' packages are built and signed on the
 maintainer's machine, and the key never leaves it. `PSPEXP_BUILD` (the
 CMake build folder for `scripts/dev/pspexp-run`, default `build/host`) lets
 the SDL layer's test run from CI's folder.

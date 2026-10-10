@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""
+check-downloads: is every installer's game still where it says (docs/Package_Manager.md §4.2)?
+For each installer package built with debs/_installer.sh (its list mode, PSPEXP_INSTALLER_LIST=1)
+and each source it names (the release's own URL, its MIRRORS, and the recipes' [mirrors] lines),
+downloads the file and checks the pinned SHA-256. Prints one line per source; exits 1 when an
+installer has no working source left (then a board could not install that game: add a mirror to
+a recipe's [mirrors], or a new URL). itch.io uploads are not checked (their links are made for
+each download). Run weekly by .github/workflows/check-downloads.yml.
+  scripts/packages/check-downloads [ID...]
+"""
+import glob, hashlib, os, re, subprocess, sys, urllib.request
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def installers():
+    for b in sorted(glob.glob(os.path.join(ROOT, "scripts/packages/debs/*/build"))):
+        if "_installer.sh" not in open(b).read():
+            continue
+        out = subprocess.run(["sh", b, "/nonexistent"], env=dict(os.environ, PSPEXP_INSTALLER_LIST="1"),
+                             capture_output=True, text=True).stdout.split()
+        if len(out) >= 3:
+            yield out[0], out[1], out[2:]
+
+
+def catalogue_mirrors():
+    m = {}
+    for r in glob.glob(os.path.join(ROOT, "recipes/*/recipe")):
+        sec = ""
+        for line in open(r):
+            line = line.strip()
+            if re.match(r"^\[.*\]$", line):
+                sec = line
+            elif sec == "[mirrors]" and "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                m.setdefault(k.strip(), []).append(v.strip())
+    return m
+
+
+def sha256_of(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "PSPExp check-downloads"})
+    h = hashlib.sha256()
+    with urllib.request.urlopen(req, timeout=60) as r:
+        while True:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+
+def main():
+    only = set(sys.argv[1:])
+    extra = catalogue_mirrors()
+    dead = []
+    for pid, sha, urls in installers():
+        if only and pid not in only:
+            continue
+        urls = urls + extra.get(pid, [])
+        good = 0
+        for u in urls:
+            if u.startswith("itch:"):
+                print("%-22s skip   %s (itch.io)" % (pid, u)); good += 1
+                continue
+            try:
+                got = sha256_of(u)
+                ok = got == sha
+                why = "" if ok else " (another file: %s...)" % got[:12]
+            except Exception as e:
+                ok, why = False, " (%s)" % str(e)[:60]
+            good += ok
+            print("%-22s %-6s %s%s" % (pid, "ok" if ok else "FAIL", u, why), flush=True)
+        if not good:
+            dead.append(pid)
+    if dead:
+        print("no working source left: " + " ".join(dead))
+        sys.exit(1)
+    print("every installer has a working source")
+
+
+if __name__ == "__main__":
+    main()

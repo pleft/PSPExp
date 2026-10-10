@@ -34,8 +34,10 @@ build_installer() {
 	_out=$1
 	_root="$(cd "$(dirname "$0")/../../../.." && pwd)"
 	DIR=${DIR:-$ID}; CMD=${CMD:-$ID}; FILE=${FILE:-$(basename "${URL%%\?*}")}
+	FILE=$(printf '%b' "$(printf '%s' "$FILE" | sed 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')" | sed 's#.*/##')   # %2F, %20...: the name as saved
+	case "$FILE" in *"'"*) echo "$ID: a FILE name with a quote" >&2; return 1 ;; esac   # (single-quoted in postinst)
 	if [ "${PSPEXP_INSTALLER_LIST:-}" = 1 ]; then   # for scripts/packages/check-downloads: what it fetches
-		echo "$ID $SHA $FILE ${URL:-itch:$ITCH} $MIRRORS"
+		echo "$ID $SHA ${URL:-itch:$ITCH} $MIRRORS"   # (no FILE: it may hold spaces)
 		return 0
 	fi
 	_w=$(mktemp -d)
@@ -63,7 +65,7 @@ S
 	_fetch="$_fetch
 ok() { echo \"$SHA  \$C/game.part\" | sha256sum -c --quiet - >/dev/null 2>&1; }
 got=
-if [ -f /opt/pspexp/downloads/$FILE ] && cp /opt/pspexp/downloads/$FILE \"\$C/game.part\" && ok; then
+if [ -f '/opt/pspexp/downloads/$FILE' ] && cp '/opt/pspexp/downloads/$FILE' \"\$C/game.part\" && ok; then
 	echo \"Using /opt/pspexp/downloads/$FILE\"; got=1
 fi
 if [ -z \"\$got\" ]; then
@@ -73,7 +75,7 @@ if [ -z \"\$got\" ]; then
 		echo \"  not there, or not the expected file: the next source\"
 	done
 fi
-[ -n \"\$got\" ] || { rm -rf \"\$C\"; echo \"no source gave the expected file: install it again later, or put $FILE in /opt/pspexp/downloads and install again\" >&2; exit 1; }"
+[ -n \"\$got\" ] || { rm -rf \"\$C\"; echo \"no source gave the expected file: install it again later, or put '$FILE' in /opt/pspexp/downloads and install again\" >&2; exit 1; }"
 	case "$URL" in
 	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;   # (unar knows a compressed tar by its name only:
 	*.tar.bz2|*.tbz2|*.tbz) _unpack='tar -xjf "$C/game.part" -C "$C/x"' ;;   #  on game.part it just decompresses it)

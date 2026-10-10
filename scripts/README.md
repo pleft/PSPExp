@@ -56,6 +56,7 @@ packages/          what the launcher offers, for any board
   mkdeb.py           a .deb without dpkg (the Mac has none)
   apt-repo           the signed apt repository and catalogue: build, push to the home server or
                      the public Cloudflare R2 bucket (push r2)
+  check-downloads    is every installer's game still downloadable (its pinned SHA-256): weekly in CI
   push-images        the card images as a download (dl.pspexp.dev, its own R2 bucket): compressed,
                      checksummed, dated, with their GPL sources and an index page
   runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole

@@ -303,7 +303,15 @@ puts the engine's files over it; the engine's `postinst` does that again at
 each upgrade. Tried in a Debian 13 container through PSPExp's SDL layer
 (null link): 489 frames in 10 s, 48 fps. The installers also make
 `/usr/share/games` when it is not there (a minimal system: every installer
-had failed at its last step there). `theia`,
+had failed at its last step there). **Watching the sources:**
+`scripts/packages/check-downloads` downloads every source of every
+installer (the builder's list mode, `PSPEXP_INSTALLER_LIST=1`, and the
+recipes' `[mirrors]`) and checks the pinned SHA-256; it fails when an
+installer has no working source left. `.github/workflows/check-downloads.yml`
+runs it weekly (GitHub mails a failed run). itch.io uploads are not checked
+(their links are made per download), nor the installers built otherwise
+(the EA discs, UT99, ET, Diablo). A hand-placed file keeps its name as saved
+(`%2F`, `%20` decoded; quoted in `postinst`). `theia`,
 `hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way.
 EA's freeware discs (`cnc-freeware`, `redalert-freeware`) use
 `_discinstaller.sh`: the release (a RAR or an ISO) downloaded and checked,

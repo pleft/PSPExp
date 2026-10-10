@@ -1,0 +1,21 @@
+# Weekly: is every installer's game still downloadable, as its pinned SHA-256 (scripts/packages/
+# check-downloads)? A failed run (GitHub mails it) means an installer has no working source left:
+# add a mirror to a recipe's [mirrors] (boards get it with the catalogue) or a new URL.
+name: check-downloads
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every installer's sources
+        run: scripts/packages/check-downloads
