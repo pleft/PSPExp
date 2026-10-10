@@ -38,6 +38,23 @@ scripts/build.sh          # host: build/host (CMake); PSP: dist/PSPExp if ../psp
 Host needs CMake and libusb-1.0 (`brew install libusb`). The PSP side needs
 the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
 
+## CI (GitHub Actions)
+
+`.github/workflows/build.yml`, on every push to main and every pull request:
+- **Board side:** CMake build and the tests on Ubuntu 24.04 (libusb, SDL2),
+  as `scripts/build.sh` does.
+- **PSP side:** built in the pspdev toolchain's own container
+  (`ghcr.io/pspdev/pspdev`, the same GCC 15.2 as `../pspdev`), then made a
+  memory-stick install (`runtime-slot --install`): `PSPExp-psp-<ref>.zip`,
+  unzipped at the stick's root, a download on the run's page.
+- **A tag `v*`:** a GitHub Release with that zip attached
+  (`git tag v0.5 && git push origin v0.5`).
+
+Nothing in CI signs: the boards' packages are built and signed on the
+maintainer's machine, and the key never leaves it. `PSPEXP_BUILD` (the
+CMake build folder for `scripts/dev/pspexp-run`, default `build/host`) lets
+the SDL layer's test run from CI's folder.
+
 ## Measure the USB link (v0.1 first milestone)
 
 1. Put PSPExp on the memory stick (custom firmware required: the boot module

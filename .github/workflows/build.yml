@@ -1,0 +1,82 @@
+# Every push: the board side built and tested (as scripts/build.sh), and the PSP side built in
+# the pspdev toolchain's own container, as a memory-stick install (runtime-slot --install).
+# A tag v*: a GitHub Release with that PSP install attached (docs/Developing.md, "CI").
+# Nothing here signs: the boards' packages are built and signed on the maintainer's machine
+# (the key never leaves it), so CI holds no secret.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: Board side (build and tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends cmake pkg-config libusb-1.0-0-dev libsdl2-dev
+      - name: Build
+        run: |
+          cmake -S . -B build/host -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/host -j"$(nproc)"
+      - name: Tests
+        run: cd build/host && ctest --output-on-failure
+
+  psp:
+    name: PSP side (memory-stick install)
+    runs-on: ubuntu-24.04
+    container: ghcr.io/pspdev/pspdev:latest
+    steps:
+      - name: Tools
+        run: apk add --no-cache git python3 zip bash
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          psp-gcc --version | head -1
+          make -C psp/transport-usb -j"$(nproc)"
+          make -C psp/runtime -j"$(nproc)"
+          make -C psp/boot -j"$(nproc)"
+          mkdir -p dist/PSPExp
+          cp psp/boot/EBOOT.PBP psp/transport-usb/pspexp_usb.prx psp/runtime/pspexp_runtime.prx dist/PSPExp/
+      - name: Memory-stick install
+        # unzipped at the stick's root: PSP/GAME/PSPExp/EBOOT.PBP, slot-a/, active (docs/manual/psp.md)
+        run: |
+          python3 scripts/packages/runtime-slot --install stick/PSP/GAME/PSPExp
+          cp LICENSE stick/PSP/GAME/PSPExp/LICENSE.txt
+          name="PSPExp-psp-${GITHUB_REF_NAME//\//-}"
+          (cd stick && zip -qr "../$name.zip" PSP)
+          echo "PSP_ZIP=$name.zip" >> "$GITHUB_ENV"
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PSPExp-psp
+          path: ${{ env.PSP_ZIP }}
+
+  release:
+    name: Release (tags v*)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [host, psp]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PSPExp-psp
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" PSPExp-psp-*.zip --repo "$GITHUB_REPOSITORY" --title "PSPExp $GITHUB_REF_NAME" \
+            --notes "The PSP side: unzip at the memory stick's root (PSP/GAME/PSPExp). The boards: card images at https://dl.pspexp.dev, packages at https://pkg.pspexp.dev."
