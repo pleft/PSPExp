@@ -913,6 +913,14 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   `pi`/`pspexp`. Wi-Fi was off (the state file above, fixed in the image
   after; `nmcli radio wifi on` on that card: 5 networks seen) and the banner
   showed (removed after).
+- **The release build, as a user gets it (2026-10-10, the rebuilt image, no
+  `ssh` file, no Ethernet used):** the launcher at first boot; Wi-Fi listed
+  and joined from the PSP with nothing done by hand; the time zone set and
+  the clock synchronised; SSH turned on from Apps > Terminal; Packages read
+  the catalogue from `https://pkg.pspexp.dev`; the Wi-Fi password never
+  reached the log (wpa_supplicant writes `<hidden>`). (The first try of
+  this card showed the Pi's own "Trying boot mode USB-MSD" screen: the card
+  was not seated; pushed home, it booted.)
 
 ## 9. The Omega2+
 
