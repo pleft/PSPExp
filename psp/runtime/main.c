@@ -239,7 +239,7 @@ static void op_log(void *u, const char *msg)
     g_log[g_log_n % 4][sizeof(g_log[0]) - 1] = 0;
     g_log_n++;
     if (!strncmp(msg, "connected", 9) || !strncmp(msg, "maintenance", 11) || !strncmp(msg, "3D:", 3) ||
-        !strncmp(msg, "us/bytes", 8)) trace(msg);   /* once per connection, or every 600 frames: kept in the log file too */
+        !strncmp(msg, "us/bytes", 8) || !strncmp(msg, "msg:", 4)) trace(msg);   /* once per connection, or every 600 frames, or the message trace: kept in the log file too */
 }
 
 static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
@@ -348,6 +348,17 @@ int main(int argc, char *argv[])
         sceKernelExitGame();
     }
     pspexp_ge_bind(&g_ge, &rt);
+    {   /* trace-messages next to the EBOOT: the first 64 messages of each OpenGL program's
+         * connection traced, each line written before the message is handled (for a PSP that
+         * stops: its last line names the message; about 10 ms a line) */
+        char path[288];
+        const char *slash = strrchr(g_trace_path, '/');
+        SceIoStat st;
+        if (slash) {
+            snprintf(path, sizeof(path), "%.*s/trace-messages", (int)(slash - g_trace_path), g_trace_path);
+            if (sceIoGetstat(path, &st) >= 0) { rt.trace_messages = 64; trace("message trace on (trace-messages)"); }
+        }
+    }
 
     while (g_running) {
         uint32_t now = sceKernelGetSystemTimeLow();

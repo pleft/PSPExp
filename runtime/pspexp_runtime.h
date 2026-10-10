@@ -185,6 +185,10 @@ typedef struct PspExpRuntime {
     uint32_t coded_pos;
     int16_t  coded_prev[2];
     uint32_t audio_status_us;
+    /* the first trace_messages messages of each OpenGL connection (one with a depth buffer)
+     * logged ("msg: ..."), before each is handled: the last one logged before the PSP stops is
+     * the one it stopped on (0: off) */
+    uint32_t trace_messages, trace_left;
 } PspExpRuntime;
 
 int  pspexp_runtime_init(PspExpRuntime *rt, const PspExpRuntimeOps *ops, const PspExpRuntimeConfig *cfg);

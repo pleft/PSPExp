@@ -75,7 +75,7 @@ it with Zig (`arm-linux-gnueabihf.2.35`, PIC, libusb static inside) to
 it with `/usr/local/bin/pspexp-run`.
 
 `pspexp-run` on the GameShell = LD_PRELOAD + the PSP handoff: it asks
-`pspexp-term` to release the PSP (SIGUSR1, via `pspexp-exec`), the game uses
+`pspexp-term` to release the PSP (SIGUSR1, via `pspexp-exec`; only for a program that takes it over USB: one sent to another PSP, `PSPEXP=tcp:...`, took the PSP from the running console until 2026-10-10), the game uses
 the USB link, and the console takes it back (SIGUSR2) when the game ends.
 The game's own X window stays on the (absent) LCD; `PSPEXP_WINDOW=hide` hides
 it. Sound goes to the PSP only (`PSPEXP_LOCAL_AUDIO=0`), so it does not also
@@ -837,6 +837,16 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   its defaults (cross Alt jumps, square Ctrl shoots, circle Shift the
   lightning, triangle Space the power line, R / L Right Ctrl / Shift grenade
   and smart bomb, SELECT Return cycles weapons, START Escape).
+  On the PSP-1000 (2026-10-10): play at 59-60 fps, about 100 KB a frame.
+  Its menu (START) now and then answered no button: Hurrican waits there
+  in a loop of `SDL_PumpEvents` and key states for Escape to be let go,
+  and the layer read the PSP's input only at an event poll or a frame
+  (found with gdb on the stuck game: its main thread running in
+  `SDL_PumpEvents`, no frame drawn); `SDL_PumpEvents` reads it now. Open:
+  twice (before 2026-10-06 and on 2026-10-10) the PSP switched itself off
+  as Hurrican started, its log ending at "connected ... depth buffer", not
+  seen again in eight starts since nor in PPSSPP; the runtime's
+  `trace-messages` switch (docs/cheatsheet.md) is on that PSP to catch it.
 - **Quake II** (`quake2`, 2026-10-04): id Software's demo on Debian's
   Yamagi Quake II 8.50 with its OpenGL 1 renderer, which the SDL layer draws
   on the PSP's GE (`graphics=opengl`, every glibc board): the demo's attract

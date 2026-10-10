@@ -3110,8 +3110,12 @@ static void fake_focus_once(void)
 
 /* the board's own keyboard (the Pi 400's) into the shared table too, for games
  * that read it after pumping (Hurrican) */
+/* the PSP's input too (service_link): a game waiting in a loop of SDL_PumpEvents and
+ * SDL_GetKeyboardState, drawing nothing, never saw the PSP's buttons change (Hurrican's menu,
+ * waiting for Escape, START, to be let go: no button answered, now and then) */
 HOOK(void, SDL_PumpEvents, (void))
 {
+    service_link();
     REAL(SDL_PumpEvents)();
     kb_refresh();
 }

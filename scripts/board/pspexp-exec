@@ -6,6 +6,10 @@
 PIDFILE=${PSPEXP_TERM_PIDFILE:-/tmp/pspexp-term.pid}
 PID=$(cat "$PIDFILE" 2>/dev/null)
 if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then exec "$@"; fi
+# only a program that takes the PSP over USB (PSPEXP: usb, pspexp-run's default) needs it handed
+# over: one sent to another PSP over Wi-Fi (PSPEXP=tcp:...) took the PSP from the running console,
+# whose launcher stood still until that program ended
+case "${PSPEXP:-usb}" in usb*) ;; *) exec "$@" ;; esac
 kill -USR1 "$PID"
 trap 'kill -USR2 "$PID" 2>/dev/null' EXIT
 trap 'exit 130' INT TERM

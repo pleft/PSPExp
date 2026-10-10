@@ -442,7 +442,7 @@ int main(void)
         {
             static uint8_t mp3[576];
             PspExpMixer *mx = &pspexp_null_runtime(nul)->mixer;
-            uint32_t k, n, mid = 0;
+            uint32_t j, n, mid = 0;
             memset(mp3, 0, sizeof(mp3));
             mp3[0] = 0xFF; mp3[1] = 0xFB; mp3[2] = 0x98; mp3[3] = 0x64; mp3[4] = 0xA5;   /* MPEG-1, 128 kbps, 32 kHz */
             pspexp_audio_stream_reset(ctx);
@@ -451,8 +451,8 @@ int main(void)
             pspexp_pump(ctx, 0);
             n = mx->buffered;
             CHECK(n >= 1580 && n <= 1590);   /* 1152 x 44100 / 32000 = 1587.6 */
-            for (k = 1; k < n; k++) {        /* (the first starts from the silence before) */
-                int16_t v = mx->ring[((mx->tail + k) % mx->ring_frames) * 2];
+            for (j = 1; j < n; j++) {        /* (the first starts from the silence before) */
+                int16_t v = mx->ring[((mx->tail + j) % mx->ring_frames) * 2];
                 if (v > -32000 && v < 32000) mid++;
             }
             CHECK(mid > n / 2);              /* most fall between a peak and a trough */

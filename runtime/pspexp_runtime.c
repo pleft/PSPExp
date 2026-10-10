@@ -495,10 +495,14 @@ static void handle_3d(PspExpRuntime *rt, const PspExpMessage *m)
             if (!rt->tex3d) rt->tex3d_on = 0;   /* reported once; drawn untextured until the next state */
         }
         if (!rt->stats.draws3d) {   /* the first of a connection, in the log: what the host sends */
-            const float *f = (const float *)(const void *)(m->payload + sizeof(*d));
-            int k = size / 4 - 3;   /* the position is last */
-            rt_log(rt, "3D: first draw: primitive %u, vertex type %x, %u vertices, the first at %d %d %d (x1000)", d->primitive,
-                   (unsigned)d->vertex_type, (unsigned)d->count, (int)(f[k] * 1000), (int)(f[k + 1] * 1000), (int)(f[k + 2] * 1000));
+            if (((d->vertex_type >> 7) & 3) == 3) {   /* float positions (last in the vertex): the first one */
+                const float *f = (const float *)(const void *)(m->payload + sizeof(*d));
+                int k = size / 4 - 3;
+                rt_log(rt, "3D: first draw: primitive %u, vertex type %x, %u vertices, the first at %d %d %d (x1000)", d->primitive,
+                       (unsigned)d->vertex_type, (unsigned)d->count, (int)(f[k] * 1000), (int)(f[k + 1] * 1000), (int)(f[k + 2] * 1000));
+            } else   /* 8- or 16-bit positions: read as floats they were nonsense */
+                rt_log(rt, "3D: first draw: primitive %u, vertex type %x, %u vertices of %u bytes", d->primitive,
+                       (unsigned)d->vertex_type, (unsigned)d->count, (unsigned)size);
         }
         if (rt->ops.draw3d)
             rt->ops.draw3d(rt->ops.user, rt->tex3d_on ? rt->tex3d : NULL, rt->tex3d_on ? rt->pal3d : NULL,
@@ -887,6 +891,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
     rt->stats.bytes_in += PSPEXP_HEADER_SIZE + m->length;
     if (rt->maintenance && m->header->channel != PSPEXP_CH_SYSTEM && m->header->channel != PSPEXP_CH_FILE) return;   /* another version's messages: not ours to read */
     if (rt->in_frame) rt->frame_bytes += PSPEXP_HEADER_SIZE + m->length;
+    if (rt->trace_left) { rt->trace_left--; rt_log(rt, "msg: %s, %u bytes", pspexp_opcode_name(op), (unsigned)m->length); }
 
     switch (op) {
     case PSPEXP_OP_HELLO_ACK:
@@ -897,7 +902,11 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (rt->maintenance) { rt_log(rt, "maintenance: the host speaks protocol %u; files only", rt->ack.protocol); return; }
         rt_log(rt, "connected: input %u Hz, audio %u Hz%s", rt->ack.input_rate, rt->ack.audio_rate,
                rt->ack.flags & PSPEXP_ACK_DEPTH ? ", depth buffer" : "");
+        /* traced: the connections of OpenGL programs (a depth buffer), not the console's own: a
+         * file write a line made the PSP too slow to answer and the console reconnected, again */
+        rt->trace_left = rt->ack.flags & PSPEXP_ACK_DEPTH ? rt->trace_messages : 0;
         if (rt->ops.depth_buffer) rt->ops.depth_buffer(rt->ops.user, (rt->ack.flags & PSPEXP_ACK_DEPTH) != 0);
+        if (rt->trace_left) rt_log(rt, "msg: depth buffer set");
         if (rt->ack.audio_rate >= 8000 && rt->ack.audio_rate <= 48000 && rt->ops.audio_start && !rt->audio_active) {
             /* 32768-frame ring, start playing once 100 ms is buffered */
             if (pspexp_mixer_init(&rt->mixer, rt->ack.audio_rate, 32768, rt->ack.audio_rate / 10) == 0) {

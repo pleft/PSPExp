@@ -29,7 +29,11 @@ stick; while the runtime runs it is the PSPExp USB device.
    plugging back in resumes any host program that is still running.
 4. Diagnostics on the memory stick, next to the EBOOT: `pspexp-rt.log`
    (link state changes) and `pspexp-shot-N.bmp` (framebuffer dumps when a
-   host asked for them).
+   host asked for them). An empty file `trace-messages` there (on the board:
+   `: > /tmp/e; pspexp-term --ctl "fs put /tmp/e ms0:/PSP/GAME/PSPExp/trace-messages"`,
+   `fs rm` to take it away; read at PSPExp's start) logs the first 64
+   messages of each OpenGL program's connection, each before it is handled:
+   for a PSP that stops, the log's last `msg:` line names the message.
 
 ### The runtime's two slots (docs/Package_Manager.md §6.1)
 
