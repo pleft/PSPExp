@@ -31,16 +31,10 @@ same. The Pi needs no screen of its own: the PSP is its screen.
 
      It sets the Pi up for PSPExp (the PSP's USB rule, the console as a
      service that starts at boot, the settings it needs) and installs
-     PSPExp from a package repository, whose address the computer keeps in
-     `~/.pspexp/repo-url`. The games come from that repository too, through
-     **Apps > Packages**. There is no public one before the release: you
-     make your own, as [Developing](../Developing.md#your-own-package-repository-before-the-first-release)
-     describes.
-
-     Without a repository address the same command builds PSPExp on the Pi
-     (a few minutes; it installs what the build needs first). The launcher
-     then works, but **Apps > Packages has no games to offer** until a
-     repository is set up and the command run again.
+     PSPExp from PSPExp's package repository, `https://pkg.pspexp.dev`. The
+     games come from there too, through **Apps > Packages**. (To use a
+     repository of your own instead, put its address in `~/.pspexp/repo-url`
+     on the computer: [Developing](../Developing.md#your-own-package-repository).)
 3. Plug the PSP into any of the Pi's USB ports and start PSPExp on it. The
    launcher appears.
 

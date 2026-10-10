@@ -152,11 +152,14 @@ packages go to `/opt/pspexp`. Without a repository address
 `pspexp-pkg install freedoom opentyrian` on the Pi (recipes installed through
 apt, docs/Package_Manager.md).
 
-### Your own package repository (before the first release)
+### Your own package repository
 
-Apps > Packages needs a package repository: the signed catalogue of recipes
-and the packages PSPExp builds itself. Until the release there is no public
-one, so a fresh setup makes its own:
+Apps > Packages reads a package repository: the signed catalogue of
+recipes and the packages PSPExp builds itself. The public one is
+`https://pkg.pspexp.dev` (Cloudflare R2, `apt-repo push r2`; its address in
+`scripts/packages/public-repo-url`, which the installers and the image
+take when `~/.pspexp/repo-url` is not set). A setup of your own, for
+packages you build yourself:
 
 1. **The packages**, into `build/debs`:
    - the console: `HOST=user@<pi> scripts/pi/install.sh build`, then

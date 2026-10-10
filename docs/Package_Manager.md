@@ -604,8 +604,10 @@ recipe needs a new meta-package, not just newer packages.
   `~/.pspexp/repo-url` is not set. **Not with the r2.dev address:** the
   home network's DNS answered 127.0.0.1 for it (ad blockers list
   `*.r2.dev`, much abused), so the Pi, moved, could not reach it (put back
-  the same hour); the public address will be a domain of the project's
-  own in front of the bucket.
+  the same hour). **The public address: `https://pkg.pspexp.dev`** (the
+  project's domain, the bucket's custom domain, 2026-10-10); the Pi, on
+  the home server, moved to it by itself at its next catalogue update and
+  apt reads PSPExp from it.
 - **Hosting, on the home server until the project is published:**
   - The repository (`dists/`, `pool/`) and the catalogue are plain static
     files.
