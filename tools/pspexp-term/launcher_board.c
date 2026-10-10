@@ -298,16 +298,25 @@ void board_wifi_connect_command(int kind, const BoardNet *net, int with_password
             char qi[100];
             squote(net->id, qi, sizeof(qi));
             snprintf(cmd, n, "%snmcli connection up uuid %s", su, qi);
-        } else if (net->saved)   /* a new password for a known network: keep its profile whatever happens */
-            snprintf(cmd, n, "%snmcli dev wifi connect %s%s", su, q, with_password ? " password \"$PSPEXP_WIFI_PSK\"" : "");
-        else   /* a failed join (a wrong password) leaves a profile NetworkManager
-                * cannot update, so every retry would fail too: drop it on failure */
-            snprintf(cmd, n, "%snmcli dev wifi connect %s%s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
-                     su, q, with_password ? " password \"$PSPEXP_WIFI_PSK\"" : "", su, q);
+        } else {
+            /* the password reaches nmcli on its standard input (--ask), from the shell's own printf
+             * (a builtin: no process), never among a program's arguments, which every user of the
+             * board could read in the process list while it joined */
+            char feed[96] = "";
+            if (with_password) snprintf(feed, sizeof(feed), "printf '%%s\\n' \"$PSPEXP_WIFI_PSK\" | ");
+            if (net->saved)   /* a new password for a known network: keep its profile whatever happens */
+                snprintf(cmd, n, "%s%snmcli%s dev wifi connect %s", feed, su, with_password ? " --ask" : "", q);
+            else   /* a failed join (a wrong password) leaves a profile NetworkManager
+                    * cannot update, so every retry would fail too: drop it on failure */
+                snprintf(cmd, n, "%s%snmcli%s dev wifi connect %s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
+                         feed, su, with_password ? " --ask" : "", q, su, q);
+        }
     } else if (kind == BOARD_WIFI_ONION && net->saved && !with_password) {
         /* known to wifisetup: first in line, and wifimanager joins it */
         snprintf(cmd, n, "wifisetup priority -ssid %s -move top", q);
     } else if (kind == BOARD_WIFI_ONION) {
+        /* (Onion's wifisetup takes the password as an argument; on the Omega everything runs as
+         * root and nobody else logs in) */
         const char *encr = net->secure ? (net->encr[0] ? net->encr : "psk2") : "none";
         /* add, or edit when the network is already known; then first in line */
         snprintf(cmd, n, "{ wifisetup add -ssid %s -encr %s -password \"$PSPEXP_WIFI_PSK\" || "

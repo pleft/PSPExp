@@ -397,11 +397,15 @@ network opens a keyboard (three pages: lower case, upper
 case, symbols; square deletes, triangle shows or hides the password, START or
 Join joins, circle cancels). The join runs in the background and ends in a
 toast. The password is handed to the command in the environment variable
-`PSPEXP_WIFI_PSK`, which the shell expands into `nmcli`'s or `wifisetup`'s
-arguments: it is never written to a file or a log by the launcher and its
-buffer is wiped after the join, but it is visible in the process list while
-that command runs. The board's network tool stores it as it stores any
-network.
+`PSPEXP_WIFI_PSK`; it is never written to a file or a log by the launcher
+and its buffer is wiped after the join. On NetworkManager boards (GameShell,
+Pi) it reaches `nmcli --ask dev wifi connect` on its standard input, piped
+by the shell's own `printf` (a builtin, so no process carries it), and is
+never among a program's arguments, which every user of the board could read
+in the process list (2026-10-11; nmcli 1.52.1 reads it there, masked, through
+its secret agent; not yet tried on a board, and not published until it is).
+On the Omega it is still `wifisetup`'s argument (everything runs as root
+there). The board's network tool stores it as it stores any network.
 
 **About** (System > About): two cards, this board and the PSP. Board: model
 (device tree, else /proc/cpuinfo: OpenWrt's "machine"), chip and cores, memory, storage,

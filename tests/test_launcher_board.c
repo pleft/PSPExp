@@ -66,6 +66,9 @@ int main(void)
         board_wifi_connect_command(BOARD_WIFI_NM, &net, 1, cmd, sizeof(cmd));
         CHECK(strstr(cmd, "'Bob'\\''s Wi-Fi'") != NULL);
         CHECK(strstr(cmd, "\"$PSPEXP_WIFI_PSK\"") != NULL);
+        /* on nmcli's standard input (--ask), from the shell's printf: never among its arguments */
+        CHECK(!strncmp(cmd, "printf '%s\\n' \"$PSPEXP_WIFI_PSK\" | ", 34) && strstr(cmd, "nmcli --ask dev wifi connect") != NULL);
+        CHECK(!strstr(cmd, " password "));
         CHECK(strstr(cmd, "|| { ") != NULL && strstr(cmd, "connection delete id 'Bob'\\''s Wi-Fi'") != NULL);
         board_wifi_connect_command(BOARD_WIFI_ONION, &net, 1, cmd, sizeof(cmd));
         CHECK(strstr(cmd, "wifisetup add -ssid 'Bob'\\''s Wi-Fi' -encr psk2") != NULL);
@@ -77,6 +80,7 @@ int main(void)
         CHECK(strstr(cmd, "nmcli connection up uuid '0c1d-uuid'") != NULL && !strstr(cmd, "PSK"));
         board_wifi_connect_command(BOARD_WIFI_NM, &net, 1, cmd, sizeof(cmd));
         CHECK(strstr(cmd, "\"$PSPEXP_WIFI_PSK\"") != NULL && !strstr(cmd, "delete"));
+        CHECK(strstr(cmd, "nmcli --ask dev wifi connect") != NULL && !strstr(cmd, " password "));
         board_wifi_connect_command(BOARD_WIFI_ONION, &net, 0, cmd, sizeof(cmd));
         CHECK(!strstr(cmd, "add") && !strstr(cmd, "PSK") && strstr(cmd, "wifisetup priority -ssid 'Bob'\\''s Wi-Fi' -move top") != NULL);
     }
