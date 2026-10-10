@@ -981,6 +981,9 @@ holding an SSH key or a Wi-Fi connection.
   SHA-256; the page and the sources answer. As on `pkg.pspexp.dev`, the bare
   address answers 404 (R2 serves names, not folders): the page is
   `/index.html`.
+- **Kept quiet until the repository is public (the user's choice):** no
+  rewrite of `/` to the page, and a `robots.txt` that keeps search engines
+  out (push-images uploads it; remove it then).
 
 ## 9. The Omega2+
 

@@ -140,4 +140,8 @@ for b in pi gameshell; do
 	$base --header-upload "Cache-Control: no-cache" copyto "$OUT/pspexp-$b-$DATE.img.xz.sha256" "$D/pspexp-$b-$DATE.img.xz.sha256"
 done
 $base --header-upload "Cache-Control: no-cache" copyto "$OUT/index.html" "$D/index.html"
+# kept out of search engines until the project is public (the user's choice, 2026-10-10: no
+# rewrite of / to the page either); remove with the repository going public
+printf 'User-agent: *\nDisallow: /\n' > "$OUT/robots.txt"
+$base --header-upload "Cache-Control: no-cache" copyto "$OUT/robots.txt" "$D/robots.txt"
 echo "uploaded release $DATE to $URL: $(curl -s -o /dev/null -w '%{http_code}' "$URL/index.html") for index.html"
