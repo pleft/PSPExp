@@ -43,6 +43,8 @@ chroot $R usermod -s /bin/bash pi
 echo 'pi:pspexp' | chroot $R chpasswd
 echo 'pi ALL=(ALL) NOPASSWD: ALL' > $R/etc/sudoers.d/010_pi-nopasswd; chmod 440 $R/etc/sudoers.d/010_pi-nopasswd
 chroot $R systemctl disable userconfig >/dev/null 2>&1
+# and its SSH banner ("SSH may not work until a valid user has been set up"), which the dialog removes
+rm -f $R/etc/ssh/sshd_config.d/rename_user.conf
 if [ -f $IN/authorized_keys ]; then
 	install -d -m 700 -o 1000 -g 1000 $R/home/pi/.ssh
 	install -m 600 -o 1000 -g 1000 $IN/authorized_keys $R/home/pi/.ssh/authorized_keys
@@ -61,21 +63,12 @@ chroot $R apt-get -qq install -y --no-install-recommends pspexp-core \
 chroot $R dpkg-query -W pspexp-core pspexp-runtime
 chroot $R sh /tmp/pkg/board-files.sh pi /usr/bin/pspexp-term
 
-# Wi-Fi: Raspberry Pi OS keeps it blocked until a country is set (raspi-config, or the
-# Imager); joined from the PSP (Settings), it must be on: unblocked at boot when no
-# country was given, on the worldwide rules, which hold everywhere
-cat > $R/etc/systemd/system/pspexp-wifi.service <<'S'
-[Unit]
-Description=PSPExp: Wi-Fi on without a country set (the worldwide rules)
-After=systemd-rfkill.service
-Before=NetworkManager.service
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'grep -q cfg80211.ieee80211_regdom= /proc/cmdline || /usr/sbin/rfkill unblock wifi'
-[Install]
-WantedBy=multi-user.target
-S
-chroot $R systemctl enable pspexp-wifi >/dev/null 2>&1
+# Wi-Fi: Raspberry Pi OS ships NetworkManager with it switched off (WirelessEnabled=false; it
+# soft-blocks the radio at every boot) until a country is set (raspi-config, the Imager);
+# joined from the PSP, it must be on: switched on here, on the worldwide rules until a
+# country is set, which hold everywhere (an rfkill unblock at boot was undone by NetworkManager)
+install -d $R/var/lib/NetworkManager
+printf '[main]\nNetworkingEnabled=true\nWirelessEnabled=true\nWWANEnabled=true\n' > $R/var/lib/NetworkManager/NetworkManager.state
 
 # ---- tidy up -----------------------------------------------------------------------------
 rm -rf $R/tmp/pkg $R/usr/sbin/policy-rc.d

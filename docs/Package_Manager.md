@@ -895,13 +895,24 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   Pi's own screen; the image makes `pi` the user (password `pspexp`, sudo
   without a password as Raspberry Pi OS gives its first user) and turns the
   dialog off. Imager's settings still apply through cloud-init.
-- **Wi-Fi:** Raspberry Pi OS keeps it blocked until a country is set; a
-  small service unblocks it at boot when the kernel command line names no
-  country (the worldwide rules), so it can be joined from the PSP.
+- **Wi-Fi:** Raspberry Pi OS ships NetworkManager with it switched off
+  (`WirelessEnabled=false` in its state file: it soft-blocks the radio at
+  every boot) until a country is set; the image switches it on (the
+  worldwide rules until a country is set), so it can be joined from the
+  PSP. A first try, `rfkill unblock wifi` at boot, was undone by
+  NetworkManager a second later.
+- **SSH's banner:** the first-boot dialog's ("SSH may not work until a valid
+  user has been set up", `sshd_config.d/rename_user.conf`) is removed with it.
 - **Kept as Raspberry Pi has them:** the disk identifier and the kernel
   command line (the first boot's `resize`), the boot partition; no SSH host
   keys in the image (made at first boot), SSH off unless `--ssh-key`.
-- **Not yet booted on a Pi.**
+- **First boot on the Pi 400 (2026-10-10, written with `dd`, an empty `ssh`
+  file added to the boot partition):** up in about a minute, the card grown
+  to 29 GB, the console running and the PSP's launcher on it, Ethernet up,
+  the dialog off, cloud-init done, SSH on from the `ssh` file with
+  `pi`/`pspexp`. Wi-Fi was off (the state file above, fixed in the image
+  after; `nmcli radio wifi on` on that card: 5 networks seen) and the banner
+  showed (removed after).
 
 ## 9. The Omega2+
 

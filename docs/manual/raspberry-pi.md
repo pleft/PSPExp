@@ -178,3 +178,12 @@ to let them go, for your phone or tablet. Details:
 - **Wi-Fi and the time zone** can be changed from the PSP: Settings >
   Network, Settings > Clock > Time zone.
 - Packages live in `/opt/pspexp`; your settings in `~/.config/pspexp*`.
+- **Getting into the Pi from a computer** (the card image; SSH is off at
+  first because every card starts with the same password):
+  - on the PSP, **Apps > Terminal** is already a shell on the Pi: `passwd`
+    sets your own password, `sudo systemctl enable --now ssh` turns SSH on;
+  - or put the card in a computer and create an empty file named `ssh` on
+    its `bootfs` drive: SSH is on from the next boot;
+  - or turn SSH on in Raspberry Pi Imager's settings when writing the card.
+
+  Then `ssh pi@raspberrypi.local`. Change the password `pspexp` first.
