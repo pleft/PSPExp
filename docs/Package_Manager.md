@@ -608,6 +608,19 @@ recipe needs a new meta-package, not just newer packages.
   project's domain, the bucket's custom domain, 2026-10-10); the Pi, on
   the home server, moved to it by itself at its next catalogue update and
   apt reads PSPExp from it.
+- **Cloudflare's cache in front of it:** the custom domain caches; the
+  first push behind it left apt an older `Packages.gz` than the
+  `InRelease` it had just read ("File has unexpected size... Mirror sync
+  in progress?") and the catalogue an older archive than its signature
+  ("does not check: refused"). Now the `Release` says `Acquire-By-Hash:
+  yes` and every index is also written under `by-hash/SHA256/<hash>`
+  (pushes add to it, like the pool), so apt asks for the index by its
+  content; and `push r2` uploads what changes under its name (`InRelease`,
+  the catalogue, the key) every time with `Cache-Control: no-cache`, the
+  pool and by-hash with a year's `immutable`. Copies cached before that
+  (4 hours, Cloudflare's default) were purged by hand; a catalogue
+  pushed after came to the Pi fresh, and the Pi upgraded `pspexp-core`
+  from the public address.
 - **Hosting, on the home server until the project is published:**
   - The repository (`dists/`, `pool/`) and the catalogue are plain static
     files.

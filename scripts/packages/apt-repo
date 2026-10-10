@@ -89,7 +89,13 @@ def build(debs_dir):
         for name, body in (("Packages", text), ("Packages.gz", gzip.compress(text, mtime=0))):
             open(os.path.join(OUT, "dists/stable", d, name), "wb").write(body)
             files.append(("%s/%s" % (d, name), body))
-    release = "Origin: PSPExp\nLabel: PSPExp\nSuite: stable\nCodename: stable\nDate: %s\nArchitectures: %s\nComponents: main\nDescription: PSPExp: the PSP as a console\n" % (
+            # by-hash (Acquire-By-Hash): apt fetches the index by its SHA256, so a cache in front of the
+            # repository (Cloudflare, for pkg.pspexp.dev) can never hand it an older Packages.gz than the
+            # InRelease it just read; the old ones stay (pushes add to by-hash, like the pool)
+            bh = os.path.join(OUT, "dists/stable", d, "by-hash/SHA256")
+            os.makedirs(bh, exist_ok=True)
+            open(os.path.join(bh, hashlib.sha256(body).hexdigest()), "wb").write(body)
+    release = "Origin: PSPExp\nLabel: PSPExp\nSuite: stable\nCodename: stable\nDate: %s\nArchitectures: %s\nComponents: main\nAcquire-By-Hash: yes\nDescription: PSPExp: the PSP as a console\n" % (
         time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime()), " ".join(ARCHES))
     for h, fn in (("MD5Sum", hashlib.md5), ("SHA256", hashlib.sha256)):
         release += "%s:\n" % h + "".join(" %s %d %s\n" % (fn(b).hexdigest(), len(b), n) for n, b in files)
@@ -123,7 +129,8 @@ def push(host):
     # pool: added to (older packages stay); the rest: replaced
     subprocess.run(["ssh", host, "mkdir -p ~/pspexp-repo"], check=True)
     subprocess.run(["rsync", "-a", OUT + "/pool/", "%s:pspexp-repo/pool/" % host], check=True)
-    subprocess.run(["rsync", "-a", "--delete", "--exclude", "pool/", OUT + "/", "%s:pspexp-repo/" % host], check=True)
+    subprocess.run(["rsync", "-a", OUT + "/dists/", "%s:pspexp-repo/dists/" % host], check=True)
+    subprocess.run(["rsync", "-a", "--delete", "--exclude", "pool/", "--exclude", "by-hash/", OUT + "/", "%s:pspexp-repo/" % host], check=True)
     print("pushed to %s:~/pspexp-repo" % host)
 
 
@@ -152,8 +159,13 @@ def push_r2():
                 "RCLONE_CONFIG_R2_ACL": "private", "RCLONE_CONFIG_R2_NO_CHECK_BUCKET": "true"})
     dest = "R2:" + v["R2_BUCKET"]
     base = ["rclone", "--fast-list", "--checksum", "--transfers", "8", "--stats-one-line", "--stats", "0"]
-    subprocess.run(base + ["copy", OUT + "/pool", dest + "/pool"], check=True, env=env)
-    subprocess.run(base + ["sync", "--exclude", "/pool/**", OUT, dest], check=True, env=env)
+    # what never changes under its name (the pool, by-hash) may be cached for good; the rest (InRelease,
+    # the catalogue, the key) is uploaded every time with no-cache, so Cloudflare asks R2 each time
+    keep = ["--header-upload", "Cache-Control: public, max-age=31536000, immutable"]
+    subprocess.run(base + keep + ["copy", OUT + "/pool", dest + "/pool"], check=True, env=env)
+    subprocess.run(base + keep + ["copy", "--include", "**/by-hash/**", OUT + "/dists", dest + "/dists"], check=True, env=env)
+    subprocess.run(base + ["--ignore-times", "--header-upload", "Cache-Control: no-cache", "sync",
+                           "--exclude", "/pool/**", "--exclude", "**/by-hash/**", OUT, dest], check=True, env=env)
     url = v.get("R2_PUBLIC_URL", "").rstrip("/")
     if url:   # what a board sees
         r = subprocess.run(["curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", url + "/dists/stable/InRelease"], capture_output=True, text=True)
