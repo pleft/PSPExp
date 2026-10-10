@@ -937,7 +937,9 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   presses ended with one listener and new logins working; a press while a
   change is still running says so. Both images rebuilt with these and
   Packages' quick opening (`pspexp-core` 9582c55), checked inside as
-  before.
+  before. The Pi image, written to a card and booted on the Pi 400 by the
+  user: the launcher, Wi-Fi joined from the PSP, Packages opening at once,
+  SSH on quickly with the password warning.
 - **First boot on the Pi 400 (2026-10-10, written with `dd`, an empty `ssh`
   file added to the boot partition):** up in about a minute, the card grown
   to 29 GB, the console running and the PSP's launcher on it, Ethernet up,
