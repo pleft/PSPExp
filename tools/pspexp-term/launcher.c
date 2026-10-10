@@ -170,6 +170,8 @@ static void cats_free(void)
 }
 
 /* (re)builds the rail from the library; keeps the current category and selection */
+static int ssh_available(void);
+
 static void cats_build(void)
 {
     char keep[64] = "", keep_id[160] = "";
@@ -235,6 +237,7 @@ static void cats_build(void)
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
     ACTION("poweroff", "Power off", "power", "Shut this board down");
+    if (ssh_available()) ACTION("ssh", "SSH", "terminal", "Log in to this board from a computer");
     ACTION("about", "About", "info", "This board, the PSP and the connection");
     /* Settings: what needs doing now first (an update waiting, a restart), then the rest in
      * groups, each opening its own settings (a group of one opens that setting at once) */
@@ -244,7 +247,7 @@ static void cats_build(void)
             { "Sound", "headphones", { "a:sound", NULL } },
             { "Clock", "clock", { "a:tz", "a:pspclock", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
-            { "This board", "circuit-board", { "a:about", "a:reboot", "a:poweroff", NULL } },
+            { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
         };
         Cat *top = c;
         int g, k, ng = 0;
@@ -561,7 +564,7 @@ static void draw_cover(const LEntry *e, int x, int y, int alpha)
 /* ---- settings ---------------------------------------------------------------------------------- */
 
 static pid_t g_bg_pid;
-static char g_bg_ok[96], g_bg_fail[96], g_bg_icon[32];
+static char g_bg_ok[96], g_bg_fail[96], g_bg_icon[32], g_bg_warn[160];
 
 /* runs a command in the background; a toast says how it went */
 static void bg_run_env(const char *cmd, const char *icon, const char *ok, const char *fail, const char *env, const char *val)
@@ -582,6 +585,13 @@ static void bg_run_env(const char *cmd, const char *icon, const char *ok, const 
     snprintf(g_bg_ok, sizeof(g_bg_ok), "%s", ok);
     snprintf(g_bg_fail, sizeof(g_bg_fail), "%s", fail);
     snprintf(g_bg_icon, sizeof(g_bg_icon), "%s", icon);
+    g_bg_warn[0] = 0;
+}
+
+/* a warning that goes with the started job's success (bg_run first) */
+static void bg_warn(const char *s)
+{
+    if (g_bg_pid > 0) snprintf(g_bg_warn, sizeof(g_bg_warn), "%s", s);
 }
 
 static void bg_run(const char *cmd, const char *icon, const char *ok, const char *fail)
@@ -604,7 +614,7 @@ static void bg_poll(uint64_t now)
         char key[48];
         snprintf(key, sizeof(key), "job:%s", g_bg_icon);
         (void)now;
-        notify(ok ? NOTE_DONE : NOTE_FAIL, g_bg_icon, ok ? g_bg_ok : g_bg_fail, NULL, NULL, key);
+        notify(!ok ? NOTE_FAIL : g_bg_warn[0] ? NOTE_WARN : NOTE_DONE, g_bg_icon, ok ? g_bg_ok : g_bg_fail, ok && g_bg_warn[0] ? g_bg_warn : NULL, NULL, key);
     }
 }
 
@@ -620,6 +630,24 @@ static int wifi_mode_psp(void)
 
 static char g_cur_ssid[64], g_cur_tz[64];
 static int g_board_known;
+static int g_ssh_on, g_ssh_default;   /* SSH server on; the user's password still a card image's published one */
+
+/* SSH: on a Debian board with an SSH server, through the root helper (pspexp-pkg-apt ssh) */
+static int ssh_available(void)
+{
+    return access("/usr/sbin/sshd", X_OK) == 0 && access("/usr/sbin/pspexp-pkg-apt", X_OK) == 0;
+}
+
+static void ssh_refresh(void)
+{
+    FILE *p;
+    char line[64] = "";
+    if (!ssh_available() || !(p = popen("sudo -n /usr/sbin/pspexp-pkg-apt ssh status 2>/dev/null", "r"))) return;
+    if (!fgets(line, sizeof(line), p)) line[0] = 0;
+    pclose(p);
+    g_ssh_on = !strncmp(line, "on", 2);
+    g_ssh_default = strstr(line, "default") != NULL;
+}
 
 /* the board's current network and zone, read now (popen: not per frame) */
 static void board_refresh(void)
@@ -627,6 +655,7 @@ static void board_refresh(void)
     int k;
     board_wifi_current(board_wifi_kind(), g_cur_ssid, sizeof(g_cur_ssid));
     board_tz_current(g_cur_tz, sizeof(g_cur_tz));
+    ssh_refresh();
     k = board_zone_find(g_cur_tz);
     if (k >= 0) {   /* the launcher's own clock follows at once (musl reads only TZ) */
         setenv("TZ", board_zone(k)->posix, 1);
@@ -646,6 +675,7 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
     if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
+    if (!strcmp(a, "ssh")) return g_ssh_on ? "On" : "Off";
     return NULL;
 }
 
@@ -653,6 +683,7 @@ static const char *action_value(const LEntry *e)
 
 enum { PICK_TZ, PICK_WIFI, PICK_BT };
 static void pick_open(int kind, uint64_t now);
+static void ssh_action(uint64_t now);
 
 static int g_test_mode;
 
@@ -689,6 +720,8 @@ static void run_action(LEntry *e, uint64_t now)
         lib_setting_set(&L, "boxart", !g_nofetch);
         snprintf(e->icon, sizeof(e->icon), "%s", g_nofetch ? "image-off" : "image");
         toast(e->icon, g_nofetch ? "Box art downloads off" : "Box art downloads on", now);
+    } else if (!strcmp(a, "ssh")) {
+        ssh_action(now);
     } else if (!strcmp(a, "wifi")) {
         int to_psp = !wifi_mode_psp();
         char cmd[400];
@@ -1438,6 +1471,27 @@ static void pick_open(int kind, uint64_t now)
         scan_start();
     }
     g_mode = M_PICK; g_overlay_a = 0; g_open_at = now; g_sel_since = now;
+    g_dirty = 1;
+}
+
+/* SSH: off -> on, on -> off. The password stays the user's choice; while it is still the card
+ * image's published one, the result warns that anyone on the network could log in with it */
+static void ssh_action(uint64_t now)
+{
+    ssh_refresh();
+    if (g_ssh_on) {
+        bg_run("sudo -n /usr/sbin/pspexp-pkg-apt ssh off </dev/null", "terminal", "SSH off", "Could not turn SSH off (see /tmp/pspexp-launcher.log)");
+        toast("terminal", "Turning SSH off...", now);
+    } else {
+        char ok[160], host[64] = "board";
+        const char *user = getenv("USER");
+        gethostname(host, sizeof(host));
+        snprintf(ok, sizeof(ok), "SSH on: ssh %s@%s.local", user && *user ? user : "user", host);
+        bg_run("sudo -n /usr/sbin/pspexp-pkg-apt ssh on </dev/null", "terminal", ok, "Could not turn SSH on (see /tmp/pspexp-launcher.log)");
+        if (g_ssh_default)
+            bg_warn("The card's password still: anyone on your network can log in. Change it: passwd in Apps > Terminal");
+        toast("terminal", "Turning SSH on...", now);
+    }
     g_dirty = 1;
 }
 

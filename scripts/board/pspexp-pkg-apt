@@ -14,6 +14,12 @@
 #   pspexp-pkg-apt remove ID     the meta-package, then only its own dependencies apt reports unneeded
 #   pspexp-pkg-apt upgrade       newer versions of what the installed recipes depend on, and pspexp-*
 #   pspexp-pkg-apt repair        dpkg --configure -a, apt-get -f install
+#   pspexp-pkg-apt ssh status    "on|off default|own": the SSH server, and whether the user's password
+#                                is still a card image's published one (Settings > SSH on the PSP)
+#   pspexp-pkg-apt ssh on        the SSH server started and kept on (the password is the user's
+#                                choice: Settings warns while it is still the published one)
+#   pspexp-pkg-apt ssh off       the SSH server stopped and kept off
+#   (ssh: for sudo's user, the console's; here because this helper's sudo rule is on every board)
 set -e
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin DEBIAN_FRONTEND=noninteractive LC_ALL=C
 CAT=/usr/share/pspexp/catalogue
@@ -197,5 +203,31 @@ upgrade)
 repair)
 	dpkg --configure -a
 	$APT -f install ;;
-*) echo "usage: pspexp-pkg-apt update | prepare ID VERSION | resume ID VERSION | install ID | remove ID | upgrade | repair" >&2; exit 2 ;;
+ssh)
+	u=${SUDO_USER:-}
+	[ -n "$u" ] && [ "$u" != root ] || die "ssh: through sudo, as the console's user"
+	systemctl cat ssh.service >/dev/null 2>&1 || die "ssh: no SSH server on this board"
+	# the password the card images publish (pi: pspexp, cpi: cpi; Raspberry Pi's old one):
+	# compared through the system's crypt, the password file never leaves root
+	default_pw() {
+		h=$(getent shadow "$u" | cut -d: -f2)
+		for p in pspexp cpi raspberry; do
+			[ -n "$h" ] && PW="$p" H="$h" perl -e 'exit(crypt($ENV{PW}, $ENV{H}) eq $ENV{H} ? 0 : 1)' && return 0
+		done
+		return 1
+	}
+	case "$1" in
+	status)
+		if systemctl -q is-active ssh.service; then st=on; else st=off; fi
+		if default_pw; then echo "$st default"; else echo "$st own"; fi ;;
+	on)
+		systemctl enable --now ssh.service
+		echo "ssh on" ;;
+	off)
+		systemctl disable --now ssh.service
+		systemctl stop ssh.socket 2>/dev/null || true
+		echo "ssh off" ;;
+	*) die "ssh: status | on | off" ;;
+	esac ;;
+*) echo "usage: pspexp-pkg-apt update | prepare ID VERSION | resume ID VERSION | install ID | remove ID | upgrade | repair | ssh status|on|off" >&2; exit 2 ;;
 esac

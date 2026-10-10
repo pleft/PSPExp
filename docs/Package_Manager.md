@@ -402,6 +402,7 @@ complete list:
 | `remove <id>` | `apt-get remove pspexp-recipe-<id>`, then remove only the packages §5.4 allows | an installed recipe id |
 | `upgrade` | for each installed recipe: its meta-package rebuilt when the recipe changed and installed with `apt-get install` (new dependencies come in); then `apt-get install --only-upgrade` of the packages the installed meta-packages depend on, and `pspexp-*` (§5.6) | none (the list comes from the catalogue and apt's state) |
 | `repair` | `dpkg --configure -a`, then `apt-get -f install` | none |
+| `ssh status` / `ssh on` / `ssh off` | Settings > This board > SSH: whether the SSH server runs and whether sudo's user still has a card image's published password (`pspexp`, `cpi`, Raspberry Pi's old `raspberry`; compared through the system's `crypt` in Perl, the hash never leaves root); start and enable, or stop and disable, `ssh.service`. Here because this helper's sudo rule is already on every board; it never sets a password (the user's choice, the launcher warns, 2026-10-10) | none |
 
 - **Package names never come from the user's side.** The helper takes
   recipe ids, which must match `[a-z0-9-]+` and exist in the root-owned
@@ -906,6 +907,14 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
 - **Kept as Raspberry Pi has them:** the disk identifier and the kernel
   command line (the first boot's `resize`), the boot partition; no SSH host
   keys in the image (made at first boot), SSH off unless `--ssh-key`.
+- **SSH, the user's switch (2026-10-10):** Settings > This board > SSH on
+  the PSP turns it on or off through the root helper (`ssh`, §5.2); while
+  the password is still the card's published one, the result warns
+  ("anyone on your network can log in", how to change it) and stays on
+  screen long enough to read (long banners: 80 ms more a character). The
+  GameShell's image follows: SSH off unless built with `--ssh-key` (it had
+  been on with `cpi`/`cpi`). Tried on the Pi 400's fresh card: off, on, the
+  warning.
 - **First boot on the Pi 400 (2026-10-10, written with `dd`, an empty `ssh`
   file added to the boot partition):** up in about a minute, the card grown
   to 29 GB, the console running and the PSP's launcher on it, Ethernet up,

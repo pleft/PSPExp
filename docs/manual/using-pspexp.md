@@ -297,7 +297,7 @@ with a single option opens that option at once), circle comes back.
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
 | Clock | Time zone, for the clock; PSP clock: let the board set the PSP's clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
-| This board | About (the board and the PSP: models, versions, battery, the connection), Restart, Power off (they ask for a second press) |
+| This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
 When there is something to do, it comes first, before the groups:
 **Update the PSP** (a newer PSPExp for the PSP is ready) and **Restart

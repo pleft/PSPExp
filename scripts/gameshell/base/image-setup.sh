@@ -96,6 +96,9 @@ while read -r kind a b c d; do
 	esac
 done < "$IN/stage/manifest"
 chroot "$R" systemctl enable ssh NetworkManager avahi-daemon systemd-timesyncd >/dev/null 2>&1 || true
+# SSH off unless the build was given a key (--ssh-key): every card has the same password, so the
+# user turns it on (Settings > This board > SSH on the PSP), as on the Raspberry Pi's image
+[ -f "$IN/authorized_keys" ] || chroot "$R" systemctl disable ssh >/dev/null 2>&1 || true
 # pspexp-wifi-mode runs hostapd itself, with its own configuration
 chroot "$R" systemctl disable hostapd >/dev/null 2>&1 || true
 chroot "$R" systemctl mask hostapd >/dev/null 2>&1 || true

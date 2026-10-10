@@ -152,7 +152,10 @@ static void remove_at(int i)
 static uint64_t banner_time(const Note *e)
 {
     uint64_t t = e->level == NOTE_WARN ? 6000000u : e->level == NOTE_ATTN || e->level == NOTE_FAIL ? 5000000u : e->level == NOTE_DONE ? 3500000u : 3000000u;
-    if (strlen(e->title) + strlen(e->detail) > 70) t += 2000000u;
+    size_t n = strlen(e->title) + strlen(e->detail);
+    /* past what fits, time to read the rest as it scrolls by: 2 s, and 80 ms a character
+     * (the SSH warning, ~130 characters, stayed 8 s and went before it was read) */
+    if (n > 70) t += 2000000u + (uint64_t)(n - 70) * 80000u;
     return t;
 }
 

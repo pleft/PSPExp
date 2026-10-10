@@ -180,8 +180,9 @@ to let them go, for your phone or tablet. Details:
 - Packages live in `/opt/pspexp`; your settings in `~/.config/pspexp*`.
 - **Getting into the Pi from a computer** (the card image; SSH is off at
   first because every card starts with the same password):
-  - on the PSP, **Apps > Terminal** is already a shell on the Pi: `passwd`
-    sets your own password, `sudo systemctl enable --now ssh` turns SSH on;
+  - on the PSP, **Settings > This board > SSH** turns it on (or off); the
+    launcher warns while the password is still `pspexp`, which **Apps >
+    Terminal** changes: `passwd`;
   - or put the card in a computer and create an empty file named `ssh` on
     its `bootfs` drive: SSH is on from the next boot;
   - or turn SSH on in Raspberry Pi Imager's settings when writing the card.
