@@ -41,7 +41,7 @@ What you get on the PSP:
 
 | Board | Good for | Setup |
 |---|---|---|
-| **Raspberry Pi 400 / 4 / 5** | the most games, 3D included | Raspberry Pi OS, then PSPExp |
+| **Raspberry Pi 400 / 4 / 5** | the most games, 3D included | a card image |
 | **ClockworkPi GameShell** | a pocket pair: the PSP plus a handheld board | a card image |
 | **Onion Omega2+** | the smallest and cheapest; 2D games and emulators | installed from a computer |
 
@@ -58,8 +58,9 @@ packages, ROMs, files, music and headphones.
 
 ## Status: not released yet
 
-PSPExp works, but nothing is published yet: there is no PSP download, no GameShell card image and no public package
-repository. Until those exist, you build everything from this repository
+PSPExp works, but only the package repository is public so far
+(`https://pkg.pspexp.dev`, where the games come from): there is no PSP
+download and no card image to download yet. Until those exist, you build them from this repository
 on a Mac or a Linux computer. That needs the
 [pspdev](https://github.com/pspdev/pspdev) toolchain for the PSP side, and
 the board guides name the scripts to run. The first release will turn the

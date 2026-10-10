@@ -8,14 +8,38 @@ same. The Pi needs no screen of its own: the PSP is its screen.
 ## What you need
 
 - A Raspberry Pi 400 (or 4 / 5) with its power supply.
-- A microSD card with **Raspberry Pi OS (64-bit), the Debian 13 "trixie"
-  release**. The Lite version is enough.
-- A network connection for the setup (Wi-Fi or Ethernet), and SSH turned
-  on: Raspberry Pi Imager can set both, and your user name, before it
-  writes the card.
+- A microSD card of 8 GB or more.
 - The PSP, [prepared](psp.md), and its mini-USB data cable.
 
-## Installing PSPExp
+## The PSPExp card image
+
+The easy way: a card with everything on it, ready at the first boot.
+
+1. Get the PSPExp card image for the Raspberry Pi.
+   - *The download: coming with the release.*
+   - From this repository: `scripts/pi/image/build-image.sh` builds it on a
+     Mac (it needs Docker or OrbStack), into `build/pi-image/pspexp-pi.img`.
+2. Write it to the card with Raspberry Pi Imager (**Use custom**) or your
+   flashing tool, and put the card in the Pi. Imager's own settings (Wi-Fi,
+   SSH, the time zone) work too if you want them; if you set a user there,
+   keep the name **pi**.
+3. Plug the PSP into any of the Pi's USB ports, start PSPExp on the PSP,
+   and switch the Pi on.
+4. **The first boot takes a minute or two**: the system grows to fill your
+   card. Then the launcher appears on the PSP.
+5. On the PSP: **Settings > Network > Wi-Fi network**, pick your network and
+   type its password on the on-screen keyboard (or plug in an Ethernet
+   cable). Then **Settings > Clock > Time zone**.
+
+Everything else happens on the PSP: **Apps > Packages** to install games.
+The card is Raspberry Pi OS Lite (64-bit) with PSPExp added; its user is
+**pi**, password **pspexp**: change it (`passwd` in **Apps > Terminal**).
+SSH is off unless you turned it on in Imager.
+
+## On a Raspberry Pi OS you already have
+
+For a Pi that already runs **Raspberry Pi OS (64-bit), the Debian 13
+"trixie" release** (Lite is enough), with a network connection and SSH on:
 
 1. Write the card with Raspberry Pi Imager (64-bit Raspberry Pi OS, with
    SSH, Wi-Fi and your user set in its settings), put it in the Pi and
@@ -147,7 +171,8 @@ to let them go, for your phone or tablet. Details:
 - **The Pi 400's keyboard** types into the PSP's terminal while the PSP is
   connected.
 - **Music in other formats** (Ogg, FLAC, Opus, M4A) is decoded on the Pi by
-  ffmpeg: `sudo apt install ffmpeg` if the player says it is missing.
+  ffmpeg (on the card image already): `sudo apt install ffmpeg` if the
+  player says it is missing.
 - **Updates** come through **Apps > Packages** (PSPExp itself is the first
   entry under Apps); after one, the launcher offers **Settings > Restart PSPExp**.
 - **Wi-Fi and the time zone** can be changed from the PSP: Settings >

@@ -877,6 +877,32 @@ It stays as built, with these changes:
   logged to the journal: the sudo rule now keeps `nmcli` out of the log
   (`Defaults!/usr/bin/nmcli !log_allowed`).
 
+### 8a. The Raspberry Pi image (2026-10-10)
+
+The user's ask: an image for the Pi too, "so users just have to burn it and
+nothing else". `scripts/pi/image/build-image.sh` makes it, differently from
+the GameShell's: the base is **Raspberry Pi OS Lite (64-bit) as Raspberry Pi
+publishes it** (the 2026-10-06 trixie release, pinned by its SHA-256), not a
+Debian built here, so the Pi's firmware, kernel and first boot stay theirs.
+In an arm64 container (natively: the Mac is arm64 like the Pi), the root
+partition is grown, PSPExp installed in a chroot (`pspexp-apt-setup pi`,
+`pspexp-core`, and what Lite lacks: PipeWire with its Bluetooth plugin,
+ffmpeg), `scripts/pi/board-files.sh` applied (as `install.sh` does on a
+running Pi; identical files there), and the file system shrunk back to its
+minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
+- **The user:** Lite ships `pi` as a placeholder (no login) for its
+  first-boot dialog, which asks for a keyboard layout and a user on the
+  Pi's own screen; the image makes `pi` the user (password `pspexp`, sudo
+  without a password as Raspberry Pi OS gives its first user) and turns the
+  dialog off. Imager's settings still apply through cloud-init.
+- **Wi-Fi:** Raspberry Pi OS keeps it blocked until a country is set; a
+  small service unblocks it at boot when the kernel command line names no
+  country (the worldwide rules), so it can be joined from the PSP.
+- **Kept as Raspberry Pi has them:** the disk identifier and the kernel
+  command line (the first boot's `resize`), the boot partition; no SSH host
+  keys in the image (made at first boot), SSH off unless `--ssh-key`.
+- **Not yet booted on a Pi.**
+
 ## 9. The Omega2+
 
 OpenWrt has none of these programs and the Omega has no compiler.

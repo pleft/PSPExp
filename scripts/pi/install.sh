@@ -122,47 +122,9 @@ else
 	CONSOLE=/usr/bin/pspexp-term
 fi
 
-# the Pi's own files: the package folders, the sudo rule for the System page, the
-# PSP's USB rule, and the service; the running console is swapped for the new one
-ssh "$PI" "CONSOLE=$CONSOLE sh -s" <<'BOARD'
-set -e
-U=$(id -un); H=$HOME
-sudo install -d -m 0755 /etc/pspexp
-sudo install -d -m 0755 -o $U -g $U /opt/pspexp /opt/pspexp/apps /opt/pspexp/systems
-# nmcli joins Wi-Fi with the password among its arguments: sudo must not log those
-printf '%s\n' "$U ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff, /usr/bin/timedatectl set-timezone *, /usr/bin/nmcli, /usr/sbin/rfkill unblock bluetooth" 'Defaults!/usr/bin/nmcli !log_allowed' | sudo tee /etc/sudoers.d/pspexp >/dev/null
-# the user's PipeWire runs without a login (Bluetooth sound, pspexp-bt: the console is a system service)
-sudo loginctl enable-linger $U 2>/dev/null || true
-sudo chmod 0440 /etc/sudoers.d/pspexp
-echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"054c\", ATTR{idProduct}==\"01ca\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
-sudo udevadm control --reload-rules || true
-SH=$(getent passwd $U | cut -d: -f7)
-sudo tee /etc/systemd/system/pspexp-term.service >/dev/null <<U
-[Unit]
-Description=PSPExp console on the PSP (pspexp-term)
-After=multi-user.target
-
-[Service]
-User=$U
-WorkingDirectory=$H
-Environment=PSPEXP_TERM=1 HOME=$H SHELL=${SH:-/bin/bash} PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/games
-ExecStart=$CONSOLE --shell ${SH:-/bin/bash} --launcher --usb
-Restart=always
-RestartSec=2
-# real-time priority allowed: its programs' sound to Bluetooth (pw-play) starved without it on the GameShell
-LimitRTPRIO=95
-LimitNICE=-19
-LimitMEMLOCK=4194304
-
-[Install]
-WantedBy=multi-user.target
-U
-# the user's PipeWire may take real-time priority with nobody logged in (Bluetooth sound)
-sudo install -d -m 0755 /etc/systemd/system/user@.service.d
-printf '%s\n' '[Service]' 'LimitRTPRIO=95' 'LimitNICE=-19' 'LimitMEMLOCK=4194304' | sudo tee /etc/systemd/system/user@.service.d/pspexp-rt.conf >/dev/null
-sudo systemctl daemon-reload
-sudo systemctl enable pspexp-term >/dev/null 2>&1
-sudo systemctl restart pspexp-term
-sleep 1; systemctl is-active pspexp-term
-BOARD
+# the Pi's own files (scripts/pi/board-files.sh, as the card image has them: the package
+# folders, the sudo rule for the System page, the PSP's USB rule, the service); the
+# running console is swapped for the new one
+ssh "$PI" "sudo sh -s \$(id -un) $CONSOLE" < "$ROOT/scripts/pi/board-files.sh"
+ssh "$PI" 'sudo udevadm control --reload-rules || true; sudo systemctl daemon-reload; sudo systemctl restart pspexp-term; sleep 1; systemctl is-active pspexp-term'
 echo "PSPExp installed on $PI ($CONSOLE); the console restarted with the launcher"

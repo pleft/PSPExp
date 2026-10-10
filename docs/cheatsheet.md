@@ -130,7 +130,8 @@ Debian boards through apt, on the Omega2+ from our own builds.
 | any cross-built game for the GameShell or Pi | `scripts/packages/cross-glibc.sh gameshell\|pi scripts/packages/build-openjazz.sh openjazz` |
 | install or update a running GameShell | `HOST=cpi@<ip> scripts/gameshell/install.sh` |
 | the card image (minimal Debian 13, Linux 6.18, PSPExp from apt, no games): kernel / U-Boot / image | `scripts/gameshell/base/build-kernel.sh` / `scripts/gameshell/base/build-uboot.sh` / `scripts/gameshell/base/build-image.sh [--ssh-key F] [--wifi-from cpi@<ip>]` |
-| write the image to a card (check the disk number in Disk Utility first) | `diskutil unmountDisk /dev/diskN && sudo dd if=build/gameshell-base/pspexp-gameshell.img of=/dev/rdiskN bs=4m status=progress && diskutil eject /dev/diskN` |
+| the Raspberry Pi card image (Raspberry Pi OS Lite 64-bit, PSPExp from apt, no games) | `scripts/pi/image/build-image.sh [--ssh-key F]` → `build/pi-image/pspexp-pi.img` |
+| write an image to a card (check the disk number in Disk Utility first; `build/pi-image/pspexp-pi.img` for the Pi) | `diskutil unmountDisk /dev/diskN && sudo dd if=build/gameshell-base/pspexp-gameshell.img of=/dev/rdiskN bs=4m status=progress && diskutil eject /dev/diskN` |
 | on the board: its own access point for the PSP / back to the home Wi-Fi | `sudo pspexp-wifi-mode psp` / `sudo pspexp-wifi-mode home` |
 | on the board: the first-boot log | `cat /var/log/pspexp-firstboot.log` |
 

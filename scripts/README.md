@@ -59,6 +59,10 @@ packages/          what the launcher offers, for any board
   runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole
                      slotted install for a memory stick (--install)
 
+pi/image/          the Raspberry Pi card image: build-image.sh (here) and image-setup.sh (in a
+                     container): Raspberry Pi OS Lite 64-bit, pinned, with PSPExp from apt
+pi/board-files.sh  the Pi's own files (service, USB and sudo rules, /opt/pspexp): install.sh, the image
+
 gameshell/         ClockworkPi GameShell (Allwinner R16, Debian 13)
   build.sh           tools and the SDL layer (Zig cross build); cavestory, retro cross-built;
                      tyrian on the board

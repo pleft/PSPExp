@@ -150,7 +150,17 @@ packages go to `/opt/pspexp`. Without a repository address
 (`~/.pspexp/repo-url`) it builds the source on the Pi and installs into
 `/usr/local` instead. Games and emulators: Apps > Packages on the PSP, or
 `pspexp-pkg install freedoom opentyrian` on the Pi (recipes installed through
-apt, docs/Package_Manager.md).
+apt, docs/Package_Manager.md). The Pi's own files (the service, the USB and
+sudo rules, `/opt/pspexp`) are `scripts/pi/board-files.sh`, shared with the
+card image.
+
+**The card image**, `scripts/pi/image/build-image.sh` (Docker or OrbStack):
+Raspberry Pi OS Lite (64-bit) as Raspberry Pi publishes it, pinned by date
+and SHA-256, with PSPExp installed from its apt repository in an arm64
+container, the `pi` user (password `pspexp`) and the Pi's own files; written
+to a card, the console starts at the first boot. Its firmware, kernel and
+first boot (growing to the card, SSH keys, cloud-init for Imager's settings)
+are Raspberry Pi's own (docs/Package_Manager.md §8).
 
 ### Your own package repository
 
