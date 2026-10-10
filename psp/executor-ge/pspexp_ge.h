@@ -46,6 +46,11 @@ typedef struct PspExpGeExecutor {
     PspExpCacheEntry *target;    /* the render target drawn into, NULL: the screen */
 } PspExpGeExecutor;
 
+/* The hand-over spinner (PspExpDisconnect), between programs: a PSPEXP_SPINNER_SIZE square of
+ * bg centred at (cx, cy) with eight dots round it, dot `phase` brightest (fg), drawn straight
+ * into the frame on screen. Not inside a frame. */
+void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32_t fg, unsigned phase);
+
 /* Copies the displayed framebuffer (480x272 RGB565) into `out` (row stride 480). */
 void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out);
 

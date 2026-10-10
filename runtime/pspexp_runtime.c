@@ -916,7 +916,11 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         }
         return;
     case PSPEXP_OP_DISCONNECT:
-        rt_log(rt, "host disconnected");
+        if (m->length >= sizeof(PspExpDisconnect) && (((const PspExpDisconnect *)m->payload)->flags & PSPEXP_DISCONNECT_HANDOVER)) {
+            memcpy(&rt->handover, m->payload, sizeof(rt->handover));   /* the executor's loop shows the spinner */
+            rt->handover_req = 1;
+            rt_log(rt, "host disconnected: handing over");
+        } else rt_log(rt, "host disconnected");
         release_all(rt);
         return;
     case PSPEXP_OP_CLOCK_SET: {

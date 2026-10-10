@@ -291,6 +291,34 @@ static void show_status_page(void)
     pspDebugScreenInit();
 }
 
+/* A hand-over (DISCONNECT with PSPEXP_DISCONNECT_HANDOVER: the launcher starting a game): the
+ * last frame stays, a spinner turns on it where the host said, until a program draws again
+ * (at most 30 s); the status page meanwhile would have replaced the launcher's "Starting" */
+static PspExpDisconnect g_ho;
+static int g_ho_on;
+static uint32_t g_ho_at, g_ho_spun, g_ho_frames;
+static unsigned g_ho_phase;
+static void handover_take(PspExpRuntime *rt, uint32_t now)
+{
+    if (!rt->handover_req) return;
+    rt->handover_req = 0;
+    g_ho = rt->handover; g_ho_on = 1; g_ho_at = now; g_ho_spun = 0; g_ho_phase = 0;
+    g_ho_frames = rt->stats.frames;   /* (counted across connections: a new frame is a change) */
+    trace("handing over: the last frame kept, a spinner on it");
+}
+/* while handing over: the spinner turned (1); over (a program drew, or 30 s: the status page) */
+static int handover_tick(PspExpRuntime *rt, uint32_t now)
+{
+    if (!g_ho_on) return 0;
+    if (rt->stats.frames != g_ho_frames) { g_ho_on = 0; return 0; }   /* the next program's first frame */
+    if (now - g_ho_at > 30000000u) { g_ho_on = 0; trace("handing over: nothing drew in 30 s"); show_status_page(); return 0; }
+    if (now - g_ho_spun >= 80000u) {
+        g_ho_spun = now;
+        pspexp_ge_spinner(&g_ge, g_ho.x, g_ho.y, g_ho.bg, g_ho.fg, g_ho_phase++);
+    }
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
     PspExpRuntime rt;
@@ -404,8 +432,9 @@ int main(int argc, char *argv[])
         }
 
         if (!link_connected()) {
-            if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); }
-            if (now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
+            handover_take(&rt, now);
+            if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); if (!g_ho_on) show_status_page(); }
+            if (!handover_tick(&rt, now) && now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
             link_wait();
             continue;
         }
@@ -421,7 +450,7 @@ int main(int argc, char *argv[])
             size_t len;
             const void *out = pspexp_runtime_out_peek(&rt, &len);
             if (len == 0) break;
-            if (link_write(out, (int)len) < 0) { trace("link write failed"); connected = 0; pspexp_runtime_disconnect(&rt); show_status_page(); break; }
+            if (link_write(out, (int)len) < 0) { trace("link write failed"); connected = 0; pspexp_runtime_disconnect(&rt); if (!g_ho_on) show_status_page(); break; }
             pspexp_runtime_out_consume(&rt);
             rt.stats.messages_out++;
         }
@@ -441,7 +470,8 @@ int main(int argc, char *argv[])
             trace("link read failed");
             connected = 0;
             pspexp_runtime_disconnect(&rt);
-            show_status_page();
+            handover_take(&rt, sceKernelGetSystemTimeLow());
+            if (!g_ho_on) show_status_page();
             continue;
         }
 
@@ -454,8 +484,10 @@ int main(int argc, char *argv[])
                                  * Bluetooth volume; the note pauses and resumes the board's music) */
                 pspexp_runtime_push_input(&rt, pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE)), pad.Lx, pad.Ly);
         }
-        /* Keep the status page until the first frame; after that the GE owns the screen. */
-        if (rt.stats.frames == 0 && now - last_status > 250000) { draw_status(&rt, gen, 1); last_status = now; }
+        /* Keep the status page until the first frame; after that the GE owns the screen. While
+         * handing over, the spinner instead */
+        handover_take(&rt, now);
+        if (!handover_tick(&rt, now) && rt.stats.frames == 0 && now - last_status > 250000) { draw_status(&rt, gen, 1); last_status = now; }
     }
 
     trace(g_quit_asked ? "leaving: quit from the HOME menu" : "leaving");

@@ -345,6 +345,7 @@ static uint64_t g_last_frame, g_sel_since;
 static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
+static int g_spin_x, g_spin_y, g_spin_drawn;   /* the "Starting" frame's spinner square (draw_running) */
 static LEntry g_running_e;
 static uint64_t g_confirm_until;
 static char g_confirm[32];
@@ -743,6 +744,7 @@ static void launch(LEntry *e, uint64_t now)
     g_launch_aware = e->pspexp || strstr(g_launch_cmd, "pspexp-") != NULL;
     g_launch_pending = 1;
     g_running = 1;
+    g_spin_drawn = 0;   /* until its "Starting" frame is drawn */
     g_running_e = *e;
     lib_recent_push(&L, e->id);
     g_dirty = 1;
@@ -850,6 +852,7 @@ void launcher_child_exited(int status, const char *message)
         notify(NOTE_FAIL, "circle-x", g_running_e.title, s, NULL, key);
     }
     g_running = 0;
+    g_spin_drawn = 0;
     cats_build();
     g_dirty = 1;
 }
@@ -1593,6 +1596,7 @@ static void home_input(uint32_t pressed, int up, int down, int left, int right, 
 {
     int n = rail_n();
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
+    if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* as the bell */
     if (left && g_home_row == 0) { g_home_sel = (g_home_sel + n - 1) % n; g_dirty = 1; }
     if (right && g_home_row == 0) { g_home_sel = (g_home_sel + 1) % n; g_dirty = 1; }
     if (down && g_home_row == -1) { g_home_row = 0; g_dirty = 1; }
@@ -1623,6 +1627,7 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         return;
     }
     if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
+    if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* the notification centre, as START searches */
     /* up and down the rail of categories, left and right along the shelf */
     if (up) select_cat(rail_pos(g_cur) - 1, -1, now);
     if (down) select_cat(rail_pos(g_cur) + 1, 1, now);
@@ -2135,6 +2140,8 @@ static void draw_list(float dt)
 static void waves(float dt) { (void)dt; gfx_waves(0); }
 
 /* the home screen: the rail's sections as large tiles, what each holds, and Play again */
+static int hint_right(int x, const char *badge, const char *label);
+
 static void draw_home(float dt)
 {
     int i, n = rail_n(), pitch = n > 5 ? 80 : 88, x0 = SCREEN_W / 2 - (n - 1) * pitch / 2;
@@ -2199,12 +2206,22 @@ static void draw_home(float dt)
         int x = 16;
         gfx_button('x', x, HINT_Y); x += 18;
         gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row == -1 ? "Notifications" : g_home_row == 1 && g_home_pill == 1 ? "Play" : "Open", C_SUB, 255, 0);
-        x = SCREEN_W - 16 - gfx_text_width(FONT_SMALL, "Search");
-        gfx_text(FONT_SMALL, x, HINT_Y - 1, "Search", C_SUB, 255, 0);
-        x -= gfx_text_width(FONT_BADGE, "START") + 16;
-        gfx_nine(NINE_R6, x, HINT_Y, gfx_text_width(FONT_BADGE, "START") + 10, 14, 0x1e2c4a, 255);
-        gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, "START", C_SUB, 255, 0);
+        x = hint_right(SCREEN_W - 16, "START", "Search");
+        hint_right(x - 14, "SELECT", "Notifications");
     }
+}
+
+/* a hint at the right of the hint line, ending at x: a button's name in a badge, then what it
+ * does; the x where it starts */
+static int hint_right(int x, const char *badge, const char *label)
+{
+    int bw = gfx_text_width(FONT_BADGE, badge) + 10;
+    x -= gfx_text_width(FONT_SMALL, label);
+    gfx_text(FONT_SMALL, x, HINT_Y - 1, label, C_SUB, 255, 0);
+    x -= bw + 6;
+    gfx_nine(NINE_R6, x, HINT_Y, bw, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, badge, C_SUB, 255, 0);
+    return x;
 }
 
 static void draw_hints(void)
@@ -2217,15 +2234,11 @@ static void draw_hints(void)
         gfx_button('s', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, 255, 0) + 14;
     }
     gfx_button('t', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0) + 14;
-    gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, g_cat[g_cur].hidden ? (parent_kind(&g_cat[g_cur]) == CK_SETTINGS ? "Settings" : "Emulators") : "Home", C_SUB, 255, 0);
-    {
-        const char *r = "Search";
-        int w = gfx_text_width(FONT_SMALL, r), bw = gfx_text_width(FONT_BADGE, "START") + 10;
-        x = SCREEN_W - 16 - w;
-        gfx_text(FONT_SMALL, x, HINT_Y - 1, r, C_SUB, 255, 0);
-        x -= bw + 6;
-        gfx_nine(NINE_R6, x, HINT_Y, bw, 14, 0x1e2c4a, 255);
-        gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, "START", C_SUB, 255, 0);
+    gfx_button('o', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, g_cat[g_cur].hidden ? (parent_kind(&g_cat[g_cur]) == CK_SETTINGS ? "Settings" : "Emulators") : "Home", C_SUB, 255, 0);
+    {   /* SELECT's hint where there is room (a long left side: "Unfavourite", "Emulators"); the button works anyway */
+        int left_end = x, r = hint_right(SCREEN_W - 16, "START", "Search");
+        int w = gfx_text_width(FONT_BADGE, "SELECT") + 10 + 6 + gfx_text_width(FONT_SMALL, "Notifications");
+        if (r - 14 - w >= left_end + 12) hint_right(r - 14, "SELECT", "Notifications");
     }
 }
 
@@ -2425,19 +2438,36 @@ static void draw_details(float dt)
     }
 }
 
+/* the program being started: the last frame the PSP shows before it, which keeps it and turns a
+ * spinner on the pill's square (PspExpDisconnect, launcher_handover_spinner) until the program draws */
+#define SPIN_BG 0x16223c
 static void draw_running(void)
 {
-    int w, cx = (SCREEN_W - COVER_SIZE) / 2;
-    const char *sub = "is running", *h = "Hold START + SELECT in the game to quit it";
+    int w, cx = (SCREEN_W - COVER_SIZE) / 2, s = PSPEXP_SPINNER_SIZE;
+    const char *sub = "Starting", *h = "Hold START + SELECT in the game to quit it";
     gfx_shadow(NINE_SHADOW14, cx, 40 + 8, COVER_SIZE, COVER_SIZE, 0x000000, 180);
     draw_cover(&g_running_e, cx, 40, 255);
     w = gfx_text_width(FONT_H1, g_running_e.title);
     if (w > SCREEN_W - 40) w = SCREEN_W - 40;
     gfx_text(FONT_H1, (SCREEN_W - w) / 2, 180, g_running_e.title, C_TEXT, 255, SCREEN_W - 40);
-    w = gfx_text_width(FONT_BODY, sub);
-    gfx_text(FONT_BODY, (SCREEN_W - w) / 2, 212, sub, C_SUB, 255, 0);
+    {   /* a pill: the spinner's square, then "Starting" */
+        int tw = gfx_text_width(FONT_BODY, sub), pw = 6 + s + 8 + tw + 14, ph = s + 8;
+        int px = (SCREEN_W - pw) / 2, py = 206;
+        gfx_nine(NINE_R14, px, py, pw, ph, SPIN_BG, 255);
+        g_spin_x = px + 6 + s / 2; g_spin_y = py + ph / 2;
+        gfx_rect(g_spin_x - s / 2, g_spin_y - s / 2, s, s, SPIN_BG, 255);
+        gfx_text(FONT_BODY, px + 6 + s + 8, g_spin_y - gfx_line_height(FONT_BODY) / 2, sub, C_SUB, 255, 0);
+        g_spin_drawn = 1;
+    }
     w = gfx_text_width(FONT_SMALL, h);
     gfx_text(FONT_SMALL, (SCREEN_W - w) / 2, HINT_Y - 1, h, C_MUTED, 255, 0);
+}
+
+int launcher_handover_spinner(int *x, int *y, uint32_t *bg, uint32_t *fg)
+{
+    if (!g_running || !g_spin_drawn) return 0;
+    *x = g_spin_x; *y = g_spin_y; *bg = SPIN_BG; *fg = C_ACCENT;
+    return 1;
 }
 
 /* ---- the about page --------------------------------------------------------------------------------- */

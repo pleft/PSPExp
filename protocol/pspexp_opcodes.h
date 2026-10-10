@@ -13,7 +13,7 @@ enum PspExpOpcode {
     PSPEXP_OP_MEMORY_QUERY   = 0x0004,  /* host -> PSP, no payload */
     PSPEXP_OP_MEMORY_STATUS  = 0x0005,  /* PSP -> host, PspExpMemoryStatus */
     PSPEXP_OP_ERROR          = 0x0006,  /* either, PspExpError */
-    PSPEXP_OP_DISCONNECT     = 0x0007,  /* either, no payload: orderly close */
+    PSPEXP_OP_DISCONNECT     = 0x0007,  /* either: orderly close; from the host, a PspExpDisconnect may say the PSP is handed over */
     PSPEXP_OP_CLOCK_SET      = 0x0008,  /* host -> PSP, PspExpClockSet (only with PSPEXP_FEATURE_CLOCK) */
     PSPEXP_OP_CLOCK_STATUS   = 0x0009,  /* PSP -> host, PspExpClockStatus: the answer */
     PSPEXP_OP_POWER_QUERY    = 0x000A,  /* host -> PSP, no payload (only with PSPEXP_FEATURE_POWER) */

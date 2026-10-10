@@ -653,6 +653,53 @@ void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out)
         memcpy(out + (size_t)y * PSPEXP_DISPLAY_WIDTH, fb + (size_t)y * PSPEXP_DISPLAY_STRIDE, PSPEXP_DISPLAY_WIDTH * 2);
 }
 
+/* 0x00RRGGBB as the GE's vertex colour (0xAABBGGRR), opaque */
+static uint32_t abgr(uint32_t rgb) { return 0xFF000000u | (rgb & 0xFFu) << 16 | (rgb & 0xFF00u) | (rgb >> 16 & 0xFFu); }
+
+/* a colour a share k/8 of the way from b to f */
+static uint32_t mix8(uint32_t b, uint32_t f, int k)
+{
+    uint32_t o = 0;
+    int sh;
+    for (sh = 0; sh <= 16; sh += 8) {
+        int cb = (int)(b >> sh & 0xFFu), cf = (int)(f >> sh & 0xFFu);
+        o |= (uint32_t)(cb + (cf - cb) * k / 8) << sh;
+    }
+    return o;
+}
+
+void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32_t fg, unsigned phase)
+{
+    typedef struct { uint32_t c; int16_t x, y, z, pad; } V;   /* GU_COLOR_8888 | GU_VERTEX_16BIT */
+    static const int8_t dot[8][2] = { {8, 0}, {6, 6}, {0, 8}, {-6, 6}, {-8, 0}, {-6, -6}, {0, -8}, {6, -6} };
+    const int s = PSPEXP_SPINNER_SIZE / 2;
+    V *v;
+    int i;
+    if (ge->in_frame) return;
+    sceGuStart(GU_DIRECT, ge->list);
+    ge->mode3d = 1; leave_3d(ge);   /* the 2D state, whatever the last program left (untextured) */
+    sceGuDrawBufferList(GU_PSM_5650, (void *)ge->displayed_offset, PSPEXP_DISPLAY_STRIDE);   /* the frame on screen */
+    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    v = (V *)sceGuGetMemory(18 * sizeof(V));
+    memset(v, 0, 18 * sizeof(V));
+    v[0].c = v[1].c = abgr(bg);
+    v[0].x = (int16_t)(cx - s); v[0].y = (int16_t)(cy - s); v[1].x = (int16_t)(cx + s); v[1].y = (int16_t)(cy + s);
+    for (i = 0; i < 8; i++) {   /* eight dots round a circle, the leading one brightest, a fading tail */
+        int age = (int)((phase + 8u - (unsigned)i) % 8u);
+        uint32_t c = abgr(mix8(bg, fg, age >= 6 ? 1 : 8 - age));
+        V *d = v + 2 + i * 2;
+        d[0].c = d[1].c = c;
+        d[0].x = (int16_t)(cx + dot[i][0] - 2); d[0].y = (int16_t)(cy + dot[i][1] - 2);
+        d[1].x = (int16_t)(cx + dot[i][0] + 2); d[1].y = (int16_t)(cy + dot[i][1] + 2);
+    }
+    sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 18, 0, v);
+    sceKernelDcacheWritebackAll();
+    sceGuFinish();
+    sceGuSync(0, 0);
+    ge->mode3d = 1;   /* the next frame sets its state afresh */
+    ge->cur_atlas = NULL;
+}
+
 static uint32_t op_frame_ge_us(void *u) { return ((PspExpGeExecutor *)u)->stats.last_ge_us; }
 
 /* ---- setup ---------------------------------------------------------------- */

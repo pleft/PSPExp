@@ -306,6 +306,22 @@ typedef struct PspExpMemoryStatus {
 } PspExpMemoryStatus;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpMemoryStatus) == 16, memory_status_size);
 
+/* DISCONNECT, host to PSP: an orderly close, no payload; or this one when the host hands
+ * the PSP over to another program (the launcher starting a game): the PSP keeps the last
+ * frame and draws a progress spinner centred at (x, y), on a square of colour bg, until a
+ * program draws again (at most 30 s, then its status page). Runtimes before it (2026-10-10)
+ * ignore the payload. */
+#define PSPEXP_DISCONNECT_HANDOVER 0x01u
+#define PSPEXP_SPINNER_SIZE        24     /* the spinner's square, px */
+typedef struct PspExpDisconnect {
+    uint8_t  flags;             /* PSPEXP_DISCONNECT_* */
+    uint8_t  reserved0[3];
+    int16_t  x, y;              /* the spinner's centre, screen px */
+    uint32_t bg;                /* 0x00RRGGBB: the square under it */
+    uint32_t fg;                /* 0x00RRGGBB: its brightest dot */
+} PspExpDisconnect;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpDisconnect) == 16, disconnect_size);
+
 /* Either direction: a protocol-level problem. */
 typedef struct PspExpError {
     uint16_t code;              /* PspExpErrorCode */

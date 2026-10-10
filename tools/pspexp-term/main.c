@@ -1512,7 +1512,18 @@ static void release_psp(void)
 {
     if (g_released) return;
     keypad_release_all();
-    if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);
+    if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
+        /* a program the launcher is starting, its "Starting" frame on the PSP: handed over, the PSP
+         * keeps that frame and turns a spinner on it until the program draws (PspExpDisconnect) */
+        PspExpDisconnect d;
+        int x, y;
+        uint32_t bg, fg;
+        memset(&d, 0, sizeof(d));
+        if (g_launcher_on && launcher_handover_spinner(&x, &y, &bg, &fg)) {
+            d.flags = PSPEXP_DISCONNECT_HANDOVER; d.x = (int16_t)x; d.y = (int16_t)y; d.bg = bg; d.fg = fg;
+            pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, &d, sizeof(d));
+        } else pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);
+    }
     pspexp_set_transport(ctx, NULL);
     g_released = 1;
     fprintf(stderr, "[pspexp-term] PSP released\n");
@@ -2543,6 +2554,7 @@ static void draw_pointer(void) {}
 /* ---- programs started from the launcher ------------------------------------------- */
 
 static void release_psp(void);
+static unsigned g_launcher_frames;   /* the launcher's frames sent: a launch waits for its "Starting" one */
 /* PSPEXP_MESSAGE: a file a program may write one line into before it ends ("Warcraft needs your
  * own DATA.WAR: ..."); the launcher shows that line instead of "stopped (status N)" */
 static void message_path(char *p, size_t n) { snprintf(p, n, "/tmp/pspexp-message-%u", (unsigned)getuid()); }
@@ -3415,7 +3427,23 @@ int main(int argc, char **argv)
         if (g_launcher_on && g_launch_pid <= 0) {
             char cmd[1024], cwd[512];
             int aware;
-            if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) { g_launch_from_files = g_view_files; launch_child(cmd, cwd, aware); }
+            /* a PSPExp program from the launcher: started once the launcher's "Starting" frame has
+             * gone to the PSP (it is the frame the PSP keeps while the program loads); the others,
+             * and any after half a second without that frame, at once */
+            static char pend_cmd[1024], pend_cwd[512];
+            static int pend_aware, pend_on;
+            static unsigned pend_frames;
+            static uint64_t pend_at;
+            if (launcher_take_launch(cmd, sizeof(cmd), cwd, sizeof(cwd), &aware)) {
+                g_launch_from_files = g_view_files;
+                if (aware && g_view_launcher && pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
+                    snprintf(pend_cmd, sizeof(pend_cmd), "%s", cmd); snprintf(pend_cwd, sizeof(pend_cwd), "%s", cwd);
+                    pend_aware = aware; pend_on = 1; pend_frames = g_launcher_frames; pend_at = now;
+                } else launch_child(cmd, cwd, aware);
+            } else if (pend_on && (g_launcher_frames != pend_frames || now - pend_at > 500000u)) {
+                pend_on = 0;
+                launch_child(pend_cmd, pend_cwd, pend_aware);
+            }
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
             if (launcher_take_files()) { files_show(NULL, 1); swallow(); }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
@@ -3508,7 +3536,7 @@ int main(int argc, char **argv)
         } else if (g_view_launcher) {
             if (launcher_needs_frame(now) && pspexp_should_render(ctx)) {
                 launcher_render(ctx, now, 1);
-                frames++; g_ctl_frame_us = now;
+                frames++; g_ctl_frame_us = now; g_launcher_frames++;
                 if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
             }
         } else if (g_view_mirror) {

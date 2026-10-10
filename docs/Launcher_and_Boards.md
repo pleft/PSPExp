@@ -77,6 +77,12 @@ it with `/usr/local/bin/pspexp-run`.
 `pspexp-run` on the GameShell = LD_PRELOAD + the PSP handoff: it asks
 `pspexp-term` to release the PSP (SIGUSR1, via `pspexp-exec`; only for a program that takes it over USB: one sent to another PSP, `PSPEXP=tcp:...`, took the PSP from the running console until 2026-10-10), the game uses
 the USB link, and the console takes it back (SIGUSR2) when the game ends.
+A game started from the launcher is preceded by its "Starting" frame, which
+the PSP keeps with a spinner turning on it until the game draws (the
+hand-over `DISCONNECT`, docs/PSPExp_Technical_Architecture.md §9.2). SELECT
+in the launcher opens the notification centre, as START opens search (the
+user's choice, 2026-10-10: notifications belong to the launcher), its hint
+beside START's where the hint line has room.
 The game's own X window stays on the (absent) LCD; `PSPEXP_WINDOW=hide` hides
 it. Sound goes to the PSP only (`PSPEXP_LOCAL_AUDIO=0`), so it does not also
 enter the console's audio FIFO.

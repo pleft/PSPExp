@@ -47,6 +47,9 @@ int launcher_open_file(const char *path);
 int launcher_system_for(const char *path, char *name, size_t n);
 /* the title of what is starting or running, NULL when nothing is */
 const char *launcher_running_title(void);
+/* the program being started: where its "Starting" frame left the spinner's square (the
+ * DISCONNECT that hands the PSP over); 0 when that frame was not drawn */
+int launcher_handover_spinner(int *x, int *y, uint32_t *bg, uint32_t *fg);
 /* tests (the control port): what is on screen, as "launcher.key=value" lines
  * appended to out; test mode refuses Restart, Power off and the Wi-Fi switch */
 void launcher_state(char *out, size_t n);

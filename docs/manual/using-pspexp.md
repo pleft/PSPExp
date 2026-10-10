@@ -31,7 +31,7 @@ music playing, a pause sign that it is paused.
    Favourites   Games    Emulators     Apps   Settings
                          34 games
                  (>) Play again  GoldenEye 007
- (X) Open                                                START Search
+ (X) Open                          SELECT Notifications  START Search
 ```
 
 Left and right pick a tile, cross opens it; down then cross plays what
@@ -57,7 +57,7 @@ one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
  [apps]   | Cave Story
  [gear]   | a short description of the game
           | Game  /  PSP renderer
- (X) Play  ([]) Favourite  (/\) Details  (O) Home        START Search
+ (X) Play  ([]) Favourite  (/\) Details  (O) Home  SELECT Notifications  START Search
 ```
 
 | Button | In the launcher |
@@ -69,6 +69,7 @@ one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
 | square | add to / remove from Favourites |
 | triangle | details: description, how it draws, size, when last played |
 | START | search everything: games, apps and every ROM, by name |
+| SELECT | the notifications |
 | SELECT, held | the terminal (and back) |
 
 ## Notifications
@@ -81,9 +82,9 @@ board's), the board losing its network, Bluetooth headphones gone,
 storage nearly full, an install or a Wi-Fi join that finished.
 
 Nothing is lost when you look away: the **bell** next to the date in the
-top bar counts what you have not seen. On the home screen press **up**
-from the tiles to reach it and **cross** to open the list, the last 50,
-newest first:
+top bar counts what you have not seen. In the launcher press **SELECT**
+to open the list (or, on the home screen, **up** from the tiles to the
+bell and **cross**), the last 50, newest first:
 
 - **cross**: go where it is about (Packages for updates, Settings for the
   network or Bluetooth), when there is somewhere to go;
@@ -99,8 +100,10 @@ see the cheatsheet).
 
 ## Playing
 
-Cross on a game starts it. The launcher shows "Starting" and hands the PSP
-over; when the game ends, the launcher comes back by itself.
+Cross on a game starts it. The launcher shows the game with "Starting" and
+a turning wheel, which the PSP keeps on screen while the game loads, until
+the game's first picture; when the game ends, the launcher comes back by
+itself.
 
 A game that cannot start says why at the bottom of the screen: Warcraft,
 for example, when the data from your own copy is not on the board yet.

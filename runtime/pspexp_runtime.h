@@ -189,6 +189,10 @@ typedef struct PspExpRuntime {
      * logged ("msg: ..."), before each is handled: the last one logged before the PSP stops is
      * the one it stopped on (0: off) */
     uint32_t trace_messages, trace_left;
+    /* a DISCONNECT that hands the PSP over (PSPEXP_DISCONNECT_HANDOVER): kept for the executor's
+     * loop, which clears handover_req when it has taken it */
+    PspExpDisconnect handover;
+    int      handover_req;
 } PspExpRuntime;
 
 int  pspexp_runtime_init(PspExpRuntime *rt, const PspExpRuntimeOps *ops, const PspExpRuntimeConfig *cfg);
