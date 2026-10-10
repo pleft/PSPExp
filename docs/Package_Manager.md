@@ -918,7 +918,9 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   and joined from the PSP with nothing done by hand; the time zone set and
   the clock synchronised; SSH turned on from Apps > Terminal; Packages read
   the catalogue from `https://pkg.pspexp.dev`; the Wi-Fi password never
-  reached the log (wpa_supplicant writes `<hidden>`). (The first try of
+  reached the log (wpa_supplicant writes `<hidden>`). OpenTyrian installed
+  from Packages (its recipe package from `pkg.pspexp.dev`, the game from
+  Debian's archive) and played. (The first try of
   this card showed the Pi's own "Trying boot mode USB-MSD" screen: the card
   was not seated; pushed home, it booted.)
 
