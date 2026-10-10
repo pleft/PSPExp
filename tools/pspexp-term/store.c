@@ -50,6 +50,8 @@ static char g_err[200];
 enum { S_LIST, S_CONFIRM, S_WORKING, S_RESULT, S_TERMS };
 static int g_mode;
 static pid_t g_pid;                /* the background job */
+static pid_t g_load_pid;           /* the list being read when Packages opens (pspexp-pkg available) */
+#define STORE_LIST "/tmp/pspexp-store-list.txt"
 static char g_job[160], g_result_title[96], g_result[400], g_job_id[48];
 static int g_job_install;
 static int g_catmode;              /* there is a catalogue */
@@ -125,14 +127,13 @@ static void filter(void)
 
 /* the catalogue's recipes with their state (pspexp-pkg available), and installed
  * titles it does not have (older archive installs: removable only) */
-static void load_catalogue(void)
+static void read_catalogue(FILE *f)
 {
     char line[1024], keep[48] = "";
-    FILE *f;
     int i;
     if (g_nvis && g_sel < g_nvis) snprintf(keep, sizeof(keep), "%s", g_pk[g_vis[g_sel]].id);
     g_n = 0;
-    if ((f = popen("pspexp-pkg available 2>/dev/null", "r"))) {
+    if (f) {
         while (fgets(line, sizeof(line), f) && g_n < PKG_MAX) {
             char *fld[8], *p = line;
             int k;
@@ -150,7 +151,6 @@ static void load_catalogue(void)
             snprintf(line, sizeof(line), "%s/recipes/%s/cover.png", g_catdir, pk->id);
             if (access(line, R_OK) == 0) snprintf(pk->cover, sizeof(pk->cover), "%s", line);
         }
-        pclose(f);
     }
     read_installed();   /* adds installed titles the catalogue lacks; the rest only get their installed version */
     for (i = 0; i < g_n; i++) {
@@ -176,6 +176,48 @@ static void load_catalogue(void)
     g_nvis = 0;
     filter();
     for (i = 0; i < g_nvis; i++) if (!strcmp(g_pk[g_vis[i]].id, keep)) g_sel = i;
+}
+
+static void load_catalogue(void)
+{
+    FILE *f = popen("pspexp-pkg available 2>/dev/null", "r");
+    read_catalogue(f);
+    if (f) pclose(f);
+}
+
+/* when Packages opens: the list read in the background, a "Reading" box meanwhile (it took 16 s
+ * on the GameShell before pspexp-pkg read every recipe in one pass: the PSP looked hung) */
+static void load_start(void)
+{
+    pid_t pid;
+    if (g_load_pid > 0) return;   /* still reading from the last time it opened */
+    if ((pid = fork()) < 0) { load_catalogue(); return; }
+    if (pid == 0) {
+        int fd = open(STORE_LIST, O_WRONLY | O_CREAT | O_TRUNC, 0644), i;
+        if (fd >= 0) { dup2(fd, 1); close(fd); }
+        fd = open("/dev/null", O_WRONLY);
+        if (fd >= 0) { dup2(fd, 2); close(fd); }
+        for (i = 3; i < 1024; i++) close(i);   /* not the PSP link */
+        execl("/bin/sh", "sh", "-c", "pspexp-pkg available", (char *)NULL);
+        _exit(127);
+    }
+    g_load_pid = pid;
+}
+
+static void open_terms_hook(void);
+
+static int load_poll(void)
+{
+    int st;
+    FILE *f;
+    if (g_load_pid <= 0 || waitpid(g_load_pid, &st, WNOHANG) != g_load_pid) return 0;
+    g_load_pid = 0;
+    f = fopen(STORE_LIST, "r");
+    read_catalogue(f);
+    if (f) fclose(f);
+    unlink(STORE_LIST);
+    open_terms_hook();
+    return 1;
 }
 
 /* a shell job in the background, its output in STORE_LOG */
@@ -283,14 +325,17 @@ static void st_open(void)
         snprintf(pub, sizeof(pub), "%s/serial", g_catdir);
         g_catmode = access(pub, R_OK) == 0;
     }
-    load_catalogue();
-    {   /* screenshots: PSPEXP_LAUNCHER_OPEN=terms:ID shows that package's terms to accept */
-        const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
-        int i;
-        if (o && !strncmp(o, "terms:", 6))
-            for (i = 0; i < g_n; i++)
-                if (!strcmp(g_pk[i].id, o + 6) && g_pk[i].terms[0]) { g_vis[0] = i; g_nvis = 1; g_sel = 0; g_mode = S_TERMS; }
-    }
+    g_n = 0; g_nvis = 0; g_sel = 0;
+    load_start();
+}
+
+static void open_terms_hook(void)
+{   /* screenshots: PSPEXP_LAUNCHER_OPEN=terms:ID shows that package's terms to accept */
+    const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
+    int i;
+    if (o && !strncmp(o, "terms:", 6))
+        for (i = 0; i < g_n; i++)
+            if (!strcmp(g_pk[i].id, o + 6) && g_pk[i].terms[0]) { g_vis[0] = i; g_nvis = 1; g_sel = 0; g_mode = S_TERMS; }
 }
 
 static int st_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
@@ -301,6 +346,7 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     (void)b; (void)now;
     if (!pressed && !up && !down && !left && !right) return;
     g_dirty = 1;
+    if (g_load_pid > 0) { if (pressed & PSPEXP_BUTTON_CIRCLE) g_exit = 1; return; }   /* reading the list: circle leaves */
     switch (g_mode) {
     case S_WORKING: return;   /* it finishes by itself */
     case S_RESULT: if (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE)) g_mode = S_LIST; return;
@@ -334,6 +380,8 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
 static int st_needs_frame(uint64_t now)
 {
     static uint64_t spin;
+    if (load_poll()) g_dirty = 1;
+    else if (g_load_pid > 0 && now - spin > 120000u) { spin = now; g_dirty = 1; }   /* the spinner turns */
     if (g_pid > 0) {
         int st;
         if (waitpid(g_pid, &st, WNOHANG) == g_pid) { job_done(st); g_dirty = 1; }
@@ -433,7 +481,11 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     if (upd) { snprintf(a, sizeof(a), ", %d update%s", upd, upd == 1 ? "" : "s"); strncat(s, a, sizeof(s) - strlen(s) - 1); }
     if (broken) { snprintf(a, sizeof(a), ", %d broken", broken); strncat(s, a, sizeof(s) - strlen(s) - 1); }
     gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 9, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
-    if (!g_n) {
+    if (g_load_pid > 0) {
+        int bx = (UI_SCREEN_W - 320) / 2, by = (UI_SCREEN_H - 84) / 2 - 8;
+        box("Reading the packages", "What this board can install, and what is installed.", 84);
+        gfx_icon("loader", 14, bx + 320 - 30, by + 12, UI_ACCENT, 128 + (int)((now / 120000u) % 2) * 127);
+    } else if (!g_n) {
         if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (Settings > Network) and press START to read it.");
         else snprintf(s, sizeof(s), "The catalogue is empty. Join a network (Settings > Network) and press START to read it.");
         box(g_catmode ? "No packages" : "No catalogue", s, 110);
@@ -528,13 +580,13 @@ static void st_render(PspExpContext *ctx, uint64_t now)
 
 static void st_state(char *out, size_t n)
 {
-    static const char *mode[] = { "list", "confirm", "working", "result" };
+    static const char *mode[] = { "list", "confirm", "working", "result", "terms" };
     static const char *stn[] = { "installed", "update", "new", "local", "broken" };
     static const char *tabn[NTABS] = { "games", "emulators", "apps" };
     size_t l = strlen(out);
     int i;
     if (l < n) l += (size_t)snprintf(out + l, n - l, "store.mode=%s\nstore.catalogue=%d\nstore.local=%d\nstore.section=%s\nstore.selected=%s\nstore.progress=%d\nstore.phase=%s\nstore.result=%s\nstore.packages=",
-                                     mode[g_mode], g_catmode, g_local, tabn[g_tab], g_sel < g_nvis ? g_pk[g_vis[g_sel]].id : "",
+                                     g_load_pid > 0 ? "loading" : mode[g_mode], g_catmode, g_local, tabn[g_tab], g_sel < g_nvis ? g_pk[g_vis[g_sel]].id : "",
                                      g_prog, g_phase, g_mode == S_RESULT ? g_result : "");
     for (i = 0; i < g_n && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s:%s", i ? "|" : "", g_pk[i].id, stn[status_of(&g_pk[i])]);
     if (l < n) snprintf(out + l, n - l, "\n");

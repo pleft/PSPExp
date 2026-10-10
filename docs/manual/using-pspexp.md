@@ -123,7 +123,8 @@ d-pad in others). Triangle on a game in the launcher shows its details.
 Games, Emulators and Apps (L / R switch). **PSPExp** itself is the first
 entry under Apps: when it says **Update**, cross installs the new PSPExp
 (and the PSP's runtime with it); then **Settings > Restart PSPExp**, and
-**Settings > Update the PSP** when the launcher offers it.
+**Settings > Update the PSP** when the launcher offers it. It opens with
+"Reading the packages" for a moment while it reads the list.
 
 | Button | |
 |---|---|

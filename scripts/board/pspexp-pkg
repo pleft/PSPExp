@@ -479,15 +479,58 @@ self_line() {
 	v=$(dpkg-query -W -f='${Version}' pspexp-core 2>/dev/null) || return 0
 	[ -n "$v" ] || return 0
 	st=installed
-	for p in pspexp-core pspexp-runtime; do
-		apt-cache policy "$p" 2>/dev/null | awk '/Installed:/ {i=$2} /Candidate:/ {c=$2} END {exit !(i != "" && i != "(none)" && c != "" && c != "(none)" && i != c)}' && st=update
-	done
+	# both in one apt-cache call (each call is ~1 s on the GameShell)
+	apt-cache policy pspexp-core pspexp-runtime 2>/dev/null | awk '
+		/^[^ ]/ { p = $1 } /Installed:/ { i[p] = $2 } /Candidate:/ { c[p] = $2 }
+		END { for (k in i) if (i[k] != "(none)" && c[k] != "" && c[k] != "(none)" && i[k] != c[k]) u = 1; exit !u }' && st=update
 	printf 'pspexp|%s|%s|app|PSPExp|The console and launcher on this board and the PSP'"'"'s own runtime: an update brings both, then Settings > Restart PSPExp and Settings > Update the PSP.|sdl|\n' "$v" "$st"
+}
+
+# on a Debian board, every recipe in one awk pass, with one dpkg-query for the installed ones: as the
+# loop below prints it, which forked ~14 programs a recipe (16 s for 48 lines on the GameShell, 5 s
+# on the Pi, while Packages opened)
+available_debian() {
+	t=$(mktemp -d) || return 1
+	dpkg-query -W -f='${Package} ${Status} ${Version}\n' 'pspexp-recipe-*' 2>/dev/null |
+		awk '/install ok installed/ { sub(/^pspexp-recipe-/, "", $1); print $1, $NF }' > "$t/meta"
+	: > "$t/apps"
+	for f in "$APPS"/*/package; do [ -f "$f" ] && echo "$f"; done > "$t/list"
+	[ -s "$t/list" ] && xargs awk 'FNR == 1 { if (id != "") print id, r; id = FILENAME; sub(/\/package$/, "", id); sub(/.*\//, "", id); r = 0 }
+		/^recipe=./ { r = 1 } END { if (id != "") print id, r }' < "$t/list" > "$t/apps"
+	awk -v fam="$FAMILY" -v board="$BOARD" -v metaf="$t/meta" -v appsf="$t/apps" '
+	function get(sec, key) { return ((sec ":" board, key) in ov) ? ov[sec ":" board, key] : base[sec, key] }
+	function flush(   id, g, w, st, v, terms) {
+		if (file == "") return
+		id = file; sub(/\/recipe$/, "", id); sub(/.*\//, "", id)
+		if (get(fam, "apt") get(fam, "build") != "") {
+			w = get(fam, "warn")
+			g = get("entry", "graphics"); if (g == "") g = get("system", "graphics")
+			v = get("package", "version")
+			if (!(id in app)) st = (id in meta) ? "broken" : "new"
+			else if (!app[id]) st = "update"
+			else if (!(id in meta)) st = "broken"
+			else st = (meta[id] == v) ? "installed" : "update"
+			terms = get("package", "terms"); gsub(/\|/, " ", terms)
+			printf "%s|%s|%s|%s|%s|%s%s|%s|%s\n", id, v, st, get("package", "category"), get("package", "title"), (w != "" ? w ". " : ""), get("package", "description"), g, terms
+		}
+		split("", base); split("", ov)
+	}
+	BEGIN { while ((getline l < metaf) > 0) { split(l, a, " "); meta[a[1]] = a[2] }
+	        while ((getline l < appsf) > 0) { split(l, a, " "); app[a[1]] = a[2] + 0 } }
+	FNR == 1 { flush(); file = FILENAME; s = "" }
+	/^[ \t]*#/ || /^[ \t]*$/ { next }
+	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }
+	{ i = index($0, "="); if (!i) next; k = substr($0, 1, i - 1); v = substr($0, i + 1)
+	  gsub(/^[ \t]+|[ \t]+$/, "", k); gsub(/^[ \t]+|[ \t]+$/, "", v)
+	  if (s ~ /:/) ov[s, k] = v; else base[s, k] = v }
+	END { flush() }' "$CAT"/*/recipe
+	rm -rf "$t"
 }
 
 available() {
 	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
 	self_line
+	[ "$FAMILY" = debian ] && { available_debian; return; }
 	for r in "$CAT"/*/recipe; do
 		[ -f "$r" ] || continue
 		id=$(basename "$(dirname "$r")")

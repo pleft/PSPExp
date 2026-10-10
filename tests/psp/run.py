@@ -562,9 +562,12 @@ def suite_apps(r):
 
     def store():
         r.ctl("open store")
-        r.ctl("wait 2500")
+        r.ctl("wait 800")
         s = r.state()
         r.expect(s["view"] == "store", "view %s" % s["view"])
+        end = time.time() + 30   # the list is read in the background, a "Reading" box meanwhile
+        while time.time() < end and s.get("store.mode") == "loading": time.sleep(0.5); s = r.state()
+        r.expect(s.get("store.mode") != "loading", "the list still loading after 30 s")
         pk = dict(x.split(":") for x in s["store.packages"].split("|") if ":" in x)
         installed = set(l.split()[0] for l in t.sh("pspexp-pkg list 2>/dev/null || true").splitlines() if l.strip())
         shown = set(k for k, v in pk.items() if v in ("installed", "update", "local"))

@@ -780,6 +780,16 @@ It stays as built, with these changes:
   installed on this board: no network, not enough space, not for this board
   kind, or a warning such as "too heavy for this board".
 - **Progress:** a bar while downloading, fed by apt.
+- **Opening (2026-10-10):** the user found Packages slow to open, the PSP
+  looking hung: `pspexp-pkg available` took 16 s for 48 lines on the
+  GameShell (5 s on the Pi), ~14 programs started a recipe and two
+  `apt-cache` calls, and Packages read it before its first frame. Now the
+  Debian boards read every recipe in one awk pass, with one `dpkg-query`
+  and one `apt-cache` (output identical on both boards): 1.0 s on the
+  GameShell, 0.36 s on the Pi; and Packages opens at once with a "Reading
+  the packages" box and a spinner while the list is read in the background
+  (circle leaves; the control port says `store.mode=loading`, which the
+  real-PSP suite waits out). Tried on the GameShell.
 - **Notices:**
   - "Updates available" on the launcher, after a daily `pspexp-pkg update`
     when the board is online. *Built 2026-09-30:* the console runs
