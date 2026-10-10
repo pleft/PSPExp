@@ -58,9 +58,11 @@ packages, ROMs, files, music and headphones.
 
 ## Status: not released yet
 
-PSPExp works, but only the package repository is public so far
-(`https://pkg.pspexp.dev`, where the games come from): there is no PSP
-download and no card image to download yet. Until those exist, you build them from this repository
+PSPExp works. Public so far: the package repository
+(`https://pkg.pspexp.dev`, where the games come from) and the card images
+for the Raspberry Pi and the GameShell
+([dl.pspexp.dev](https://dl.pspexp.dev/index.html)). There is no PSP
+download yet: until there is, you build the PSP side from this repository
 on a Mac or a Linux computer. That needs the
 [pspdev](https://github.com/pspdev/pspdev) toolchain for the PSP side, and
 the board guides name the scripts to run. The first release will turn the

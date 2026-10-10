@@ -958,6 +958,30 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   this card showed the Pi's own "Trying boot mode USB-MSD" screen: the card
   was not seated; pushed home, it booted.)
 
+### 8b. The images as a download (2026-10-10)
+
+`scripts/packages/push-images [DATE]` publishes both images in their own R2
+bucket behind `https://dl.pspexp.dev` (the user's choice: a bucket of their
+own, as `apt-repo push r2` replaces what its bucket does not hold; the
+bucket and address in `~/.pspexp/r2.env` as `R2_IMAGES_BUCKET`,
+`R2_IMAGES_URL`). Each image compressed with xz (the Pi's 3.6 GiB to 819
+MiB, the GameShell's 1.4 GiB to 201 MiB; Imager and Etcher write `.img.xz`
+as it is), dated, with its SHA-256; an `index.html` (no-cache; the images
+and sources cached for good, their names never reused). It refuses an image
+holding an SSH key or a Wi-Fi connection.
+- **Sources (GPL):** beside the images, `sources/DATE/`: Linux 6.18.54 and
+  U-Boot 2026.07 as the GameShell image was built from them (the upstream
+  archives, unchanged), the kernel's whole `.config`, our boot files
+  (`kernel.config`, the device tree, `uboot.config`, `uboot-cpi3.patch`,
+  the build scripts, the Wi-Fi NVRAM), and each image's package list with
+  its source packages (`dpkg-query` of the image itself), pointing to
+  Debian's and Raspberry Pi's source archives; `README.txt` says what is
+  what, `SHA256SUMS`.
+- **Tried:** the GameShell image downloaded from `dl.pspexp.dev` matched its
+  SHA-256; the page and the sources answer. As on `pkg.pspexp.dev`, the bare
+  address answers 404 (R2 serves names, not folders): the page is
+  `/index.html`.
+
 ## 9. The Omega2+
 
 OpenWrt has none of these programs and the Omega has no compiler.

@@ -16,7 +16,8 @@ same. The Pi needs no screen of its own: the PSP is its screen.
 The easy way: a card with everything on it, ready at the first boot.
 
 1. Get the PSPExp card image for the Raspberry Pi.
-   - *The download: coming with the release.*
+   - The download: [dl.pspexp.dev](https://dl.pspexp.dev/index.html), a
+     compressed `.img.xz` and its SHA-256 checksum.
    - From this repository: `scripts/pi/image/build-image.sh` builds it on a
      Mac (it needs Docker or OrbStack), into `build/pi-image/pspexp-pi.img`.
 2. Write it to the card with Raspberry Pi Imager (**Use custom**) or your
