@@ -829,6 +829,15 @@ It stays as built, with these changes:
 - **Tried on a GameShell:** first boot grew the card and finished; the PSP
   connected and got its clock; Wi-Fi joined from System > Wi-Fi network;
   all nine recipes installed through apt (903 MB used after).
+- **Rebuilt 2026-10-10** (the user: the latest, nothing of games or
+  emulators): the kernel again for the 5 October device tree (the
+  Bluetooth UART's max-speed, 1.5 Mbit/s), `pspexp-core` 21b1af8 and
+  `pspexp-runtime` 79a56b6 from the repository; 1405 MiB, 703 MiB used.
+  Checked inside the image: no recipe, no app or system, no game or
+  emulator package, no SSH key, no Wi-Fi connection; the console,
+  first-boot, Wi-Fi-mode and boot-log services enabled. Its apt source is
+  the home repository (~/.pspexp/repo-url): a card burned from it installs
+  games on that network only, until a public repository.
 - **Found on it:** the image ships no apt lists, so the first install found
   nothing; the root helper now fetches them when missing. The launcher's
   Wi-Fi join passed the password to `nmcli` as an argument, which `sudo`
