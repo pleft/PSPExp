@@ -1,29 +1,17 @@
 #!/bin/sh
-# jazz-shareware-data: Jazz Jackrabbit's shareware episode (Epic MegaGames,
-# 1994; freely distributable: LICENSE.DOC inside), for Debian's OpenJazz, which
-# is given the folder (/usr/share/games/jazz-shareware). Arch all. Usage: build OUTDIR
+# jazz-shareware-data: an installer for Jazz Jackrabbit's shareware episode (Epic MegaGames, 1994;
+# LICENSE.DOC inside: passed on with no file altered or removed), for Debian's OpenJazz, which is
+# given the folder (/usr/share/games/jazz-shareware). PSPExp hosts none of it (the user's rule,
+# 2026-10-11): the board downloads it from DOS Games Archive (or a mirror; the SHA-256 decides)
+# (_installer.sh). Usage: build OUTDIR
 set -e
-ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-. "$ROOT/scripts/packages/recipes/_lib.sh"
-CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
-Z=$(jazz_zip)
-W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-mkdir -p "$W/root/usr/share/games/jazz-shareware" "$W/root/usr/share/doc/jazz-shareware-data"
-unzip -q -o "$Z" -d "$W/root/usr/share/games/jazz-shareware"
-cat > "$W/root/usr/share/doc/jazz-shareware-data/README" <<D
-Jazz Jackrabbit, shareware episode 1 (Epic MegaGames, 1994), for OpenJazz.
-Its licence is LICENSE.DOC in /usr/share/games/jazz-shareware. Packaged by
-PSPExp (docs/Package_Manager.md).
-D
-cat > "$W/control" <<C
-Package: jazz-shareware-data
-Version: 1.0-pspexp1
-Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
-Section: non-free/games
-Priority: optional
-Description: Jazz Jackrabbit shareware episode, for OpenJazz
- The freely distributable shareware episode of Jazz Jackrabbit (Epic
- MegaGames, 1994), in /usr/share/games/jazz-shareware. Packaged by PSPExp.
-C
-python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/jazz-shareware-data_1.0-pspexp1_all.deb"
+. "$(dirname "$0")/../_installer.sh"
+ID=jazz-shareware-data TITLE="Jazz Jackrabbit (shareware)" VERSION=1.0-pspexp2 DIR=jazz-shareware CMD=jazz-shareware
+URL=https://image.dosgamesarchive.com/games/jazz.zip
+MIRRORS="https://web.archive.org/web/2024id_/https://image.dosgamesarchive.com/games/jazz.zip https://web.archive.org/web/2015id_/http://image.dosgamesarchive.com/games/jazz.zip"
+SHA=ed025415c0bc5ebc3a41e7a070551bdfdfb0b65b5314241152d8bd31f87c22da SIZE="1.4 MB" TOP=
+RUN='exec /usr/games/OpenJazz "$G" "$@"'
+DEPENDS=openjazz
+ABOUT=" The freely distributable shareware episode of Jazz Jackrabbit (Epic
+ MegaGames, 1994), in /usr/share/games/jazz-shareware, for OpenJazz."
+build_installer "$1"

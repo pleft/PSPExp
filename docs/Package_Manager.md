@@ -272,7 +272,25 @@ a direct download (`URL=`) or an itch.io upload (`ITCH=user/game/upload`,
 whose short-lived link is asked for at each install); unpacked with unar
 (RAR, ZIP; tar for a .tar.gz, .tar.bz2 or .tar.xz, which unar would only decompress under the name game.part; unar with `-D`, so an archive of several
 top-level items is not wrapped in a folder named after the download), or
-kept whole (`KEEP=`: a Solarus quest's `.solarus` file). `theia`,
+kept whole (`KEEP=`: a Solarus quest's `.solarus` file). **Sources
+(2026-10-11):** besides `URL=`, `MIRRORS=` lists more places for the same
+file, and the signed catalogue may add more (`[mirrors]` with `ID=URL`
+lines, in any recipe), so a dead site is a catalogue update, not a new
+package; `postinst` takes a copy placed by hand in
+`/opt/pspexp/downloads/FILE` first, then each source in turn, and the
+pinned SHA-256 decides (the first file that matches is used); when none
+does, it says to place the file there. `DIR=` and `CMD=` keep the folder
+under `/usr/share/games` and the command a recipe or a Debian program
+expects (the user's data folder follows the command's name). The game data
+PSPExp had hosted became installers by the user's rule (host no game
+assets, 2026-10-11): `quake-shareware-data` (id's `quake106.zip` kept
+whole, as id's shareware licence asks; five sources), `jazz-shareware-data`
+and `tyrian-data` (three each), all found matching their pinned checksum
+on the original site and the Internet Archive's raw captures; tried in a
+Debian 13 container: an upgrade from the hosted package with the first
+source blocked (the next one taken, the same save folder), every built-in
+source blocked but a catalogue mirror, every source blocked but a copy in
+`/opt/pspexp/downloads`, nothing at all (the message), and removal. `theia`,
 `hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way.
 EA's freeware discs (`cnc-freeware`, `redalert-freeware`) use
 `_discinstaller.sh`: the release (a RAR or an ISO) downloaded and checked,

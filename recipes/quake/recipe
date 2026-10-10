@@ -10,7 +10,7 @@ title=Quake (shareware)
 description=id Software's 1996 first-person shooter, its shareware episode on Quakespasm: the full 3D world drawn by the PSP.
 category=game
 license=GPL-2.0 (Quakespasm); shareware (Quake, id Software, 1996)
-version=2
+version=3
 
 [debian]
 apt=quake-shareware-data

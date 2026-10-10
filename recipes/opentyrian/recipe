@@ -8,7 +8,7 @@ title=OpenTyrian
 description=Tyrian 2.1, the 1995 vertical shooter: fight through a story campaign, earning money between levels to buy weapons and ship upgrades. Freeware since 2004.
 category=game
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
-version=2
+version=3
 
 [debian]
 apt=opentyrian tyrian-data

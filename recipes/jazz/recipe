@@ -7,7 +7,7 @@ title=Jazz Jackrabbit (shareware)
 description=Jazz Jackrabbit, Epic MegaGames' 1994 platformer, its shareware episode on OpenJazz: fast run-and-gun through colourful planets.
 category=game
 license=GPL-2.0 (OpenJazz); shareware (Jazz Jackrabbit, Epic MegaGames, 1994)
-version=2
+version=3
 
 [debian]
 apt=openjazz jazz-shareware-data

@@ -8,6 +8,15 @@
 #   ID TITLE VERSION       package name, the game's title, the package's version
 #   SHA                    SHA-256 of the release archive
 #   URL=...                a direct download, or
+#   MIRRORS                more places for the same file, tried in turn when one fails or
+#                          gives another file (the SHA-256 decides); the signed catalogue may
+#                          add more ([mirrors] ID=URL lines in any recipe), so a dead site is a
+#                          catalogue update, not a new package
+#   FILE                   the release's file name (default: URL's); a copy placed by hand in
+#                          /opt/pspexp/downloads/FILE is taken first (the last resort when every
+#                          source is gone)
+#   DIR, CMD               the folder under /usr/share/games and the command in /usr/games
+#                          (default: ID), where a recipe or a Debian program expects them
 #   ITCH=user/game/upload  an itch.io upload (a free game's link is asked for at
 #                          each install: itch.io's links last a minute)
 #   SIZE                   the download's size, for the message ("575 MB")
@@ -22,18 +31,23 @@
 build_installer() {
 	_out=$1
 	_root="$(cd "$(dirname "$0")/../../../.." && pwd)"
+	DIR=${DIR:-$ID}; CMD=${CMD:-$ID}; FILE=${FILE:-$(basename "${URL%%\?*}")}
+	if [ "${PSPEXP_INSTALLER_LIST:-}" = 1 ]; then   # for scripts/packages/check-downloads: what it fetches
+		echo "$ID $SHA $FILE ${URL:-itch:$ITCH} $MIRRORS"
+		return 0
+	fi
 	_w=$(mktemp -d)
 	mkdir -p "$_w/root/usr/games" "$_w/root/usr/share/doc/$ID" "$_w/ctl"
-	cat > "$_w/root/usr/games/$ID" <<S
+	cat > "$_w/root/usr/games/$CMD" <<S
 #!/bin/sh
 # $TITLE (package $ID: downloaded when it was installed)
-G=/usr/share/games/$ID
+G=/usr/share/games/$DIR
 [ -f "\$G/.pspexp-sha256" ] || { echo "the game is not there: install the package $ID again (it downloads it)" >&2; exit 1; }
-D="\${XDG_DATA_HOME:-\$HOME/.local/share}/$ID"
+D="\${XDG_DATA_HOME:-\$HOME/.local/share}/$CMD"   # (the command's name: the folder a former package used, as for Quake)
 mkdir -p "\$D"
 $RUN
 S
-	chmod 755 "$_w/root/usr/games/$ID"
+	chmod 755 "$_w/root/usr/games/$CMD"
 	if [ -n "$ITCH" ]; then
 		_u=${ITCH%%/*}; _r=${ITCH#*/}; _g=${_r%%/*}; _id=${_r#*/}
 		_src="https://$_u.itch.io/$_g (upload $_id)"
@@ -43,6 +57,21 @@ S
 		_src="$URL"
 		_fetch="u='$URL'"
 	fi
+	# the sources in turn: the release's own, the mirrors, the catalogue's (the SHA-256 decides)
+	_fetch="$_fetch
+ok() { echo \"$SHA  \$C/game.part\" | sha256sum -c --quiet - >/dev/null 2>&1; }
+got=
+if [ -f /opt/pspexp/downloads/$FILE ] && cp /opt/pspexp/downloads/$FILE \"\$C/game.part\" && ok; then
+	echo \"Using /opt/pspexp/downloads/$FILE\"; got=1
+fi
+if [ -z \"\$got\" ]; then
+	for v in \"\$u\" $MIRRORS \$(awk -v id='$ID' '/^\\[/ { s = \$0; next } s == \"[mirrors]\" { i = index(\$0, \"=\"); k = substr(\$0, 1, i - 1); gsub(/[ \\t]/, \"\", k); if (i && k == id) { v = substr(\$0, i + 1); gsub(/^[ \\t]+|[ \\t]+\$/, \"\", v); print v } }' /usr/share/pspexp/catalogue/recipes/*/recipe 2>/dev/null); do
+		echo \"Downloading $TITLE ($SIZE) from \$(echo \"\$v\" | cut -d/ -f3)...\"
+		if curl -fL --retry 2 --connect-timeout 20 -o \"\$C/game.part\" \"\$v\" && ok; then got=1; break; fi
+		echo \"  not there, or not the expected file: the next source\"
+	done
+fi
+[ -n \"\$got\" ] || { rm -rf \"\$C\"; echo \"no source gave the expected file: install it again later, or put $FILE in /opt/pspexp/downloads and install again\" >&2; exit 1; }"
 	case "$URL" in
 	*.tar.gz|*.tgz) _unpack='tar -xzf "$C/game.part" -C "$C/x"' ;;   # (unar knows a compressed tar by its name only:
 	*.tar.bz2|*.tbz2|*.tbz) _unpack='tar -xjf "$C/game.part" -C "$C/x"' ;;   #  on game.part it just decompresses it)
@@ -54,7 +83,9 @@ S
 $TITLE. This package holds no part of the game: installing it downloads the
 developer's release from
   $_src
-checks its SHA-256 ($SHA) and unpacks it into /usr/share/games/$ID, every
+(or the same file from a mirror${MIRRORS:+: $MIRRORS}; or a copy placed in
+/opt/pspexp/downloads/$FILE), checks its SHA-256 ($SHA) and unpacks it into
+/usr/share/games/$DIR, every
 file as released (the developer's own notes and terms are among them).
 Removing the package removes it. Installer by PSPExp.
 D
@@ -63,14 +94,11 @@ D
 # fetch, check and unpack $TITLE (the package carries none of it)
 set -e
 [ "\$1" = configure ] || exit 0
-G=/usr/share/games/$ID
+G=/usr/share/games/$DIR
 C=/var/cache/$ID
 [ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "$SHA" ] && exit 0
 mkdir -p "\$C"
-echo "Downloading $TITLE ($SIZE) from its developer's page..."
 $_fetch
-curl -fL --retry 3 --connect-timeout 20 -o "\$C/game.part" "\$u" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
-echo "$SHA  \$C/game.part" | sha256sum -c --quiet - || { rm -rf "\$C"; echo "the download is not the expected file (a new release?)" >&2; exit 1; }
 echo "Unpacking..."
 mkdir -p "\$C/x"
 $_unpack
@@ -84,7 +112,7 @@ P
 #!/bin/sh
 # the game the installer unpacked goes with the package
 set -e
-case "\$1" in remove|purge) rm -rf /usr/share/games/$ID /usr/share/games/$ID.new /var/cache/$ID ;; esac
+case "\$1" in remove|purge) rm -rf /usr/share/games/$DIR /usr/share/games/$DIR.new /var/cache/$ID ;; esac
 exit 0
 R
 	cat > "$_w/ctl/control" <<C

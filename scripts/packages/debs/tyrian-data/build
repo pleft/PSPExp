@@ -1,29 +1,17 @@
 #!/bin/sh
-# tyrian-data: the Tyrian 2.1 freeware data where Debian's opentyrian reads it
-# (/usr/share/games/tyrian), so apt needs neither game-data-packager nor its
-# GTK. Arch all. Usage: build OUTDIR
+# tyrian-data: an installer for Tyrian 2.1 (freeware since 2004), its data where Debian's
+# opentyrian reads it (/usr/share/games/tyrian; no game-data-packager and its GTK). PSPExp hosts
+# none of it (the user's rule, 2026-10-11): the board downloads tyrian21.zip from OpenTyrian's
+# site (or a mirror; the SHA-256 decides) and unpacks it as released (_installer.sh).
+# Usage: build OUTDIR
 set -e
-ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-. "$ROOT/scripts/packages/recipes/_lib.sh"
-CACHE="${CACHE:-$ROOT/build/pkg-cache}"; mkdir -p "$CACHE"
-Z=$(fetch "https://camanis.net/tyrian/tyrian21.zip")
-W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-mkdir -p "$W/root/usr/share/games/tyrian" "$W/root/usr/share/doc/tyrian-data"
-unzip -q -j -o "$Z" -d "$W/root/usr/share/games/tyrian"
-rm -f "$W/root/usr/share/games/tyrian"/*.exe "$W/root/usr/share/games/tyrian"/*.EXE   # the DOS program: not needed
-cat > "$W/root/usr/share/doc/tyrian-data/README" <<D
-Tyrian 2.1 data files (freeware since 2004), from $(basename "$Z"), for
-OpenTyrian. Packaged by PSPExp (docs/Package_Manager.md).
-D
-cat > "$W/control" <<C
-Package: tyrian-data
-Version: 2.1-pspexp1
-Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
-Section: contrib/games
-Priority: optional
-Description: Tyrian 2.1 data files, for OpenTyrian
- The freeware data of the vertical shooter Tyrian 2.1, in the folder
- Debian's opentyrian reads. Packaged by PSPExp.
-C
-python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/tyrian-data_2.1-pspexp1_all.deb"
+. "$(dirname "$0")/../_installer.sh"
+ID=tyrian-data TITLE="Tyrian 2.1" VERSION=2.1-pspexp2 DIR=tyrian
+URL=https://camanis.net/tyrian/tyrian21.zip
+MIRRORS="https://web.archive.org/web/2023id_/https://camanis.net/tyrian/tyrian21.zip https://web.archive.org/web/2015id_/http://sites.google.com/a/camanis.net/opentyrian/tyrian/tyrian21.zip"
+SHA=7790d09a2a3addcd33c66ef063d5900eb81cc9c342f4807eb8356364dd1d9277 SIZE="4.5 MB" TOP=tyrian21
+RUN='exec /usr/games/opentyrian "$@"'
+DEPENDS=opentyrian
+ABOUT=" The freeware data of the vertical shooter Tyrian 2.1 (1995; freeware since
+ 2004), in the folder Debian's opentyrian reads."
+build_installer "$1"
