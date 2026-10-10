@@ -4,6 +4,11 @@ PSPExp's apt repository and recipe catalogue (docs/Package_Manager.md §6).
 
   scripts/packages/apt-repo build [DEBS_DIR]   -> build/apt: pool/, dists/stable/, catalogue.tar.gz (all signed)
   scripts/packages/apt-repo push [HOST]        build/apt to HOST:~/pspexp-repo, older packages kept there.
+  scripts/packages/apt-repo push r2            build/apt to the public Cloudflare R2 bucket (rclone): the
+                                               account, keys, bucket and public address in ~/.pspexp/r2.env
+                                               (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+                                               R2_BUCKET, R2_PUBLIC_URL; a local file, never in the
+                                               repository); older packages kept there too
                                                HOST (user@host): the argument, else $PSPEXP_REPO_HOST, else
                                                the first line of ~/.pspexp/repo-host (a local setting, never
                                                in the repository)
@@ -99,6 +104,13 @@ def build(debs_dir):
         t.add(os.path.join(ROOT, "recipes"), arcname="recipes", filter=lambda i: None if os.path.basename(i.name).startswith(".") else i)
         ser = tarfile.TarInfo("serial"); body = (serial + "\n").encode(); ser.size = len(body); ser.mtime = int(time.time())
         t.addfile(ser, io.BytesIO(body))
+        # the public repository's address (scripts/packages/public-repo-url): a board whose own differs
+        # moves there when it reads this signed catalogue (pspexp-pkg-apt update)
+        pub = os.path.join(ROOT, "scripts/packages/public-repo-url")
+        if os.path.exists(pub):
+            body = (open(pub).readline().strip() + "\n").encode()
+            rep = tarfile.TarInfo("repo"); rep.size = len(body); rep.mtime = int(time.time())
+            t.addfile(rep, io.BytesIO(body))
     gpg("--local-user", KEY_NAME, "--detach-sign", "-o", cat + ".sig", cat)
     # the keyring for boards (/usr/share/keyrings/pspexp-archive-keyring.gpg)
     open(os.path.join(OUT, "pspexp-archive-keyring.gpg"), "wb").write(gpg("--export", KEY_NAME).stdout)
@@ -115,10 +127,47 @@ def push(host):
     print("pushed to %s:~/pspexp-repo" % host)
 
 
+def push_r2():
+    # the keys reach rclone through its environment (a remote named R2, no config file); the pool first
+    # (added to), then the indexes, key and catalogue (replaced): a board never reads an index that
+    # names a package not there yet
+    cfg = os.path.expanduser("~/.pspexp/r2.env")
+    if not os.path.exists(cfg):
+        sys.exit("apt-repo push r2: no %s (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_URL)" % cfg)
+    v = {}
+    for line in open(cfg):
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, val = line.split("=", 1)
+            v[k.strip()] = val.strip().strip('"').strip("'")
+    need = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]
+    missing = [k for k in need if not v.get(k)]
+    if missing:
+        sys.exit("apt-repo push r2: %s missing in %s" % (", ".join(missing), cfg))
+    env = dict(os.environ)
+    env.update({"RCLONE_CONFIG_R2_TYPE": "s3", "RCLONE_CONFIG_R2_PROVIDER": "Cloudflare",
+                "RCLONE_CONFIG_R2_ACCESS_KEY_ID": v["R2_ACCESS_KEY_ID"],
+                "RCLONE_CONFIG_R2_SECRET_ACCESS_KEY": v["R2_SECRET_ACCESS_KEY"],
+                "RCLONE_CONFIG_R2_ENDPOINT": "https://%s.r2.cloudflarestorage.com" % v["R2_ACCOUNT_ID"],
+                "RCLONE_CONFIG_R2_ACL": "private", "RCLONE_CONFIG_R2_NO_CHECK_BUCKET": "true"})
+    dest = "R2:" + v["R2_BUCKET"]
+    base = ["rclone", "--fast-list", "--checksum", "--transfers", "8", "--stats-one-line", "--stats", "0"]
+    subprocess.run(base + ["copy", OUT + "/pool", dest + "/pool"], check=True, env=env)
+    subprocess.run(base + ["sync", "--exclude", "/pool/**", OUT, dest], check=True, env=env)
+    url = v.get("R2_PUBLIC_URL", "").rstrip("/")
+    if url:   # what a board sees
+        r = subprocess.run(["curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", url + "/dists/stable/InRelease"], capture_output=True, text=True)
+        print("pushed to R2 bucket %s; %s/dists/stable/InRelease: %s" % (v["R2_BUCKET"], url, r.stdout or r.stderr.strip()))
+    else:
+        print("pushed to R2 bucket %s (no R2_PUBLIC_URL to check it from)" % v["R2_BUCKET"])
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "build":
         build(sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "build/debs"))
+    elif cmd == "push" and len(sys.argv) > 2 and sys.argv[2] == "r2":
+        push_r2()
     elif cmd == "push":
         host = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("PSPEXP_REPO_HOST", "")
         cfg = os.path.expanduser("~/.pspexp/repo-host")

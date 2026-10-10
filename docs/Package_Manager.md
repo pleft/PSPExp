@@ -588,6 +588,24 @@ recipe needs a new meta-package, not just newer packages.
 - **Signing:** the project key signs the repository's metadata
   (`InRelease`, `Release.gpg`) and the catalogue (§5.1). The image carries
   its public half and an apt source that names it with `Signed-By`.
+- **The public host (2026-10-10, the user's choice: Cloudflare R2):** a
+  bucket, filled by `apt-repo push r2` with rclone (the account, keys,
+  bucket and public address in `~/.pspexp/r2.env`, a local file; the keys
+  reach rclone through its environment, no config file): the pool first,
+  added to, then the indexes, key and catalogue, replaced; it then fetches
+  the public `InRelease`. The whole repository (229 files, 448 MiB) in
+  about 30 s; a package downloaded from it identical, the catalogue's
+  signature good. **Moving boards:** the signed catalogue may carry the
+  repository's address (`repo`, from `scripts/packages/public-repo-url`
+  when that file is there); `pspexp-pkg-apt update`, once the signature
+  checks, rewrites `/etc/pspexp/repo` and the apt source when the address
+  differs, so boards set up on the home server move by themselves (tried
+  on the Pi). The installers and the image build take that file when
+  `~/.pspexp/repo-url` is not set. **Not with the r2.dev address:** the
+  home network's DNS answered 127.0.0.1 for it (ad blockers list
+  `*.r2.dev`, much abused), so the Pi, moved, could not reach it (put back
+  the same hour); the public address will be a domain of the project's
+  own in front of the bucket.
 - **Hosting, on the home server until the project is published:**
   - The repository (`dists/`, `pool/`) and the catalogue are plain static
     files.

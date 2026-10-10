@@ -54,7 +54,8 @@ packages/          what the launcher offers, for any board
                      pspexp-mupen64plus (the N64, with its launch script pspexp-n64), and the
                      engines and installers of the games above
   mkdeb.py           a .deb without dpkg (the Mac has none)
-  apt-repo           the signed apt repository and catalogue: build, push to the home server
+  apt-repo           the signed apt repository and catalogue: build, push to the home server or
+                     the public Cloudflare R2 bucket (push r2)
   runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole
                      slotted install for a memory stick (--install)
 

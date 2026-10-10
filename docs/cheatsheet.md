@@ -96,7 +96,7 @@ cable pull, so pull the cable to read it after a session.
 | **the PSP as this machine's console** | `build/host/pspexp-term` |
 | the PSP's memory stick from a shell (list, copy both ways, mkdir, rm, mv, free space) | `build/host/pspexp-ms [--tcp <host>] ls ms0:/PSP/GAME` / `get ms0:/X [file]` / `put file ms0:/PSP/GAME/X/` / `mkdir` / `rm` / `mv` / `df` |
 | a stand-in PSP whose memory stick is a folder (file manager, `pspexp-ms`) | `PSPEXP_MS0=<folder> build/host/pspexp-sdl-server` |
-| PSPExp's apt repository and catalogue: build (signed) / push to the home server | `scripts/packages/apt-repo build build/debs` / `scripts/packages/apt-repo push` |
+| PSPExp's apt repository and catalogue: build (signed) / push to the home server / to the public R2 bucket (keys in `~/.pspexp/r2.env`) | `scripts/packages/apt-repo build build/debs` / `scripts/packages/apt-repo push` / `scripts/packages/apt-repo push r2` |
 | **integration tests on a real PSP** (on a board's console; report + the PSP's screenshots in `build/psp-tests/`) | `tests/psp/run.py --host <user@board> [link stick launcher files terminal]` |
 | **every game on the real PSP** from the launcher (starts, fps, sound, nub, START + SELECT, the PSP still there; ~35 s a game; results in /tmp/pspexp-all-games) | on the board, PSP connected: `tests/psp/all-games.sh` / `tests/psp/all-games.sh "Nintendo 64::Super Mario 64" /opt/pspexp/apps/quake/quake.entry` |
 | drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` / `--ctl "volume-bar 40"` |

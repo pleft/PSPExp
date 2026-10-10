@@ -63,6 +63,7 @@ fi
 # PSPExp: pspexp-core from the repository, then the GameShell's own files, the
 # same list as every GameShell install (scripts/gameshell/stage.sh, GS_CORE=apt)
 REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+[ -n "$REPO_URL" ] || REPO_URL=$(head -1 "$ROOT/scripts/packages/public-repo-url" 2>/dev/null)   # else the public repository
 [ -n "$REPO_URL" ] || { echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url)" >&2; exit 1; }
 mkdir -p "$IN/pkg"
 echo "$REPO_URL" > "$IN/pkg/repo-url"

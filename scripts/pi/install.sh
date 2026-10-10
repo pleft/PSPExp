@@ -67,6 +67,7 @@ if [ "$1" = cavestory ]; then
 fi
 
 REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+[ -n "$REPO_URL" ] || REPO_URL=$(head -1 "$ROOT/scripts/packages/public-repo-url" 2>/dev/null)   # else the public repository
 [ -n "$REPO_URL" ] || PSPEXP_CORE=local
 [ "$1" = build ] && PSPEXP_CORE=build
 

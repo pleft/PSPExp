@@ -154,6 +154,16 @@ update)
 	chown -R root:root "$CAT.new" && chmod -R u=rwX,go=rX "$CAT.new"
 	rm -rf "$CAT.old"; [ -d "$CAT" ] && mv "$CAT" "$CAT.old"; mv "$CAT.new" "$CAT"; rm -rf "$CAT.old"
 	echo "catalogue $new: $(ls "$CAT/recipes" | wc -l) recipes"
+	# the repository moved: the signed catalogue names its address (repo); this board's apt source and
+	# catalogue follow it (a home server first, the public one since; the key is the same)
+	if [ -f "$t/x/repo" ]; then
+		nr=$(head -1 "$t/x/repo" | tr -d '\r')
+		if echo "$nr" | grep -Eq '^https?://[A-Za-z0-9.:/_-]+$' && [ "$nr" != "$REPO" ]; then
+			echo "$nr" > /etc/pspexp/repo
+			[ -f /etc/apt/sources.list.d/pspexp.sources ] && sed -i "s#^URIs: .*#URIs: $nr#" /etc/apt/sources.list.d/pspexp.sources
+			echo "the repository moved: $nr"
+		fi
+	fi
 	apt-get -q -o DPkg::Lock::Timeout=120 update >/dev/null 2>&1 || die "apt could not read its lists"
 	echo "apt lists updated" ;;
 accept)   # the user accepted the recipe's terms (Packages asked on the PSP): recorded for its installer

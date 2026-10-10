@@ -27,6 +27,7 @@ trap 'rm -rf "$W"' EXIT
 # PSPExp itself as the pspexp-core package, and the stage without its own copies
 # (GS_CORE=apt). GS_CORE=local keeps the older /usr/local install.
 REPO_URL="${PSPEXP_REPO_URL:-$(head -1 "$HOME/.pspexp/repo-url" 2>/dev/null)}"
+[ -n "$REPO_URL" ] || REPO_URL=$(head -1 "$ROOT/scripts/packages/public-repo-url" 2>/dev/null)   # else the public repository
 if [ -n "$REPO_URL" ] && [ "${GS_CORE:-apt}" = apt ]; then
 	gpg --dearmor < "$ROOT/scripts/packages/pspexp-archive-key.asc" > "$W/keyring.gpg"
 	scp -q "$W/keyring.gpg" "$ROOT/scripts/board/pspexp-apt-setup" "$ROOT/scripts/board/pspexp-pkg-apt" "$GS:/tmp/"
