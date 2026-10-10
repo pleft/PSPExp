@@ -1644,8 +1644,9 @@ right (architecture §12a).
 
 ## 7. The terminal and the file manager (2026-09-27)
 
-Both are built-in apps: the first two entries of the launcher's **Apps**
-(Terminal, Files), with covers of their own (the icon large on a fixed
+Both are built-in apps in the launcher's **Apps** (Terminal, Files; the
+category is in alphabetical order, built-in and installed apps together,
+since 2026-10-10: Files, Music, Packages, System Monitor, Terminal), with covers of their own (the icon large on a fixed
 gradient, `CoverSpec.hero`), favourites and recents like any app; the
 System section keeps the board's settings only.
 

@@ -151,6 +151,11 @@ static Cat *cat_add(const char *name, const char *icon, uint32_t col, int kind, 
     return c;
 }
 
+static int cmp_entry_title(const void *a, const void *b)
+{
+    return strcasecmp((*(LEntry *const *)a)->title, (*(LEntry *const *)b)->title);
+}
+
 static void cat_push(Cat *c, LEntry *e)
 {
     c->it = (LEntry **)realloc(c->it, (size_t)(c->n + 1) * sizeof(LEntry *));
@@ -215,6 +220,7 @@ static void cats_build(void)
     c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
     for (i = 0; i < NBUILTIN; i++) cat_push(c, &g_builtin[i]);
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
+    if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_entry_title);   /* the built-in and installed apps together, A to Z */
     c = cat_add("Settings", "settings", 0x94a3b8, CK_SETTINGS, "item");
     g_nactions = 0;
     ACTION("rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
