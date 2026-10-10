@@ -914,7 +914,10 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   screen long enough to read (long banners: 80 ms more a character). The
   GameShell's image follows: SSH off unless built with `--ssh-key` (it had
   been on with `cpi`/`cpi`). Tried on the Pi 400's fresh card: off, on, the
-  warning.
+  warning; on the Pi 400's own card, it came as an update through Packages.
+  Both images rebuilt with it (`pspexp-core` 4ba5e92): SSH enabled nowhere
+  in them (no unit, no socket), the source `https://pkg.pspexp.dev`, no host
+  keys, Wi-Fi connections or leftovers.
 - **First boot on the Pi 400 (2026-10-10, written with `dd`, an empty `ssh`
   file added to the boot partition):** up in about a minute, the card grown
   to 29 GB, the console running and the PSP's launcher on it, Ethernet up,
