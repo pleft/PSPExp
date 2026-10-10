@@ -77,6 +77,8 @@ void gfx_cover_forget(const char *key);
 #define DISC_TEX   128
 int  gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha);
 void gfx_disc_forget(const char *key);
+/* for the tests: 1 when every cached cover and disc holds a texture id of its own */
+int  gfx_cache_ids_distinct(void);
 
 /* one picture at a time, for full-screen viewing: decoded, fitted inside
  * max_w x max_h (box-filtered, dithered to 5650) and kept on the PSP; its

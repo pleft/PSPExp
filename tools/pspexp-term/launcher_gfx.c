@@ -1062,6 +1062,22 @@ static int art_appeared(const char *had, int was_missing, const char *art)
     return !art_missing(art);
 }
 
+/* a texture id for a new cover: the next of the pool that no cached cover holds. The pool
+ * is larger than the cache so the id just replaced, still on screen this frame, is not
+ * reused at once; but a cover kept in use (the selection) outlives a whole turn of the pool,
+ * and taking its id again overwrote its picture with another game's, then released it when
+ * that other one left the cache: a cover showing the wrong game or the generated one, a
+ * selected disc that did not grow */
+static uint16_t cover_fresh_id(void)
+{
+    for (;;) {
+        uint16_t id = (uint16_t)(ID_COVER + (next_cover_id++ % COVER_IDS));
+        int i;
+        for (i = 0; i < COVER_SLOTS; i++) if (cslot[i].key[0] && cslot[i].id == id) break;
+        if (i == COVER_SLOTS) return id;
+    }
+}
+
 static int cover_slot(const CoverSpec *c)
 {
     int i, best = 0;
@@ -1079,7 +1095,7 @@ static int cover_slot(const CoverSpec *c)
     if (!cslot[best].from_art) cover_generate(c, px, COVER_SIZE);
     rounded_mask(px, COVER_SIZE, 12.0f);
     if (cslot[best].key[0]) pspexp_release(G, cslot[best].id);
-    cslot[best].id = (uint16_t)(ID_COVER + (next_cover_id++ % COVER_IDS));   /* fresh id: the old one may still be on screen */
+    cslot[best].id = cover_fresh_id();   /* fresh id: the old one may still be on screen */
     upload_rgba(cslot[best].id, px, COVER_SIZE, COVER_SIZE);
     free(px);
     snprintf(cslot[best].key, sizeof(cslot[best].key), "%s", c->key);
@@ -1208,6 +1224,17 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
     free(f);
 }
 
+/* a texture id for a new disc: the next of the pool that no cached disc holds (cover_fresh_id) */
+static uint16_t disc_fresh_id(void)
+{
+    for (;;) {
+        uint16_t id = (uint16_t)(ID_DISC + (next_disc_id++ % DISC_IDS));
+        int i;
+        for (i = 0; i < DISC_SLOTS; i++) if (dslot[i].key[0] && dslot[i].id == id) break;
+        if (i == DISC_SLOTS) return id;
+    }
+}
+
 int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
 {
     int i, best = -1, T = DISC_TEX;
@@ -1227,7 +1254,7 @@ int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
         if (!dslot[best].from_art) cover_generate(c, cov, COVER_SIZE);
         disc_render(cov, px, T, big ? DISC_BIG : DISC_SMALL, big);
         if (dslot[best].key[0] && dslot[best].id) pspexp_release(G, dslot[best].id);
-        dslot[best].id = (uint16_t)(ID_DISC + (next_disc_id++ % DISC_IDS));   /* fresh id: the old one may still be on screen */
+        dslot[best].id = disc_fresh_id();   /* fresh id: the old one may still be on screen */
         upload_rgba(dslot[best].id, px, T, T);
         free(cov); free(px);
         snprintf(dslot[best].key, sizeof(dslot[best].key), "%s", c->key);
@@ -1238,6 +1265,16 @@ draw:
     dslot[best].used = ++cover_clock;
     quad(dslot[best].id, cx - T / 2, cy - T / 2 + 2, T, T, 0, 0, T, T, c4444(0xffffff, alpha));
     return dslot[best].from_art;
+}
+
+int gfx_cache_ids_distinct(void)
+{
+    int i, j;
+    for (i = 0; i < COVER_SLOTS; i++) for (j = i + 1; j < COVER_SLOTS; j++)
+        if (cslot[i].key[0] && cslot[j].key[0] && cslot[i].id == cslot[j].id) return 0;
+    for (i = 0; i < DISC_SLOTS; i++) for (j = i + 1; j < DISC_SLOTS; j++)
+        if (dslot[i].key[0] && dslot[j].key[0] && dslot[i].id == dslot[j].id) return 0;
+    return 1;
 }
 
 void gfx_disc_forget(const char *key)

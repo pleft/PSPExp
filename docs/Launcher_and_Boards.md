@@ -220,7 +220,17 @@ UMD-like but with none of Sony's marks (`gfx_disc`). Each disc is rendered
 on the board at its final size with its shadow, 70 px across, and once
 more at 86 px with the selection's blue glow and a light ring round the
 window, both 128x128 8888 textures in an LRU of 14; the small disc fades
-into the large one, lifted 4 px, as the selection arrives. Apps, tools and
+into the large one, lifted 4 px, as the selection arrives. A disc or cover
+newly rendered takes the next texture id of its pool (40 for discs, 32
+for covers) that no cached one holds: the pool is larger than the cache
+so the id just replaced, still on screen that frame, is not reused at
+once, but until 2026-10-10 the next id was taken whatever held it. The
+selection's disc, kept in use while the shelf scrolled past some 30
+others, then had its id given to another game's: its picture overwritten
+with that game's, then released when the other left the cache (the user
+saw now and then a selected disc that did not grow, a cover turning into
+another game's or the generated one; `tests/test_launcher_gfx.c` shows
+two cached pictures sharing an id from the 31st game before the fix). Apps, tools and
 settings are icon tiles (54 px, 62 selected). Under the shelf the
 selection's title, its description (two lines) and its detail line; a
 setting's value at the right of its title. The cover column and the list
