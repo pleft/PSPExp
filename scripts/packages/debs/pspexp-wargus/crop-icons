@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""
+crop-icons SRC DST W H CW CH: Warcraft II's icon sheet (SRC, a grid of W x H
+icons) with each icon cut down to its middle CW x CH, pixel for pixel (no
+resampling: the art stays sharp), into DST. For the PSP's 480x272, where three
+46x38 icons side by side made the game's left column a third of the screen.
+Python's standard library only: 8-bit PNGs (wartool writes palette ones),
+not interlaced; the palette and its transparency are kept.
+"""
+import struct, sys, zlib
+
+
+def chunks(data):
+    i = 8
+    while i < len(data):
+        n, = struct.unpack(">I", data[i:i + 4])
+        yield data[i + 4:i + 8], data[i + 8:i + 8 + n]
+        i += 12 + n
+
+
+def unfilter(raw, w, h, bpp):
+    stride = w * bpp
+    rows, prev, i = [], bytearray(stride), 0
+    for _ in range(h):
+        f, line = raw[i], bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x - bpp] if x >= bpp else 0
+            if f == 1: line[x] = (line[x] + a) & 255
+            elif f == 2: line[x] = (line[x] + b) & 255
+            elif f == 3: line[x] = (line[x] + (a + b) // 2) & 255
+            elif f == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(line)
+        prev = line
+    return rows
+
+
+def chunk(kind, body):
+    return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
+
+
+def main():
+    src, dst = sys.argv[1], sys.argv[2]
+    W, H, CW, CH = (int(a) for a in sys.argv[3:7])
+    data = open(src, "rb").read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        sys.exit("crop-icons: %s is not a PNG" % src)
+    ihdr, keep, idat = None, [], b""
+    for kind, body in chunks(data):
+        if kind == b"IHDR": ihdr = body
+        elif kind in (b"PLTE", b"tRNS"): keep.append((kind, body))
+        elif kind == b"IDAT": idat += body
+    w, h, depth, ctype, _, _, interlace = struct.unpack(">IIBBBBB", ihdr)
+    if depth != 8 or interlace:
+        sys.exit("crop-icons: %s: only 8-bit, not interlaced" % src)
+    bpp = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ctype]
+    rows = unfilter(zlib.decompress(idat), w, h, bpp)
+    cols, lines = w // W, h // H
+    ox, oy = (W - CW) // 2, (H - CH) // 2
+    out = bytearray()
+    for r in range(lines):
+        for y in range(CH):
+            line = rows[r * H + oy + y]
+            out.append(0)
+            for c in range(cols):
+                x0 = (c * W + ox) * bpp
+                out += line[x0:x0 + CW * bpp]
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", cols * CW, lines * CH, 8, ctype, 0, 0, 0))
+    for kind, body in keep:
+        png += chunk(kind, body)
+    png += chunk(b"IDAT", zlib.compress(bytes(out), 9)) + chunk(b"IEND", b"")
+    tmp = dst + ".tmp"
+    open(tmp, "wb").write(png)
+    import os
+    os.replace(tmp, dst)
+
+
+if __name__ == "__main__":
+    main()

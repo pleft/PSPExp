@@ -81,8 +81,9 @@ game's MIDI version. The first start prepares it all and takes a few
 minutes (about 4 on a Pi 400 from a disc image); after that it starts
 straight away, and its tile shows the game's title screen. Everything is drawn at the PSP's own size, pixel for
 pixel, so the text is sharp, and laid out for its screen: the menus, and
-in a game the minimap, the selected unit and its command buttons down the
-left, the map on the right, your gold, lumber, oil and food along the
+in a game the minimap, the selected unit and its command buttons down a
+narrow column on the left (the buttons' pictures trimmed a little at
+their edges to fit), the map on the right, your gold, lumber, oil and food along the
 top, the Menu button top right. **Standard Game** first asks which map
 list to play: Skirmish Modern is Warcraft II's usual one; Skirmish
 Classic, Front Lines and For the Motherland are Wargus's extra sets, each

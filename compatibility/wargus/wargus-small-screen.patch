@@ -604,6 +604,31 @@ index 74c9af3..c25cf21 100644
  
  AddFiller("ui/human/menubutton.png", 0, 0)
  AddFiller("ui/human/minimap.png", 0, 24)
+diff --git a/scripts/icons.lua b/scripts/icons.lua
+index 7670da8..1ba67ba 100644
+--- a/scripts/icons.lua
++++ b/scripts/icons.lua
+@@ -233,9 +233,19 @@ if (wargus.tileset == nil) then
+     icon = CIcon:New(icons[i][1])
+   end
+ else
++  -- PSPExp: on a small screen (the PSP's 480x272) the icons cut to their middle
++  -- 36x30, pixel for pixel (icons-psp.png, made by the launch script beside
++  -- the extracted data): the game's left column is a quarter of the screen
++  -- instead of a third. Without that sheet, the full icons. ui_small.lua lays
++  -- the column out for IconW x IconH.
++  local file, w, h = "tilesets/" .. wargus.tileset .. "/icons.png", 46, 38
++  if Video.Height < 400 and CanAccessFile("tilesets/" .. wargus.tileset .. "/icons-psp.png") then
++    file, w, h = "tilesets/" .. wargus.tileset .. "/icons-psp.png", 36, 30
++  end
++  IconW, IconH = w, h
+   for i = 1,table.getn(icons) do
+     icon = CIcon:New(icons[i][1])
+-    icon.G = CPlayerColorGraphic:New("tilesets/" .. wargus.tileset .. "/icons.png", 46, 38)
++    icon.G = CPlayerColorGraphic:New(file, w, h)
+     icon.Frame = icons[i][2]
+   end
+ end
 diff --git a/scripts/lists/maps/For the Motherland b/scripts/lists/maps/For the Motherland
 index 0d44dc5..2b1d20f 100644
 --- a/scripts/lists/maps/For the Motherland	
@@ -1646,19 +1671,21 @@ index 4811fa6..87a005e 100644
  UI.ButtonPanel.ShowCommandKey = wc2.preferences.ShowCommandKey
 diff --git a/scripts/ui_small.lua b/scripts/ui_small.lua
 new file mode 100644
-index 0000000..8a866b2
+index 0000000..37bed76
 --- /dev/null
 +++ b/scripts/ui_small.lua
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,220 @@
 +--      ui_small.lua - the in-game interface on a small screen (480x272, the PSP's)
 +--
 +--      Loaded by human/ui.lua and orc/ui.lua after their own layout when the
 +--      screen is under 400 lines (see pspexp.lua: maps are played at the
 +--      size in wc2.preferences.GameVideoWidth/Height). The usual layout's left
-+--      column is 176 wide and reaches line 480: here it is 152 wide, the
-+--      minimap smaller, the unit's panel compact (name, health, portrait and
-+--      four short lines) and the 3x3 command buttons below it; the map takes
-+--      the rest. SmallUIRace ("human" or "orc") picks the graphics.
++--      column is 176 wide and reaches line 480: here it is as wide as three
++--      icons (122 with icons.lua's 36x30 icons cut from the 46x38 ones, 152
++--      with the full ones), the minimap smaller, the unit's panel compact
++--      (name, health, portrait and four short lines) and the 3x3 command
++--      buttons below it; the map takes the rest. SmallUIRace ("human" or
++--      "orc") picks the graphics.
 +--
 +--      This program is free software; you can redistribute it and/or modify
 +--      it under the terms of the GNU General Public License as published by
@@ -1667,19 +1694,35 @@ index 0000000..8a866b2
 +
 +local race = SmallUIRace or "human"
 +local W, H = Video.Width, Video.Height
-+local L = 152                 -- the left column
++local IW, IH = IconW or 46, IconH or 38   -- the icons (icons.lua)
++local cut = IW < 46
++local PX = IW + 3             -- icons side by side
++local L = 4 + 3 * PX + 1      -- the left column: 152 with the full icons, 122 cut
 +local PY = 96                 -- the unit's panel
-+-- the command buttons (3 rows of 38), raised 4: an icon's frame reaches 4
-+-- below it (CIcon::DrawUnitIcon) and Stratagus does not clip it; on line 273
-+-- of 272 it wrote past the screen and crashed the GameShell's 32-bit build
-+local BY = H - 3 * 38 - 4
++-- the command buttons, 3 rows of 38 (full icons) or 33 (cut). The full icons'
++-- raised frame reaches 4 below them (CIcon::DrawUnitIcon, IconsShift) and
++-- Stratagus does not clip it: on line 273 of 272 it wrote past the screen and
++-- crashed the GameShell's 32-bit build. The cut ones get the button style's
++-- flat 1-pixel frame (that raised frame is drawn for 46x38 only)
++local PYB = cut and IH + 3 or 38
++local BY = H - 3 * PYB - (cut and 2 or 4)
++if cut then
++  Preference.IconsShift = false
++  -- the one style every icon button uses, resized; the hotkey letter in each state's own
++  -- place (a style defined before keeps its states' places: the top-level one is not taken)
++  local letter = {TextPos = {IW, IH - 12}}
++  DefineButtonStyle("icon", {Size = {IW, IH}, Default = letter, Hover = letter, Clicked = letter})
++  -- with nothing selected the engine writes its name, the cycle and the players' scores at
++  -- fixed places made for its 176-wide panel (the scores at 133): past this column
++  Preference.ShowNoSelectionStats = false
++end
 +
 +UI.Fillers:clear()
 +AddResizedFiller("ui/" .. race .. "/buttonpanel.png", 0, 0, L, H)
 +AddResizedFiller("ui/" .. race .. "/resource.png", L, 0, W - L, 16)
 +AddResizedFiller("ui/" .. race .. "/statusline.png", L, H - 16, W - L, 16)
 +
-+UI.Minimap.X = 30
++UI.Minimap.X = (L - 92) / 2
 +UI.Minimap.Y = 2
 +UI.Minimap.W = 92
 +UI.Minimap.H = 92
@@ -1705,29 +1748,30 @@ index 0000000..8a866b2
 +-- several units: three icons, "+N" for the rest
 +UI.SelectedButtons:clear()
 +AddSelectedButton(4, PY + 4)
-+AddSelectedButton(53, PY + 4)
-+AddSelectedButton(102, PY + 4)
++AddSelectedButton(4 + PX, PY + 4)
++AddSelectedButton(4 + 2 * PX, PY + 4)
 +UI.MaxSelectedTextX = 6
-+UI.MaxSelectedTextY = PY + 49
++UI.MaxSelectedTextY = PY + IH + 11
 +
 +-- what a building makes, beside its portrait
-+UI.SingleTrainingButton.X = 54
++local TX = 4 + IW + 4
++UI.SingleTrainingButton.X = TX
 +UI.SingleTrainingButton.Y = PY + 21
 +UI.TrainingButtons:clear()
-+AddTrainingButton(54, PY + 21)
-+AddTrainingButton(100, PY + 21)
-+UI.UpgradingButton.X = 54
++AddTrainingButton(TX, PY + 21)
++AddTrainingButton(TX + IW, PY + 21)
++UI.UpgradingButton.X = TX
 +UI.UpgradingButton.Y = PY + 21
-+UI.ResearchingButton.X = 54
++UI.ResearchingButton.X = TX
 +UI.ResearchingButton.Y = PY + 21
 +UI.TransportingButtons:clear()
-+AddTransportingButton(54, PY + 21)
-+AddTransportingButton(100, PY + 21)
++AddTransportingButton(TX, PY + 21)
++AddTransportingButton(TX + IW, PY + 21)
 +
 +UI.ButtonPanel.Buttons:clear()
 +for row = 0, 2 do
 +  for col = 0, 2 do
-+    AddButtonPanelButton(4 + col * 49, BY + row * 38)
++    AddButtonPanelButton(4 + col * PX, BY + row * PYB)
 +  end
 +end
 +UI.ButtonPanel.X = 0
@@ -1760,8 +1804,8 @@ index 0000000..8a866b2
 +UI.NetworkDiplomacyButton.Y = 0
 +
 +-- the unit's panel: name; health; portrait, and beside it up to four short
-+-- lines (x 54, lines 9 apart from PY + 22; a label before "~|" ends at
-+-- the position, so those lines are placed at xr)
++-- lines (beside the portrait, 9 apart from PY + 22; a label before "~|" ends
++-- at the position, so those lines are placed at xr)
 +local min_damage = Div(ActiveUnitVar("PiercingDamage", "Value", "Initial"), 2)
 +local max_damage = Add(ActiveUnitVar("PiercingDamage", "Value", "Initial"), ActiveUnitVar("BasicDamage", "Value", "Initial"))
 +local damage_bonus = Sub(ActiveUnitVar("PiercingDamage", "Value", "Type"), ActiveUnitVar("PiercingDamage", "Value", "Initial"))
@@ -1771,23 +1815,25 @@ index 0000000..8a866b2
 +  return {"Text", {Text = Concat(name, If(GreaterThan(PlayerData(ActiveUnitVar("Player", "Value"), "Incomes", res), 100),
 +	InverseVideo(Concat("+", String(Sub(PlayerData(ActiveUnitVar("Player", "Value"), "Incomes", res), 100)))), ""))}}
 +end
-+local x, xr, l1, l2, l3, l4 = 54, 96, 22, 31, 40, 49
++local x, xr, l1, l2, l3, l4 = TX, TX + 42, 22, 31, 40, 49
++local bar = TX + IW + 2       -- a progress bar beside what is being made
++local manaw = L - x - 38
 +
 +DefinePanelContents(
 +  {
 +  Ident = "panel-general-contents",
 +  Pos = {0, PY}, DefaultFont = "small",
 +  Contents = {
-+	{ Pos = {76, 1}, More = {"Text", {Text = Line(1, UnitName("Active"), 148, "game"), Centered = true, Font = "game"}} },
++	{ Pos = {L / 2, 1}, More = {"Text", {Text = Line(1, UnitName("Active"), L - 4, "game"), Centered = true, Font = "game"}} },
 +	{ Pos = {4, 14}, Condition = {ShowOpponent = false, HideNeutral = true},
-+		More = {"LifeBar", {Variable = "HitPoints", Height = 6, Width = 88}} },
-+	{ Pos = {122, 13}, Condition = {ShowOpponent = false, HideNeutral = true},
++		More = {"LifeBar", {Variable = "HitPoints", Height = 6, Width = L - 64}} },
++	{ Pos = {L - 30, 13}, Condition = {ShowOpponent = false, HideNeutral = true},
 +		More = {"FormattedText2", {Variable = "HitPoints", Format = "%d/%d", Component1 = "Value", Component2 = "Max", Centered = true}} },
 +	{ Pos = {x, l1}, Condition = {ShowOpponent = false, GiveResource = "only", Build = "false"},
 +		More = {"Text", {Text = Concat(function() return _(ResourcesOnUI[GetUnitVariable(-1, "GiveResourceType", "Value") + 1]) end,
 +			String(ActiveUnitVar("GiveResource", "Value")))}} },
 +	{ Pos = {x, l2}, Condition = {ShowOpponent = false, HideNeutral = true, Build = "only"},
-+		More = {"CompleteBar", {Variable = "Build", Width = 92, Height = 8, Border = false}} },
++		More = {"CompleteBar", {Variable = "Build", Width = L - x - 6, Height = 8, Border = false}} },
 +	{ Pos = {x, l1}, Condition = {ShowOpponent = false, HideNeutral = true, Build = "only"}, More = {"Text", _("% Complete")} },
 +  } },
 +  {
@@ -1832,10 +1878,10 @@ index 0000000..8a866b2
 +		More = {"Text", {Text = _("Armor~|: "), Variable = "Armor", Stat = true}} },
 +	{ Pos = {xr, l3}, Condition = {AttackRange = "only"},
 +		More = {"Text", {Text = _("Range~|: "), Variable = "AttackRange", Stat = true}} },
-+	-- making something: its icon at x 54, the progress bar beside it (no room for "% Complete")
-+	{ Pos = {102, l2}, Condition = {Research = "only"}, More = {"CompleteBar", {Variable = "Research", Width = 46, Height = 10, Border = false}} },
-+	{ Pos = {102, l2}, Condition = {Training = "only"}, More = {"CompleteBar", {Variable = "Training", Width = 46, Height = 10, Border = false}} },
-+	{ Pos = {102, l2}, Condition = {UpgradeTo = "only"}, More = {"CompleteBar", {Variable = "UpgradeTo", Width = 46, Height = 10, Border = false}} },
++	-- making something: its icon beside the portrait, the progress bar beside it (no room for "% Complete")
++	{ Pos = {bar, l2}, Condition = {Research = "only"}, More = {"CompleteBar", {Variable = "Research", Width = L - bar - 4, Height = 10, Border = false}} },
++	{ Pos = {bar, l2}, Condition = {Training = "only"}, More = {"CompleteBar", {Variable = "Training", Width = L - bar - 4, Height = 10, Border = false}} },
++	{ Pos = {bar, l2}, Condition = {UpgradeTo = "only"}, More = {"CompleteBar", {Variable = "UpgradeTo", Width = L - bar - 4, Height = 10, Border = false}} },
 +	{ Pos = {xr, l4}, Condition = {CarryResource = "only"},
 +		More = {"FormattedText2", {Format = _("Carry~|: %d %s"), Variable = "CarryResource", Component1 = "Value", Component2 = "Name"}} },
 +  } },
@@ -1846,6 +1892,6 @@ index 0000000..8a866b2
 +  Contents = {
 +	{ Pos = {xr, l2}, Condition = {Armor = "only"}, More = {"Text", {Text = _("Armor~|: "), Variable = "Armor", Stat = true}} },
 +	{ Pos = {x, l4}, Condition = {Mana = "only"},
-+		More = {"CompleteBar", {Color = "light-blue", Variable = "Mana", Height = 7, Width = 60, Border = true}} },
-+	{ Pos = {x + 64, l4}, Condition = {Mana = "only"}, More = {"Text", {Variable = "Mana"}} },
++		More = {"CompleteBar", {Color = "light-blue", Variable = "Mana", Height = 7, Width = manaw, Border = true}} },
++	{ Pos = {x + manaw + 4, l4}, Condition = {Mana = "only"}, More = {"Text", {Variable = "Mana"}} },
 +  } })

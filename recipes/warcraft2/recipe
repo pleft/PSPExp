@@ -9,7 +9,8 @@
 # a cover: the launcher shows the title screen of the player's own copy once
 # it is extracted (art=), a generated cover before. Played at the PSP's
 # 480x272, the menus and the game laid out for it (the package's patch to
-# Wargus's scripts). The music: the CD's recordings from a disc image,
+# Wargus's scripts; in a game a 122-wide left column, the command icons cut
+# to their middle 36x30 on the board). The music: the CD's recordings from a disc image,
 # else the game's MIDI. The PSP's controls, as
 # Warcraft's: the nub is the mouse (cross selects and orders, circle the
 # right button), the d-pad scrolls the map, square Shift, triangle Ctrl,
@@ -27,7 +28,7 @@ title=Warcraft II
 description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD or its image, Battle.net Edition or GOG). Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, Wargus); the game's data is your own copy's (Blizzard)
-version=3
+version=4
 
 [debian]
 apt=pspexp-wargus

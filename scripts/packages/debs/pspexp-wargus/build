@@ -2,7 +2,8 @@
 # pspexp-wargus: Warcraft II on Wargus (GPL-2.0) at a fixed master commit,
 # built by scripts/packages/build-stratagus.sh ARCH with one patch: the game
 # runs at the PSP's 480x272, pixel for pixel, menus and maps, each laid out
-# for it (compatibility/wargus/wargus-small-screen.patch).
+# for it (compatibility/wargus/wargus-small-screen.patch), the command icons cut to
+# their middle 36x30 by crop-icons on the board (from the player's extracted data).
 # The engine is pspexp-stratagus. The game's data is the player's own copy (Warcraft II is
 # sold, not free: none of it is in the package or downloaded), copied into
 # ~/Warcraft2 (the folder is made for it): the DOS CD's files (its DATA
@@ -22,11 +23,12 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp9
+V=3.3.3~git20260629-pspexp10
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
 install -m 755 "$B/wartool" "$W/root$L/"
+install -m 755 "$ROOT/scripts/packages/debs/pspexp-wargus/crop-icons" "$W/root$L/"
 cp -r "$B/share/"* "$W/root$S/"
 echo "$V" > "$W/root$S/.pspexp-version"
 install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-wargus/copyright"
@@ -127,6 +129,14 @@ if ! cmp -s "$S/.pspexp-version" "$D/.pspexp-scripts"; then
 	[ -d "$S/contrib" ] && { mkdir -p "$D/graphics/ui"; cp -r "$S/contrib/." "$D/graphics/ui/"; }   # as Wargus's starter does
 	cp "$S/.pspexp-version" "$D/.pspexp-scripts"
 fi
+# the icons cut to their middle 36x30 for the PSP's screen (icons.lua and ui_small.lua take them when
+# they are there): three full ones side by side made the game's left column a third of the screen;
+# made again when the extracted sheet is newer, quietly skipped if that fails (the full icons then)
+for t in "$D"/graphics/tilesets/*/icons.png; do
+	[ -f "$t" ] || continue
+	c="${t%icons.png}icons-psp.png"
+	[ "$c" -nt "$t" ] || python3 "$L/crop-icons" "$t" "$c" 46 38 36 30 >&2 || rm -f "$c"
+done
 # MIDI music on the GameShell: the sound mixed at 22050 Hz (the SDL layer's PSPEXP_AUDIO_RATE), or
 # FluidSynth, synthesising it as it plays, took a whole Cortex-A7 core at 44.1 kHz in a battle and the
 # sound skipped (Warcraft I, 2026-10-09); the CD's music, OGG, keeps 44.1 kHz
@@ -144,7 +154,7 @@ Architecture: $ARCH
 Maintainer: PSPExp <pspexp@localhost>
 Section: games
 Priority: optional
-Depends: $(cat "$B/wartool.depends"), pspexp-stratagus (>= 3.3.3~git20260622), innoextract, bchunk, vorbis-tools, libarchive-tools
+Depends: $(cat "$B/wartool.depends"), pspexp-stratagus (>= 3.3.3~git20260622), innoextract, bchunk, vorbis-tools, libarchive-tools, python3
 Description: Warcraft II on Wargus (Stratagus), for PSPExp
  Blizzard's 1995 real-time strategy game on the Wargus game scripts and
  the Stratagus engine, built from the projects' sources (2026-06-29).

@@ -1026,7 +1026,8 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
     the main menu (its tools and dialogs, Player Properties 500x480, are
     for a large screen).
 
-  The game itself (`ui_small.lua`): a 152-wide left column with a 92-pixel
+  The game itself (`ui_small.lua`): a 152-wide left column (122 since
+  2026-10-10, below) with a 92-pixel
   minimap, the unit's panel (name, health, portrait and four short lines
   in the small font: damage, armour, range, production, supply; what a
   building makes beside its portrait with a progress bar; three portraits
@@ -1046,6 +1047,30 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   scripts: the launch script copies Wargus's scripts again when the
   package's version changes (`.pspexp-scripts`; the extracted data and
   wartool's `wc2-config.lua` are kept).
+
+  A narrower column (2026-10-10, the user on the real PSP: the column was
+  a third of the screen): the command icons cut to their middle 36x30,
+  pixel for pixel (the user's idea; shrinking them, 33x27 nearest
+  neighbour, dropped detail), so the column is
+  122 wide and the map 358x240. The launch script makes
+  `graphics/tilesets/*/icons-psp.png` from the extracted `icons.png` with
+  `crop-icons` (Python's standard library: an 8-bit PNG decoded,
+  each 46x38 icon cut, written again; a third of a second a tileset on
+  the Pi), again when the extracted sheet is newer; `icons.lua` takes it
+  under 400 lines when it is there (`CanAccessFile`), else the full icons
+  and the 152 column. `ui_small.lua` lays the column out from
+  `IconW`/`IconH`: the full icons give exactly the earlier places. With the
+  cut ones the raised frame is off (`Preference.IconsShift`: Stratagus
+  draws it for 46x38 only, fixed sizes in `CIcon::DrawUnitIcon`) and the
+  "icon" button style, the one every icon button shares, is redefined at
+  36x30 with the hotkey letter's place given in each state (a style
+  defined before keeps its states' places: the letters first showed below
+  the icons). The engine's text when nothing is selected (name, cycle,
+  the players' scores at fixed places for its 176-wide panel, the scores
+  at x 133) is off (`Preference.ShowNoSelectionStats`): it ran onto the
+  map. Checked on the real PSP from the Pi (the user: "looks correct") and
+  on the stand-in: a berserker, a peon and its buttons, the empty panel;
+  59.6-59.8 fps over whole games. pspexp-wargus pspexp10 (needs python3).
 - **Warcraft and Warcraft II on the GameShell** (2026-10-09): both recipes
   now offer the armhf packages there too (built by
   `build-stratagus.sh armhf`, the same data and scripts). Measured with the
