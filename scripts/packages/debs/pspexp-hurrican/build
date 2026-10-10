@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/hurrican"
 [ -x "$B/hurrican" ] && [ -s "$B/depends.txt" ] || { echo "no $B/hurrican: scripts/packages/build-hurrican.sh $ARCH first" >&2; exit 1; }
-V=2026.0d91d1f-pspexp1
+V=2026.0d91d1f-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/hurrican" "$W/root/usr/share/doc/pspexp-hurrican"
 install -m 755 "$B/hurrican" "$W/root/usr/lib/pspexp/hurrican/hurrican"
@@ -26,4 +26,5 @@ Description: Hurrican's engine, for PSPExp
  Turrican, which Debian does not carry. Its data comes with the package
  hurrican. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-hurrican "$V" "$W/root/usr/share/doc/pspexp-hurrican"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-hurrican_${V}_$ARCH.deb"

@@ -27,12 +27,11 @@ esac
 SRC="$ROOT/../retro/libretro-$CORE"
 [ -f "$B/${CORE}_libretro.so" ] || { echo "no $B/${CORE}_libretro.so: CORE=$CORE scripts/gameshell/build.sh retro (armhf) or scripts/pi/install.sh retro (arm64)" >&2; exit 1; }
 [ -f "$SRC/$LIC" ] || { echo "no licence $SRC/$LIC" >&2; exit 1; }
-V="$(git -C "$SRC" log -1 --format=%cd --date=format:%Y.%m.%d)+$(git -C "$SRC" rev-parse --short HEAD)"
+V="$(git -C "$SRC" log -1 --format=%cd --date=format:%Y.%m.%d)+$(git -C "$SRC" rev-parse --short HEAD)-pspexp2"   # (-pspexp2: the licences and source, 2026-10-11)
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 R="$W/root"
 mkdir -p "$R/usr/lib/$TRIPLET/libretro" "$R/usr/share/doc/pspexp-libretro-$CORE"
 install -m 644 "$B/${CORE}_libretro.so" "$R/usr/lib/$TRIPLET/libretro/${CORE}_libretro.so"
-install -m 644 "$SRC/$LIC" "$R/usr/share/doc/pspexp-libretro-$CORE/copyright"
 cat > "$W/control" <<C
 Package: pspexp-libretro-$CORE
 Version: $V
@@ -46,4 +45,5 @@ Description: libretro core: $DESC
  Debian's libretro folder and played by pspexp-retro. Free for
  non-commercial use: see /usr/share/doc/pspexp-libretro-$CORE/copyright.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-libretro-$CORE "$V" "$R/usr/share/doc/pspexp-libretro-$CORE"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$R" "$W/control" "$OUT/pspexp-libretro-${CORE}_${V}_$ARCH.deb"

@@ -801,6 +801,37 @@ EBOOT only when no slot file (`slot-a/VERSION`, `slot-b/VERSION`, `active`,
 the console keeps the other slot as it is (the previous version, for the
 fallback) until the next runtime update overwrites it.
 
+### 6.2 Licences and sources (2026-10-11)
+
+The licence check before going public found the compiled programs PSPExp
+hosts (the engines, the libretro cores, Stratagus and its games) without a
+copyright file in 16 of 21 packages, and none with a source offer, which
+GPL asks for whoever passes a binary on. `scripts/packages/sources` holds
+one table: each package's components (upstream address, the exact tag or
+commit the build uses, a local checkout for Cave Story's engine and the
+cores) and our files that build it. A package's build calls
+`sources copyright PACKAGE VERSION DOCDIR`, which:
+- makes once `build/sources/out/PACKAGE/PACKAGE_VERSION.source.tar.xz`:
+  each component at that commit (submodules where the build fetches them:
+  Hurrican, PicoDrive), our patches and the build and packaging scripts,
+  and a README saying what each part is;
+- writes the package's `copyright`: what it holds, each component's
+  address, commit and licence (read from the texts: GPL-2.0, GPL-3.0,
+  LGPL-2.1, MIT, zlib, BSD, Apache-2.0), where the source archive is
+  (`https://pkg.pspexp.dev/sources/PACKAGE/...`), and the licence texts out
+  of the source itself (found by name, `LICENSE`, `COPYING`, `LICENSES`...,
+  or named in the table where a project keeps it elsewhere: AssaultCube's
+  `source/README*.txt`, Hurrican's `README.txt`, Handy's
+  `lynx/license.txt`).
+
+`apt-repo push` uploads `build/sources/out` beside the repository, added
+to like the pool and cached for good (the names carry the version), and no
+longer replaces `sources/`. Every package with it got a new version, so
+boards take the copyright file with their next update. PSPExp's own
+packages (`pspexp-core`, `pspexp-runtime`, `pspexp-retro`: MIT, with the
+fonts, icons, stb and, on the GameShell, libusb linked in) follow with
+their next build.
+
 ## 7. The Packages app
 
 It stays as built, with these changes:

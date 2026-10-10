@@ -11,11 +11,10 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus"
 [ -x "$B/stratagus" ] && [ -s "$B/stratagus.depends" ] || { echo "no $B/stratagus: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260622-pspexp1
+V=3.3.3~git20260622-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/stratagus" "$W/root/usr/share/doc/pspexp-stratagus"
 install -m 755 "$B/stratagus" "$W/root/usr/lib/pspexp/stratagus/stratagus"
-install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-stratagus/copyright"
 echo "Stratagus (https://github.com/Wargus/stratagus, commit 3d87c93), GPL-2.0, built by PSPExp, unmodified." > "$W/root/usr/share/doc/pspexp-stratagus/README"
 cat > "$W/control" <<C
 Package: pspexp-stratagus
@@ -30,4 +29,5 @@ Description: Stratagus real-time strategy engine, for PSPExp
  (Warcraft II), built from the project's sources (2026-06-22).
  Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-stratagus "$V" "$W/root/usr/share/doc/pspexp-stratagus"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-stratagus_${V}_$ARCH.deb"

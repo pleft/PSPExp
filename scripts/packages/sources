@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+sources: the licence and the complete source of every program PSPExp compiles and hosts
+(docs/Package_Manager.md §6.2). A package's build calls
+  scripts/packages/sources copyright PACKAGE VERSION DOCDIR
+which makes (once) build/sources/out/PACKAGE/PACKAGE_VERSION.source.tar.xz, the source GPL asks
+for: each upstream component at the exact commit the package was built from (submodules
+included), our patches, and the scripts that build and package it; and writes DOCDIR/copyright:
+what the package holds, each component's address, commit and licence, the licence texts out of
+the source itself, and where the source archive is (https://pkg.pspexp.dev/sources/PACKAGE/...).
+apt-repo push uploads build/sources/out beside the repository, added to like the pool.
+  scripts/packages/sources list                 the packages it knows
+  scripts/packages/sources archive PACKAGE VERSION
+"""
+import glob, os, re, shutil, subprocess, sys, tarfile, time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+WORK = os.path.join(ROOT, "build/sources")
+OUT = os.path.join(WORK, "out")
+PUBLIC = "https://pkg.pspexp.dev/sources"
+P = "scripts/packages/"
+GH = "https://github.com/"
+
+# component: (name, upstream address, ref (tag, branch-free commit), local checkout or None)
+# ours: the files of this repository that build it (build scripts, patches)
+PACKAGES = {
+    "pspexp-assaultcube": dict(what="AssaultCube's client", comps=[("AssaultCube", GH + "assaultcube/AC", "v1.3.0.2", None)],
+                               licences={"AssaultCube": ["source/README.txt", "source/README_CUBEENGINE.txt"]},
+                               ours=[P + "build-assaultcube.sh"]),
+    "pspexp-easyrpg": dict(what="EasyRPG Player", comps=[("EasyRPG Player", GH + "EasyRPG/Player", "0.8.1.1", None),
+                                                     ("liblcf", GH + "EasyRPG/liblcf", "0.8.1", None)],
+                           ours=[P + "build-easyrpg.sh"]),
+    "pspexp-egoboo": dict(what="Egoboo's program", comps=[("Egoboo", GH + "egoboo/egoboo", "401393e", None)],
+                          ours=[P + "build-egoboo.sh"]),
+    "pspexp-etlegacy": dict(what="ET: Legacy's client", comps=[("ET: Legacy", GH + "etlegacy/etlegacy", "v2.86.0", None)],
+                            ours=[P + "build-etlegacy.sh", "compatibility/etlegacy/pspexp.patch"]),
+    "pspexp-hurrican": dict(what="Hurrican's engine", comps=[("Hurrican", GH + "HurricanGame/Hurrican", "0d91d1f2d40f38d21e7f41afc01369ee55649fb6", None)],
+                            submodules=True, licences={"Hurrican": ["README.txt"]},
+                            ours=[P + "build-hurrican.sh"]),
+    "pspexp-luanti": dict(what="Luanti (Minetest)", comps=[("Luanti", GH + "luanti-org/luanti", "5.10.0", None)],
+                          ours=[P + "build-luanti.sh"]),
+    "pspexp-mupen64plus": dict(what="Mupen64Plus and GLideN64", comps=[
+        ("mupen64plus-core", GH + "mupen64plus/mupen64plus-core", "ba95bab92a76744753bfe61470823a4937850ab0", None),
+        ("mupen64plus-ui-console", GH + "mupen64plus/mupen64plus-ui-console", "c8ac4862a019d7885b24927d9b4db5dd3e42a528", None),
+        ("mupen64plus-rsp-hle", GH + "mupen64plus/mupen64plus-rsp-hle", "8a7a472a7172eb2c8725b305eae26818ed7b51a2", None),
+        ("mupen64plus-audio-sdl", GH + "mupen64plus/mupen64plus-audio-sdl", "2faed1c7e62c5f292948e7cd2398c184970cf794", None),
+        ("mupen64plus-input-sdl", GH + "mupen64plus/mupen64plus-input-sdl", "842c39e89749aa3a8d02202b2afddd20b29cdfdb", None),
+        ("mupen64plus-rsp-cxd4", GH + "mupen64plus/mupen64plus-rsp-cxd4", "00906a92641c540a64e4e7505012157315314810", None),
+        ("GLideN64", GH + "gonetz/GLideN64", "41c7ba273a6c9afb43c0574cf3cf5d139182d070", None)],
+        ours=[P + "build-mupen64plus.sh"]),
+    "pspexp-openra": dict(what="OpenRA", comps=[("OpenRA", GH + "OpenRA/OpenRA", "release-20250330", None)],
+                          ours=[P + "build-openra.sh"]),
+    "pspexp-opensurge": dict(what="Open Surge", comps=[("Open Surge", GH + "alemart/opensurge", "v0.6.1.3", None),
+                                                   ("SurgeScript", GH + "alemart/surgescript", "v0.6.1", None),
+                                                   ("Allegro 5", GH + "liballeg/allegro5", "5.2.11.3", None)],
+                             ours=[P + "build-opensurge.sh"]),
+    "pspexp-solarus": dict(what="the Solarus engine", comps=[("Solarus", "https://gitlab.com/solarus-games/solarus", "v1.6.5", None)],
+                           ours=[P + "build-solarus.sh"]),
+    "pspexp-srb2": dict(what="Sonic Robo Blast 2's program", comps=[("SRB2", GH + "STJr/SRB2", "SRB2_release_2.2.15", None)],
+                        ours=[P + "build-srb2.sh"]),
+    "pspexp-srb2kart": dict(what="SRB2Kart's program", comps=[("SRB2Kart", GH + "STJr/Kart-Public", "v1.6", None)],
+                            ours=[P + "build-srb2kart.sh"]),
+    "pspexp-vanillaconquer": dict(what="Vanilla Conquer", comps=[("Vanilla Conquer", GH + "TheAssemblyArmada/Vanilla-Conquer", "ce83b59edd99cccac6cebaae054ca04962c744b7", None)],
+                                  ours=[P + "build-vanillaconquer.sh"]),
+    "pspexp-stratagus": dict(what="the Stratagus engine", comps=[("Stratagus", GH + "Wargus/stratagus", "3d87c93f7fd8c0b62ee1be5df0a6d9efc72ca6cc", None)],
+                             ours=[P + "build-stratagus.sh"]),
+    "pspexp-war1gus": dict(what="War1gus", comps=[("War1gus", GH + "Wargus/war1gus", "8ec75764c7b4706a4405004438e810c050228b94", None)],
+                           ours=[P + "build-stratagus.sh", "compatibility/war1gus/war1tool-optional-cutscenes.patch"]),
+    "pspexp-wargus": dict(what="Wargus", comps=[("Wargus", GH + "Wargus/wargus", "cde1a0718a0058cc651ecd56ff8149fc39f624e9", None)],
+                          ours=[P + "build-stratagus.sh", "compatibility/wargus/wargus-small-screen.patch", P + "debs/pspexp-wargus/crop-icons"]),
+    "pspexp-cavestory": dict(what="NXEngine-evo, the Cave Story engine", comps=[
+        ("NXEngine-evo", GH + "nxengine/nxengine-evo", None, "../cavestory/nxengine-evo")],
+        ours=[P + "build-nxengine.sh", P + "recipes/_lib.sh", "scripts/pi/install.sh"],
+        note="Built with the 480x272 default and a fix for starting with no save (cavestory_patch in recipes/_lib.sh, applied by the build). On the GameShell, zlib 1.3.1, libpng 1.6.44, SDL2_image 2.8.2 and SDL2_mixer 2.8.1 are linked in (zlib and libpng licences, zlib licence: build-nxengine.sh fetches their releases)."),
+    "pspexp-libretro-handy": dict(what="the Handy libretro core (Atari Lynx)", comps=[("libretro-handy", GH + "libretro/libretro-handy", None, "../retro/libretro-handy")],
+                                  licences={"libretro-handy": ["lynx/license.txt"]},
+                                  ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
+    "pspexp-libretro-picodrive": dict(what="the PicoDrive libretro core", comps=[("PicoDrive", GH + "libretro/picodrive", None, "../retro/libretro-picodrive")],
+                                      ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
+    "pspexp-libretro-snes9x2005": dict(what="the Snes9x 2005 libretro core", comps=[("Snes9x 2005", GH + "libretro/snes9x2005", None, "../retro/libretro-snes9x2005")],
+                                       ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
+}
+
+LICENCE_NAME = re.compile(r"^(licen[cs]es?|copying|copyright|notice|gpl|lgpl)([-._].*)?$", re.I)
+
+
+def sh(*a, cwd=None):
+    return subprocess.run(a, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def fetch(name, url, ref, local, dest, submodules=False):
+    """the component's tree at its commit, submodules included, in dest; returns the commit"""
+    if os.path.exists(dest):
+        shutil.rmtree(dest)
+    if local:
+        src = os.path.join(ROOT, local)
+        sh("git", "clone", "-q", src, dest)
+        commit = sh("git", "-C", src, "rev-parse", "HEAD")
+        sh("git", "-C", dest, "checkout", "-q", commit)
+        # the submodules at the commits the checkout records, from their own upstreams
+        sh("git", "-C", dest, "submodule", "update", "-q", "--init", "--recursive")
+        return commit
+    if re.fullmatch(r"[0-9a-f]{7,39}", ref):   # a short commit: GitHub fetches only whole ones
+        sh("git", "clone", "-q", "--filter=blob:none", url, dest)
+        sh("git", "-C", dest, "checkout", "-q", ref)
+    else:
+        os.makedirs(dest)
+        sh("git", "init", "-q", dest)
+        sh("git", "-C", dest, "fetch", "-q", "--depth", "1", url, ref)
+        sh("git", "-C", dest, "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD")
+    if submodules:   # only where the build fetches them too (Hurrican); the others build without
+        sh("git", "-C", dest, "submodule", "update", "-q", "--init", "--recursive", "--depth", "1")
+    return sh("git", "-C", dest, "rev-parse", "HEAD")
+
+
+def licence_files(tree):
+    out = []
+    for f in sorted(os.listdir(tree)):
+        p = os.path.join(tree, f)
+        if os.path.isfile(p) and LICENCE_NAME.match(f):
+            out.append(p)
+    for sub in ("docs", "doc", "LICENSES", "licenses"):
+        d = os.path.join(tree, sub)
+        if os.path.isdir(d):
+            out += [os.path.join(d, f) for f in sorted(os.listdir(d)) if LICENCE_NAME.match(f) and os.path.isfile(os.path.join(d, f))]
+    return out
+
+
+def label(texts):
+    t = " ".join(texts)[:200000]
+    found = []
+    for pat, name in ((r"GNU GENERAL PUBLIC LICENSE\s+Version 3", "GPL-3.0"), (r"GNU GENERAL PUBLIC LICENSE\s+Version 2", "GPL-2.0"),
+                      (r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 2\.1", "LGPL-2.1"), (r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3", "LGPL-3.0"),
+                      (r"Permission is hereby granted, free of charge|under the MIT license", "MIT"), (r"This software is provided 'as-is'|ZLIB license|z-lib like", "zlib"),
+                      (r"Redistribution and use in source and binary forms", "BSD"), (r"Apache License\s+Version 2\.0", "Apache-2.0")):
+        if re.search(pat, t, re.I) and name not in found:
+            found.append(name)
+    return ", ".join(found) or "see the licence texts below"
+
+
+def archive(pkg, version):
+    """build/sources/out/PKG/PKG_VERSION.source.tar.xz (made once) and what it holds"""
+    spec = PACKAGES[pkg]
+    name = "%s_%s" % (pkg, version)
+    out = os.path.join(OUT, pkg, name + ".source.tar.xz")
+    meta = os.path.join(WORK, "meta", name + ".txt")
+    if os.path.exists(out) and os.path.exists(meta):
+        return out, open(meta).read()
+    stage = os.path.join(WORK, "stage", name)
+    if os.path.exists(stage):
+        shutil.rmtree(stage)
+    os.makedirs(stage)
+    lines, licences = [], []
+    for cname, url, ref, local in spec["comps"]:
+        d = re.sub(r"[^A-Za-z0-9.+-]+", "-", cname).strip("-").lower()
+        commit = fetch(cname, url, ref, local, os.path.join(stage, d), spec.get("submodules", False))
+        files = licence_files(os.path.join(stage, d)) + [os.path.join(stage, d, f) for f in spec.get("licences", {}).get(cname, [])]
+        texts = [open(f, errors="replace").read() for f in files]
+        lines.append("%s|%s|%s|%s|%s|%s" % (cname, url, ref or "", commit, label(texts), d))
+        for f in files:
+            licences.append("%s|%s" % (cname, os.path.relpath(f, stage)))
+        shutil.rmtree(os.path.join(stage, d, ".git"), ignore_errors=True)
+        for g in glob.glob(os.path.join(stage, d, "**", ".git"), recursive=True):
+            (shutil.rmtree if os.path.isdir(g) else os.remove)(g)
+    os.makedirs(os.path.join(stage, "pspexp"))
+    for f in spec["ours"] + ["scripts/packages/debs/%s/build" % pkg if os.path.exists(os.path.join(ROOT, "scripts/packages/debs/%s/build" % pkg)) else None]:
+        if f:
+            dst = os.path.join(stage, "pspexp", f)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(os.path.join(ROOT, f), dst)
+    pspexp_commit = sh("git", "-C", ROOT, "rev-parse", "HEAD")
+    readme = ["%s %s: its complete source" % (pkg, version), "",
+              "The components, each at the commit the package was built from (with their submodules where the build fetches them):"]
+    for l in lines:
+        c, url, ref, commit, lic, d = l.split("|")
+        readme.append("  %s/  %s, %s%s (%s)" % (d, url, commit, " (%s)" % ref if ref and ref != commit else "", lic))
+    readme += ["", "pspexp/: the scripts that build and package it, and our patches to it (PSPExp, MIT;",
+               "from PSPExp's repository at commit %s). %s" % (pspexp_commit, spec.get("note", "")), ""]
+    open(os.path.join(stage, "README.txt"), "w").write("\n".join(readme))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    os.makedirs(os.path.dirname(meta), exist_ok=True)
+    tmp = out + ".part"
+    with tarfile.open(tmp, "w:xz", preset=6) as t:
+        t.add(stage, arcname=name + ".source")
+    os.replace(tmp, out)
+    m = "\n".join(lines) + "\n--\n" + "\n".join(licences) + "\n"
+    open(meta, "w").write(m)
+    return out, m
+
+
+def copyright(pkg, version, docdir):
+    spec = PACKAGES[pkg]
+    out, m = archive(pkg, version)
+    comps, lics = m.split("\n--\n")
+    stage = os.path.join(WORK, "stage", "%s_%s" % (pkg, version))
+    url = "%s/%s/%s" % (PUBLIC, pkg, os.path.basename(out))
+    t = ["%s %s: %s, built by PSPExp." % (pkg, version, spec["what"]), "", "Built from:"]
+    for l in comps.strip().splitlines():
+        c, u, ref, commit, lic, d = l.split("|")
+        t.append("  %s: %s, commit %s%s; %s" % (c, u, commit, " (%s)" % ref if ref and ref != commit else "", lic))
+    t += ["", "The complete source (each component at that commit, our patches, and the scripts that",
+          "build and package it):", "  " + url,
+          "", "PSPExp's packaging and build scripts: MIT.", "" + spec.get("note", ""), ""]
+    for l in lics.strip().splitlines():
+        c, rel = l.split("|", 1)
+        p = os.path.join(stage, rel)
+        if os.path.exists(p):
+            t += ["", "==== %s: %s ====" % (c, rel.split("/", 1)[1]), "", open(p, errors="replace").read().rstrip()]
+    os.makedirs(docdir, exist_ok=True)
+    open(os.path.join(docdir, "copyright"), "w").write("\n".join(t) + "\n")
+
+
+def main():
+    a = sys.argv[1:]
+    if a[:1] == ["list"]:
+        print("\n".join(sorted(PACKAGES)))
+    elif a[:1] == ["archive"] and len(a) == 3:
+        print(archive(a[1], a[2])[0])
+    elif a[:1] == ["copyright"] and len(a) == 4:
+        copyright(a[1], a[2], a[3])
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

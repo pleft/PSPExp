@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/solarus"
 [ -x "$B/solarus-run" ] && [ -s "$B/depends.txt" ] || { echo "no $B/solarus-run: scripts/packages/build-solarus.sh $ARCH first" >&2; exit 1; }
-V=1.6.5-pspexp1
+V=1.6.5-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L="$W/root/usr/lib/pspexp/solarus"
 mkdir -p "$L" "$W/root/usr/share/doc/pspexp-solarus"
@@ -28,4 +28,5 @@ Description: Solarus 1.6 engine, for PSPExp
  The engine of action-RPG quests made with Solarus 1.6, which Debian 13
  does not carry. Quests come with their own packages. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-solarus "$V" "$W/root/usr/share/doc/pspexp-solarus"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-solarus_${V}_$ARCH.deb"

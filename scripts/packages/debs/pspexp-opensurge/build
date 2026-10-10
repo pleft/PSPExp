@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/opensurge"
 [ -x "$B/opensurge" ] && [ -s "$B/depends.txt" ] || { echo "no $B/opensurge: scripts/packages/build-opensurge.sh $ARCH first" >&2; exit 1; }
-V=0.6.1.3-pspexp1
+V=0.6.1.3-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/opensurge" "$W/root/usr/share/games" "$W/root/usr/share/doc/pspexp-opensurge"
 cp "$B/opensurge" "$W/root/usr/lib/pspexp/opensurge/"
@@ -31,4 +31,5 @@ Description: Open Surge, for PSPExp
  engine, which Debian does not carry. Built with Allegro 5 through SDL so
  that PSPExp's SDL layer takes its window. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-opensurge "$V" "$W/root/usr/share/doc/pspexp-opensurge"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-opensurge_${V}_$ARCH.deb"

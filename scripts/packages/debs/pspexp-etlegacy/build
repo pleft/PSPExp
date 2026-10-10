@@ -10,7 +10,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/etlegacy"
 [ -x "$B/etl" ] && [ -s "$B/depends.txt" ] || { echo "no $B/etl: scripts/packages/build-etlegacy.sh $ARCH first" >&2; exit 1; }
-V=2.86.0-pspexp1
+V=2.86.0-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/etlegacy" "$W/root/usr/share/doc/pspexp-etlegacy"
 install -m 755 "$B/etl" "$W/root/usr/lib/pspexp/etlegacy/etl"
@@ -29,4 +29,5 @@ Description: ET: Legacy's client, for PSPExp
  built from the project's v2.86.0 tag against the system's SDL2. The game
  comes with package etlegacy. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-etlegacy "$V" "$W/root/usr/share/doc/pspexp-etlegacy"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-etlegacy_${V}_$ARCH.deb"

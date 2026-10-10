@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/mupen64plus"
 [ -x "$B/mupen64plus" ] && [ -s "$B/depends.txt" ] || { echo "no $B/mupen64plus: scripts/packages/build-mupen64plus.sh $ARCH first" >&2; exit 1; }
-V=2.6.0+git2026-pspexp1
+V=2.6.0+git2026-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/mupen64plus
 mkdir -p "$W/root$L" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-mupen64plus"
@@ -55,4 +55,5 @@ Description: Mupen64Plus, the Nintendo 64 emulator, for PSPExp
  Mupen64Plus with the GLideN64 graphics plugin, which Debian does not build
  for arm64, and a launch script for the PSP (pspexp-n64). Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-mupen64plus "$V" "$W/root/usr/share/doc/pspexp-mupen64plus"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-mupen64plus_${V}_$ARCH.deb"

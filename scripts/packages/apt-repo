@@ -22,6 +22,7 @@ import gzip, hashlib, io, os, shutil, subprocess, sys, tarfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "build/apt")
+SOURCES = os.path.join(ROOT, "build/sources/out")   # what scripts/packages/sources made
 GNUPG = os.path.expanduser("~/.pspexp/gnupg")
 KEY_NAME = "PSPExp archive <pspexp@localhost>"
 ARCHES = ("arm64", "armhf")
@@ -130,7 +131,9 @@ def push(host):
     subprocess.run(["ssh", host, "mkdir -p ~/pspexp-repo"], check=True)
     subprocess.run(["rsync", "-a", OUT + "/pool/", "%s:pspexp-repo/pool/" % host], check=True)
     subprocess.run(["rsync", "-a", OUT + "/dists/", "%s:pspexp-repo/dists/" % host], check=True)
-    subprocess.run(["rsync", "-a", "--delete", "--exclude", "pool/", "--exclude", "by-hash/", OUT + "/", "%s:pspexp-repo/" % host], check=True)
+    if os.path.isdir(SOURCES):   # the source archives (scripts/packages/sources): added to, like the pool
+        subprocess.run(["rsync", "-a", SOURCES + "/", "%s:pspexp-repo/sources/" % host], check=True)
+    subprocess.run(["rsync", "-a", "--delete", "--exclude", "pool/", "--exclude", "by-hash/", "--exclude", "/sources/", OUT + "/", "%s:pspexp-repo/" % host], check=True)
     print("pushed to %s:~/pspexp-repo" % host)
 
 
@@ -164,8 +167,10 @@ def push_r2():
     keep = ["--header-upload", "Cache-Control: public, max-age=31536000, immutable"]
     subprocess.run(base + keep + ["copy", OUT + "/pool", dest + "/pool"], check=True, env=env)
     subprocess.run(base + keep + ["copy", "--include", "**/by-hash/**", OUT + "/dists", dest + "/dists"], check=True, env=env)
+    if os.path.isdir(SOURCES):   # the source archives (scripts/packages/sources): added to, named by version
+        subprocess.run(base + keep + ["copy", SOURCES, dest + "/sources"], check=True, env=env)
     subprocess.run(base + ["--ignore-times", "--header-upload", "Cache-Control: no-cache", "sync",
-                           "--exclude", "/pool/**", "--exclude", "**/by-hash/**", OUT, dest], check=True, env=env)
+                           "--exclude", "/pool/**", "--exclude", "**/by-hash/**", "--exclude", "/sources/**", OUT, dest], check=True, env=env)
     url = v.get("R2_PUBLIC_URL", "").rstrip("/")
     if url:   # what a board sees
         r = subprocess.run(["curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", url + "/dists/stable/InRelease"], capture_output=True, text=True)

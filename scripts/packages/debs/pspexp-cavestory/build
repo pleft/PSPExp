@@ -24,7 +24,7 @@ if [ ! -x "$X" ]; then   # the data extractor, for the board (it reads the game'
 		c++ -w -std=c++14 -O2 -DHAVE_UNIX_LIKE -I/s -I/s/deps -I/usr/include/SDL2 /s/src/extract/*.cpp /s/src/common/misc.cpp \
 			/s/src/Utils/Logger.cpp /s/src/stagedata.cpp -o /o/'"$(basename "$X")"
 fi
-V="$(git -C "$S" log -1 --format=%cd --date=format:%Y.%m.%d)+pspexp2"
+V="$(git -C "$S" log -1 --format=%cd --date=format:%Y.%m.%d)+pspexp3"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L="$W/root/usr/lib/pspexp/cavestory"
 mkdir -p "$L/engine-data" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-cavestory"
@@ -46,7 +46,6 @@ set -e
 [ -d /usr/share/games/cavestory/data ] && cp -R /usr/lib/pspexp/cavestory/engine-data/. /usr/share/games/cavestory/data/
 exit 0
 P
-cp "$S/LICENSE" "$W/root/usr/share/doc/pspexp-cavestory/copyright"
 cat > "$W/root/usr/share/doc/pspexp-cavestory/README" <<D
 NXEngine-evo, the Cave Story engine (GPL-3.0: copyright, the licence; the source at
 https://github.com/nxengine/nxengine-evo, commit $(git -C "$S" rev-parse HEAD)), and nxextract,
@@ -66,4 +65,5 @@ Description: Cave Story's engine (NXEngine-evo), for PSPExp
  NXEngine-evo, which Debian does not carry, and its data extractor; the game
  comes with cavestory-data. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-cavestory "$V" "$W/root/usr/share/doc/pspexp-cavestory"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-cavestory_${V}_$ARCH.deb"

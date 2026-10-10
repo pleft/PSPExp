@@ -56,6 +56,7 @@ packages/          what the launcher offers, for any board
   mkdeb.py           a .deb without dpkg (the Mac has none)
   apt-repo           the signed apt repository and catalogue: build, push to the home server or
                      the public Cloudflare R2 bucket (push r2)
+  sources            each compiled package's copyright file and complete source archive (from its build)
   check-downloads    is every installer's game still downloadable (its pinned SHA-256): weekly in CI
   push-images        the card images as a download (dl.pspexp.dev, its own R2 bucket): compressed,
                      checksummed, dated, with their GPL sources and an index page

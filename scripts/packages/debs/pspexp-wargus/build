@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/wargus"
 [ -x "$B/wartool" ] && [ -s "$B/wartool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260629-pspexp10
+V=3.3.3~git20260629-pspexp11
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/wargus; S=/usr/share/pspexp/wargus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-wargus"
@@ -31,7 +31,6 @@ install -m 755 "$B/wartool" "$W/root$L/"
 install -m 755 "$ROOT/scripts/packages/debs/pspexp-wargus/crop-icons" "$W/root$L/"
 cp -r "$B/share/"* "$W/root$S/"
 echo "$V" > "$W/root$S/.pspexp-version"
-install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-wargus/copyright"
 cat > "$W/root/usr/games/warcraft2" <<'S'
 #!/bin/sh
 # Warcraft II (package pspexp-wargus): the player's own copy in ~/Warcraft2,
@@ -162,4 +161,5 @@ Description: Warcraft II on Wargus (Stratagus), for PSPExp
  installer) placed in ~/Warcraft2; it is extracted on the first start.
  Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-wargus "$V" "$W/root/usr/share/doc/pspexp-wargus"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-wargus_${V}_$ARCH.deb"

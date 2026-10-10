@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/easyrpg"
 [ -x "$B/easyrpg-player" ] && [ -s "$B/depends.txt" ] || { echo "no $B/easyrpg-player: scripts/packages/build-easyrpg.sh $ARCH first" >&2; exit 1; }
-V=0.8.1.1-pspexp1
+V=0.8.1.1-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-easyrpg"
 install -m 755 "$B/easyrpg-player" "$W/root/usr/games/easyrpg-player"
@@ -27,4 +27,5 @@ Description: EasyRPG Player, for PSPExp
  A free interpreter for RPG Maker 2000 and 2003 games, which Debian does
  not carry. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-easyrpg "$V" "$W/root/usr/share/doc/pspexp-easyrpg"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-easyrpg_${V}_$ARCH.deb"

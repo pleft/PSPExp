@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/srb2"
 [ -x "$B/srb2" ] && [ -s "$B/depends.txt" ] || { echo "no $B/srb2: scripts/packages/build-srb2.sh $ARCH first" >&2; exit 1; }
-V=2.2.15-pspexp1
+V=2.2.15-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/srb2" "$W/root/usr/share/doc/pspexp-srb2"
 install -m 755 "$B/srb2" "$W/root/usr/lib/pspexp/srb2/srb2"
@@ -25,4 +25,5 @@ Description: Sonic Robo Blast 2's program, for PSPExp
  The SRB2 team's 3D Sonic fan game, built from the project's
  SRB2_release_2.2.15 tag. Its assets come with package srb2. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-srb2 "$V" "$W/root/usr/share/doc/pspexp-srb2"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-srb2_${V}_$ARCH.deb"

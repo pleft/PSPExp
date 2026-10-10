@@ -16,13 +16,12 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/stratagus/war1gus"
 [ -x "$B/war1tool" ] && [ -s "$B/war1tool.depends" ] || { echo "no $B: scripts/packages/build-stratagus.sh $ARCH first" >&2; exit 1; }
-V=3.3.3~git20260622-pspexp4
+V=3.3.3~git20260622-pspexp5
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/war1gus; S=/usr/share/pspexp/war1gus
 mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-war1gus"
 install -m 755 "$B/war1tool" "$W/root$L/"
 cp -r "$B/share/"* "$W/root$S/"
-install -m 644 "$B/COPYING" "$W/root/usr/share/doc/pspexp-war1gus/copyright"
 cat > "$W/root/usr/games/warcraft" <<'S'
 #!/bin/sh
 # Warcraft: Orcs & Humans (package pspexp-war1gus): the player's own DATA.WAR,
@@ -73,4 +72,5 @@ Description: Warcraft: Orcs & Humans on War1gus (Stratagus), for PSPExp
  the player's own DATA.WAR from Warcraft: Orcs & Humans (DOS), placed in
  ~/Warcraft; it is extracted on the first start. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-war1gus "$V" "$W/root/usr/share/doc/pspexp-war1gus"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-war1gus_${V}_$ARCH.deb"

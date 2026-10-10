@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/egoboo"
 [ -x "$B/egoboo" ] && [ -s "$B/depends.txt" ] || { echo "no $B/egoboo: scripts/packages/build-egoboo.sh $ARCH first" >&2; exit 1; }
-V=2.9.0+401393e-pspexp1
+V=2.9.0+401393e-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/egoboo" "$W/root/usr/share/doc/pspexp-egoboo"
 install -m 755 "$B/egoboo" "$W/root/usr/lib/pspexp/egoboo/egoboo"
@@ -26,4 +26,5 @@ Description: Egoboo's program, for PSPExp
  which Debian 13 does not carry. Its data comes with the package egoboo.
  Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-egoboo "$V" "$W/root/usr/share/doc/pspexp-egoboo"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-egoboo_${V}_$ARCH.deb"

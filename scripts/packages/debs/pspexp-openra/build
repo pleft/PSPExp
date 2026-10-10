@@ -12,7 +12,7 @@ OUT="$1"; ARCH="$2"
 [ "$ARCH" = arm64 ] || { echo "pspexp-openra: arm64 only" >&2; exit 1; }
 B="$ROOT/build/arm64/openra"
 [ -x "$B/lib/OpenRA" ] && [ -s "$B/depends.txt" ] || { echo "no $B/lib/OpenRA: scripts/packages/build-openra.sh first" >&2; exit 1; }
-V=20250330-pspexp1
+V=20250330-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-openra"
 cp -R "$B/lib" "$W/root/usr/lib/pspexp/openra"
@@ -44,4 +44,5 @@ Description: OpenRA (Red Alert, Tiberian Dawn), for PSPExp
  release-20250330 built for arm64. The original games' content is
  installed by OpenRA's own content installer. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-openra "$V" "$W/root/usr/share/doc/pspexp-openra"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-openra_${V}_$ARCH.deb"

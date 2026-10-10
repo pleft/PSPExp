@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/luanti"
 [ -x "$B/luanti" ] && [ -s "$B/depends.txt" ] || { echo "no $B/luanti: scripts/packages/build-luanti.sh $ARCH first" >&2; exit 1; }
-V=5.10.0-pspexp1
+V=5.10.0-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/luanti" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-luanti"
 install -m 755 "$B/luanti" "$W/root/usr/lib/pspexp/luanti/luanti"
@@ -42,4 +42,5 @@ Description: Luanti (Minetest), built with SDL2, for PSPExp
  is built for X11) so that PSPExp's SDL layer takes its window, with
  Minetest Game. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-luanti "$V" "$W/root/usr/share/doc/pspexp-luanti"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-luanti_${V}_$ARCH.deb"

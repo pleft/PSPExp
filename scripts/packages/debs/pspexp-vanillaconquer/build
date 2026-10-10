@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/vanillaconquer"
 [ -x "$B/vanillara" ] && [ -s "$B/depends.txt" ] || { echo "no $B/vanillara: scripts/packages/build-vanillaconquer.sh $ARCH first" >&2; exit 1; }
-V=2026.07+ce83b59-pspexp1
+V=2026.07+ce83b59-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/vanillaconquer" "$W/root/usr/share/doc/pspexp-vanillaconquer"
 install -m 755 "$B/vanillara" "$B/vanillatd" "$W/root/usr/lib/pspexp/vanillaconquer/"
@@ -26,4 +26,5 @@ Description: Vanilla Conquer, Command & Conquer and Red Alert's engine, for PSPE
  source EA published. Their data comes with cnc-freeware and
  redalert-freeware. Packaged by PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-vanillaconquer "$V" "$W/root/usr/share/doc/pspexp-vanillaconquer"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-vanillaconquer_${V}_$ARCH.deb"
