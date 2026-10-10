@@ -733,7 +733,15 @@ fallback) until the next runtime update overwrites it.
 It stays as built, with these changes:
 - **The catalogue:** it reads the recipes (with covers) instead of a folder
   of archives.
-- **Sections:** Games, Emulators, Apps, and PSPExp itself.
+- **Sections:** Games, Emulators, Apps, and PSPExp itself. *Built
+  2026-10-10* (the user found no way to update PSPExp from the PSP, and an
+  empty Apps section: every recipe is a game or an emulator): `pspexp-pkg
+  available` lists `pspexp` first on the Debian boards, category app,
+  "update" when apt has a newer `pspexp-core` or `pspexp-runtime` than is
+  installed; `install pspexp` runs the helper's upgrade (as `pspexp-pkg
+  upgrade`), `remove pspexp` is refused; the daily check counts it with the
+  recipes. Packages offers it only as an update and then points to Restart
+  PSPExp and Update the PSP.
 - **States:** Get, Installed, Update. It says why something can't be
   installed on this board: no network, not enough space, not for this board
   kind, or a warning such as "too heavy for this board".

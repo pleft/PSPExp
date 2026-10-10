@@ -6,7 +6,8 @@
  * It shows the recipe catalogue through pspexp-pkg (docs/Package_Manager.md):
  * `pspexp-pkg available` for the list, `install` / `remove` / `update` /
  * `recover` for the work, apt's progress read from its status lines.
- * Sections: Games, Emulators, Apps (L / R). The catalogue: the signed one apt's
+ * Sections: Games, Emulators, Apps (L / R); Apps starts with PSPExp itself (pspexp-pkg's `pspexp`:
+ * updated, never removed here). The catalogue: the signed one apt's
  * helper keeps in /usr/share/pspexp/catalogue (the Debian boards), or the one the
  * Mac publishes to $PSPEXP_ROOT/catalogue with the builds it installs from (the
  * Omega2+, §9: no network needed there).
@@ -49,7 +50,7 @@ static char g_err[200];
 enum { S_LIST, S_CONFIRM, S_WORKING, S_RESULT, S_TERMS };
 static int g_mode;
 static pid_t g_pid;                /* the background job */
-static char g_job[160], g_result_title[96], g_result[400];
+static char g_job[160], g_result_title[96], g_result[400], g_job_id[48];
 static int g_job_install;
 static int g_catmode;              /* there is a catalogue */
 static int g_local;                /* published by the Mac with its builds (the Omega): no network needed */
@@ -224,6 +225,7 @@ static void catalogue_job(const char *verb, const Pkg *p)
     else snprintf(cmd, sizeof(cmd), "PSPEXP_PKG_WAIT=5 pspexp-pkg %s", verb);
     snprintf(g_job, sizeof(g_job), "%s%s%s", what, p ? " " : "", p ? p->title : "");
     snprintf(g_result_title, sizeof(g_result_title), "%s", p ? p->title : "Packages");
+    snprintf(g_job_id, sizeof(g_job_id), "%s", p ? p->id : "");
     g_job_install = !strcmp(verb, "update") ? -1 : !strcmp(verb, "remove") ? 0 : 1;
     g_prog = -1; g_phase[0] = 0;
     if (run_bg(cmd) == 0) g_mode = S_WORKING;
@@ -258,7 +260,8 @@ static void job_done(int status)
     {
         const char *last = strrchr(out, '\n'), *m = last ? last + 1 : out;
         if (!strncmp(m, "pspexp-pkg: ", 12)) m += 12;
-        if (ok) snprintf(g_result, sizeof(g_result), "%s. The launcher shows the change in a moment.", g_job_install ? "Installed" : "Removed");
+        if (ok && g_job_install && !strcmp(g_job_id, "pspexp")) snprintf(g_result, sizeof(g_result), "PSPExp updated. Settings > Restart PSPExp starts it; then Settings > Update the PSP, when offered.");
+        else if (ok) snprintf(g_result, sizeof(g_result), "%s. The launcher shows the change in a moment.", g_job_install ? "Installed" : "Removed");
         else if (strstr(out, "busy")) snprintf(g_result, sizeof(g_result), "Another package operation is running; try again in a moment.");
         else snprintf(g_result, sizeof(g_result), "It did not work: %s", m[0] ? m : "pspexp-pkg failed");
     }
@@ -319,7 +322,9 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         filter();
         return;
     }
-    if ((pressed & PSPEXP_BUTTON_CROSS) && p && (p->avail[0] || !strcmp(p->st, "broken")) && strcmp(p->st, "local")) start_install(p);
+    /* (PSPExp itself, "pspexp": only an update; installed is current, nothing to reinstall) */
+    if ((pressed & PSPEXP_BUTTON_CROSS) && p && (p->avail[0] || !strcmp(p->st, "broken")) && strcmp(p->st, "local") &&
+        (strcmp(p->id, "pspexp") || !strcmp(p->st, "update"))) start_install(p);
     /* square removes (square deletes everywhere: a letter, a Bluetooth pairing); triangle stays for showing more */
     if ((pressed & PSPEXP_BUTTON_SQUARE) && p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local"))) g_mode = S_CONFIRM;
     if (pressed & PSPEXP_BUTTON_START) { if (g_local) load_catalogue(); else catalogue_job("update", NULL); }
@@ -486,7 +491,8 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     if (p && g_mode == S_LIST) {
         int st = status_of(p);
         if (st == ST_BROKEN) x = ui_hint_btn(x, 'x', "Retry");
-        else if (st != ST_LOCAL && p->avail[0]) x = ui_hint_btn(x, 'x', st == ST_NEW ? "Install" : st == ST_UPDATE ? "Update" : "Reinstall");
+        else if (st != ST_LOCAL && p->avail[0] && (strcmp(p->id, "pspexp") || st == ST_UPDATE))
+            x = ui_hint_btn(x, 'x', st == ST_NEW ? "Install" : st == ST_UPDATE ? "Update" : "Reinstall");
         if (p->inst[0] || st == ST_BROKEN || st == ST_LOCAL) x = ui_hint_btn(x, 's', "Remove");
     }
     x = ui_hint_cap(x, "L/R", "Section", UI_SUB);

@@ -120,7 +120,10 @@ d-pad in others). Triangle on a game in the launcher shows its details.
 ## Packages: installing games
 
 **Apps > Packages** lists what your board can install, in three sections:
-Games, Emulators and Apps (L / R switch).
+Games, Emulators and Apps (L / R switch). **PSPExp** itself is the first
+entry under Apps: when it says **Update**, cross installs the new PSPExp
+(and the PSP's runtime with it); then **Settings > Restart PSPExp**, and
+**Settings > Update the PSP** when the launcher offers it.
 
 | Button | |
 |---|---|

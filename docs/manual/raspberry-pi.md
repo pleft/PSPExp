@@ -154,8 +154,8 @@ to let them go, for your phone or tablet. Details:
   connected.
 - **Music in other formats** (Ogg, FLAC, Opus, M4A) is decoded on the Pi by
   ffmpeg: `sudo apt install ffmpeg` if the player says it is missing.
-- **Updates** come through **Apps > Packages** (PSPExp itself is a package
-  too); after one, the launcher offers **Settings > Restart PSPExp**.
+- **Updates** come through **Apps > Packages** (PSPExp itself is the first
+  entry under Apps); after one, the launcher offers **Settings > Restart PSPExp**.
 - **Wi-Fi and the time zone** can be changed from the PSP: Settings >
   Network, Settings > Clock > Time zone.
 - Packages live in `/opt/pspexp`; your settings in `~/.config/pspexp*`.

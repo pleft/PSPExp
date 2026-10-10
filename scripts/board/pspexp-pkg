@@ -15,6 +15,7 @@
 #   pspexp-pkg upgrade                     changed recipes, then newer versions of their packages
 #   pspexp-pkg list                        installed
 #   pspexp-pkg available                   the catalogue: id|recipe version|state|category|title|description
+#                                          (first, on the Debian boards: pspexp, PSPExp itself; its install is the upgrade)
 #   pspexp-pkg update                      the catalogue and apt's lists
 #   pspexp-pkg check                       update, then "updates=N new=M": installed recipes that
 #                                          changed, and recipes new since the last check (the
@@ -470,8 +471,23 @@ state_of() {   # installed | update | new | broken
 # the catalogue for this board: id|recipe version|state|category|title|description|graphics|terms
 # (graphics: how its first entry or system draws, "" not said; terms: what must be accepted before
 # installing, "NAME URL", "" none)
+# PSPExp itself (Debian boards): the console and launcher (pspexp-core) and the PSP's runtime
+# (pspexp-runtime), one entry in Packages' Apps: "update" when apt has a newer one of either
+# (installed through upgrade, as `pspexp-pkg upgrade`); never removed from here
+self_line() {
+	[ "$FAMILY" = debian ] || return 0
+	v=$(dpkg-query -W -f='${Version}' pspexp-core 2>/dev/null) || return 0
+	[ -n "$v" ] || return 0
+	st=installed
+	for p in pspexp-core pspexp-runtime; do
+		apt-cache policy "$p" 2>/dev/null | awk '/Installed:/ {i=$2} /Candidate:/ {c=$2} END {exit !(i != "" && i != "(none)" && c != "" && c != "(none)" && i != c)}' && st=update
+	done
+	printf 'pspexp|%s|%s|app|PSPExp|The console and launcher on this board and the PSP'"'"'s own runtime: an update brings both, then Settings > Restart PSPExp and Settings > Update the PSP.|sdl|\n' "$v" "$st"
+}
+
 available() {
 	[ -d "$CAT" ] || die "no catalogue (pspexp-pkg update)"
+	self_line
 	for r in "$CAT"/*/recipe; do
 		[ -f "$r" ] || continue
 		id=$(basename "$(dirname "$r")")
@@ -489,10 +505,12 @@ install)
 	[ $# -ge 1 ] || die "usage: pspexp-pkg install [--accept-terms] ID|FILE.tar.gz..."
 	lock
 	for f in "$@"; do
-		case "$f" in *.tar.gz|*.tgz|*/*) install_one "$f" ;; *) install_recipe "$f" ;; esac
+		case "$f" in pspexp) [ "$FAMILY" = debian ] || die "pspexp: the Debian boards' entry"; $APT_HELPER upgrade ;;
+		*.tar.gz|*.tgz|*/*) install_one "$f" ;; *) install_recipe "$f" ;; esac
 	done ;;
 remove)
 	[ $# -ge 1 ] || die "usage: pspexp-pkg remove ID..."
+	for i in "$@"; do [ "$i" = pspexp ] && die "PSPExp itself is not removed from Packages"; done
 	lock
 	for i in "$@"; do
 		# a recipe's: installed by one, or the subject of an interrupted operation (abandoned, §5.3)
