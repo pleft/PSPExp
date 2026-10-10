@@ -41,7 +41,7 @@ def catalogue_mirrors():
 def sha256_of(url):
     req = urllib.request.Request(url, headers={"User-Agent": "PSPExp check-downloads"})
     h = hashlib.sha256()
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=180) as r:
         while True:
             b = r.read(1 << 20)
             if not b:
@@ -63,12 +63,14 @@ def main():
             if u.startswith("itch:"):
                 print("%-22s skip   %s (itch.io)" % (pid, u)); good += 1
                 continue
-            try:
-                got = sha256_of(u)
-                ok = got == sha
-                why = "" if ok else " (another file: %s...)" % got[:12]
-            except Exception as e:
-                ok, why = False, " (%s)" % str(e)[:60]
+            for attempt in (1, 2):   # (the Internet Archive is slow, and from CI it timed out at times)
+                try:
+                    got = sha256_of(u)
+                    ok = got == sha
+                    why = "" if ok else " (another file: %s...)" % got[:12]
+                    break
+                except Exception as e:
+                    ok, why = False, " (%s)" % str(e)[:60]
             good += ok
             print("%-22s %-6s %s%s" % (pid, "ok" if ok else "FAIL", u, why), flush=True)
         if not good:
