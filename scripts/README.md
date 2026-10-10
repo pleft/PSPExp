@@ -14,7 +14,6 @@ dev/               run and test from the build tree, a PSP on the Mac's USB or a
   pspexp-tyrian      OpenTyrian on the PSP
   run-ppsspp.sh      the PSP runtime in the PPSSPP emulator (installed fresh into slot a)
   bench-shim.sh      the SDL layer's upload benchmark (Doom timedemo), here or on a board
-  export-stratagus-patch.sh   the Warcraft (Stratagus) backend as a patch
 
 board/             installed on every board (/usr/local/bin; the Omega's SD card)
   pspexp-exec        start a PSPExp program: the console hands the PSP over and back

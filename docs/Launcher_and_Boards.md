@@ -920,8 +920,8 @@ More (2026-10-03, on the Pi and in PPSSPP from it, not yet on the PSP):
   build; a build for the GameShell is possible later).
 - **Warcraft: Orcs & Humans** (`warcraft`, 2026-10-08): Blizzard's 1994
   strategy game on Stratagus and War1gus, through the SDL layer like any
-  other game (not the v0.2 renderer backend in `compatibility/stratagus`,
-  which needs the engine patched). Debian has neither, so
+  other game (not the v0.2 renderer backend, which needs the engine patched
+  and stays in the WarCraft project). Debian has neither, so
   `scripts/packages/build-stratagus.sh` builds both in a container at their
   master's newest commits (2026-06-22: the last tags, 3.3.2, are from 2022):
   the engine is `pspexp-stratagus` (shared with Warcraft II), the game's

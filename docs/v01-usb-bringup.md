@@ -96,6 +96,9 @@ build/host/pspexp-sprite-demo --tcp 127.0.0.1:3838 --clut --shot 120
 PSPEXP=tcp:127.0.0.1:3838 PSPEXP_SHOT_EVERY=300 ../WarCraft/build/host-stratagus/stratagus -d ../WarCraft/dist/War1gus
 ```
 
+(The last line is the v0.2 Stratagus backend, which since 2026-10-10 lives
+only in the WarCraft project.)
+
 `--shot N` / `PSPEXP_SHOT_EVERY=N` send `DEBUG_SCREENSHOT` every N frames;
 the runtime writes the displayed framebuffer to `pspexp-shot-<i>.bmp` next
 to the EBOOT (on the emulated stick, so readable from the host; on hardware,

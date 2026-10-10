@@ -25,7 +25,7 @@ Every document and what it is for: [docs/README.md](README.md).
 | per-batch palette, flip, 4444 alpha tints, translucent rects, lines, quad batches (v0.2 needs) | done, tested |
 | audio: shared mixer, cached sounds + streamed PCM, SDL device and PSP audio thread (v0.3 item pulled forward) | done; on the PSP since 2026-09-22 (Warcraft, the SDL layer's streamed audio: the rows below) |
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
-| **v0.2** Stratagus renderer backend (`compatibility/stratagus`, branch `pspexp` in ../WarCraft) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
+| **v0.2** Stratagus renderer backend (branch `pspexp` of Stratagus in the WarCraft project; no longer in PSPExp) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
 | host-rendered OpenGL (`libsdl-pspexp-hostgl`): a game too heavy for the GE drawn by the board's own GPU, each frame sent to the PSP as a picture | OpenMW from a Mac at 60 fps on the PSP (2026-10-02); on the Pi 400's GPU, headless: SuperTuxKart, Trackballs, Open Surge packaged (2026-10-03; ~30 fps in PPSSPP, not yet measured on the PSP) |
 | **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
 
@@ -87,16 +87,13 @@ bytes per frame and the input-to-present latency once a second.
 
 ## v0.2: Warcraft on the PSP through PSPExp
 
-`compatibility/stratagus/README.md` describes the Stratagus renderer backend
-and how to build the engine with it. Then, with the PSP running `dist/PSPExp`:
-
-```sh
-cd ../WarCraft
-PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus -r "maps/4-middle-ground.smp"
-```
-
-The game runs on the Mac; the PSP renders it, plays its sound, and its
-controls play it, from the title screen on.
+The first real game on PSPExp was Warcraft on a Stratagus patched to draw
+through PSPExp's protocol (a renderer backend: 60 fps over USB, about 1 ms
+of PSP time a frame). It proved the protocol and stays in the standalone
+WarCraft project (Stratagus's `pspexp` branch); PSPExp no longer carries
+its patch (removed 2026-10-10). Warcraft I and II now come as packages that
+run unmodified Stratagus through the SDL layer (`warcraft`, `warcraft2`;
+docs/Launcher_and_Boards.md).
 
 ## v0.4: any SDL2 program on the PSP
 
@@ -138,8 +135,7 @@ per frame, GE 2.2 ms, PSP CPU 0.06 ms, audio with no underruns.
 ## Raspberry Pi as the host
 
 `scripts/pi/build.sh` installs the Debian packages (including Chocolate
-Doom and Freedoom), builds the host tools and the SDL layer (and Stratagus
-when a WarCraft checkout is next to PSPExp), adds a udev rule for the PSP,
+Doom and Freedoom), builds the host tools and the SDL layer, adds a udev rule for the PSP,
 and prints the run commands. Tested on a Raspberry Pi 400 over SSH with no
 desktop: the USB link measures the same 25 MB/s as on the Mac, and
 `scripts/dev/pspexp-doom` plays Doom on the PSP at 35 fps with clean audio. The
@@ -293,7 +289,8 @@ psp/                 the PSP side: runtime (pspexp_runtime.prx), executor-ge (th
                      transport-usb (kernel USB driver pspexp_usb.prx), transport-tcp,
                      boot (EBOOT loader)
 compatibility/       existing programs on the PSP: sdl-pspexp (the SDL layer: any
-                     SDL2 program), stratagus (Warcraft's renderer backend)
+                     SDL2 program), war1gus and wargus (the Warcraft packages'
+                     patches)
 tools/               pspexp-term (the PSP as a console, with the launcher and a
                      file manager whose drives include the PSP's memory stick),
                      pspexp-retro (emulator player), pspexp-sdl-server (a stand-in

@@ -1,6 +1,6 @@
 # PSPExp cheatsheet
 
-Paths are relative to the PSPExp tree; the WarCraft project is `../WarCraft`.
+Paths are relative to the PSPExp tree.
 
 ## Build and install
 
@@ -11,8 +11,8 @@ Paths are relative to the PSPExp tree; the WarCraft project is `../WarCraft`.
 | PSP install without slots (older way) | `dist/PSPExp/` → `ms0:/PSP/GAME/PSPExp/` (EBOOT.PBP, pspexp_usb.prx, pspexp_runtime.prx), into an empty folder: with any slot file there the loader ignores these |
 | PSP recovery, a broken install (PSP in USB mode) | `scripts/packages/runtime-slot --install <stick>/PSP/GAME/PSPExp` (removes the old slots and pending update first); without the repository: delete the folder, then copy `dist/PSPExp/` |
 | a runtime set with its VERSION / the `pspexp-runtime` package | `scripts/packages/runtime-slot OUTDIR` / `scripts/packages/debs/pspexp-runtime/build OUTDIR` |
-| rebuild Stratagus with the backend | `cd ../WarCraft && cmake --build build/host-stratagus -j8 --target stratagus` |
-| regenerate the Stratagus patch after editing the `pspexp` branch | `scripts/dev/export-stratagus-patch.sh` |
+| Warcraft I and II: build Stratagus, War1gus and Wargus (Docker, about 15 min an architecture) / package them | `scripts/packages/build-stratagus.sh arm64` (or `armhf`) / `scripts/packages/debs/pspexp-stratagus/build build/debs arm64`, the same for `pspexp-war1gus` and `pspexp-wargus` |
+| Warcraft II's PSP layout: change it, then the patch | a Wargus checkout at the commit `build-stratagus.sh` names, `compatibility/wargus/wargus-small-screen.patch` applied, edited; then `git diff > compatibility/wargus/wargus-small-screen.patch` (the map lists keep their Windows line endings) |
 
 Only `pspexp_runtime.prx` changes often; the EBOOT and the USB driver rarely.
 With slots, the runtime reaches the PSP over the link (below); USB mode is
@@ -97,8 +97,7 @@ cable pull, so pull the cable to read it after a session.
 | **every game on the real PSP** from the launcher (starts, fps, sound, nub, START + SELECT, the PSP still there; ~35 s a game; results in /tmp/pspexp-all-games) | on the board, PSP connected: `tests/psp/all-games.sh` / `tests/psp/all-games.sh "Nintendo 64::Super Mario 64" /opt/pspexp/apps/quake/quake.entry` |
 | drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` / `--ctl "volume-bar 40"` |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |
-| Warcraft on the PSP, main menu / straight into a map | `cd ../WarCraft && PSPEXP=usb build/host-stratagus/stratagus -d dist/War1gus` / `... -r maps/4-middle-ground.smp` |
-| Warcraft with the Mac window shown / without a PSP | `PSPEXP_WINDOW=show ...` / `PSPEXP=sdl ...` |
+| Warcraft I and II on a board | Apps > Packages, or on the board `pspexp-pkg install warcraft warcraft2`; your copy's data in `~/Warcraft` (DATA.WAR) / `~/Warcraft2` |
 
 ## Any board: packages and ROMs
 
@@ -200,17 +199,17 @@ After a change to the OpenGL layer, the protocol or the runtime:
 d-pad or nub: move · cross: shape · circle: tint · square: field on/off ·
 triangle: field size 100/500/2000/5000 · start: reset.
 
-## Warcraft controls (PSP), same as the native port
+## Warcraft I and II controls (PSP)
 
-nub: pointer · cross: left click · circle: right click · square: shift ·
-triangle: ctrl · d-pad: scroll · L / R: slow / fast pointer · start: menu (F10) ·
-select: escape.
+nub: pointer · cross: left click · circle: right click · square: shift (add
+to the selection) · triangle: ctrl · d-pad: scroll · start: menu (F10) ·
+select: escape · L, R: nothing.
 
 ## What is worth testing next
 
-1. **Play Warcraft for real**: a full skirmish from the title screen, sound
-   from the PSP speaker, pointer feel with the nub. Compare with the native
-   build's feel. Report the stats line if anything stutters.
+1. **Warcraft I and II on the real PSP** (only the stand-in so far): a
+   whole skirmish from the launcher, its sound from the PSP speaker, the
+   pointer's feel with the nub, on the Pi and on the GameShell.
 2. **Cable pull mid-game**, wait a few seconds, plug back: the game should
    resume with its textures replayed (`reconnected` in the host log).
 3. **Long session** (20+ minutes, many unit types): watch `resident` in the

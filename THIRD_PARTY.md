@@ -2,7 +2,6 @@
 
 These keep the licence of the project they come from or change; PSPExp's MIT licence (LICENSE) does not apply to them:
 
-- compatibility/stratagus/stratagus-pspexp.patch: changes to Stratagus, GPL-2.0.
 - compatibility/etlegacy/pspexp.patch: changes to ET: Legacy, GPL-3.0.
 - compatibility/war1gus/war1tool-optional-cutscenes.patch: a fix to War1gus's war1tool, GPL-2.0.
 - compatibility/wargus/wargus-small-screen.patch: Wargus's scripts for the PSP's screen (its menus and the game laid out for 480x272), GPL-2.0.
