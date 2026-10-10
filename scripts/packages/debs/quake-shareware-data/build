@@ -7,7 +7,7 @@
 # folder, and runs Quakespasm there (_installer.sh). Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=quake-shareware-data TITLE="Quake (shareware)" VERSION=1.06-pspexp3 DIR=quake-shareware CMD=quake-shareware
+ID=quake-shareware-data TITLE="Quake (shareware)" VERSION=1.06-pspexp4 DIR=quake-shareware CMD=quake-shareware
 URL=https://ftp.gwdg.de/pub/misc/ftp.idsoftware.com/idstuff/quake/quake106.zip
 MIRRORS="https://youfailit.net/pub/idgames/idstuff/quake/quake106.zip http://ftp.fu-berlin.de/pc/games/idgames/idstuff/quake/quake106.zip https://web.archive.org/web/2015id_/ftp://ftp.idsoftware.com/idstuff/quake/quake106.zip https://web.archive.org/web/2020id_/https://youfailit.net/pub/idgames/idstuff/quake/quake106.zip"
 SHA=ec6c9d34b1ae0252ac0066045b6611a7919c2a0d78a3a66d9387a8f597553239 SIZE="9 MB" KEEP=quake106.zip

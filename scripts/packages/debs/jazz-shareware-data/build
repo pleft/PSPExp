@@ -6,7 +6,7 @@
 # (_installer.sh). Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=jazz-shareware-data TITLE="Jazz Jackrabbit (shareware)" VERSION=1.0-pspexp2 DIR=jazz-shareware CMD=jazz-shareware
+ID=jazz-shareware-data TITLE="Jazz Jackrabbit (shareware)" VERSION=1.0-pspexp3 DIR=jazz-shareware CMD=jazz-shareware
 URL=https://image.dosgamesarchive.com/games/jazz.zip
 MIRRORS="https://web.archive.org/web/2024id_/https://image.dosgamesarchive.com/games/jazz.zip https://web.archive.org/web/2015id_/http://image.dosgamesarchive.com/games/jazz.zip"
 SHA=ed025415c0bc5ebc3a41e7a070551bdfdfb0b65b5314241152d8bd31f87c22da SIZE="1.4 MB" TOP=
