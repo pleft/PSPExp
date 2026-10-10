@@ -935,7 +935,9 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   restart. Now: started or stopped at once, kept across restarts in the
   background, the leftover listener ended; on the GameShell, four quick
   presses ended with one listener and new logins working; a press while a
-  change is still running says so.
+  change is still running says so. Both images rebuilt with these and
+  Packages' quick opening (`pspexp-core` 9582c55), checked inside as
+  before.
 - **First boot on the Pi 400 (2026-10-10, written with `dd`, an empty `ssh`
   file added to the boot partition):** up in about a minute, the card grown
   to 29 GB, the console running and the PSP's launcher on it, Ethernet up,
