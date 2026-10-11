@@ -42,7 +42,7 @@ jobs:
           - **Raspberry Pi 3, 4, 400, 5 (64-bit):** \`pspexp-pi-$TAG.img.xz\`; login pi / pspexp.
           - **ClockworkPi GameShell:** \`pspexp-gameshell-$TAG.img.xz\`; login cpi / cpi.
 
-          Write an image with Raspberry Pi Imager (Use custom) or balenaEtcher, plug the PSP in, start PSPExp on it, power the board on. Games come from Apps > Packages (https://pkg.pspexp.dev). SSH is off until Settings > This board > SSH; change the password first. Each file's SHA-256 is beside it; the images' package lists and the GameShell's kernel and boot loader sources are attached too."
+          Write an image with Raspberry Pi Imager (Use custom) or balenaEtcher, plug the PSP in, start PSPExp on it, power the board on. Games come from Apps > Packages (https://pkg.pspexp.dev). SSH is off until Settings > This board > SSH; change the password first. Each file's SHA-256 is beside it; the images' package lists and the GameShell's kernel and boot loader sources are attached too. What is new and what is known not to work: CHANGELOG.md in the repository."
 
   psp:
     runs-on: ubuntu-24.04

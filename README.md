@@ -41,28 +41,33 @@ What you get on the PSP:
 
 | Board | Good for | Setup |
 |---|---|---|
-| **Raspberry Pi 400 / 4 / 5** | the most games, 3D included | a card image |
+| **Raspberry Pi 3 / 4 / 400 / 5** | the most games, 3D included | a card image |
 | **ClockworkPi GameShell** | a pocket pair: the PSP plus a handheld board | a card image |
 | **Onion Omega2+** | the smallest and cheapest; 2D games and emulators | built and installed from a computer (for tinkerers, for now) |
 
 ## Getting started
 
-1. [Prepare the PSP](docs/manual/psp.md): install PSPExp on its memory stick. You only do this once.
-2. Set up the board: [Raspberry Pi](docs/manual/raspberry-pi.md),
-   [GameShell](docs/manual/gameshell.md) or [Omega2+](docs/manual/omega2.md).
+1. [Prepare the PSP](docs/manual/psp.md): unzip PSPExp from the
+   [Releases](https://github.com/pleft/PSPExp/releases) page onto its memory
+   stick. You only do this once.
+2. Set up the board: write its card image from the same page
+   ([Raspberry Pi](docs/manual/raspberry-pi.md),
+   [GameShell](docs/manual/gameshell.md)), or build it
+   ([Omega2+](docs/manual/omega2.md)).
 3. Start PSPExp on the PSP and plug the cable into the board. The launcher appears.
 4. In the launcher, open **Apps > Packages** and install a game.
 
 [Using PSPExp](docs/manual/using-pspexp.md) covers the rest: buttons,
 packages, ROMs, files, music and headphones.
 
-## Status: not released yet
+## Downloads
 
-PSPExp works. Each release ([Releases](https://github.com/pleft/PSPExp/releases)) holds the PSP's files and
-the card images for the Raspberry Pi and the GameShell, built by GitHub's
-CI; the games come from PSPExp's package repository
-(`https://pkg.pspexp.dev`). You can also build everything from this
-repository on a Mac or a Linux computer: the
+Each release on the [Releases](https://github.com/pleft/PSPExp/releases)
+page holds the PSP's files and the card images for the Raspberry Pi and the
+GameShell, built by GitHub's CI, each with its SHA-256; what is new and what
+is known not to work is in the [release notes](CHANGELOG.md). The games come
+from PSPExp's package repository (`https://pkg.pspexp.dev`). You can also
+build everything from this repository on a Mac or a Linux computer: the
 [pspdev](https://github.com/pspdev/pspdev) toolchain for the PSP side, and
 the board guides name the scripts to run.
 
@@ -83,6 +88,7 @@ instead, and each finished frame is sent as a picture.
 | If you want to... | Read |
 |---|---|
 | set it up and play | [the user manual](docs/manual/README.md) |
+| see what is new, and what does not work yet | [the release notes](CHANGELOG.md) |
 | type commands on the board | [the cheatsheet](docs/cheatsheet.md) |
 | build it, change it, run the tests | [Developing PSPExp](docs/Developing.md) |
 | understand the design | [the technical architecture](docs/PSPExp_Technical_Architecture.md) |

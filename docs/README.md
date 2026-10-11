@@ -4,6 +4,8 @@
 
 - [User manual](manual/README.md): preparing the PSP, setting up each board,
   and everything the launcher does. Start here.
+- [Release notes](../CHANGELOG.md): what each release brings, the downloads,
+  and what is known not to work yet.
 - [Cheatsheet](cheatsheet.md): commands to type on the board, for those who
   use its shell.
 
