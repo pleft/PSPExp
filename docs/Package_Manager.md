@@ -1124,7 +1124,10 @@ holding an SSH key or a Wi-Fi connection.
   PSP from the CI-built zip: the launcher, Wi-Fi joined from the PSP, SSH
   switched on, Packages refreshing by itself on its first opening,
   OpenTyrian installed (its data through the installer, the pinned SHA-256)
-  and played; no interrupted operation left. The Pi's
+  and played; no interrupted operation left. Release 2026-10-11.4:
+  `pspexp-core` 7ba9a2f, with the `usb0` hooks (the USB lease after Wi-Fi,
+  its name servers after Wi-Fi's) the GameShell image's test asked for;
+  2026-10-11.3 removed. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
