@@ -29,7 +29,8 @@ date over the USB cable.
 
 ## Starting it
 
-Start **PSPExp** from the Game menu. It shows a status page while it waits
+Start **PSPExp** from the Game menu. It shows a status page (its first
+line: PSPExp's version on the PSP, and its slot) while it waits
 for a board; plug the USB cable into the board (the board must be set up
 first, see its guide) and the launcher appears within a few seconds.
 

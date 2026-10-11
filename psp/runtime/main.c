@@ -45,6 +45,45 @@ static void trace_init(const char *argv0)
     snprintf(g_trace_path, sizeof(g_trace_path), "%.*s/pspexp-rt.log", (int)(slash - argv0), argv0);
 }
 
+/* What the status page says this runtime is: the version in its slot's VERSION file (the one the
+ * board's About shows), without the time of day, and the slot; "v0.2" had been printed since v0.2 */
+static char g_version[64] = "(installed without slots)";
+static void version_init(void)
+{
+    char path[300], text[160], *v, *e;
+    const char *slash = strrchr(g_trace_path, '/');
+    SceUID fd;
+    int n;
+    char slot;
+    if (!slash) return;
+    snprintf(path, sizeof(path), "%.*s/active", (int)(slash - g_trace_path), g_trace_path);
+    if ((fd = sceIoOpen(path, PSP_O_RDONLY, 0)) < 0) return;
+    n = sceIoRead(fd, text, sizeof(text) - 1);
+    sceIoClose(fd);
+    if (n <= 0) return;
+    text[n] = 0;
+    if (!(v = strstr(text, "slot=")) || (v[5] != 'a' && v[5] != 'b')) return;
+    slot = v[5];
+    snprintf(g_version, sizeof(g_version), "(slot %c)", slot);
+    snprintf(path, sizeof(path), "%.*s/slot-%c/VERSION", (int)(slash - g_trace_path), g_trace_path, slot);
+    if ((fd = sceIoOpen(path, PSP_O_RDONLY, 0)) < 0) return;
+    n = sceIoRead(fd, text, sizeof(text) - 1);
+    sceIoClose(fd);
+    if (n <= 0) return;
+    text[n] = 0;
+    if (strncmp(text, "version=", 8)) return;
+    v = text + 8;
+    for (e = v; *e && *e != '\n' && *e != '\r'; e++) ;
+    *e = 0;
+    {   /* 2026.10.10.135826+g79a56b6 -> 2026.10.10+g79a56b6 */
+        char *plus = strchr(v, '+'), *t = plus;
+        int dots = 0;
+        for (e = v; plus && e < plus; e++) if (*e == '.' && ++dots == 3) { t = e; break; }
+        if (plus && t != plus) memmove(t, plus, strlen(plus) + 1);
+    }
+    snprintf(g_version, sizeof(g_version), "%.40s (slot %c)", v, slot);
+}
+
 /* A working connection: the boot loader's attempt count for this slot goes
  * back to 0 (docs/Package_Manager.md §6.1: `active` next to the EBOOT, "slot=X
  * tries=N"; after 3 attempts without this, the loader boots the other slot). */
@@ -248,7 +287,7 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
     int i;
     pspexpUsbGetStats(&us);
     pspDebugScreenSetXY(0, 0);
-    printf("PSPExp runtime v0.2  %s  (hold HOME 2 s to exit)          \n",
+    printf("PSPExp %s  %s  (hold HOME 2 s to exit)          \n", g_version,
            connected ? (g_link == LINK_TCP ? "CONNECTED (TCP)" : "CONNECTED (USB)")
                      : (pspexpUsbAttached() ? "attached, waiting for host sync" : "waiting for USB cable or TCP"));
     printf("%-78s\n", g_tcp_available ? pspexp_tcp_psp_status() : "tcp: unavailable");
@@ -344,6 +383,7 @@ int main(int argc, char *argv[])
     rc = pspexpUsbStart();
     printf("pspexpUsbStart: 0x%08X\n", rc);
     trace_init(argc > 0 ? argv[0] : NULL);
+    version_init();
     trace("runtime starting");
     pspexp_tcp_psp_set_trace(trace);
     { char b[64]; snprintf(b, sizeof(b), "pspexpUsbStart: 0x%08X", (unsigned)rc); trace(b); }
