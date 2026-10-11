@@ -15,7 +15,7 @@
 #                   unchanged), our boot files (config, device tree, patch, scripts), and each
 #                   image's package list with the source package of each (Debian's and Raspberry
 #                   Pi's archives hold those sources), README.txt
-#   index.html      the latest release (no-cache)
+#   index.html      the latest release (no-cache); older releases are removed (images, sums, sources)
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DATE="${1:-$(date -u +%Y-%m-%d)}"
@@ -144,4 +144,14 @@ $base --header-upload "Cache-Control: no-cache" copyto "$OUT/index.html" "$D/ind
 # rewrite of / to the page either); remove with the repository going public
 printf 'User-agent: *\nDisallow: /\n' > "$OUT/robots.txt"
 $base --header-upload "Cache-Control: no-cache" copyto "$OUT/robots.txt" "$D/robots.txt"
+# only the latest release is kept (the user: no point keeping the older ones and their storage):
+# the other dates' images, checksums and sources go, once this one and its page are up
+for f in $(rclone lsf "$D" 2>/dev/null | grep -E '^pspexp-(pi|gameshell)-[0-9]{4}-[0-9]{2}-[0-9]{2}\.img\.xz(\.sha256)?$' | grep -v -- "-$DATE\.img"); do
+	echo "removing $f (an older release)"
+	rclone -q deletefile "$D/$f"
+done
+for d in $(rclone lsf --dirs-only "$D/sources" 2>/dev/null | tr -d / | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' | grep -v -x -- "$DATE"); do
+	echo "removing sources/$d (an older release)"
+	rclone -q purge "$D/sources/$d"
+done
 echo "uploaded release $DATE to $URL: $(curl -s -o /dev/null -w '%{http_code}' "$URL/index.html") for index.html"

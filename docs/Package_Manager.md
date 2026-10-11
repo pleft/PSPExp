@@ -1059,7 +1059,10 @@ holding an SSH key or a Wi-Fi connection.
 - **Release 2026-10-11:** both images rebuilt with `pspexp-core` fa7860b
   (the Wi-Fi password on nmcli's standard input, the copyright files, the
   quick Packages, the SSH switch's fix), checked inside as before, and
-  published beside 2026-10-10's; the page names the latest. The Pi's
+  published; `push-images` now keeps only the latest release (the user:
+  no point keeping older ones and their storage): once the new one and its
+  page are up, the other dates' images, checksums and sources go. 2026-10-10
+  removed so: the bucket holds 1.18 GiB. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
