@@ -1131,7 +1131,9 @@ holding an SSH key or a Wi-Fi connection.
   and written: the hooks from the package; plugged into the Mac (Internet
   Sharing on), the lease's default route at metric 1000 and traffic
   through Wi-Fi, Wi-Fi's name server first and the Mac's after; unplugged,
-  the USB route dead and ignored, Packages refreshed with no error. The Pi's
+  the USB route dead and ignored, Packages refreshed with no error. Its Pi
+  image, downloaded and written, on the Pi 400: the launcher, Wi-Fi, SSH,
+  Packages refreshing by itself, OpenTyrian installed and played. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
