@@ -3,7 +3,8 @@
 ## The first release
 
 The first public release of PSPExp: the PSP as the screen, sound and
-controller of a small Linux board, which runs the games.
+controller of a small Linux board, which runs the games. See it in the
+[demo video](https://youtu.be/CQm_w-4Oqfw).
 
 ### Downloads
 

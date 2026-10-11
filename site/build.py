@@ -17,7 +17,7 @@ SITE = os.path.join(ROOT, "site")
 OUT = os.path.join(SITE, "out")
 REPO = "https://github.com/pleft/PSPExp"
 RELEASES = REPO + "/releases/latest"
-VIDEO = ""   # the tutorial's embed address (https://www.youtube-nocookie.com/embed/ID) once published
+VIDEO = "https://www.youtube-nocookie.com/embed/CQm_w-4Oqfw"   # the demo video (youtu.be/CQm_w-4Oqfw), unlisted until launch day
 LAUNCHED = False   # until launch day: every page says "do not index" (Cloudflare Pages' _headers);
                    # then True, with pspexp.dev attached (GOING_PUBLIC)
 
@@ -217,7 +217,7 @@ def front_page():
     body = open(os.path.join(SITE, "index.html"), encoding="utf-8").read()
     video = ""
     if VIDEO:
-        video = ('<section class="wrap video"><h2>See it set up</h2><div class="frame"><iframe src="%s" title="Setting up PSPExp" '
+        video = ('<section class="wrap video"><h2>See it in action</h2><div class="frame"><iframe src="%s" title="PSPExp in action" '
                  'allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></section>' % VIDEO)
     body = body.replace("{{RELEASES}}", RELEASES).replace("{{REPO}}", REPO).replace("{{VIDEO}}", video)
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(page("PSPExp: your PSP, playing games it never had", body, 0, "home"))
