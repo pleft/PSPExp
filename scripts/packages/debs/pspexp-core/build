@@ -61,6 +61,11 @@ set -e
 sysctl -q -p /etc/sysctl.d/90-pspexp-routes.conf >/dev/null 2>&1 || true
 exit 0
 P
+# the board-GPU layer (libsdl-pspexp-hostgl: SuperTuxKart, Celeste 64, the N64...) draws through SDL's
+# offscreen driver, which makes its GL context with EGL; Raspberry Pi OS Lite (the card image) has
+# no EGL, and SuperTuxKart failed there ("Couldn't initialise irrlicht device"); GLES for the N64's
+# video plugin (GLideN64)
+GPU_DEPS=""; [ "$ARCH" = arm64 ] && GPU_DEPS=", libegl1, libegl-mesa0, libgles2"
 cat > "$W/control" <<C
 Package: pspexp-core
 Version: $V
@@ -68,7 +73,7 @@ Architecture: $ARCH
 Maintainer: PSPExp <pspexp@localhost>
 Section: games
 Priority: optional
-Depends: libc6, libusb-1.0-0, libsdl2-2.0-0, sudo, gpgv, pspexp-runtime
+Depends: libc6, libusb-1.0-0, libsdl2-2.0-0, sudo, gpgv, pspexp-runtime$GPU_DEPS
 Description: PSPExp: the PSP as this board's console
  The console and launcher that make a PSP the screen, sound and controller
  of this board, the SDL layer that puts SDL2 programs on the PSP, and the

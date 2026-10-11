@@ -1035,6 +1035,14 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   worldwide rules until a country is set), so it can be joined from the
   PSP. A first try, `rfkill unblock wifi` at boot, was undone by
   NetworkManager a second later.
+- **The board's GPU on the image (2026-10-11):** the integration tests on
+  the release's Pi image, with SuperTuxKart installed, failed it
+  ("Couldn't initialise irrlicht device"): Raspberry Pi OS Lite has no EGL,
+  through which SDL's offscreen driver (the board-GPU layer's, on a board
+  with no display) makes its GL context; the full Raspberry Pi OS the
+  earlier tests ran on has it. `pspexp-core` for arm64 now depends on
+  `libegl1`, `libegl-mesa0` and `libgles2` (GLES for the N64's GLideN64):
+  SuperTuxKart then 58 fps, the games suite 6 of 6 on the image.
 - **SSH's banner:** the first-boot dialog's ("SSH may not work until a valid
   user has been set up", `sshd_config.d/rename_user.conf`) is removed with it.
 - **Kept as Raspberry Pi has them:** the disk identifier and the kernel
