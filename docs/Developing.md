@@ -89,8 +89,9 @@ it on every push (build command `python3 site/build.py`, output `site/out`).
 Until launch day `LAUNCHED = False`: every page carries `X-Robots-Tag:
 noindex` (`_headers`, by address), and the site is reviewed at its
 `pages.dev` address; on launch day pspexp.dev is attached and `LAUNCHED`
-becomes True: pspexp.dev and www are then indexed, while `pspexp.pages.dev`
-keeps its noindex for good (one address in search results). `VIDEO`:
+became True on launch day (2026-10-11): pspexp.dev is indexed, while
+`pspexp.pages.dev` and `www.pspexp.dev` keep their noindex for good (one
+address in search results). `VIDEO`:
 the demo video's embed address (youtube-nocookie; the video is unlisted
 until launch day, public then).
 Try it: `python3 site/build.py && python3 -m http.server -d site/out`.

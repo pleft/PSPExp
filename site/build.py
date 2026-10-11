@@ -18,10 +18,10 @@ OUT = os.path.join(SITE, "out")
 REPO = "https://github.com/pleft/PSPExp"
 RELEASES = REPO + "/releases/latest"
 VIDEO = "https://www.youtube-nocookie.com/embed/CQm_w-4Oqfw"   # the demo video (youtu.be/CQm_w-4Oqfw), unlisted until launch day
-LAUNCHED = False   # until launch day: every page says "do not index" (Cloudflare Pages' _headers);
+LAUNCHED = True    # until launch day: every page says "do not index" (Cloudflare Pages' _headers);
                    # then True, with pspexp.dev attached: pspexp.dev is indexed, pages.dev never is
-HOSTS = ["pspexp.pages.dev"]                     # always "do not index": one address in search results
-SOON = ["pspexp.dev", "www.pspexp.dev"]          # "do not index" until launch day
+HOSTS = ["pspexp.pages.dev", "www.pspexp.dev"]   # always "do not index": one address in search results
+SOON = ["pspexp.dev"]                            # "do not index" until launch day
 
 MANUAL = [("README.md", "index.html", "The manual"), ("psp.md", "psp.html", "The PSP"),
           ("raspberry-pi.md", "raspberry-pi.html", "Raspberry Pi"), ("gameshell.md", "gameshell.html", "GameShell"),
