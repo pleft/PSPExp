@@ -1,0 +1,10 @@
+# dhclient exit hook (PSPExp, in pspexp-core): the USB network's default route goes after Wi-Fi's.
+# usb0.interfaces gives it metric 1000 (IF_METRIC), but dhclient-script sets the routes a server
+# sends as classless static routes (option 121; macOS Internet Sharing does) without one: such a
+# route, metric 0, took all traffic over the cable, and after the cable came out, nowhere.
+case "$interface:$reason" in
+usb0:BOUND|usb0:RENEW|usb0:REBIND|usb0:REBOOT)
+	for gw in $(ip -4 route show default dev usb0 | awk '!/ metric / { print $3 }'); do
+		ip -4 route replace default via "$gw" dev usb0 metric 1000 && ip -4 route del default via "$gw" dev usb0 metric 0 2>/dev/null
+	done ;;
+esac

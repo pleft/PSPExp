@@ -50,7 +50,9 @@ echo "PSPExp: the PSP as the screen, sound and controller of this board (docs in
 # a route whose link is down is not used (scripts/board/90-pspexp-routes.conf): in the package, so a
 # board already set up gets it with its update (a GameShell's USB-network route, left after the
 # cable came out, had sent everything nowhere); applied at once by postinst
-mkdir -p "$R/etc/sysctl.d"
+mkdir -p "$R/etc/sysctl.d" "$R/etc/dhcp/dhclient-exit-hooks.d" "$R/etc/dhcp/dhclient-enter-hooks.d"
+install -m 644 "$ROOT/scripts/board/pspexp-usb0-dns" "$R/etc/dhcp/dhclient-enter-hooks.d/pspexp-usb0-dns"   # (its name servers after Wi-Fi's)
+install -m 644 "$ROOT/scripts/board/pspexp-usb0-metric" "$R/etc/dhcp/dhclient-exit-hooks.d/pspexp-usb0-metric"   # (the GameShell's USB network after Wi-Fi)
 install -m 644 "$ROOT/scripts/board/90-pspexp-routes.conf" "$R/etc/sysctl.d/90-pspexp-routes.conf"
 cat > "$W/postinst" <<'P'
 #!/bin/sh

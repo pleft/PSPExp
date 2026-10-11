@@ -1,0 +1,16 @@
+# dhclient enter hook (PSPExp, in pspexp-core): the USB network's name servers go after the ones
+# there are (Wi-Fi's, from NetworkManager), not in their place. dhclient had replaced resolv.conf
+# with the computer's (macOS Internet Sharing: 192.168.2.1); after the cable came out no name
+# resolved and Packages could not read the catalogue. Without other name servers (the GameShell's
+# own access point for the PSP), the computer's are the only ones, as before.
+if [ "$interface" = usb0 ]; then
+	make_resolv_conf() {
+		[ -n "$new_domain_name_servers" ] || return 0
+		_t=$(mktemp) || return 0
+		_ours=$(echo $new_domain_name_servers | sed 's/\./\\./g; s/ /|/g')
+		grep -v -E "^nameserver ($_ours)\$" /etc/resolv.conf > "$_t" 2>/dev/null || true
+		for _ns in $new_domain_name_servers; do echo "nameserver $_ns" >> "$_t"; done
+		cat "$_t" > /etc/resolv.conf
+		rm -f "$_t"
+	}
+fi

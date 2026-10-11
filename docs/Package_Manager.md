@@ -482,7 +482,19 @@ finishes or cleans up, and the user sees which.
   `usb0.interfaces`: dhclient takes `IF_METRIC`), and the launcher's network
   icon and its online check take the default route with the lowest metric
   among interfaces with a link. Tried on the GameShell with the dead route
-  put back: traffic through Wi-Fi, the Wi-Fi icon.
+  put back: traffic through Wi-Fi, the Wi-Fi icon. Then the real cycle
+  (the user plugged the image's GameShell into the Mac, Internet Sharing
+  on, and out again) found two more: macOS sends its routes as classless
+  static routes (DHCP option 121), which `dhclient-script` sets without
+  `IF_METRIC`, so the lease's default route had no metric and took the
+  traffic; and `dhclient` replaced `resolv.conf` with the Mac's name
+  server, so once unplugged no name resolved ("the catalogue could not be
+  read"). `pspexp-core` now also carries two `dhclient` hooks for `usb0`:
+  an exit hook that puts its default routes at metric 1000, and an enter
+  hook whose `make_resolv_conf` adds the computer's name servers after the
+  ones there are (alone when there are none: the GameShell's own access
+  point). Tried: plugged in, the USB route at 1000 and Wi-Fi used; out,
+  Packages refreshed, Wi-Fi's name server first.
 - **One operation at a time:** `pspexp-pkg` takes an exclusive lock
   (`flock` on `<root>/state/lock`), held for the whole operation, recovery
   included. A second one, from the Packages app or the shell, waits or
