@@ -69,6 +69,7 @@ int main(void)
         /* on nmcli's standard input (--ask), from the shell's printf: never among its arguments */
         CHECK(!strncmp(cmd, "printf '%s\\n' \"$PSPEXP_WIFI_PSK\" | ", 34) && strstr(cmd, "nmcli --ask dev wifi connect") != NULL);
         CHECK(!strstr(cmd, " password "));
+        CHECK(strstr(cmd, "connect 'Bob'\\''s Wi-Fi' >/dev/null ||") != NULL);   /* nmcli's prompt (dots: the length) not in the log */
         CHECK(strstr(cmd, "|| { ") != NULL && strstr(cmd, "connection delete id 'Bob'\\''s Wi-Fi'") != NULL);
         board_wifi_connect_command(BOARD_WIFI_ONION, &net, 1, cmd, sizeof(cmd));
         CHECK(strstr(cmd, "wifisetup add -ssid 'Bob'\\''s Wi-Fi' -encr psk2") != NULL);

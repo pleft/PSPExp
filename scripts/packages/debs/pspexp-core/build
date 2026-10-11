@@ -5,6 +5,7 @@
 # launcher's fonts. Its scripts never restart the running console: it notices
 # the new file and offers System > Restart PSPExp.
 #   build OUTDIR arm64 USER@PI      the Pi's own build (~/pspexp/src/build: scripts/pi/install.sh build)
+#   build OUTDIR arm64 DIR          or one in a local folder (a Debian 13 arm64 container's)
 #   build OUTDIR armhf              the GameShell's (scripts/gameshell/build.sh: build/gameshell)
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
@@ -13,10 +14,15 @@ W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/b"
 case "$ARCH" in
 arm64)
-	[ -n "$SRC_HOST" ] || { echo "arm64: give the Pi (user@host) whose build to package" >&2; exit 2; }
+	[ -n "$SRC_HOST" ] || { echo "arm64: give the Pi (user@host) whose build to package, or a local folder holding one" >&2; exit 2; }
+	if [ -d "$SRC_HOST" ]; then   # a build made elsewhere (a Debian 13 arm64 container: the same libraries as Raspberry Pi OS)
+		cp "$SRC_HOST/pspexp-term" "$SRC_HOST/libsdl-pspexp.so" "$W/b/"
+		cp "$SRC_HOST/pspexp-ms" "$SRC_HOST/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true
+	else
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-term" "$SRC_HOST:pspexp/src/build/libsdl-pspexp.so" "$W/b/"
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-ms" "$W/b/" 2>/dev/null || true
-	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true ;;   # the board's GPU draws (pspexp-run PSPEXP_HOSTGL)
+	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true   # the board's GPU draws (pspexp-run PSPEXP_HOSTGL)
+	fi ;;
 armhf)
 	cp "$ROOT/build/gameshell/bin/pspexp-term" "$W/b/"
 	cp "$ROOT/build/gameshell/lib/libsdl-pspexp.so" "$W/b/" 2>/dev/null || true
@@ -55,4 +61,5 @@ Description: PSPExp: the PSP as this board's console
  package tools behind Apps > Packages. Upgrading it never restarts the
  running console; the console offers a restart.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-core "$V" "$R/usr/share/doc/pspexp-core"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$R" "$W/control" "$OUT/pspexp-core_${V}_$ARCH.deb"

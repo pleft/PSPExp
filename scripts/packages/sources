@@ -79,6 +79,20 @@ PACKAGES = {
                                       ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
     "pspexp-libretro-snes9x2005": dict(what="the Snes9x 2005 libretro core", comps=[("Snes9x 2005", GH + "libretro/snes9x2005", None, "../retro/libretro-snes9x2005")],
                                        ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
+    # PSPExp's own: its code is MIT (its source: PSPExp's repository, at the commit the copyright
+    # file names); what goes in with it keeps its own licence (THIRD_PARTY.md)
+    "pspexp-core": dict(what="PSPExp's console and launcher, its SDL layer and package tools", own=True,
+                        comps=[("libusb", GH + "libusb/libusb", "v1.0.29", None)],
+                        ours=["scripts/packages/debs/pspexp-core/build", "scripts/gameshell/build.sh"],
+                        own_licences=["LICENSE", "THIRD_PARTY.md", "tools/pspexp-term/assets/Inter-LICENSE.txt",
+                                      "tools/pspexp-term/assets/lucide-LICENSE.txt", "tools/pspexp-term/assets/spleen-LICENSE.txt",
+                                      "tools/pspexp-term/assets/systems/LICENSE.txt"],
+                        note="libusb 1.0.29 (LGPL-2.1) is linked into the GameShell's build (armhf); the Raspberry Pi's uses Debian's libusb-1.0-0."),
+    "pspexp-runtime": dict(what="PSPExp's runtime for the PSP", own=True, comps=[],
+                           ours=["scripts/packages/debs/pspexp-runtime/build"], own_licences=["LICENSE"],
+                           note="Built with the pspdev toolchain and PSPSDK (BSD), https://github.com/pspdev."),
+    "pspexp-retro": dict(what="PSPExp's libretro player", own=True, comps=[],
+                         ours=["scripts/packages/debs/pspexp-retro/build"], own_licences=["LICENSE", "tools/pspexp-retro/libretro.h"]),
 }
 
 LICENCE_NAME = re.compile(r"^(licen[cs]es?|copying|copyright|notice|gpl|lgpl)([-._].*)?$", re.I)
@@ -198,6 +212,8 @@ def copyright(pkg, version, docdir):
     for l in comps.strip().splitlines():
         c, u, ref, commit, lic, d = l.split("|")
         t.append("  %s: %s, commit %s%s; %s" % (c, u, commit, " (%s)" % ref if ref and ref != commit else "", lic))
+    if spec.get("own"):
+        t += ["  PSPExp: https://github.com/pleft/PSPExp, commit %s; MIT" % sh("git", "-C", ROOT, "rev-parse", "HEAD")]
     t += ["", "The complete source (each component at that commit, our patches, and the scripts that",
           "build and package it):", "  " + url,
           "", "PSPExp's packaging and build scripts: MIT.", "" + spec.get("note", ""), ""]
@@ -206,6 +222,8 @@ def copyright(pkg, version, docdir):
         p = os.path.join(stage, rel)
         if os.path.exists(p):
             t += ["", "==== %s: %s ====" % (c, rel.split("/", 1)[1]), "", open(p, errors="replace").read().rstrip()]
+    for f in spec.get("own_licences", []):
+        t += ["", "==== PSPExp: %s ====" % f, "", open(os.path.join(ROOT, f), errors="replace").read().rstrip()]
     os.makedirs(docdir, exist_ok=True)
     open(os.path.join(docdir, "copyright"), "w").write("\n".join(t) + "\n")
 

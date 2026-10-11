@@ -25,4 +25,5 @@ Description: PSPExp's runtime for the PSP
  them into the PSP's inactive slot over the link, and the PSP boots them at
  its next start of PSPExp.
 C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-runtime "$V" "$W/root/usr/share/doc/pspexp-runtime"   # licences, and where the complete source is (Package_Manager §6.2)
 python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$1/pspexp-runtime_${V}_all.deb"

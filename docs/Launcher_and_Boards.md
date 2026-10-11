@@ -402,8 +402,12 @@ and its buffer is wiped after the join. On NetworkManager boards (GameShell,
 Pi) it reaches `nmcli --ask dev wifi connect` on its standard input, piped
 by the shell's own `printf` (a builtin, so no process carries it), and is
 never among a program's arguments, which every user of the board could read
-in the process list (2026-10-11; nmcli 1.52.1 reads it there, masked, through
-its secret agent; not yet tried on a board, and not published until it is).
+in the process list (2026-10-11; nmcli 1.52.1 reads it there through its
+secret agent). nmcli's prompt goes nowhere (it writes a dot a character: the
+password's length), its errors to the log. Tried on a Raspberry Pi 400 from
+the card image: a new network joined from the PSP, its profile saved with
+the password, and a recorder of every nmcli process's arguments (ten times
+a second) saw none carry it.
 On the Omega it is still `wifisetup`'s argument (everything runs as root
 there). The board's network tool stores it as it stores any network.
 

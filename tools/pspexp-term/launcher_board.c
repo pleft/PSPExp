@@ -301,15 +301,16 @@ void board_wifi_connect_command(int kind, const BoardNet *net, int with_password
         } else {
             /* the password reaches nmcli on its standard input (--ask), from the shell's own printf
              * (a builtin: no process), never among a program's arguments, which every user of the
-             * board could read in the process list while it joined */
+             * board could read in the process list while it joined; its prompt (one dot a character,
+             * so the password's length) goes nowhere, its errors to the log */
             char feed[96] = "";
             if (with_password) snprintf(feed, sizeof(feed), "printf '%%s\\n' \"$PSPEXP_WIFI_PSK\" | ");
             if (net->saved)   /* a new password for a known network: keep its profile whatever happens */
-                snprintf(cmd, n, "%s%snmcli%s dev wifi connect %s", feed, su, with_password ? " --ask" : "", q);
+                snprintf(cmd, n, "%s%snmcli%s dev wifi connect %s%s", feed, su, with_password ? " --ask" : "", q, with_password ? " >/dev/null" : "");
             else   /* a failed join (a wrong password) leaves a profile NetworkManager
                     * cannot update, so every retry would fail too: drop it on failure */
-                snprintf(cmd, n, "%s%snmcli%s dev wifi connect %s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
-                         feed, su, with_password ? " --ask" : "", q, su, q);
+                snprintf(cmd, n, "%s%snmcli%s dev wifi connect %s%s || { %snmcli connection delete id %s >/dev/null 2>&1; false; }",
+                         feed, su, with_password ? " --ask" : "", q, with_password ? " >/dev/null" : "", su, q);
         }
     } else if (kind == BOARD_WIFI_ONION && net->saved && !with_password) {
         /* known to wifisetup: first in line, and wifimanager joins it */

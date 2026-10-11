@@ -830,7 +830,12 @@ longer replaces `sources/`. Every package with it got a new version, so
 boards take the copyright file with their next update. PSPExp's own
 packages (`pspexp-core`, `pspexp-runtime`, `pspexp-retro`: MIT, with the
 fonts, icons, stb and, on the GameShell, libusb linked in) follow with
-their next build.
+their next build: done the same day (`pspexp-core`: PSPExp's MIT, the
+fonts', icons' and stb's licences, THIRD_PARTY.md, and libusb 1.0.29 with
+its source archive, linked into the GameShell's build; PSPExp's own source
+is named by its commit in PSPExp's repository). `pspexp-core`'s arm64
+build may also be packaged from a local folder (`build OUTDIR arm64 DIR`):
+one made in a Debian 13 arm64 container, the libraries Raspberry Pi OS has.
 
 ## 7. The Packages app
 
