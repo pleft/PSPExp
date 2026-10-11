@@ -19,7 +19,9 @@ REPO = "https://github.com/pleft/PSPExp"
 RELEASES = REPO + "/releases/latest"
 VIDEO = "https://www.youtube-nocookie.com/embed/CQm_w-4Oqfw"   # the demo video (youtu.be/CQm_w-4Oqfw), unlisted until launch day
 LAUNCHED = False   # until launch day: every page says "do not index" (Cloudflare Pages' _headers);
-                   # then True, with pspexp.dev attached (GOING_PUBLIC)
+                   # then True, with pspexp.dev attached: pspexp.dev is indexed, pages.dev never is
+HOSTS = ["pspexp.pages.dev"]                     # always "do not index": one address in search results
+SOON = ["pspexp.dev", "www.pspexp.dev"]          # "do not index" until launch day
 
 MANUAL = [("README.md", "index.html", "The manual"), ("psp.md", "psp.html", "The PSP"),
           ("raspberry-pi.md", "raspberry-pi.html", "Raspberry Pi"), ("gameshell.md", "gameshell.html", "GameShell"),
@@ -241,8 +243,11 @@ def main():
     assets()
     front_page()
     manual_pages()
-    if not LAUNCHED:   # kept out of search engines while the project is quiet
-        open(os.path.join(OUT, "_headers"), "w").write("/*\n  X-Robots-Tag: noindex, nofollow\n")
+    # by address (Cloudflare Pages matches a rule's https://host/ against the request): the pages.dev
+    # copy stays out of search engines so they list pspexp.dev alone; previews are noindex already
+    hosts = HOSTS + ([] if LAUNCHED else SOON)
+    open(os.path.join(OUT, "_headers"), "w").write(
+        "".join("https://%s/*\n  X-Robots-Tag: noindex, nofollow\n" % h for h in hosts))
     n = sum(len(fs) for _, _, fs in os.walk(OUT))
     print("site/out: %d files" % n)
 
