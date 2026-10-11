@@ -1107,7 +1107,12 @@ holding an SSH key or a Wi-Fi connection.
   removed by it. Release 2026-10-11.3: `pspexp-core` e2da0d7 (the dead
   route ignored, the next operation finishing an interrupted one, Packages
   refreshing when an hour old), the GameShell's USB network after Wi-Fi;
-  2026-10-11.2 removed. The Pi's
+  2026-10-11.2 removed. Its Pi image, downloaded from dl.pspexp.dev, its
+  SHA-256 checked, written and booted on the Pi 400 by the user with the
+  PSP from the CI-built zip: the launcher, Wi-Fi joined from the PSP, SSH
+  switched on, Packages refreshing by itself on its first opening,
+  OpenTyrian installed (its data through the installer, the pinned SHA-256)
+  and played; no interrupted operation left. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
