@@ -1127,7 +1127,11 @@ holding an SSH key or a Wi-Fi connection.
   and played; no interrupted operation left. Release 2026-10-11.4:
   `pspexp-core` 7ba9a2f, with the `usb0` hooks (the USB lease after Wi-Fi,
   its name servers after Wi-Fi's) the GameShell image's test asked for;
-  2026-10-11.3 removed. The Pi's
+  2026-10-11.3 removed. The GameShell image tried by the user, downloaded
+  and written: the hooks from the package; plugged into the Mac (Internet
+  Sharing on), the lease's default route at metric 1000 and traffic
+  through Wi-Fi, Wi-Fi's name server first and the Mac's after; unplugged,
+  the USB route dead and ignored, Packages refreshed with no error. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
