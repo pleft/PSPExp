@@ -2786,6 +2786,9 @@ static int psp_clock_sync(int force, char *reply, size_t rn)
         if (st.result == 1) snprintf(msg, sizeof(msg), "The PSP's clock was %s %s: set from this board%s%s", span, diff < 0 ? "behind" : "ahead", note[0] ? "; " : "", note);
         else snprintf(msg, sizeof(msg), "The PSP's %s, as this board's", note);
         fprintf(stderr, "[pspexp-term] %s\n", msg);
+        /* a new time zone reaches the memory stick's file dates only once the PSP restarts (the
+         * integration tests: dates 2 h off after the zone was set, right after a restart) */
+        if (st.zone_result == 1) strncat(msg, ". Files' dates follow once the PSP restarts", sizeof(msg) - strlen(msg) - 1);
         if (g_launcher_on && (llabs(diff) > 90 || st.zone_result == 1)) notify(NOTE_INFO, "clock", "The PSP's clock was set", msg, NULL, "psp-clock");
     } else if (note[0]) fprintf(stderr, "[pspexp-term] the PSP: %s\n", note);
     if (st.result < 0) fprintf(stderr, "[pspexp-term] the PSP could not set its clock (%d)\n", st.result);

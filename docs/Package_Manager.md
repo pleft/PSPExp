@@ -1050,6 +1050,11 @@ minimum plus 256 MiB: 3.6 GiB, 2 GiB used.
   earlier tests ran on has it. `pspexp-core` for arm64 now depends on
   `libegl1`, `libegl-mesa0` and `libgles2` (GLES for the N64's GLideN64):
   SuperTuxKart then 58 fps, the games suite 6 of 6 on the image.
+- **The release tests on both images (2026-10-11):** the Pi 27 of 27, its
+  games 6 of 6 (after the EGL fix); the GameShell 31 of 31 (Cave Story 50
+  fps, Freedoom 35, Quake 36). One finding on the way: after the board sets
+  the PSP's time zone, the PSP stamps files on its stick in the old zone
+  until it restarts; the launcher's notice and the manual now say so.
 - **SSH's banner:** the first-boot dialog's ("SSH may not work until a valid
   user has been set up", `sshd_config.d/rename_user.conf`) is removed with it.
 - **Kept as Raspberry Pi has them:** the disk identifier and the kernel

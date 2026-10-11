@@ -303,7 +303,7 @@ with a single option opens that option at once), circle comes back.
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Clock | Time zone, for the clock; PSP clock: let the board set the PSP's clock |
+| Clock | Time zone, for the clock; PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
 | This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
