@@ -1,0 +1,72 @@
+#!/bin/sh
+# A card image as a release's files (docs/Package_Manager.md §8b): what CI attaches to a GitHub
+# Release (.github/workflows/release.yml), and what anyone may make here:
+#   scripts/packages/release-images pi|gameshell VERSION OUTDIR
+# Takes build/pi-image/pspexp-pi.img or build/gameshell-base/pspexp-gameshell.img as it is (built by
+# scripts/pi/image/build-image.sh, scripts/gameshell/base/build-image.sh), refuses one that holds an
+# SSH key or a Wi-Fi connection (a build for your own card), and writes to OUTDIR:
+#   pspexp-BOARD-VERSION.img.xz and .sha256      (Raspberry Pi Imager and Etcher take .img.xz as it is)
+#   pspexp-BOARD-VERSION-packages.txt            every package on the card with its source package
+#                                                (Debian's and Raspberry Pi's archives hold those sources)
+#   pspexp-gameshell-VERSION-sources.tar         the GameShell's kernel and boot loader as GPL asks:
+#                                                Linux and U-Boot as built from (upstream, unchanged), the
+#                                                kernel's whole .config, our boot files and scripts, README
+# PSPEXP_PLATFORM: the container's platform for reading the image (linux/arm64 on the Mac).
+set -e
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+BOARD="$1"; VERSION="$2"; OUT="$3"
+case "$BOARD" in pi) IMG="$ROOT/build/pi-image/pspexp-pi.img" OFF=1064960 ;; gameshell) IMG="$ROOT/build/gameshell-base/pspexp-gameshell.img" OFF=139264 ;;
+*) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+[ -n "$VERSION" ] && [ -n "$OUT" ] || { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ -f "$IMG" ] || { echo "release-images: no $IMG (build it first)" >&2; exit 1; }
+mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"
+N="pspexp-$BOARD-$VERSION"
+
+# the package list, and the check that it is a release build: read from the image itself
+docker run --rm --privileged --platform "${PSPEXP_PLATFORM:-linux/arm64}" -v "$(dirname "$IMG")":/i:ro -v "$OUT":/o debian:trixie sh -ec '
+mkdir -p /r; mount -o ro,loop,offset=$(('"$OFF"' * 512)) /i/'"$(basename "$IMG")"' /r
+if ls /r/home/*/.ssh/authorized_keys >/dev/null 2>&1 || [ -n "$(ls /r/etc/NetworkManager/system-connections/ 2>/dev/null)" ]; then
+	echo "release-images: the image holds an SSH key or a Wi-Fi connection: not a release build" >&2; umount /r; exit 1
+fi
+dpkg-query --admindir=/r/var/lib/dpkg -W -f="\${Package} \${Version} \${Architecture} \${source:Package} \${source:Version}\n" > /o/'"$N"'-packages.txt
+umount /r'
+
+if [ "$BOARD" = gameshell ]; then   # the kernel and boot loader: upstream as built from, and ours
+	GSB="$ROOT/build/gameshell-base"
+	KVER=$(sed -n 's/^KVER="\${KVER:-\(.*\)}"$/\1/p' "$ROOT/scripts/gameshell/base/build-kernel.sh")
+	UVER=$(sed -n 's/^UVER="\${UVER:-\(.*\)}"$/\1/p' "$ROOT/scripts/gameshell/base/build-uboot.sh")
+	S="$OUT/.src-$N"; rm -rf "$S"; mkdir -p "$S/$N-sources"
+	cp "$GSB/linux-$KVER.tar.xz" "$GSB/u-boot-$UVER.tar.bz2" "$S/$N-sources/"
+	cp "$GSB/kernel/config" "$S/$N-sources/linux-$KVER-gameshell.config"
+	( cd "$ROOT" && tar -czf "$S/$N-sources/pspexp-gameshell-boot.tar.gz" \
+		scripts/gameshell/base/build-kernel.sh scripts/gameshell/base/build-uboot.sh scripts/gameshell/base/build-image.sh \
+		scripts/gameshell/base/image-setup.sh scripts/gameshell/base/kernel.config scripts/gameshell/base/uboot.config \
+		scripts/gameshell/base/uboot-cpi3.patch scripts/gameshell/base/sun8i-r16-clockworkpi-cpi3.dts \
+		"scripts/gameshell/base/brcmfmac43430a0-sdio.clockwork,clockworkpi-cpi3.txt" )
+	cat > "$S/$N-sources/README.txt" <<R
+PSPExp's GameShell card image $VERSION: the sources of its kernel and boot loader
+
+  linux-$KVER.tar.xz        Linux $KVER as kernel.org publishes it (GPL-2.0), unchanged
+  u-boot-$UVER.tar.bz2      U-Boot $UVER as denx.de publishes it (GPL-2.0), unchanged
+  linux-$KVER-gameshell.config   the kernel's whole .config, as built (sunxi_defconfig + kernel.config)
+  pspexp-gameshell-boot.tar.gz
+      kernel.config, sun8i-r16-clockworkpi-cpi3.dts (the board's device tree), uboot.config,
+      uboot-cpi3.patch (the one change to U-Boot), the scripts that build them and the image
+      (build-kernel.sh, build-uboot.sh, build-image.sh, image-setup.sh), and the Wi-Fi chip's
+      settings file (Ampak's AP6212 NVRAM, GPL-2.0 as linux-firmware carries it).
+  Its Bluetooth firmware patch is ClockworkPi's (GPL-3.0): github.com/clockworkpi/bluetooth,
+  commit 52feb7abb39a8e8b71b2a593851638c76a3e59c1.
+
+Everything else on the card is unmodified packages, listed with their source packages in
+$N-packages.txt (package, version, architecture, source, source version):
+  Debian's: https://snapshot.debian.org/ and https://sources.debian.org/
+  PSPExp's (pspexp-*): https://pkg.pspexp.dev (their sources: https://pkg.pspexp.dev/sources/)
+R
+	tar -C "$S" -cf "$OUT/$N-sources.tar" "$N-sources"
+	rm -rf "$S"
+fi
+
+echo "compressing $N.img.xz"
+xz -T0 -6 -c "$IMG" > "$OUT/$N.img.xz.part" && mv "$OUT/$N.img.xz.part" "$OUT/$N.img.xz"
+( cd "$OUT" && { shasum -a 256 "$N.img.xz" 2>/dev/null || sha256sum "$N.img.xz"; } > "$N.img.xz.sha256" )
+ls -la "$OUT" | grep "$N"

@@ -1,0 +1,126 @@
+# A release, everything in one place: a tag v* (or a run by hand, kept as a draft unless told to
+# publish) makes a GitHub Release with the PSP's memory-stick zip and both card images, each with
+# its SHA-256, the images' package lists and the GameShell's kernel and boot loader sources
+# (docs/Package_Manager.md §8b). The images are built here from public things only: Raspberry Pi
+# OS, Debian, this repository's scripts, and the packages already published at
+# https://pkg.pspexp.dev (built and signed on the maintainer's machine; no key is here).
+# Each job puts its files on the draft as soon as they are made (an image is larger than the
+# artifacts a private repository may keep); the last one publishes it.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release's name (a tag made at this commit when it does not exist)"
+        required: true
+      publish:
+        description: "Publish it (otherwise it stays a draft)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The draft release
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" --title "PSPExp $TAG" --notes \
+            "PSPExp $TAG: the PSP's side and the card images.
+
+          - **The PSP:** \`PSPExp-psp-$TAG.zip\`: unzip it at the memory stick's root (PSP/GAME/PSPExp); custom firmware needed.
+          - **Raspberry Pi 3, 4, 400, 5 (64-bit):** \`pspexp-pi-$TAG.img.xz\`; login pi / pspexp.
+          - **ClockworkPi GameShell:** \`pspexp-gameshell-$TAG.img.xz\`; login cpi / cpi.
+
+          Write an image with Raspberry Pi Imager (Use custom) or balenaEtcher, plug the PSP in, start PSPExp on it, power the board on. Games come from Apps > Packages (https://pkg.pspexp.dev). SSH is off until Settings > This board > SSH; change the password first. Each file's SHA-256 is beside it; the images' package lists and the GameShell's kernel and boot loader sources are attached too."
+
+  psp:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/pspdev/pspdev:latest
+    steps:
+      - run: apk add --no-cache git python3 zip bash
+      - uses: actions/checkout@v4
+      - name: Build and pack
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          make -C psp/transport-usb -j"$(nproc)" && make -C psp/runtime -j"$(nproc)" && make -C psp/boot -j"$(nproc)"
+          mkdir -p dist/PSPExp
+          cp psp/boot/EBOOT.PBP psp/transport-usb/pspexp_usb.prx psp/runtime/pspexp_runtime.prx dist/PSPExp/
+          python3 scripts/packages/runtime-slot --install stick/PSP/GAME/PSPExp
+          cp LICENSE stick/PSP/GAME/PSPExp/LICENSE.txt
+          (cd stick && zip -qr "../PSPExp-psp-$TAG.zip" PSP)
+          sha256sum "PSPExp-psp-$TAG.zip" > "PSPExp-psp-$TAG.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: psp
+          path: PSPExp-psp-*
+
+  pi:
+    needs: draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Room (the image needs about 10 GB)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h / | tail -1
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3   # the image's own programs are arm64: they run through QEMU here
+      - name: The Raspberry Pi image
+        env:
+          PSPEXP_PLATFORM: linux/amd64
+          PSPEXP_REPO_URL: https://pkg.pspexp.dev
+        run: scripts/pi/image/build-image.sh
+      - name: Its release files
+        env:
+          PSPEXP_PLATFORM: linux/amd64
+        run: |
+          scripts/packages/release-images pi "$TAG" out
+          gh release upload "$TAG" out/pspexp-pi-* --repo "$GITHUB_REPOSITORY" --clobber
+
+  gameshell:
+    needs: draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Room
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h / | tail -1
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3   # the image's programs are armhf: they run through QEMU here
+      - name: Kernel, boot loader, image
+        env:
+          PSPEXP_PLATFORM: linux/amd64
+          PSPEXP_REPO_URL: https://pkg.pspexp.dev
+        run: |
+          scripts/gameshell/base/build-kernel.sh
+          scripts/gameshell/base/build-uboot.sh
+          scripts/gameshell/base/build-image.sh
+      - name: Its release files
+        env:
+          PSPEXP_PLATFORM: linux/amd64
+        run: |
+          scripts/packages/release-images gameshell "$TAG" out
+          gh release upload "$TAG" out/pspexp-gameshell-* --repo "$GITHUB_REPOSITORY" --clobber
+
+  publish:
+    needs: [psp, pi, gameshell]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: psp
+      - name: The PSP's zip, and the release published (a run by hand only when asked)
+        run: |
+          gh release upload "$TAG" PSPExp-psp-* --repo "$GITHUB_REPOSITORY" --clobber
+          if [ "${{ github.event_name }}" = push ] || [ "${{ inputs.publish }}" = true ]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          fi

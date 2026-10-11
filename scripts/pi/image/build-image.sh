@@ -54,6 +54,7 @@ case "$RH" in *.local)
 	ADDHOST="--add-host=$RH:$RIP" ;;
 esac
 docker volume create pspexp-pi-imgbuild >/dev/null
-docker run --rm --privileged --platform linux/arm64 $ADDHOST \
+# (PSPEXP_PLATFORM: the container's platform; linux/arm64 on the Mac, linux/amd64 in CI with QEMU)
+docker run --rm --privileged --platform "${PSPEXP_PLATFORM:-linux/arm64}" $ADDHOST \
 	-v pspexp-pi-imgbuild:/work -v "$OUT":/out debian:trixie sh /out/in/image-setup.sh
 ls -la "$OUT/pspexp-pi.img"

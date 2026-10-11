@@ -16,8 +16,8 @@ gs_stage() {
 	S="$1"; R="$S/root"; M="$S/manifest"
 	B="$ROOT/build/gameshell"; G="$ROOT/scripts/gameshell"
 	rm -rf "$S"; mkdir -p "$R"; : > "$M"
-	[ -x "$B/bin/pspexp-term" ] || { echo "run scripts/gameshell/build.sh first" >&2; return 1; }
-	[ -f "$B/lib/libsdl-pspexp.so" ] || { echo "run scripts/gameshell/build.sh (the shim) first" >&2; return 1; }
+	[ "${GS_CORE:-}" = apt ] || [ -x "$B/bin/pspexp-term" ] || { echo "run scripts/gameshell/build.sh first" >&2; return 1; }   # (from apt: none of the build needed)
+	[ "${GS_CORE:-}" = apt ] || [ -f "$B/lib/libsdl-pspexp.so" ] || { echo "run scripts/gameshell/build.sh (the shim) first" >&2; return 1; }
 	gs_dir 0755 0 0 /etc/pspexp
 	gs_dir 0755 1000 1000 /home/cpi/pspexp
 

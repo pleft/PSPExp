@@ -1,6 +1,6 @@
 # Every push: the board side built and tested (as scripts/build.sh), and the PSP side built in
 # the pspdev toolchain's own container, as a memory-stick install (runtime-slot --install).
-# A tag v*: a GitHub Release with that PSP install attached (docs/Developing.md, "CI").
+# Releases (the PSP's zip and both card images) are release.yml's (docs/Developing.md, "CI").
 # Nothing here signs: the boards' packages are built and signed on the maintainer's machine
 # (the key never leaves it), so CI holds no secret.
 name: build
@@ -62,21 +62,3 @@ jobs:
         with:
           name: PSPExp-psp
           path: ${{ env.PSP_ZIP }}
-
-  release:
-    name: Release (tags v*)
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [host, psp]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: PSPExp-psp
-      - name: GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" PSPExp-psp-*.zip --repo "$GITHUB_REPOSITORY" --title "PSPExp $GITHUB_REF_NAME" \
-            --notes "The PSP side: unzip at the memory stick's root (PSP/GAME/PSPExp). The boards: card images at https://dl.pspexp.dev, packages at https://pkg.pspexp.dev."

@@ -15,7 +15,8 @@ mkdir -p "$OUT/uboot"
 TAR="$OUT/u-boot-$UVER.tar.bz2"
 [ -f "$TAR" ] || curl -fL -o "$TAR" "https://ftp.denx.de/pub/u-boot/u-boot-$UVER.tar.bz2"
 docker volume create pspexp-ubuild >/dev/null
-docker run --rm --platform linux/arm64 \
+# (PSPEXP_PLATFORM: the container's platform; linux/arm64 on the Mac, linux/amd64 in CI with QEMU)
+docker run --rm --platform "${PSPEXP_PLATFORM:-linux/arm64}" \
 	-v pspexp-ubuild:/work -v "$OUT":/out -v "$ROOT/scripts/gameshell/base":/base:ro \
 	-e UVER="$UVER" -e JOBS="${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}" debian:trixie sh -ec '
 	export DEBIAN_FRONTEND=noninteractive

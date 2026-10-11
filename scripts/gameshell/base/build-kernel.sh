@@ -15,7 +15,8 @@ TAR="$OUT/linux-$KVER.tar.xz"
 # the source and build tree live in a volume: the kernel has file names that
 # differ only in case, which the Mac's disk cannot hold
 docker volume create pspexp-kbuild >/dev/null
-docker run --rm --platform linux/arm64 \
+# (PSPEXP_PLATFORM: the container's platform; linux/arm64 on the Mac, linux/amd64 in CI with QEMU)
+docker run --rm --platform "${PSPEXP_PLATFORM:-linux/arm64}" \
 	-v pspexp-kbuild:/work -v "$OUT":/out -v "$ROOT/scripts/gameshell/base":/base:ro \
 	-e KVER="$KVER" -e JOBS="${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}" debian:trixie sh -ec '
 	export DEBIAN_FRONTEND=noninteractive
