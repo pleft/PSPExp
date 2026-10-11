@@ -1056,6 +1056,12 @@ holding an SSH key or a Wi-Fi connection.
   SHA-256; the page and the sources answer. As on `pkg.pspexp.dev`, the bare
   address answers 404 (R2 serves names, not folders): the page is
   `/index.html`.
+- **Release 2026-10-11:** both images rebuilt with `pspexp-core` fa7860b
+  (the Wi-Fi password on nmcli's standard input, the copyright files, the
+  quick Packages, the SSH switch's fix), checked inside as before, and
+  published beside 2026-10-10's; the page names the latest. The Pi's
+  update to fa7860b came through Packages like a user's, Wi-Fi still
+  joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
   rewrite of `/` to the page, and a `robots.txt` that keeps search engines
   out (push-images uploads it; remove it then).
