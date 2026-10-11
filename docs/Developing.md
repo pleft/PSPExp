@@ -76,6 +76,22 @@ maintainer's machine, and the key never leaves it. `PSPEXP_BUILD` (the
 CMake build folder for `scripts/dev/pspexp-run`, default `build/host`) lets
 the SDL layer's test run from CI's folder.
 
+## The web page (pspexp.dev)
+
+`site/`: the front page (`site/index.html`, `site/style.css`, `site/icon.svg`)
+and `site/build.py`, which writes `site/out/`: the front page in its frame, the
+user manual as pages from `docs/manual/*.md` (its own small Markdown
+converter, Python's standard library only: the manual is written once, its
+links between pages follow, links out of it go to GitHub), the screenshots
+(`docs/images`) and the launcher's font. The look is the launcher's: its
+colours (`launcher_ui.h`) and Inter; light and dark. Cloudflare Pages builds
+it on every push (build command `python3 site/build.py`, output `site/out`).
+Until launch day `LAUNCHED = False`: every page carries `X-Robots-Tag:
+noindex` (`_headers`), and the site is reviewed at its `pages.dev` address;
+on launch day pspexp.dev is attached and `LAUNCHED` becomes True. `VIDEO`:
+the tutorial's embed address, once published (the page then shows it).
+Try it: `python3 site/build.py && python3 -m http.server -d site/out`.
+
 ## Measure the USB link (v0.1 first milestone)
 
 1. Put PSPExp on the memory stick (custom firmware required: the boot module

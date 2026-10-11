@@ -1,0 +1,108 @@
+<main>
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="kicker">Open source · PSP-1000 · Raspberry Pi · GameShell</p>
+      <h1>Your PSP, playing games it never had</h1>
+      <p class="lead">Plug a small Linux board into your PSP's USB port. The board runs the games;
+      the PSP draws them with its own graphics chip, plays their sound and takes your buttons.
+      Quake, Celeste 64, Cave Story, Diablo, emulators and more, on the PSP's screen.</p>
+      <p class="cta"><a class="button" href="{{RELEASES}}">Download</a>
+      <a class="button ghost" href="manual/index.html">Read the manual</a></p>
+    </div>
+    <figure class="psp"><img src="images/launcher-games.png" alt="The PSPExp launcher on the PSP: the Games shelf, with Cave Story highlighted" width="480" height="272"></figure>
+  </div>
+</section>
+
+{{VIDEO}}
+
+<section class="wrap">
+  <h2>What you get on the PSP</h2>
+  <div class="cards">
+    <div class="card"><h3>A launcher made for it</h3><p>Games, emulators, apps and settings, with covers,
+      favourites, search and notifications, all on the PSP's buttons.</p></div>
+    <div class="card"><h3>Games, installed from the PSP</h3><p>Freedoom, Quake, Celeste 64, Unreal Tournament,
+      Sonic Robo Blast 2, Cave Story, OpenTTD, Command &amp; Conquer, SuperTux and dozens more, in two presses.</p></div>
+    <div class="card"><h3>Emulators</h3><p>NES, SNES, Mega Drive, Game Boy, Game Boy Advance, Lynx, WonderSwan
+      and, on a Raspberry Pi, the Nintendo 64. Bring your own ROMs.</p></div>
+    <div class="card"><h3>Apps and headphones</h3><p>A music player, a file manager with the PSP's memory stick,
+      a system monitor, a Linux terminal, and Bluetooth headphones.</p></div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="gallery">
+    <figure><img src="images/launcher-home.png" alt="The launcher's home screen" loading="lazy" width="480" height="272"><figcaption>The launcher's home</figcaption></figure>
+    <figure><img src="images/packages.png" alt="The Packages app" loading="lazy" width="480" height="272"><figcaption>Packages: install from the PSP</figcaption></figure>
+    <figure><img src="images/celeste64.png" alt="Celeste 64 on the PSP" loading="lazy" width="480" height="272"><figcaption>Celeste 64, drawn by a Raspberry Pi</figcaption></figure>
+    <figure><img src="images/supertuxkart.png" alt="SuperTuxKart on the PSP" loading="lazy" width="480" height="272"><figcaption>SuperTuxKart</figcaption></figure>
+  </div>
+  <p class="note">What the PSP shows, captured from the stream the board sends it.</p>
+</section>
+
+<section class="wrap split">
+  <div>
+    <h2>How it works</h2>
+    <p>The game runs on the board, unmodified, and draws through SDL2 or OpenGL as usual. PSPExp catches
+    those calls and sends the PSP what to draw, not the finished pixels: textures once, then small lists of
+    sprites each frame. The PSP's graphics chip draws them at full speed, its sound chip plays the audio,
+    and its buttons go back to the game. Games too heavy for the PSP's chip are drawn by the board's GPU,
+    and each frame is sent as a picture.</p>
+  </div>
+  <div>
+    <h2>What you need</h2>
+    <ul class="needs">
+      <li>A <b>PSP-1000</b> with custom firmware (PSPExp loads a small USB driver).</li>
+      <li>A <b>mini-USB data cable</b>.</li>
+      <li>A <b>Raspberry Pi</b> 3, 4, 400 or 5, or a <b>ClockworkPi GameShell</b>, and a microSD card.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Boards</h2>
+  <div class="table"><table>
+    <thead><tr><th>Board</th><th>Games</th><th>Setting up</th></tr></thead>
+    <tbody>
+      <tr><td><b>Raspberry Pi</b> 3 / 4 / 400 / 5</td><td>all 58 packages, 3D and the Pi's GPU included</td><td>write the card image</td></tr>
+      <tr><td><b>ClockworkPi GameShell</b></td><td>47 packages: a pocket pair with the PSP</td><td>write the card image</td></tr>
+      <tr><td><b>Onion Omega2+</b></td><td>12: 2D games and emulators</td><td>for tinkerers: built from the repository</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="wrap">
+  <h2>Get started</h2>
+  <ol class="steps">
+    <li><b>The PSP.</b> Download <code>PSPExp-psp</code> from the <a href="{{RELEASES}}">latest release</a> and unzip it
+      at the root of the memory stick. <a href="manual/psp.html">How</a></li>
+    <li><b>The board.</b> Write its card image from the same release with Raspberry Pi Imager or balenaEtcher.
+      <a href="manual/raspberry-pi.html">Raspberry Pi</a> · <a href="manual/gameshell.html">GameShell</a></li>
+    <li><b>Connect.</b> Plug the PSP into the board, start PSPExp on the PSP, power the board on. The launcher appears.</li>
+    <li><b>Play.</b> Join Wi-Fi from the PSP, open <i>Apps &gt; Packages</i> and install a game.
+      <a href="manual/using-pspexp.html">Using PSPExp</a></li>
+  </ol>
+</section>
+
+<section class="wrap faq">
+  <h2>Questions</h2>
+  <details><summary>Can it harm my PSP?</summary><p>PSPExp is a homebrew program on the memory stick: it changes
+    nothing in the PSP's firmware, and quitting it returns the PSP as it was. It does need custom firmware to run.</p></details>
+  <details><summary>Which PSP models work?</summary><p>It is tested on the PSP-1000. Other models have not been tried yet.</p></details>
+  <details><summary>Where do the games come from?</summary><p>From their authors: free and open-source games through
+    Debian and PSPExp's package repository, and games whose authors publish them downloaded from their own pages when
+    you install them. PSPExp hosts no game data. Warcraft I and II need the data of your own copy; emulators need your own ROMs.</p></details>
+  <details><summary>Does the board need a screen or keyboard?</summary><p>No. The PSP is its screen and controller;
+    Wi-Fi, the time zone and updates are set from the PSP.</p></details>
+  <details><summary>How does it update?</summary><p>The launcher tells you when a new PSPExp is out; Packages installs it,
+    and Settings &gt; Update the PSP puts the PSP's part up to date.</p></details>
+  <details><summary>Is it made by Sony?</summary><p>No. PSPExp is an independent open-source project, not affiliated
+    with Sony; "PSP" names the console it runs on.</p></details>
+</section>
+
+<section class="wrap closing">
+  <h2>Give your PSP a sidekick</h2>
+  <p class="cta"><a class="button" href="{{RELEASES}}">Download</a>
+  <a class="button ghost" href="{{REPO}}">Source on GitHub</a></p>
+</section>
+</main>

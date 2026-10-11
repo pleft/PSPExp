@@ -24,6 +24,7 @@
 - [Packages](Package_Manager.md): recipes, the apt repository, and how games
   are packaged for each board.
 - [Scripts](../scripts/README.md): what each script does and where it runs.
+- The web page: `site/` (built into pspexp.dev; [Developing](Developing.md#the-web-page-pspexpdev)).
 - [v0.1 USB bring-up](v01-usb-bringup.md): the first measurements of the USB link.
 - [Superseded sections](archive/Launcher_and_Boards-superseded.md): how packages and
   the GameShell's first card image worked before the recipes and apt (kept for the record).

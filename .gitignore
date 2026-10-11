@@ -13,3 +13,4 @@ PSPExpUSB.S
 
 # commercial ROMs for local testing: never committed, never on a card image
 /roms/
+site/out/

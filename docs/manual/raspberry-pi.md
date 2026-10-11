@@ -7,7 +7,8 @@ same. The Pi needs no screen of its own: the PSP is its screen.
 
 ## What you need
 
-- A Raspberry Pi 400 (or 4 / 5) with its power supply.
+- A Raspberry Pi 3, 4, 400 or 5 (64-bit) with its power supply. PSPExp is
+  tested on the Pi 400.
 - A microSD card of 8 GB or more.
 - The PSP, [prepared](psp.md), and its mini-USB data cable.
 
@@ -45,21 +46,19 @@ For a Pi that already runs **Raspberry Pi OS (64-bit), the Debian 13
 1. Write the card with Raspberry Pi Imager (64-bit Raspberry Pi OS, with
    SSH, Wi-Fi and your user set in its settings), put it in the Pi and
    power it on. Wait for it to appear on your network.
-2. Install PSPExp:
-   - *With the release: one command on the Pi adds PSPExp's package
-     repository and installs it (coming with the release).*
-   - Before the release, from this repository, on a Mac or Linux computer:
+2. Install PSPExp from this repository, on a Mac or Linux computer:
 
-     ```sh
-     HOST=<user>@<pi-address> scripts/pi/install.sh
-     ```
+   ```sh
+   HOST=<user>@<pi-address> scripts/pi/install.sh
+   ```
 
-     It sets the Pi up for PSPExp (the PSP's USB rule, the console as a
-     service that starts at boot, the settings it needs) and installs
-     PSPExp from PSPExp's package repository, `https://pkg.pspexp.dev`. The
-     games come from there too, through **Apps > Packages**. (To use a
-     repository of your own instead, put its address in `~/.pspexp/repo-url`
-     on the computer: [Developing](../Developing.md#your-own-package-repository).)
+   It sets the Pi up for PSPExp (the PSP's USB rule, the console as a
+   service that starts at boot, the settings it needs) and installs
+   PSPExp from PSPExp's package repository, `https://pkg.pspexp.dev`. The
+   games come from there too, through **Apps > Packages**. (To use a
+   repository of your own instead, put its address in `~/.pspexp/repo-url`
+   on the computer: [Developing](../Developing.md#your-own-package-repository).)
+   A one-command install on the Pi itself is planned.
 3. Plug the PSP into any of the Pi's USB ports and start PSPExp on it. The
    launcher appears.
 
