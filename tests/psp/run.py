@@ -319,9 +319,11 @@ def suite_launcher(r):
     def apps():
         s = r.to_category("Apps")
         items = s["launcher.items"].split("|")
-        r.expect(items[:2] == ["Terminal", "Files"], "Apps starts with %s" % items[:2])
+        # Apps is in alphabetical order (2026-10-10, the user's ask), the built-in apps among the installed
+        r.expect("Terminal" in items and "Files" in items, "Apps lacks Terminal or Files: %s" % items)
+        r.expect(items == sorted(items, key=str.lower), "Apps is not in alphabetical order: %s" % items)
         r.shot("launcher-apps", "Apps: Terminal and Files, built in")
-    r.check("Apps starts with Terminal and Files", apps)
+    r.check("Apps holds Terminal and Files, A to Z", apps)
 
     def walk():
         cats = r.state()["launcher.categories"].split("|")
@@ -540,8 +542,10 @@ def suite_apps(r):
         r.ctl("open launcher")
         s = r.to_category("Apps")
         items = s["launcher.items"].split("|")
-        r.expect(items[:4] == ["Terminal", "Files", "System Monitor", "Packages"], "Apps starts with %s" % items[:4])
-    r.check("Apps lists Terminal, Files, System Monitor and Packages", listed)
+        missing = [a for a in ("Terminal", "Files", "System Monitor", "Packages") if a not in items]
+        r.expect(not missing, "Apps lacks %s: %s" % (missing, items))
+        r.expect(items == sorted(items, key=str.lower), "Apps is not in alphabetical order: %s" % items)
+    r.check("Apps lists Terminal, Files, System Monitor and Packages, A to Z", listed)
 
     def monitor():
         r.ctl("open monitor")
@@ -570,7 +574,7 @@ def suite_apps(r):
         r.expect(s.get("store.mode") != "loading", "the list still loading after 30 s")
         pk = dict(x.split(":") for x in s["store.packages"].split("|") if ":" in x)
         installed = set(l.split()[0] for l in t.sh("pspexp-pkg list 2>/dev/null || true").splitlines() if l.strip())
-        shown = set(k for k, v in pk.items() if v in ("installed", "update", "local"))
+        shown = set(k for k, v in pk.items() if v in ("installed", "update", "local") and k != "pspexp")   # (PSPExp itself: the app's own entry, not a recipe)
         r.expect(shown == installed, "installed per the app %s, per pspexp-pkg %s" % (sorted(shown), sorted(installed)))
         r.note("packages: %d offered or installed, %d installed, catalogue %s" % (len(pk), len(installed), "published with the builds" if s.get("store.local") == "1" else "apt's"))
         r.shot("store", "Packages")
