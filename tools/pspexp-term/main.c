@@ -1601,7 +1601,8 @@ static void files_show(const char *path, int from_launcher)
 /* where a notification's action goes (the notification centre, cross) */
 static void notify_go(const char *a)
 {
-    if (!strncmp(a, "app:", 4) && app_find(a + 4)) app_show(app_find(a + 4));
+    if (!strncmp(a, "app:store:", 10)) { store_focus(a + 10); app_show(app_find("store")); }   /* on a package */
+    else if (!strncmp(a, "app:", 4) && app_find(a + 4)) app_show(app_find(a + 4));
     else if (!strcmp(a, "files")) files_show(NULL, 1);
     else if (!strncmp(a, "category:", 9)) {
         g_app = NULL; g_view_files = 0; g_view_mirror = 0; g_view_launcher = 1;
@@ -2823,11 +2824,19 @@ static void pkg_check_tick(uint64_t now)
     if (g_pkgchk_pid > 0) {
         int st, upd = 0, nw = 0;
         FILE *f;
-        char msg[160];
+        char msg[160], line[160], self[16] = "";
         if (waitpid(g_pkgchk_pid, &st, WNOHANG) != g_pkgchk_pid) return;
         g_pkgchk_pid = 0;
         if (!(f = fopen(out, "r"))) return;
-        if (fscanf(f, "updates=%d new=%d", &upd, &nw) == 2 && (upd > 0 || nw > 0)) {
+        if (!fgets(line, sizeof(line), f)) line[0] = 0;
+        /* pspexp=update: PSPExp itself (console or PSP runtime) has a new version, said by its name;
+         * the count then says the packages (an older pspexp-pkg writes no pspexp=) */
+        if (sscanf(line, "updates=%d new=%d pspexp=%15s", &upd, &nw, self) >= 2 && !strcmp(self, "update")) {
+            upd--;
+            fprintf(stderr, "[pspexp-term] PSPExp: a new version in Apps > Packages\n");
+            if (g_launcher_on) notify(NOTE_ATTN, "download", "A new PSPExp is available", "Apps > Packages: update PSPExp, first under Apps", "app:store:pspexp", "pspexp-update");
+        }
+        if (line[0] && (upd > 0 || nw > 0)) {
             if (nw > 0 && upd > 0) snprintf(msg, sizeof(msg), "%d new and %d update%s in Apps > Packages", nw, upd, upd == 1 ? "" : "s");
             else if (nw > 0) snprintf(msg, sizeof(msg), "%d new in Apps > Packages", nw);
             else snprintf(msg, sizeof(msg), "%d update%s in Apps > Packages", upd, upd == 1 ? "" : "s");

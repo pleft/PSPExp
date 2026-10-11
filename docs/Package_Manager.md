@@ -876,6 +876,14 @@ It stays as built, with these changes:
     Packages", "2 updates in Apps > Packages", or both. Tried on the
     GameShell: the notice came 2 min 15 s after a restart;
   - "Needs a network: join Wi-Fi in System" when offline.
+  - **PSPExp itself by name (2026-10-11, the user's ask):** `check` says
+    `pspexp=update` when PSPExp's console or the PSP's runtime has a new
+    version, and the launcher shows "A new PSPExp is available" (the other
+    updates keep their count); selecting it opens Packages on PSPExp
+    (`app:store:pspexp`: its section, it selected, once the list is read).
+    Each section's tab shows how many updates it holds, in the Update
+    chip's colours: the user had opened Packages on Games with nothing
+    saying PSPExp's update was under Apps. Tried on the Pi 400.
 
 ## 8. The minimal GameShell image
 

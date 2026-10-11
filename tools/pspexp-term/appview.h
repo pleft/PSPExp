@@ -24,6 +24,8 @@ typedef struct AppView {
 
 extern const AppView MONITOR_APP, STORE_APP, MUSIC_APP, NOTIFY_APP;
 const AppView *app_find(const char *id);
+/* Packages opens on this package (its section, it selected) the next time it reads its list */
+void store_focus(const char *id);
 
 /* Apps that open files (a plugin of sorts): Files asks which app takes a file
  * by its name, hands it the folder's entries and the one chosen, and the

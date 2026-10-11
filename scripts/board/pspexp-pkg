@@ -588,6 +588,8 @@ check)
 	new=$(printf '%s\n' "$list" | cut -d'|' -f1 | sort | comm -23 - "$seen" | grep -c . || true)
 	updates=$(printf '%s\n' "$list" | awk -F'|' '$3 == "update"' | grep -c . || true)
 	printf '%s\n' "$list" | cut -d'|' -f1 | grep . | sort > "$seen.new" && mv "$seen.new" "$seen"
-	echo "updates=$updates new=$new" ;;
+	# PSPExp itself (its console or the PSP's runtime) said apart: the launcher names it
+	self=$(printf '%s\n' "$list" | awk -F'|' '$1 == "pspexp" { print $3 }')
+	echo "updates=$updates new=$new pspexp=${self:-none}" ;;
 *) echo "usage: pspexp-pkg install ID|FILE.tar.gz... | remove ID... | upgrade | list | available | update | check | recover" >&2; exit 2 ;;
 esac

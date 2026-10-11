@@ -206,6 +206,24 @@ static void load_start(void)
 
 static void open_terms_hook(void);
 
+/* Packages opened on one package (a notification's app:store:ID): its section, it selected, once
+ * the list is read */
+static char g_focus[48];
+void store_focus(const char *id) { snprintf(g_focus, sizeof(g_focus), "%s", id ? id : ""); }
+static void focus_apply(void)
+{
+    int i;
+    if (!g_focus[0]) return;
+    for (i = 0; i < g_n; i++) if (!strcmp(g_pk[i].id, g_focus)) {
+        int k;
+        g_tab = tab_of(&g_pk[i]);
+        filter();
+        for (k = 0; k < g_nvis; k++) if (g_vis[k] == i) g_sel = k;
+        break;
+    }
+    g_focus[0] = 0;
+}
+
 static int load_poll(void)
 {
     int st;
@@ -217,6 +235,7 @@ static int load_poll(void)
     if (f) fclose(f);
     unlink(STORE_LIST);
     open_terms_hook();
+    focus_apply();
     return 1;
 }
 
@@ -464,11 +483,18 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     gfx_text(FONT_TITLE, 34, 5, "Packages", UI_TEXT, 255, 0);
     {   /* the sections, as tabs (L / R) */
         static const char *tab[NTABS] = { "Games", "Emulators", "Apps" };
-        int tx = 150;
+        int tx = 150, n_upd[NTABS] = { 0 };
+        for (i = 0; i < g_n; i++) if (status_of(&g_pk[i]) == ST_UPDATE) n_upd[tab_of(&g_pk[i])]++;
         for (i = 0; i < NTABS; i++) {
-            int w = gfx_text_width(FONT_SMALL, tab[i]) + 18, on = i == g_tab;
+            /* a section with updates shows how many, in the Update chip's colours: the user
+             * opened Packages on Games and could not tell PSPExp's update was under Apps */
+            char c[8] = "";
+            int cw = 0, w, on = i == g_tab;
+            if (n_upd[i]) { snprintf(c, sizeof(c), "%d", n_upd[i] > 99 ? 99 : n_upd[i]); cw = gfx_text_width(FONT_BADGE, c) + 10; }
+            w = gfx_text_width(FONT_SMALL, tab[i]) + 18 + (cw ? cw + 4 : 0);
             if (on) gfx_nine(NINE_R6, tx, 7, w, 18, UI_ACCENT, 200);
             gfx_text(FONT_SMALL, tx + 9, 8, tab[i], on ? 0xffffff : UI_SUB, 255, 0);
+            if (cw) chip(tx + w - 7, 9, c, 0x7c5a12, 0xfff3c4);
             tx += w + 4;
         }
     }
