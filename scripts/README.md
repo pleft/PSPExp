@@ -58,8 +58,8 @@ packages/          what the launcher offers, for any board
                      the public Cloudflare R2 bucket (push r2)
   sources            each compiled package's copyright file and complete source archive (from its build)
   check-downloads    is every installer's game still downloadable (its pinned SHA-256): weekly in CI
-  push-images        the card images as a download (dl.pspexp.dev, its own R2 bucket): compressed,
-                     checksummed, dated, with their GPL sources and an index page
+  release-images     a card image as a release's files (compressed, SHA-256, package list, the
+                     GameShell's kernel and boot loader sources): what .github/workflows/release.yml attaches
   runtime-slot       the PSP runtime as a slot set (VERSION with checksums), or a whole
                      slotted install for a memory stick (--install)
 

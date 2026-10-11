@@ -46,11 +46,10 @@ the setup and the list of packages differ.
 4. [Using PSPExp](using-pspexp.md): the launcher, packages, emulators,
    files, music, Bluetooth and the terminal.
 
-> **Before the first public release.** The card images
-> ([dl.pspexp.dev](https://dl.pspexp.dev/index.html)) and the package
-> repository are public; the PSP files are not yet (marked *coming with
-> the release*): until then they are built from this repository with the
-> scripts the guides name.
+> **The downloads** (the PSP's files and the card images) are on PSPExp's
+> [Releases](https://github.com/pleft/PSPExp/releases) page, one release holding them all; the games come
+> from PSPExp's package repository. Everything can also be built from this
+> repository with the scripts the guides name.
 
 ## When something goes wrong
 

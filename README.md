@@ -58,15 +58,13 @@ packages, ROMs, files, music and headphones.
 
 ## Status: not released yet
 
-PSPExp works. Public so far: the package repository
-(`https://pkg.pspexp.dev`, where the games come from) and the card images
-for the Raspberry Pi and the GameShell
-([dl.pspexp.dev](https://dl.pspexp.dev/index.html)). There is no PSP
-download yet: until there is, you build the PSP side from this repository
-on a Mac or a Linux computer. That needs the
+PSPExp works. Each release ([Releases](https://github.com/pleft/PSPExp/releases)) holds the PSP's files and
+the card images for the Raspberry Pi and the GameShell, built by GitHub's
+CI; the games come from PSPExp's package repository
+(`https://pkg.pspexp.dev`). You can also build everything from this
+repository on a Mac or a Linux computer: the
 [pspdev](https://github.com/pspdev/pspdev) toolchain for the PSP side, and
-the board guides name the scripts to run. The first release will turn the
-steps above into downloads.
+the board guides name the scripts to run.
 
 Tested on: PSP-1000, Raspberry Pi 400, GameShell, Omega2+.
 

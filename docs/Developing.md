@@ -47,8 +47,11 @@ the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
   (`ghcr.io/pspdev/pspdev`, the same GCC 15.2 as `../pspdev`), then made a
   memory-stick install (`runtime-slot --install`): `PSPExp-psp-<ref>.zip`,
   unzipped at the stick's root, a download on the run's page.
-- **A tag `v*`:** a GitHub Release with that zip attached
-  (`git tag v0.5 && git push origin v0.5`).
+- **A tag `v*`:** `.github/workflows/release.yml` makes the GitHub Release
+  with everything: the PSP's zip and both card images, built there from
+  public things only (`git tag v0.5 && git push origin v0.5`; or
+  `gh workflow run release.yml -f tag=NAME`, kept a draft unless
+  `-f publish=true`). docs/Package_Manager.md §8c.
 
 Weekly, `.github/workflows/check-downloads.yml` checks that every
 installer's game is still downloadable (`scripts/packages/check-downloads`,

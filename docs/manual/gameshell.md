@@ -19,8 +19,8 @@ is all of that.
 ## Installing PSPExp
 
 1. Get the PSPExp card image.
-   - The download: [dl.pspexp.dev](https://dl.pspexp.dev/index.html), a
-     compressed `.img.xz` and its SHA-256 checksum.
+   - The download: `pspexp-gameshell-<version>.img.xz` on PSPExp's
+     [Releases](https://github.com/pleft/PSPExp/releases) page, with its SHA-256 checksum.
    - From this repository: `scripts/gameshell/base/build-kernel.sh`,
      `build-uboot.sh` and `build-image.sh` build it on a Mac (they need
      Docker or OrbStack); see the script headers.

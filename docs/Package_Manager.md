@@ -1140,6 +1140,29 @@ holding an SSH key or a Wi-Fi connection.
   rewrite of `/` to the page, and a `robots.txt` that keeps search engines
   out (push-images uploads it; remove it then).
 
+### 8c. Releases from CI, in one place (2026-10-11)
+
+The user did not like the downloads scattered (the images on
+`dl.pspexp.dev`, the PSP's zip on GitHub) and the images built on the Mac.
+`.github/workflows/release.yml` now makes a GitHub Release on a tag `v*`
+(or by hand, a draft unless told to publish) holding everything: the PSP's
+memory-stick zip and both card images, each with its SHA-256, the images'
+package lists and the GameShell's kernel and boot loader sources
+(`scripts/packages/release-images`, which keeps push-images' check that the
+image holds no SSH key or Wi-Fi connection). The images are built on
+GitHub's x86 machines from public things only (Raspberry Pi OS, Debian, the
+scripts, the packages already at `pkg.pspexp.dev`); the image scripts take
+`PSPEXP_PLATFORM` (`linux/amd64` there), and QEMU runs the images' ARM
+programs. Each job puts its files on the draft as soon as they are made (a
+private repository keeps 500 MB of artifacts, less than the Pi's image);
+the last one publishes it. The first run (`v0.5-rc1`, a draft): 19 minutes
+(the PSP 21 s, the Pi's image 15 min, the GameShell's with its kernel and
+U-Boot 19 min); both images downloaded and checked: their SHA-256, the
+file systems clean, the same `pspexp-core` and runtime as the 2026-10-11.4
+images the user tried, SSH off, no keys or Wi-Fi, the routes setting and
+both `usb0` hooks. `dl.pspexp.dev` and `push-images` retire; the board
+packages are still built and signed on the Mac (the key stays there).
+
 ## 9. The Omega2+
 
 OpenWrt has none of these programs and the Omega has no compiler.
