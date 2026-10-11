@@ -1070,7 +1070,13 @@ holding an SSH key or a Wi-Fi connection.
   published; `push-images` now keeps only the latest release (the user:
   no point keeping older ones and their storage): once the new one and its
   page are up, the other dates' images, checksums and sources go. 2026-10-10
-  removed so: the bucket holds 1.18 GiB. The Pi's
+  removed so: the bucket holds 1.18 GiB. A published name never gets other
+  content (the images are cached for good under it): a second release the
+  same day is `DATE.2`, and `push-images` refuses a name already published
+  with other content. Release 2026-10-11.2: `pspexp-core` 06f7772 (PSPExp
+  named in its update notice, the update counts on Packages' tabs) and the
+  PSP runtime c81b36a (its real version on the status page); 2026-10-11
+  removed by it. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no

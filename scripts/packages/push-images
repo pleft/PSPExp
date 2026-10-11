@@ -3,7 +3,8 @@
 # SHA-256, dated, in its own R2 bucket behind its own address (dl.pspexp.dev; the package
 # repository's bucket is apt-repo's, whose push replaces what it does not have), with the sources
 # GPL asks for beside them, and an index page.
-#   scripts/packages/push-images [DATE]        (DATE: the release's name, default today, UTC)
+#   scripts/packages/push-images [DATE]        (DATE: the release's name, default today, UTC;
+#                                               a second release the same day: DATE.2)
 # Takes build/pi-image/pspexp-pi.img and build/gameshell-base/pspexp-gameshell.img as they are
 # (build them first: scripts/pi/image/build-image.sh, scripts/gameshell/base/build-image.sh), and
 # refuses one that holds an SSH key or a Wi-Fi connection (a build for your own card).
@@ -19,6 +20,7 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DATE="${1:-$(date -u +%Y-%m-%d)}"
+echo "$DATE" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?$' || { echo "push-images: a release is named YYYY-MM-DD or YYYY-MM-DD.N" >&2; exit 2; }
 OUT="$ROOT/build/release/$DATE"
 PI="$ROOT/build/pi-image/pspexp-pi.img"
 GS="$ROOT/build/gameshell-base/pspexp-gameshell.img"
@@ -134,6 +136,15 @@ export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$(v R2_ACCESS_KEY_ID)" RCLONE_CONFIG_R2_S
 export RCLONE_CONFIG_R2_ENDPOINT="https://$(v R2_ACCOUNT_ID).r2.cloudflarestorage.com"
 D="R2:$(v R2_IMAGES_BUCKET)"
 base="rclone --checksum --transfers 4 --stats-one-line --stats 0 -q"
+# a published name never gets other content: the images are cached for good under it (a second
+# release the same day is DATE.2)
+for b in pi gameshell; do
+	f="pspexp-$b-$DATE.img.xz"
+	old=$(rclone cat "$D/$f.sha256" 2>/dev/null | cut -d' ' -f1)
+	if [ -n "$old" ] && [ "$old" != "$(cut -d' ' -f1 "$OUT/$f.sha256")" ]; then
+		echo "push-images: $f is published with other content: name this release $DATE.2 (or the next number)" >&2; exit 1
+	fi
+done
 $base --header-upload "Cache-Control: public, max-age=31536000, immutable" copy "$OUT/sources" "$D/sources/$DATE"
 for b in pi gameshell; do
 	$base --header-upload "Cache-Control: public, max-age=31536000, immutable" copyto "$OUT/pspexp-$b-$DATE.img.xz" "$D/pspexp-$b-$DATE.img.xz"
@@ -146,11 +157,11 @@ printf 'User-agent: *\nDisallow: /\n' > "$OUT/robots.txt"
 $base --header-upload "Cache-Control: no-cache" copyto "$OUT/robots.txt" "$D/robots.txt"
 # only the latest release is kept (the user: no point keeping the older ones and their storage):
 # the other dates' images, checksums and sources go, once this one and its page are up
-for f in $(rclone lsf "$D" 2>/dev/null | grep -E '^pspexp-(pi|gameshell)-[0-9]{4}-[0-9]{2}-[0-9]{2}\.img\.xz(\.sha256)?$' | grep -v -- "-$DATE\.img"); do
+for f in $(rclone lsf "$D" 2>/dev/null | grep -E '^pspexp-(pi|gameshell)-[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?\.img\.xz(\.sha256)?$' | grep -v -F -- "-$DATE.img"); do
 	echo "removing $f (an older release)"
 	rclone -q deletefile "$D/$f"
 done
-for d in $(rclone lsf --dirs-only "$D/sources" 2>/dev/null | tr -d / | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' | grep -v -x -- "$DATE"); do
+for d in $(rclone lsf --dirs-only "$D/sources" 2>/dev/null | tr -d / | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?$' | grep -v -x -F -- "$DATE"); do
 	echo "removing sources/$d (an older release)"
 	rclone -q purge "$D/sources/$d"
 done
