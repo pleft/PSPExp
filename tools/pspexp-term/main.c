@@ -2812,7 +2812,14 @@ static int board_online(void)
     char line[256];
     int yes = 0;
     if (!f) return 0;
-    while (fgets(line, sizeof(line), f)) { char ifc[32], dst[16]; if (sscanf(line, "%31s %15s", ifc, dst) == 2 && !strcmp(dst, "00000000")) yes = 1; }
+    while (fgets(line, sizeof(line), f)) {   /* a default route whose interface has its link (not a cable's left behind) */
+        char ifc[32], dst[16], cpath[96], c = '1';
+        FILE *cf;
+        if (sscanf(line, "%31s %15s", ifc, dst) != 2 || strcmp(dst, "00000000")) continue;
+        snprintf(cpath, sizeof(cpath), "/sys/class/net/%s/carrier", ifc);
+        if ((cf = fopen(cpath, "r"))) { c = (char)fgetc(cf); fclose(cf); }
+        if (c == '1') yes = 1;
+    }
     fclose(f);
     return yes;
 }

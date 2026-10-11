@@ -462,6 +462,27 @@ package scripts have run. So the contract is **forward recovery**. Every
 operation either finishes, or leaves a recorded state that `recover`
 finishes or cleans up, and the user sees which.
 
+- **The next operation finishes an interrupted one (2026-10-11):** an
+  install or removal that finds the journal of another first runs
+  `recover`, then carries on (it had said "run pspexp-pkg recover", a
+  command a PSP user cannot type: the user met it on the GameShell's fresh
+  card, OpenTyrian's install cut off when apt could reach nothing); when
+  that fails it says to try again with the board online. Its failures say
+  what to do in the Packages app ("install it again, and it carries on").
+  Tried on the GameShell: Mr. Boom's install cut off by a dead route, then
+  Rocks'n'Diamonds' install finished it first and both were installed.
+- **A route that leads nowhere (the cause, 2026-10-11):** the GameShell's
+  USB network takes a lease from a computer's Internet Sharing; after the
+  cable came out its default route stayed (`linkdown`) and, without a
+  metric, won over Wi-Fi's (600): apt reached nothing ("No route to host")
+  and the launcher showed a cable for the network. Now `pspexp-core` ships
+  `/etc/sysctl.d/90-pspexp-routes.conf` (`ignore_routes_with_linkdown`,
+  applied by its `postinst`, so boards already set up get it with the
+  update), the USB network's lease goes after Wi-Fi (`metric 1000` in
+  `usb0.interfaces`: dhclient takes `IF_METRIC`), and the launcher's network
+  icon and its online check take the default route with the lowest metric
+  among interfaces with a link. Tried on the GameShell with the dead route
+  put back: traffic through Wi-Fi, the Wi-Fi icon.
 - **One operation at a time:** `pspexp-pkg` takes an exclusive lock
   (`flock` on `<root>/state/lock`), held for the whole operation, recovery
   included. A second one, from the Packages app or the shell, waits or

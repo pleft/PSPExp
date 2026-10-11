@@ -47,6 +47,18 @@ done
 mkdir -p "$R/usr/share/pspexp/launcher/systems"   # the systems' icons (CC BY 4.0, their LICENSE.txt)
 cp "$ROOT/tools/pspexp-term/assets/systems/"* "$R/usr/share/pspexp/launcher/systems/" && chmod 644 "$R/usr/share/pspexp/launcher/systems/"*
 echo "PSPExp: the PSP as the screen, sound and controller of this board (docs in the PSPExp repository)." > "$R/usr/share/doc/pspexp-core/README"
+# a route whose link is down is not used (scripts/board/90-pspexp-routes.conf): in the package, so a
+# board already set up gets it with its update (a GameShell's USB-network route, left after the
+# cable came out, had sent everything nowhere); applied at once by postinst
+mkdir -p "$R/etc/sysctl.d"
+install -m 644 "$ROOT/scripts/board/90-pspexp-routes.conf" "$R/etc/sysctl.d/90-pspexp-routes.conf"
+cat > "$W/postinst" <<'P'
+#!/bin/sh
+set -e
+[ "$1" = configure ] || exit 0
+sysctl -q -p /etc/sysctl.d/90-pspexp-routes.conf >/dev/null 2>&1 || true
+exit 0
+P
 cat > "$W/control" <<C
 Package: pspexp-core
 Version: $V

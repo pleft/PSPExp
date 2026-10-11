@@ -6,5 +6,8 @@ allow-hotplug usb0
 iface usb0 inet static
 	address 192.168.10.1
 	netmask 255.255.255.0
+	# the route Internet Sharing gives (dhclient: IF_METRIC) goes after Wi-Fi's (600): a lease kept
+	# after the cable came out had sent everything to it ("No route to host"; apt found nothing)
+	metric 1000
 	post-up (dhclient -nw usb0 > /dev/null 2>&1 &) || true
 	pre-down dhclient -r usb0 > /dev/null 2>&1 || true

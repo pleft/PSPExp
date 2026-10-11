@@ -1790,10 +1790,17 @@ static void status_poll(uint64_t now)
         char iface[32] = "", line[256];
         FILE *f = fopen("/proc/net/route", "r");
         wired = 0;
-        if (f) {
+        if (f) {   /* the default route with the lowest metric whose interface has its link: a USB
+                    * network's route left after the cable came out had shown a cable, not Wi-Fi */
+            long best = -1;
             while (fgets(line, sizeof(line), f)) {
-                char name[32]; unsigned long dest;
-                if (sscanf(line, "%31s %lx", name, &dest) == 2 && dest == 0) { snprintf(iface, sizeof(iface), "%s", name); break; }
+                char name[32], cpath[96], c = '1'; unsigned long dest, gw, flags, refcnt, use, metric;
+                FILE *cf;
+                if (sscanf(line, "%31s %lx %lx %lx %lu %lu %lu", name, &dest, &gw, &flags, &refcnt, &use, &metric) != 7 || dest != 0) continue;
+                snprintf(cpath, sizeof(cpath), "/sys/class/net/%s/carrier", name);
+                if ((cf = fopen(cpath, "r"))) { c = (char)fgetc(cf); fclose(cf); }
+                if (c != '1') continue;
+                if (best < 0 || (long)metric < best) { best = (long)metric; snprintf(iface, sizeof(iface), "%s", name); }
             }
             fclose(f);
         }

@@ -302,10 +302,18 @@ begin() {   # begin OP ID
 	ABANDONED=""
 	if [ -f "$J" ]; then
 		# removing the recipe an interrupted operation was about abandons that operation (§5.3:
-		# a broken one recover cannot finish); anything else waits for recover
-		[ "$OP" = remove ] && [ "$(jget id)" = "$ID" ] || die "an earlier operation was interrupted: run pspexp-pkg recover"
-		echo "abandoning the interrupted $(jget op) of $ID (at $(jget checkpoint))"
-		rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; ABANDONED=1
+		# a broken one recover cannot finish); anything else finishes it first (it had said "run
+		# pspexp-pkg recover", a command a PSP user has no way to type)
+		if [ "$OP" = remove ] && [ "$(jget id)" = "$ID" ]; then
+			echo "abandoning the interrupted $(jget op) of $ID (at $(jget checkpoint))"
+			rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"; ABANDONED=1
+		else
+			_w="$(jget op) of $(jget id)"
+			echo "finishing the interrupted $_w first"
+			( recover ) || die "the interrupted $_w could not be finished: is the board online? Try again in a moment"
+			[ ! -f "$J" ] || die "the interrupted $_w could not be finished: try again in a moment"
+			STAGE="$STATE/stage/$ID"
+		fi
 	fi
 	SERIAL=$(serial); RV=""
 }
@@ -343,7 +351,7 @@ install_recipe() {
 	$APT_HELPER prepare "$ID" "$RV" >/dev/null || die "$ID: could not prepare its meta-package"
 	jset staged; crash staged
 	jset apt-started; crash apt-started
-	$APT_HELPER resume "$ID" "$RV" || { echo "pspexp-pkg: apt did not finish; $ID is broken (retry: pspexp-pkg recover, or remove it)" >&2; exit 1; }
+	$APT_HELPER resume "$ID" "$RV" || { echo "pspexp-pkg: the download or install did not finish (is the board online?): install it again, and it carries on" >&2; exit 1; }
 	crash apt-unrecorded
 	jset apt-done; crash apt-done
 	# a system's core must now exist where the system file says
@@ -380,7 +388,7 @@ remove_recipe() {
 	publish_systems
 	rm -rf "$APPS/.$ID.old"; rm -f "$STATE/publishing"
 	jset apt-started; crash apt-started
-	if [ -n "$(meta_version "$ID")" ]; then $APT_HELPER remove "$ID" || { echo "pspexp-pkg: apt did not finish removing; run pspexp-pkg recover" >&2; exit 1; }; fi
+	if [ -n "$(meta_version "$ID")" ]; then $APT_HELPER remove "$ID" || { echo "pspexp-pkg: the removal did not finish: remove it again, and it carries on" >&2; exit 1; }; fi
 	crash apt-unrecorded
 	rm -rf "$STAGE"; rm -f "$J"
 	echo "removed $ID"
@@ -421,7 +429,7 @@ recover() {
 				return 1
 			fi
 		fi
-		[ "$(meta_version "$ID")" = "$RV" ] || { echo "$ID is broken: its programs were not installed (retry: pspexp-pkg recover; or remove it)" >&2; return 1; }
+		[ "$(meta_version "$ID")" = "$RV" ] || { echo "$ID: its programs were not installed (is the board online?): install it again, or remove it" >&2; return 1; }
 		jset apt-done ;;
 	esac
 	CP=$(jget checkpoint)
