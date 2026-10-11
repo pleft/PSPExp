@@ -579,7 +579,7 @@ upgrade)
 recover) lock; if [ "$FAMILY" = debian ]; then recover; fi ;;
 update)
 	[ "$FAMILY" = debian ] || { echo "catalogue $(serial): $(ls "$CAT" 2>/dev/null | wc -l) recipes (the Mac publishes it: pspexp-pkg-build publish)"; exit 0; }
-	lock; $APT_HELPER update ;;
+	lock; $APT_HELPER update && touch "$STATE/updated" ;;   # (when: Packages refreshes when it is over an hour old)
 list)
 	for d in "$APPS"/*/; do
 		[ -f "$d/package" ] || continue
@@ -591,7 +591,7 @@ check)
 	# the recipes this board is offered, before the update: the first check's baseline
 	seen="$STATE/seen-recipes"
 	[ -f "$seen" ] || { available | cut -d'|' -f1 | sort > "$seen"; }
-	if [ "$FAMILY" = debian ]; then ( lock; $APT_HELPER update >/dev/null 2>&1 ) || { echo "updates=0 new=0 error=update"; exit 1; }; fi
+	if [ "$FAMILY" = debian ]; then ( lock; $APT_HELPER update >/dev/null 2>&1 ) || { echo "updates=0 new=0 error=update"; exit 1; }; touch "$STATE/updated"; fi
 	list=$(available)
 	new=$(printf '%s\n' "$list" | cut -d'|' -f1 | sort | comm -23 - "$seen" | grep -c . || true)
 	updates=$(printf '%s\n' "$list" | awk -F'|' '$3 == "update"' | grep -c . || true)

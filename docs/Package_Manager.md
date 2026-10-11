@@ -885,7 +885,14 @@ It stays as built, with these changes:
   GameShell, 0.36 s on the Pi; and Packages opens at once with a "Reading
   the packages" box and a spinner while the list is read in the background
   (circle leaves; the control port says `store.mode=loading`, which the
-  real-PSP suite waits out). Tried on the GameShell.
+  real-PSP suite waits out). Tried on the GameShell. Since 2026-10-11 it
+  also refreshes the catalogue and apt's lists first when the last refresh
+  (the daily check, START, or this; `pspexp-pkg update` leaves
+  `<root>/state/updated`) is over an hour old: Packages had shown no update
+  for a PSPExp published that morning, a day before the daily check would
+  have; offline the refresh fails at once and the list is the one there
+  was. Tried on the GameShell: the first opening fetched (about 15 s) and
+  showed PSPExp's update, the next one opened at once.
 - **Notices:**
   - "Updates available" on the launcher, after a daily `pspexp-pkg update`
     when the board is online. *Built 2026-09-30:* the console runs

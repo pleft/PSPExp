@@ -198,7 +198,13 @@ static void load_start(void)
         fd = open("/dev/null", O_WRONLY);
         if (fd >= 0) { dup2(fd, 2); close(fd); }
         for (i = 3; i < 1024; i++) close(i);   /* not the PSP link */
-        execl("/bin/sh", "sh", "-c", "pspexp-pkg available", (char *)NULL);
+        /* the catalogue and apt's lists refreshed first when the last refresh (the daily check, START,
+         * or this) is over an hour old: Packages had shown no update for PSPExp a day before the
+         * daily check would; offline it fails at once and the list is the one there was */
+        char cmd[800];
+        snprintf(cmd, sizeof(cmd), "[ -n \"$(find '%s/state/updated' -mmin -60 2>/dev/null)\" ] || pspexp-pkg update >/dev/null 2>&1; "
+                 "pspexp-pkg available", root_dir());
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);
     }
     g_load_pid = pid;
@@ -509,7 +515,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 9, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
     if (g_load_pid > 0) {
         int bx = (UI_SCREEN_W - 320) / 2, by = (UI_SCREEN_H - 84) / 2 - 8;
-        box("Reading the packages", "What this board can install, and what is installed.", 84);
+        box("Reading the packages", "What this board can install, what is installed, and what is new.", 84);
         gfx_icon("loader", 14, bx + 320 - 30, by + 12, UI_ACCENT, 128 + (int)((now / 120000u) % 2) * 127);
     } else if (!g_n) {
         if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (Settings > Network) and press START to read it.");
