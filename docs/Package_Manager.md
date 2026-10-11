@@ -1083,6 +1083,17 @@ It keeps our own static builds, as archives, but reads the **same recipes**:
 
 Later, the same idea as §6 with opkg: an `.ipk` feed.
 
+
+**At the first public release (2026-10-11, the user's choice):** the Omega
+stays a board for tinkerers, built and installed from the repository; no
+Omega download or package feed is published, so its archives that carry
+game data (Jazz, OpenTyrian, Cave Story) are never passed on. Next, the
+Omega like the others: programs only in its archives, the game data
+fetched on the Omega at install (the recipes' `data=` with `sha256=` and
+mirrors, shared with the Debian installers; Cave Story extracted there by
+a MIPS `nxextract`), a public feed (`pkg.pspexp.dev/omega/`, each archive
+checked against a checksum in the signed catalogue), and copyright files
+and sources through `scripts/packages/sources`.
 ## 10. Performance, licences, tests
 
 ### 10.1 Performance

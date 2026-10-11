@@ -43,7 +43,7 @@ What you get on the PSP:
 |---|---|---|
 | **Raspberry Pi 400 / 4 / 5** | the most games, 3D included | a card image |
 | **ClockworkPi GameShell** | a pocket pair: the PSP plus a handheld board | a card image |
-| **Onion Omega2+** | the smallest and cheapest; 2D games and emulators | installed from a computer |
+| **Onion Omega2+** | the smallest and cheapest; 2D games and emulators | built and installed from a computer (for tinkerers, for now) |
 
 ## Getting started
 

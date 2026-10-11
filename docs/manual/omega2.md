@@ -19,8 +19,13 @@ seconds and uses under 4 MB of memory.
 
 ## Installing PSPExp
 
-- *With the release: a download for the Omega (coming with the release).*
-- From this repository, on the computer:
+> **For tinkerers, for now.** The first public release covers the
+> Raspberry Pi and the GameShell (card images, and games from PSPExp's
+> package repository). The Omega has no download and no public package
+> feed yet: you build PSPExp and its games from this repository and put
+> them on the Omega yourself, as below. A public feed for it comes later.
+
+From this repository, on the computer:
 
   ```sh
   scripts/omega/build.sh                          # builds everything for the Omega (needs Zig)
@@ -31,7 +36,9 @@ seconds and uses under 4 MB of memory.
   into the dock's USB port and start PSPExp on it.
 
 The Omega's games are PSPExp's own builds, made for its processor. They
-are built on the computer and put on the Omega's card with:
+are built on the computer and put on the Omega's card with (for your own
+Omega only: some, such as Jazz Jackrabbit, OpenTyrian and Cave Story,
+carry their game data, which PSPExp does not pass on):
 
 ```sh
 HOST=root@<omega-address> scripts/packages/pspexp-pkg-build build freedoom opentyrian nes

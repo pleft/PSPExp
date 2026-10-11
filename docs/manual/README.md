@@ -31,7 +31,7 @@ it uses a small kernel driver for the USB link.
 | Best for | the most games, the smoothest play | a handheld pair: the PSP on top of a pocket console | the smallest, cheapest setup |
 | Games | all 58 packages, OpenGL and 3D games (Quake, OpenArena) included, and the ones drawn by the Pi's own graphics chip (SuperTuxKart, Celeste 64, Nintendo 64, Unreal Tournament and more) | 47 packages: not the nine drawn by the Pi's graphics chip, nor Diablo and Wolfenstein: Enemy Territory; heavy 3D slower | 12 packages: Doom, OpenTyrian, Cave Story, Jazz Jackrabbit, the adventures, NES, Game Boy, SNES, Mega Drive |
 | Bluetooth headphones | yes (Pi 400 tested) | yes (tried with earbuds) | no |
-| Setting up | flash a card image (or add PSPExp to Raspberry Pi OS) | flash a card image | install from a computer over the network |
+| Setting up | flash a card image (or add PSPExp to Raspberry Pi OS) | flash a card image | build and install from a computer (for tinkerers, for now) |
 | Guide | [Raspberry Pi](raspberry-pi.md) | [GameShell](gameshell.md) | [Omega2+](omega2.md) |
 
 Every board shows the same launcher on the PSP and plays the same way; only
