@@ -150,7 +150,7 @@ cat > "$W/control" <<C
 Package: pspexp-wargus
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: $(cat "$B/wartool.depends"), pspexp-stratagus (>= 3.3.3~git20260622), innoextract, bchunk, vorbis-tools, libarchive-tools, python3

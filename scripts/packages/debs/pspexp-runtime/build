@@ -17,7 +17,7 @@ cat > "$W/control" <<C
 Package: pspexp-runtime
 Version: $V
 Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Description: PSPExp's runtime for the PSP

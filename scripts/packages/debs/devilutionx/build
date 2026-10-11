@@ -103,7 +103,7 @@ cat > "$W/ctl/control" <<C
 Package: devilutionx
 Version: $V
 Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: contrib/games
 Priority: optional
 Depends: curl, ca-certificates, tar, xz-utils, libsdl2-2.0-0, libsdl2-image-2.0-0, libsodium23, zlib1g, libbz2-1.0

@@ -61,7 +61,7 @@ R
 Package: $ID
 Version: $VERSION
 Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: contrib/games
 Priority: optional
 Depends: curl, ca-certificates, unar, 7zip, pspexp-vanillaconquer

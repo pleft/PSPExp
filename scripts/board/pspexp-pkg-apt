@@ -98,7 +98,7 @@ prepare_meta() {
 Package: pspexp-recipe-$id
 Version: $v
 Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: metapackages
 Priority: optional
 Depends: $(echo $pk | sed 's/ /, /g')

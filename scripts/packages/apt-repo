@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 OUT = os.path.join(ROOT, "build/apt")
 SOURCES = os.path.join(ROOT, "build/sources/out")   # what scripts/packages/sources made
 GNUPG = os.path.expanduser("~/.pspexp/gnupg")
-KEY_NAME = "PSPExp archive <pspexp@localhost>"
+KEY_NAME = "PSPExp archive <pspexp@localhost>"   # the signing key's identity (not the maintainer's address)
 ARCHES = ("arm64", "armhf")
 PUBKEY = os.path.join(ROOT, "scripts/packages/pspexp-archive-key.asc")
 

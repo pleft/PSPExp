@@ -19,7 +19,7 @@ cat > "$W/control" <<C
 Package: pspexp-easyrpg
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: $(cat "$B/depends.txt")

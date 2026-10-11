@@ -36,7 +36,7 @@ cat > "$W/control" <<C
 Package: pspexp-libretro-$CORE
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: libc6

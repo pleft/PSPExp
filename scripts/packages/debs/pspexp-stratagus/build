@@ -20,7 +20,7 @@ cat > "$W/control" <<C
 Package: pspexp-stratagus
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: $(cat "$B/stratagus.depends"), timgm6mb-soundfont

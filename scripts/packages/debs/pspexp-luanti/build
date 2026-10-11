@@ -33,7 +33,7 @@ cat > "$W/control" <<C
 Package: pspexp-luanti
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: $(cat "$B/depends.txt"), luanti-data (>= 5.10.0), luanti-data (<< 5.11), luanti-game-minetest

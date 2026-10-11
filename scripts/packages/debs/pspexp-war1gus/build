@@ -62,7 +62,7 @@ cat > "$W/control" <<C
 Package: pspexp-war1gus
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: $(cat "$B/war1tool.depends"), pspexp-stratagus (>= 3.3.3~git20260622)

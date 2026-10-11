@@ -721,6 +721,13 @@ recipe needs a new meta-package, not just newer packages.
   the next boot. A restart in the middle of an install is therefore
   impossible.
 
+**The maintainer's address (2026-10-11):** `info@pspexp.dev` (Cloudflare
+Email Routing, forwarded to the maintainer) in every package's Maintainer
+field and the README, in place of `pspexp@localhost`; each package carries
+it from its next build. The signing key keeps its identity, `PSPExp archive
+<pspexp@localhost>`, by which `apt-repo` chooses it: a name inside the key,
+not an address anyone writes to.
+
 ### 6.1 The PSP's runtime: a lifecycle of its own
 
 The PSP runs PSPExp from its memory stick. A new version reaches it only by

@@ -70,7 +70,7 @@ cat > "$W/control" <<C
 Package: pspexp-core
 Version: $V
 Architecture: $ARCH
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: libc6, libusb-1.0-0, libsdl2-2.0-0, sudo, gpgv, pspexp-runtime$GPU_DEPS

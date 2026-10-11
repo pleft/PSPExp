@@ -113,7 +113,7 @@ cat > "$W/control" <<C
 Package: pspexp-lugaru
 Version: $V
 Architecture: all
-Maintainer: PSPExp <pspexp@localhost>
+Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
 Depends: lugaru

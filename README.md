@@ -103,3 +103,7 @@ terms; none are in this repository.
 
 PSPExp is not made by or affiliated with Sony. "PSP" names the console it
 runs on.
+
+## Contact
+
+info@pspexp.dev, or an issue on GitHub.

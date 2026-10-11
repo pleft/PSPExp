@@ -11,7 +11,7 @@ import os, shutil, subprocess, sys, tarfile, tempfile, time, io
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 GNUPG = os.path.expanduser("~/.pspexp/gnupg")
-KEY = "PSPExp archive <pspexp@localhost>"
+KEY = "PSPExp archive <pspexp@localhost>"   # the signing key's identity
 
 TEST_RECIPES = {
 "pkgtest-hello": """[package]
