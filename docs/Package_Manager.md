@@ -1104,7 +1104,10 @@ holding an SSH key or a Wi-Fi connection.
   with other content. Release 2026-10-11.2: `pspexp-core` 06f7772 (PSPExp
   named in its update notice, the update counts on Packages' tabs) and the
   PSP runtime c81b36a (its real version on the status page); 2026-10-11
-  removed by it. The Pi's
+  removed by it. Release 2026-10-11.3: `pspexp-core` e2da0d7 (the dead
+  route ignored, the next operation finishing an interrupted one, Packages
+  refreshing when an hour old), the GameShell's USB network after Wi-Fi;
+  2026-10-11.2 removed. The Pi's
   update to fa7860b came through Packages like a user's, Wi-Fi still
   joined after.
 - **Kept quiet until the repository is public (the user's choice):** no
