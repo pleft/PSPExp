@@ -14,7 +14,7 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"
-V=469d-pspexp1
+V=469d-pspexp2
 P469D=https://github.com/OldUnreal/UnrealTournamentPatches/releases/download/v469d/OldUnreal-UTPatch469d-Linux-arm64.tar.bz2
 P469D_SHA=d9ef651c1d768cb4d1f146287cb58bee0834a9bd88a8593a78d0f74f956a031d
 COMMIT=7ebf94345070ff01bf256e495795038afa68d713
@@ -52,6 +52,7 @@ echo "Fetching OldUnreal's installer..."
 curl -fsSL --retry 3 -o "\$C/install-ut99.sh" "https://raw.githubusercontent.com/OldUnreal/FullGameInstallers/$COMMIT/Linux/install-ut99.sh" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
 echo "$SHA  \$C/install-ut99.sh" | sha256sum -c --quiet - || { rm -rf "\$C"; echo "OldUnreal's installer is not the expected file" >&2; exit 1; }
 echo "Downloading Unreal Tournament (about 650 MB) and OldUnreal's patch..."
+mkdir -p /usr/share/games   # (not there on a fresh card)
 rm -rf "\$G.new"
 # the terms were accepted by the user in Packages (recorded above): the installer's question answered so
 printf 'y\\n' | bash "\$C/install-ut99.sh" --ui-mode none --application-entry skip --desktop-shortcut skip -d "\$G.new" > "\$C/install.log" 2>&1 || { tail -5 "\$C/install.log" >&2; rm -rf "\$G.new" "\$C"; echo "the installation failed: install it again" >&2; exit 1; }

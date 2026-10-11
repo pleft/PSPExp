@@ -7,7 +7,7 @@
 # Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=srb2kart TITLE="SRB2Kart" VERSION=1.6-pspexp1
+ID=srb2kart TITLE="SRB2Kart" VERSION=1.6-pspexp2
 URL=https://github.com/STJr/Kart-Public/releases/download/v1.6/AssetsLinuxOnly.zip
 SHA=7a384fb99d42f0cf41d12e3ed873754f9a5ba2b993d5e54bde7962bea3accdd1 SIZE="221 MB" TOP=""
 RUN='SRB2WADDIR="$G" exec /usr/lib/pspexp/srb2kart/srb2kart -width 640 -height 400 "$@"'

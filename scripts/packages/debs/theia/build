@@ -7,7 +7,7 @@
 # (FullPackageFlag=1). Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=theia TITLE="Theia: The Crimson Eclipse" VERSION=2.08-pspexp1
+ID=theia TITLE="Theia: The Crimson Eclipse" VERSION=2.08-pspexp2
 ITCH=missingseven/theia/13796643
 SHA=d0e69762c4d69eee16eae2c396f54d7fc5a8f017a5de6279164a2f3f339634e1 SIZE="575 MB" TOP="Theia ENG Orihalcon V2-08"
 RUN='exec /usr/games/easyrpg-player --project-path "$G" --save-path "$D" "$@"'

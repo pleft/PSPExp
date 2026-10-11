@@ -6,7 +6,7 @@
 # engine reads it as it is (_installer.sh). Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=zsdx TITLE="The Legend of Zelda: Mystery of Solarus DX" VERSION=1.12.3-pspexp1
+ID=zsdx TITLE="The Legend of Zelda: Mystery of Solarus DX" VERSION=1.12.3-pspexp2
 URL="https://gitlab.com/solarus-games/games/zsdx/uploads/c00fd6ca1a8776570d95212388928737/zsdx-v1.12.3.solarus"
 SHA=1f7d78fbf538de819451f0c37f762b5baabc1ec2572e10f8e05dedb0579dc95a SIZE="21 MB" KEEP=zsdx.solarus
 RUN='exec /usr/lib/pspexp/solarus/solarus-run -lua-console=no "$G/zsdx.solarus" "$@"'

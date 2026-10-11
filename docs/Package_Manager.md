@@ -303,7 +303,14 @@ puts the engine's files over it; the engine's `postinst` does that again at
 each upgrade. Tried in a Debian 13 container through PSPExp's SDL layer
 (null link): 489 frames in 10 s, 48 fps. The installers also make
 `/usr/share/games` when it is not there (a minimal system: every installer
-had failed at its last step there). **Watching the sources:**
+had failed at its last step there). Only the installers rebuilt since had
+it: Zelda: Mystery of Solarus DX failed so on the v1.0.0 Pi image
+(2026-10-11, "mv: cannot move ... to /usr/share/games/zsdx.new"), and the
+ten others built before the fix (Alter A.I.L.A., AssaultCube, Celeste 64,
+Egoboo, Hurrican, Quake II demo, SRB2, SRB2Kart, Theia, Unreal Tournament,
+which makes the folder itself now) were rebuilt with the next `-pspexpN`; the
+disc installers and DevilutionX, ET: Legacy make it with `mkdir -p`. The
+failed install recovered by itself at the next one. **Watching the sources:**
 `scripts/packages/check-downloads` downloads every source of every
 installer (the builder's list mode, `PSPEXP_INSTALLER_LIST=1`, and the
 recipes' `[mirrors]`) and checks the pinned SHA-256; it fails when an

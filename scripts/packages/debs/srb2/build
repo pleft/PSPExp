@@ -11,7 +11,7 @@
 # Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=srb2 TITLE="Sonic Robo Blast 2" VERSION=2.2.15-pspexp1
+ID=srb2 TITLE="Sonic Robo Blast 2" VERSION=2.2.15-pspexp2
 URL=https://github.com/STJr/SRB2/releases/download/SRB2_release_2.2.15/SRB2-v2215-Full.zip
 SHA=3eda3080ab87940fca5e4dcd22b8e041dc1d9e65bfe9177bff68383e9bd58a10 SIZE="179 MB" TOP=""
 RUN='[ -f "$HOME/.srb2/autoexec.cfg" ] || { mkdir -p "$HOME/.srb2"; printf "%s\n" "setcontrol systemmenu joy7" "setcontrol scores tab joy8" "setcontrol turnleft joy5" "setcontrol turnright joy6" > "$HOME/.srb2/autoexec.cfg"; }

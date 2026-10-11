@@ -7,7 +7,7 @@
 # data folder. Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=alter-aila-genesis TITLE="Alter A.I.L.A. Genesis" VERSION=2010.11.24-pspexp3
+ID=alter-aila-genesis TITLE="Alter A.I.L.A. Genesis" VERSION=2010.11.24-pspexp4
 URL="https://archive.org/download/rmn-game-272-alter-a-i-l-a-genesis/272%2Fdownloads%2FAlter%20Aila%20Genesis%20-%20Nov%2024%2C%202010_1.rar"
 SHA=1a832ab87a5d5e47e8949d9b4f5efdb123ad14d25a0c70ec655bcfbc7d474761 SIZE="76 MB" TOP="Alter Aila Genesis"
 RUN='exec /usr/games/easyrpg-player --project-path "$G" --save-path "$D" "$@"'
