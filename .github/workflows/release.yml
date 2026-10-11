@@ -50,6 +50,8 @@ jobs:
     steps:
       - run: apk add --no-cache git python3 zip bash
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the tags: the runtime's VERSION names the release (release=vX.Y.Z)
       - name: Build and pack
         shell: bash
         run: |

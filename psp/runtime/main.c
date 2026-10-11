@@ -72,6 +72,16 @@ static void version_init(void)
     if (n <= 0) return;
     text[n] = 0;
     if (strncmp(text, "version=", 8)) return;
+    {   /* a release's name (release=v1.0.0, the line after version=): shown instead of the date */
+        char *r = strstr(text, "\nrelease=v");
+        if (r) {
+            r += 10;
+            for (e = r; *e && *e != '\n' && *e != '\r'; e++) ;
+            *e = 0;
+            snprintf(g_version, sizeof(g_version), "%.20s (slot %c)", r, slot);
+            return;
+        }
+    }
     v = text + 8;
     for (e = v; *e && *e != '\n' && *e != '\r'; e++) ;
     *e = 0;

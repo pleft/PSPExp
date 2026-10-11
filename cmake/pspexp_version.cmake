@@ -15,6 +15,14 @@ if(r EQUAL 0 AND d)
     string(APPEND v ", modified")
   endif()
   string(APPEND v ")")
+  # a release (a tag vX.Y.Z on this very commit, and nothing changed): its name in front, as
+  # "1.0.0, 2026.10.11 (7ba9a2f)"; the packages keep their date versions, which updates compare
+  execute_process(COMMAND git -C "${SRC}" describe --tags --exact-match --match "v[0-9]*" HEAD
+                  OUTPUT_VARIABLE tag OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE tr ERROR_QUIET)
+  if(tr EQUAL 0 AND tag AND NOT dirty)
+    string(REGEX REPLACE "^v" "" tag "${tag}")
+    set(v "${tag}, ${v}")
+  endif()
 elseif(EXISTS "${SRC}/.pspexp-version")
   file(READ "${SRC}/.pspexp-version" v)
   string(STRIP "${v}" v)

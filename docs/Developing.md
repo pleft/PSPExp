@@ -55,7 +55,23 @@ the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
 
 Weekly, `.github/workflows/check-downloads.yml` checks that every
 installer's game is still downloadable (`scripts/packages/check-downloads`,
-docs/Package_Manager.md §4.2). Nothing in CI signs: the boards' packages are built and signed on the
+docs/Package_Manager.md §4.2). **Versions and releases (the user's choice, 2026-10-11):** releases are
+semantic versions, `v1.0.0` on launch day; then `v1.1.0` for new features or
+games support, `v1.0.1` for fixes only, `v2.0.0` only if older boards or PSP
+installs stop working with it. The packages keep their date versions
+(`2026.10.11.093726+g7ba9a2f`), which boards compare for updates (a `1.0.0`
+would sort below them and stop every update); a build from a release's tag
+shows its name besides: the launcher's About `1.0.0, 2026.10.11 (7ba9a2f)`
+(`cmake/pspexp_version.cmake`), the PSP's status page `PSPExp 1.0.0 (slot a)`
+(a `release=` line in the slot's VERSION, which the loader and the board
+skip). **Making a release:**
+1. `git tag vX.Y.Z` on the commit (not pushed yet);
+2. build and publish the packages from it (`pspexp-core` for both boards,
+   `pspexp-runtime`, `apt-repo build` and `push`): they then show the release;
+3. `git push origin vX.Y.Z`: `release.yml` builds the PSP's zip and the card
+   images, which take those packages, and publishes the Release with them.
+
+Nothing in CI signs: the boards' packages are built and signed on the
 maintainer's machine, and the key never leaves it. `PSPEXP_BUILD` (the
 CMake build folder for `scripts/dev/pspexp-run`, default `build/host`) lets
 the SDL layer's test run from CI's folder.

@@ -24,6 +24,12 @@ def version():
 def make_set(out):
     os.makedirs(out, exist_ok=True)
     lines = ["version=" + version()]
+    # a release (a tag vX.Y.Z on this very commit): its name for the PSP's status page; version= stays
+    # the date, which the board compares for updates (the loader skips lines it does not know)
+    tag = subprocess.run(["git", "-C", ROOT, "describe", "--tags", "--exact-match", "--match", "v[0-9]*", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    if tag:
+        lines.append("release=" + tag)
     for m in MODULES:
         src = os.path.join(DIST, m)
         shutil.copy(src, os.path.join(out, m))
