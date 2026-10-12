@@ -119,7 +119,8 @@ Measured on the PSP-1000 with a Pi 400:
 | Mr. Boom, the 2D emulators | 60 fps |
 | Quake (shareware) | 45–60 fps, about 30 in the biggest fights |
 | OpenArena, DreamChess, Emilia Pinball, SuperTux | about 30 fps |
-| Music player | MP3 decoded by the PSP; the Pi does almost nothing |
+| Media: music | MP3 decoded by the PSP; the Pi does almost nothing |
+| Media: films | 720p and 1080p H.264 at 29–30 pictures a second on the PSP-1000, the film's clock exact (Pi 400; ffmpeg uses about half a core) |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi; its menus 33-60 fps on the PSP-1000 |
 | Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); the sound clean in Mario, Ocarina and Banjo-Tooie; GoldenEye and Perfect Dark still have short gaps where the Pi falls behind |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |

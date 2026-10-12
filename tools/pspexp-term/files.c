@@ -576,7 +576,7 @@ static const MItem ACTIONS[] = {
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
     { "folder-plus", "New folder", A_MKDIR }, { "info", "Details", A_DETAILS },
-    { "list", "Add to the music queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
+    { "list", "Add to the Media queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
 };
 /* cross on an archive */
 static const MItem ARCHIVE[] = {
@@ -586,7 +586,7 @@ static const MItem ARCHIVE[] = {
 static const MItem OPTIONS[] = {
     { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
     { "columns-2", "This folder in the other panel", P_SAME }, { "arrow-right-left", "Swap the panels", P_SWAP },
-    { "square-terminal", "Terminal here", P_TERMINAL }, { "music", "Music", P_MUSIC }, { "x", "Close the file manager", P_CLOSE },
+    { "square-terminal", "Terminal here", P_TERMINAL }, { "clapperboard", "Media", P_MUSIC }, { "x", "Close the file manager", P_CLOSE },
 };
 #define NACT ((int)(sizeof(ACTIONS) / sizeof(ACTIONS[0])))
 #define NOPT ((int)(sizeof(OPTIONS) / sizeof(OPTIONS[0])))
@@ -688,8 +688,8 @@ static void run_action(int id)
         if (e && !n && p->sel < p->list.n && !p->list.e[p->sel].is_up) e[n++] = p->list.e[p->sel];
         if (n) music_add(p->path, e, n);
         free(e);
-        snprintf(g_msg_title, sizeof(g_msg_title), "Music");
-        snprintf(g_msg, sizeof(g_msg), "%s", n ? music_note() : "Highlight or mark songs or folders first.");
+        snprintf(g_msg_title, sizeof(g_msg_title), "Media");
+        snprintf(g_msg, sizeof(g_msg), "%s", n ? music_note() : "Highlight or mark songs, films or folders first.");
         g_over = O_MESSAGE;
         { int k; for (k = 0; k < p->list.n; k++) p->list.e[k].marked = 0; }
         break;
@@ -1243,7 +1243,7 @@ void files_state(char *out, size_t n)
     size_t l = strlen(out);
     int k, i;
 #define ADD(...) do { if (l < n) l += (size_t)snprintf(out + l, n - l, __VA_ARGS__); } while (0)
-    ADD("files.active=%s\nfiles.overlay=%s\n", g_act ? "right" : "left", g_over >= 0 && g_over <= O_PLAY ? over[g_over] : "?");
+    ADD("files.active=%s\nfiles.overlay=%s\n", g_act ? "right" : "left", g_over >= 0 && g_over < (int)(sizeof(over) / sizeof(over[0])) ? over[g_over] : "?");
     if (g_over == O_DRIVES || g_over == O_ACTIONS || g_over == O_OPTIONS) ADD("files.menu_sel=%d\n", g_msel);
     ADD("files.drives=");
     for (i = 0; i < g_ndrv; i++) ADD("%s%s", i ? "|" : "", g_drv[i].name);

@@ -35,7 +35,7 @@ music playing, a pause sign that it is paused.
 ```
 
 Left and right pick a tile, cross opens it; down then cross plays what
-you were playing (or opens Music, on Now playing; left / right between
+you were playing (or opens Media, on Now playing; left / right between
 the two).
 
 Inside a section, the same five run down the left as the **rail**, and the
@@ -196,7 +196,7 @@ Only use ROMs of games you own.
 | d-pad | move (left / right: a page) |
 | up from the top | the drive button: cross lists every drive |
 | L / R | the left / right panel |
-| cross | open: a folder, a picture, a text file, music (in Music), a ROM (plays it), an archive (unpack it, or see what is in it), a package (installs it) |
+| cross | open: a folder, a picture, a text file, music or a film (in Media), a ROM (plays it), an archive (unpack it, or see what is in it), a package (installs it) |
 | circle | the folder above; at the top of a drive, close Files |
 | square | mark several files |
 | triangle | copy or move to the other panel, delete, rename, new folder, details, compress to a .zip |
@@ -217,17 +217,17 @@ marked files and folders, or the highlighted one, into a .zip beside them.
 Archives open on the board: one on the PSP's memory stick is copied over
 first. A zipped ROM still goes straight to its emulator.
 
-## Music
+## Media
 
-**Apps > Music** plays the music on your board, your USB sticks and the
-PSP's memory stick. Cross on a song in **Files** opens it here too. It has
-three views; **START** goes from one to the next:
+**Apps > Media** plays the music and the films on your board, your USB
+sticks and the PSP's memory stick. Cross on a song or a film in **Files**
+opens it here too. It has three views; **START** goes from one to the next:
 
 - **Now playing**: the song, artist, album and cover, the time, and
   what comes next;
-- **Browse**: your music folder, home, the drives, and the PSP's
-  **MUSIC** folder. Cross opens a folder, or plays a song and the rest of
-  its folder; **square adds** the song, or a folder's songs (with its
+- **Browse**: your Music and Videos folders, home, the drives, and the
+  PSP's **MUSIC** and **VIDEO** folders. Cross opens a folder, or plays a
+  song (or film) and the rest of its folder; **square adds** the song, or a folder's songs (with its
   subfolders'), to the end of the queue; circle goes up;
 - **Queue**: the songs to come. Cross plays one, square takes it out.
 
@@ -239,15 +239,15 @@ three views; **START** goes from one to the next:
 | square | stop (Browse: add to the queue; Queue: take out) |
 | triangle | play order: shuffle, repeat (off, all, one song) |
 | START | the next view |
-| circle | close Music (back to Files, if you came from there); the music goes on |
+| circle | close Media (back to Files, if you came from there); the music goes on, a film pauses |
 | ♪ (note) | pause / play, from anywhere |
 
 The music goes on while you use the launcher, Files or the other apps;
-**Now playing** on the home screen, or Apps > Music, brings it back. In
+**Now playing** on the home screen, or Apps > Media, brings it back. In
 **Files** the song playing has a note beside it and its title shows at the
-foot of the panel; cross on it (or START > Music) brings Music back
+foot of the panel; cross on it (or START > Media) brings Media back
 without starting the song over. Files' triangle menu has **Add to the
-music queue**, for the highlighted or marked songs and folders.
+Media queue**, for the highlighted or marked songs, films and folders.
 Starting a game stops it.
 
 The cover comes from the file, or a `cover.jpg` / `folder.jpg` beside it.
@@ -256,6 +256,17 @@ Media Engine: the board barely works and the cable carries a few kilobytes
 a second. WAV plays as it is; Ogg, FLAC, Opus and M4A are decoded by the
 board when it has ffmpeg. The note button needs the PSP's PSPExp from
 5 October 2026 or later (Settings > Update the PSP).
+
+**Films** (MP4, MKV, WebM, AVI, MOV, MPEG and more: whatever ffmpeg
+reads, H.264, H.265, VP9, AV1, with any sound) play full screen in
+**Now playing**. The board decodes them and fits the picture to the PSP's
+screen, up to 30 pictures a second (a 60 a second film shows every other
+one); the PSP draws each picture and plays the sound. A key brings the
+title, the time and the buttons over the picture for a few seconds (the
+first press only shows them); cross pauses, left / right jump 10 seconds,
+square stops. Closing Media pauses a film. A Raspberry Pi 400 shows a
+720p or 1080p H.264 film at 29–30 pictures a second; films need ffmpeg,
+which the card images have.
 
 ## Bluetooth headphones
 

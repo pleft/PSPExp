@@ -21,7 +21,7 @@ What you get on the PSP:
   [dozens more](docs/manual/raspberry-pi.md#what-it-plays-like).
 - **Emulators**: NES, SNES, Mega Drive, Game Boy (Color, Advance), Lynx,
   WonderSwan and, on a Pi, the Nintendo 64. Bring your own ROMs.
-- **A music player, a file manager and a Linux terminal**, plus Bluetooth
+- **A media player for music and films, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
 
 | | |

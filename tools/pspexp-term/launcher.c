@@ -189,7 +189,7 @@ static void cats_build(void)
     action(&g_builtin[1], "files", "Files", "folder-open", "The board's drives and the PSP's memory stick: copy, move, view");
     action(&g_builtin[2], "monitor", "System Monitor", "activity", "This board's CPU, memory, temperature, storage, network and programs");
     action(&g_builtin[3], "store", "Packages", "package", "Games, emulators and apps for this board: install, update, remove");
-    action(&g_builtin[4], "music", "Music", "music", "Songs from this board and the PSP's memory stick: play folders, shuffle, a queue; it goes on behind everything");
+    action(&g_builtin[4], "music", "Media", "clapperboard", "Songs and films from this board and the PSP's memory stick: play folders, shuffle, a queue; music goes on behind everything");
     for (i = 0; i < NBUILTIN; i++) {
         int k;
         g_builtin[i].type = LT_APP;

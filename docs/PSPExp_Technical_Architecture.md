@@ -1129,7 +1129,7 @@ Prototype `sdl-pspexp` as an `SDL_Renderer` driver for suitable SDL applications
 
 - triangle-based batches for rotation/skew (static meshes and 3D commands: done for OpenGL 1.x, §12a);
 - offloading batch expansion or audio mixing to the Media Engine (our own code on it: first a small test on the real PSP, as PPSSPP does not run code there; does it coexist with the firmware's codec, which uses it for MP3 since 2026-10-03?);
-- **a video player** in the file manager: H.264 up to 480x272 decoded on the PSP (`sceMpeg` / `sceVideocodec`, on the Media Engine like MP3), 100–200 KB/s over the link instead of the 8 MB/s that finished frames need; other formats converted on the board by ffmpeg (the Pi);
+- **a video player**: *done 2026-10-12 the simpler way, in Media (docs/Launcher_and_Boards.md §10.4): the board decodes any film with ffmpeg and sends finished 16-bit pictures, 272 KB each, about 8 MB/s at 30 a second (a third of the link); the Pi 400 shows 720p and 1080p at 29–30 on the PSP-1000 with two frames in flight.* Still open: H.264 up to 480x272 decoded on the PSP (`sceMpeg` / `sceVideocodec`, on the Media Engine like MP3), 100–200 KB/s over the link and 24-bit colour, for the weaker boards (the GameShell) and the Omega (no ffmpeg); a film already H.264 at that size would pass through as it is;
 - sound to a Bluetooth device paired with the board: done 2026-10-03, with its volume bar (§8, docs/Launcher_and_Boards.md §11); open: headphones tried on the GameShell (PipeWire in its image since 2026-10-03);
 - compute/RPC services;
 - network/storage services;

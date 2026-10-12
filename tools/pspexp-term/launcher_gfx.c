@@ -39,6 +39,7 @@
 #define ICON_IDS      900  /* ids they cycle through: a fresh one for each, as the old may still be on screen */
 #define ID_COVER      4000 /* + pool index */
 #define ID_IMAGE      5000 /* + 0..3: the picture shown full screen, in tiles */
+#define ID_VIDEO      5010 /* + 0..7: a film's picture, in tiles, two sets used in turn */
 #define COVER_SLOTS   10
 #define ID_DISC       4200 /* + pool index */
 #define DISC_SLOTS    14
@@ -448,7 +449,7 @@ static const IconName ICONS[] = {
     { "wifi-low", 0xe5f8 }, { "wifi-high", 0xe5f7 }, { "wifi-zero", 0xe5f9 }, { "battery", 0xe053 }, { "box", 0xe061 }, { "battery-full", 0xe055 },
     { "battery-medium", 0xe057 }, { "battery-low", 0xe056 }, { "battery-charging", 0xe054 }, { "battery-warning", 0xe3ac },
     { "monitor", 0xe11d }, { "cpu", 0xe0a9 }, { "folder", 0xe0d7 }, { "terminal", 0xe181 }, { "disc", 0xe0af }, { "disc-3", 0xe494 },
-    { "cassette-tape", 0xe4ca }, { "save", 0xe14d }, { "tv", 0xe195 }, { "smartphone", 0xe163 }, { "gamepad-directional", 0xe69b },
+    { "cassette-tape", 0xe4ca }, { "save", 0xe14d }, { "tv", 0xe195 }, { "clapperboard", 0xe29b }, { "film", 0xe0d0 }, { "smartphone", 0xe163 }, { "gamepad-directional", 0xe69b },
     { "bell", 0xe059 }, { "bell-off", 0xe05a }, { "bell-dot", 0xe42b }, { "alert-triangle", 0xe193 }, { "check-circle", 0xe07c },
     { "puzzle", 0xe29c }, { "swords", 0xe2b4 }, { "ghost", 0xe20e }, { "trophy", 0xe373 }, { "sparkles", 0xe412 },
     { "layout-grid", 0xe0ff }, { "app-window", 0xe426 }, { "package", 0xe129 }, { "play", 0xe13c }, { "circle-play", 0xe080 },
@@ -832,6 +833,75 @@ void gfx_image_free(void)
     int t;
     for (t = 0; t < 4; t++) if (g_img_tiles & (1 << t)) pspexp_release(G, (uint16_t)(ID_IMAGE + t));
     g_img_tiles = 0; g_img_w = g_img_h = 0;
+}
+
+/* ---- a film's picture (Media): 5650 already, sent as it is ------------------------------------------- */
+
+/* Two sets of tiles, used in turn: with two frames in flight (Media's), the
+ * PSP may still draw one set while the next picture fills the other. A set's
+ * id is uploaded once (the PSP refuses one it holds): the next pictures
+ * replace its bytes (PATCH), or, on an older runtime, it goes and comes again */
+static int g_vid_w, g_vid_h, g_vid_tiles[2], g_vid_set;
+
+void gfx_video_upload(const uint16_t *px, int w, int h)
+{
+    int ty, tx, y, set = !g_vid_set;
+    if (w > 512 || h > 512) return;
+    if (w != g_vid_w || h != g_vid_h) gfx_video_free();   /* another size: new textures */
+    for (ty = 0; ty < 2; ty++)
+        for (tx = 0; tx < 2; tx++) {
+            int x0 = tx * 256, y0 = ty * 256, tw = w - x0 > 256 ? 256 : w - x0, th = h - y0 > 256 ? 256 : h - y0, t = ty * 2 + tx;
+            uint16_t id = (uint16_t)(ID_VIDEO + set * 4 + t);
+            PspExpTextureDesc d;
+            PspExpFrame f;
+            uint16_t *dst;
+            int patch;
+            if (tw <= 0 || th <= 0) continue;
+            memset(&d, 0, sizeof(d));
+            d.width = (uint16_t)pow2(tw); d.height = (uint16_t)pow2(th); d.format = PSPEXP_TEX_5650;
+            d.layout = PSPEXP_LAYOUT_LINEAR;
+            d.priority = PSPEXP_PRIORITY_LOW;   /* changes every picture: main RAM, not VRAM (the GE reads it fine) */
+            f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw > 64 ? 64 : tw); f.h = (uint16_t)th;
+            patch = (g_vid_tiles[set] & (1 << t)) && pspexp_patch_supported(G);
+            if (patch) dst = (uint16_t *)pspexp_patch_texture_begin(G, id, 0, (uint32_t)(d.width * d.height * 2));
+            else {
+                if (g_vid_tiles[set] & (1 << t)) pspexp_release(G, id);
+                g_vid_tiles[set] &= ~(1 << t);
+                /* (the whole texture goes: the runtime wants every byte of it) */
+                dst = (uint16_t *)pspexp_upload_texture_begin(G, id, &d, (uint32_t)(d.width * d.height * 2), &f, 1);
+            }
+            if (!dst) continue;
+            for (y = 0; y < th; y++) {
+                memcpy(dst + (size_t)y * d.width, px + (size_t)(y0 + y) * w + x0, (size_t)tw * 2);
+                if (tw < d.width) memset(dst + (size_t)y * d.width + tw, 0, (size_t)(d.width - tw) * 2);
+            }
+            if (th < d.height) memset(dst + (size_t)th * d.width, 0, (size_t)(d.height - th) * d.width * 2);
+            if (patch) pspexp_patch_texture_commit(G);
+            else { pspexp_upload_texture_commit(G, 0); g_vid_tiles[set] |= 1 << t; }   /* (no replay copy: a new picture comes anyway) */
+        }
+    g_vid_w = w; g_vid_h = h; g_vid_set = set;
+}
+
+void gfx_video_draw(int x, int y)
+{
+    int t;
+    for (t = 0; t < 4; t++) {
+        PspExpQuadExRec q;
+        int x0 = (t & 1) * 256, y0 = (t >> 1) * 256;
+        if (!(g_vid_tiles[g_vid_set] & (1 << t))) continue;
+        memset(&q, 0, sizeof(q));
+        q.x = (int16_t)(x + x0); q.y = (int16_t)(y + y0);
+        q.w = (int16_t)(g_vid_w - x0 > 256 ? 256 : g_vid_w - x0); q.h = (int16_t)(g_vid_h - y0 > 256 ? 256 : g_vid_h - y0);
+        q.u1 = (uint16_t)q.w; q.v1 = (uint16_t)q.h; q.color = 0xFFFF;
+        pspexp_draw_quad_ex_batch(G, (uint16_t)(ID_VIDEO + g_vid_set * 4 + t), &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
+    }
+}
+
+void gfx_video_free(void)
+{
+    int s, t;
+    for (s = 0; s < 2; s++) for (t = 0; t < 4; t++) if (g_vid_tiles[s] & (1 << t)) pspexp_release(G, (uint16_t)(ID_VIDEO + s * 4 + t));
+    g_vid_tiles[0] = g_vid_tiles[1] = 0; g_vid_w = g_vid_h = 0;
 }
 
 /* ---- covers ----------------------------------------------------------------------------------------- */

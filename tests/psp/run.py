@@ -578,10 +578,10 @@ def suite_apps(r):
         r.ctl("open launcher")
         s = r.to_category("Apps")
         items = s["launcher.items"].split("|")
-        missing = [a for a in ("Terminal", "Files", "System Monitor", "Packages") if a not in items]
+        missing = [a for a in ("Terminal", "Files", "Media", "System Monitor", "Packages") if a not in items]
         r.expect(not missing, "Apps lacks %s: %s" % (missing, items))
         r.expect(items == sorted(items, key=str.lower), "Apps is not in alphabetical order: %s" % items)
-    r.check("Apps lists Terminal, Files, System Monitor and Packages, A to Z", listed)
+    r.check("Apps lists Terminal, Files, Media, System Monitor and Packages, A to Z", listed)
 
     def monitor():
         r.ctl("open monitor")
@@ -615,6 +615,34 @@ def suite_apps(r):
         r.note("packages: %d offered or installed, %d installed, catalogue %s" % (len(pk), len(installed), "published with the builds" if s.get("store.local") == "1" else "apt's"))
         r.shot("store", "Packages")
     r.check("Packages lists what the repositories offer and what is installed", store)
+
+    def film():
+        # a 720p film with sound, made here by ffmpeg, opened from Files: Media shows it full screen
+        if t.sh("command -v ffmpeg || true").strip() == "":
+            r.note("media: no ffmpeg on the board, no film tried")
+            return
+        t.sh("mkdir -p %s/films && ffmpeg -v error -y -f lavfi -i testsrc2=size=1280x720:rate=30 -f lavfi -i sine=f=440:r=48000 "
+             "-t 12 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest %s/films/film.mp4" % (BOARD_DIR, BOARD_DIR), timeout=300)
+        r.ctl("open files %s/films" % BOARD_DIR)
+        r.ctl("idle 1500")
+        r.select("left", "film.mp4")
+        r.press("cross", idle=False)
+        end = time.time() + 15
+        s = r.state()
+        while time.time() < end and int(s.get("music.video_frames", "0")) < 10: time.sleep(0.5); s = r.state()
+        r.expect(s.get("view") == "music" and s.get("music.video") == "1", "no film playing (view %s, error %s)" % (s.get("view"), s.get("music.error")))
+        f0, p0, t0 = int(s["music.video_frames"]), float(s["music.pos"]), time.time()
+        time.sleep(4)
+        s = r.state()
+        f1, p1, t1 = int(s["music.video_frames"]), float(s["music.pos"]), time.time()
+        fps, speed = (f1 - f0) / (t1 - t0), (p1 - p0) / (t1 - t0)
+        r.note("media: %s; %.1f pictures a second on the PSP, the film's clock at %.2fx" % (s.get("music.format"), fps, speed))
+        r.shot("media-film", "Media: a film, drawn by the PSP")
+        r.expect(fps >= 20, "only %.1f pictures a second" % fps)
+        r.expect(0.9 < speed < 1.1, "the film's clock ran at %.2fx" % speed)
+        r.press("square", idle=False)   # stop
+        r.press("circle")
+    r.check("Media plays a film from Files, full screen, 20 pictures a second or more", film)
 
     if STORE_WRITES:
         def cycle():

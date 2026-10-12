@@ -87,6 +87,10 @@ int  gfx_image_load(const char *path, int max_w, int max_h, int *w, int *h);
 void gfx_image_draw(int x, int y);
 void gfx_image_size(int *w, int *h);   /* as shown */
 void gfx_image_free(void);
+/* a film's picture (RGB 5650, w x h up to 512 a side), sent for each new one; drawn at x, y */
+void gfx_video_upload(const uint16_t *px, int w, int h);
+void gfx_video_draw(int x, int y);
+void gfx_video_free(void);
 
 uint32_t gfx_hash(const char *s);
 

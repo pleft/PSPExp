@@ -1,4 +1,5 @@
 /* pspexp-term's music player: see player.h */
+#define _GNU_SOURCE   /* F_SETPIPE_SZ: a film's pictures through a 1 MB pipe, not 64 KB (four main-loop turns a picture) */
 #include "player.h"
 #include "../../protocol/pspexp_mp3.h"
 #include <errno.h>
@@ -17,6 +18,10 @@
 #define LEAD 0.40             /* seconds sent ahead of the play clock */
 #define MP3_MAX (100u << 20)  /* an MP3 is read whole */
 #define COVER_FILE "/tmp/pspexp-player-cover"
+#define VID_W 480             /* a film's picture fits the screen */
+#define VID_H 272
+#define RING 32               /* pictures decoded ahead (about a second): when full, ffmpeg waits */
+#define ABUF (RATE * 4)       /* a film's sound read ahead, frames (4 s: more than the ring holds) */
 
 enum { K_NONE, K_MP3, K_WAV, K_PIPE };
 
@@ -36,18 +41,42 @@ static struct {
     double base, t0, sent, paused_at;
     int eof, reset_due;
     int local;                 /* started while the sound went to the board's output (Bluetooth) */
+    /* a film: its pictures from fd 3 of the same ffmpeg */
+    int video, has_audio, aeof, veof;
+    int vw, vh; double vfps;
+    int vfd; size_t vfill;
+    uint16_t *ring, *pic;      /* RING pictures, and the one shown */
+    double rpts[RING]; int rhead, rcount;
+    long vframes;              /* pictures read since the last start */
+    unsigned serial;           /* changes with each picture shown */
+    unsigned long vread, vdrop; /* pictures read in all, and dropped unshown (tests: Media's state) */
+    /* a film's sound, read from ffmpeg as far ahead as it gives it (never blocked
+     * on it), sent to the PSP LEAD ahead of the clock as for music */
+    int16_t *abuf; size_t alen;
+    int have_pic;
 } P;
 
 static double now_s(void) { return (double)pspexp_time_us() / 1e6; }
 
-int player_handles(const char *name)
+static int ext_of(const char *name, const char *const *ext)
 {
-    static const char *EXT[] = { "mp3", "wav", "ogg", "oga", "flac", "opus", "m4a", "aac", "wma", "mod", "xm", "it", "s3m", NULL };
     const char *dot = strrchr(name, '.');
     int i;
     if (!dot) return 0;
-    for (i = 0; EXT[i]; i++) if (!strcasecmp(dot + 1, EXT[i])) return 1;
+    for (i = 0; ext[i]; i++) if (!strcasecmp(dot + 1, ext[i])) return 1;
     return 0;
+}
+
+int player_is_video(const char *name)
+{
+    static const char *const EXT[] = { "mp4", "m4v", "mkv", "webm", "avi", "mov", "mpg", "mpeg", "ts", "m2ts", "wmv", "flv", "ogv", "3gp", NULL };
+    return ext_of(name, EXT);
+}
+
+int player_handles(const char *name)
+{
+    static const char *const EXT[] = { "mp3", "wav", "ogg", "oga", "flac", "opus", "m4a", "aac", "wma", "mod", "xm", "it", "s3m", NULL };
+    return ext_of(name, EXT) || player_is_video(name);
 }
 
 static int have_ffmpeg(void)
@@ -400,38 +429,177 @@ static void probe(const char *path)
     }
 }
 
+/* a film's picture: its size fitted into the screen (even sides, its pixels'
+ * shape kept), its rate (up to 30 a second: 60 shows every other), its
+ * codec in the format line. -1 when it has no picture */
+static int probe_video(const char *path)
+{
+    static char out[2048];
+    char w[16] = "", h[16] = "", rate[32] = "", sar[32] = "", codec[32] = "", acodec[32] = "";
+    char *argv[] = { "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                     "stream=codec_name,width,height,r_frame_rate,sample_aspect_ratio", "-of", "default=nw=1", (char *)path, NULL };
+    char *aargv[] = { "ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_name", "-of", "default=nw=1", (char *)path, NULL };
+    double sw, sh, aspect, fps = 25;
+    int dw, dh;
+    char *s;
+    if (capture(argv, out, sizeof(out)) != 0) return -1;
+    probe_line(out, "width", w, sizeof(w)); probe_line(out, "height", h, sizeof(h));
+    probe_line(out, "r_frame_rate", rate, sizeof(rate)); probe_line(out, "sample_aspect_ratio", sar, sizeof(sar));
+    probe_line(out, "codec_name", codec, sizeof(codec));
+    sw = atof(w); sh = atof(h);
+    if (sw < 2 || sh < 2) return -1;
+    aspect = sw / sh;
+    if (sar[0] && strchr(sar, ':') && atof(sar) > 0 && atof(strchr(sar, ':') + 1) > 0) aspect *= atof(sar) / atof(strchr(sar, ':') + 1);
+    if (aspect >= (double)VID_W / VID_H) { dw = VID_W; dh = (int)(VID_W / aspect + 0.5); }
+    else { dh = VID_H; dw = (int)(VID_H * aspect + 0.5); }
+    P.vw = dw & ~1; P.vh = dh & ~1;
+    if (P.vw < 2) P.vw = 2;
+    if (P.vh < 2) P.vh = 2;
+    if (strchr(rate, '/') && atof(strchr(rate, '/') + 1) > 0) fps = atof(rate) / atof(strchr(rate, '/') + 1);
+    while (fps > 31) fps /= 2;
+    if (fps < 1) fps = 25;
+    P.vfps = fps;
+    P.has_audio = capture(aargv, out, sizeof(out)) == 0 && strstr(out, "codec_name=") != NULL;
+    if (P.has_audio) probe_line(out, "codec_name", acodec, sizeof(acodec));
+    for (s = codec; *s; s++) if (*s >= 'a' && *s <= 'z') *s = (char)(*s - 32);
+    for (s = acodec; *s; s++) if (*s >= 'a' && *s <= 'z') *s = (char)(*s - 32);
+    snprintf(P.info.format, sizeof(P.info.format), "%s %dx%d  shown %dx%d  %.0f fps%s%s", codec, (int)sw, (int)sh, P.vw, P.vh, fps,
+             acodec[0] ? "  " : "  no sound", acodec);
+    return 0;
+}
+
 static void pipe_close(void)
 {
     if (P.fd >= 0) close(P.fd);
+    if (P.vfd >= 0) close(P.vfd);
     if (P.pid > 0) { kill(P.pid, SIGKILL); waitpid(P.pid, NULL, 0); }   /* (TERM: ffmpeg finishes its write first, to a pipe nobody reads) */
-    P.pid = -1; P.fd = -1; P.partial = 0;
+    P.pid = -1; P.fd = -1; P.vfd = -1; P.partial = 0; P.vfill = 0;
 }
 
 static int pipe_open(double at)
 {
-    int fds[2];
-    char ss[32];
+    int fds[2], vfds[2] = { -1, -1 };
+    char ss[32], vf[160];
     snprintf(ss, sizeof(ss), "%.3f", at);
     pipe_close();
+    P.rhead = P.rcount = 0; P.vframes = 0; P.aeof = P.veof = 0; P.alen = 0;
     if (pipe(fds) < 0) return -1;
+    if (P.video && pipe(vfds) < 0) { close(fds[0]); close(fds[1]); return -1; }
+    /* the picture: the film's rate (or half), fitted, 5650 dithered by error diffusion (bands otherwise) */
+    snprintf(vf, sizeof(vf), "fps=%.3f,scale=%d:%d:flags=bicubic:sws_dither=ed,setsar=1", P.vfps, P.vw, P.vh);
     P.pid = fork();
-    if (P.pid < 0) { close(fds[0]); close(fds[1]); return -1; }
+    if (P.pid < 0) { close(fds[0]); close(fds[1]); if (vfds[0] >= 0) { close(vfds[0]); close(vfds[1]); } return -1; }
     if (P.pid == 0) {
         int nul = open("/dev/null", O_RDWR);
         dup2(fds[1], 1); dup2(nul, 2); dup2(nul, 0);
         close(fds[0]);
-        execlp("ffmpeg", "ffmpeg", "-nostdin", "-v", "error", "-ss", ss, "-i", P.path, "-vn",
-               "-f", "s16le", "-ac", "2", "-ar", "44100", "-", (char *)NULL);
+        if (!P.video) {
+            execlp("ffmpeg", "ffmpeg", "-nostdin", "-v", "error", "-ss", ss, "-i", P.path, "-vn",
+                   "-f", "s16le", "-ac", "2", "-ar", "44100", "-", (char *)NULL);
+            _exit(127);
+        }
+        dup2(vfds[1], 3);
+        close(vfds[0]);
+        if (P.has_audio)
+            execlp("ffmpeg", "ffmpeg", "-nostdin", "-v", "error", "-ss", ss, "-i", P.path,
+                   "-map", "0:a:0", "-f", "s16le", "-ac", "2", "-ar", "44100", "pipe:1",
+                   "-map", "0:v:0", "-vf", vf, "-pix_fmt", "bgr565le", "-f", "rawvideo", "pipe:3", (char *)NULL);
+        else {   /* no sound: silence for the clock, as long as the rest of the film (ffmpeg ends with its longest output) */
+            char len[32];
+            snprintf(len, sizeof(len), "%.3f", P.info.dur > at ? P.info.dur - at : 36000.0);
+            execlp("ffmpeg", "ffmpeg", "-nostdin", "-v", "error", "-ss", ss, "-i", P.path, "-f", "lavfi", "-t", len, "-i", "anullsrc=r=44100:cl=stereo",
+                   "-map", "1:a", "-f", "s16le", "-ac", "2", "-ar", "44100", "pipe:1",
+                   "-map", "0:v:0", "-vf", vf, "-pix_fmt", "bgr565le", "-f", "rawvideo", "pipe:3", (char *)NULL);
+        }
         _exit(127);
     }
     close(fds[1]);
     P.fd = fds[0];
     fcntl(P.fd, F_SETFL, fcntl(P.fd, F_GETFL) | O_NONBLOCK);
+    if (P.video) {
+        close(vfds[1]);
+        P.vfd = vfds[0];
+        fcntl(P.vfd, F_SETFL, fcntl(P.vfd, F_GETFL) | O_NONBLOCK);
+#ifdef F_SETPIPE_SZ
+        fcntl(P.vfd, F_SETPIPE_SZ, 1 << 20);   /* a few pictures a read, not 64 KB */
+#endif
+    }
     return 0;
+}
+
+/* the pictures ffmpeg has written, into the ring, while it has room */
+static void video_read(void)
+{
+    size_t fb = (size_t)P.vw * P.vh * 2;
+    int got = 0;
+    while (P.vfd >= 0 && got < 8) {
+        int slot;
+        ssize_t r;
+        if (P.rcount == RING) break;   /* full: ffmpeg waits (its sound is read ahead meanwhile, film_audio) */
+        slot = (P.rhead + P.rcount) % RING;
+        r = read(P.vfd, (uint8_t *)P.ring + (size_t)slot * fb + P.vfill, fb - P.vfill);
+        if (r == 0) { close(P.vfd); P.vfd = -1; P.veof = 1; break; }
+        if (r < 0) break;   /* nothing yet */
+        P.vfill += (size_t)r;
+        if (P.vfill == fb) {
+            P.rpts[slot] = P.base + (double)P.vframes / P.vfps;
+            P.vframes++; P.rcount++; P.vfill = 0; got++; P.vread++;
+        }
+    }
+}
+
+static double clock_pos(void);
+
+/* the newest picture whose time has come becomes the one shown */
+static void video_show(void)
+{
+    double t = clock_pos();
+    int k = -1;
+    size_t fb = (size_t)P.vw * P.vh * 2;
+    while (P.rcount && P.rpts[P.rhead] <= t + 0.5 / P.vfps) { if (k >= 0) P.vdrop++; k = P.rhead; P.rhead = (P.rhead + 1) % RING; P.rcount--; }
+    if (k >= 0) { memcpy(P.pic, (uint8_t *)P.ring + (size_t)k * fb, fb); P.have_pic = 1; P.serial++; }
+}
+
+void player_video_stats(unsigned long *read, unsigned long *dropped, int *ahead)
+{
+    *read = P.vread; *dropped = P.vdrop; *ahead = P.rcount;
+}
+
+int player_video(const uint16_t **px, int *w, int *h, unsigned *serial)
+{
+    if (!P.kind || !P.video || !P.have_pic) return 0;
+    *px = P.pic; *w = P.vw; *h = P.vh; *serial = P.serial;
+    return 1;
+}
+
+/* a film: the sound ffmpeg has written, into abuf; then what is due, to the PSP */
+static void film_audio(PspExpContext *ctx, double until)
+{
+    while (P.fd >= 0 && P.alen < ABUF) {
+        ssize_t r;
+        memcpy((uint8_t *)(P.abuf + P.alen * 2), P.pend, (size_t)P.partial);
+        r = read(P.fd, (uint8_t *)(P.abuf + P.alen * 2) + P.partial, (ABUF - P.alen) * 4 - (size_t)P.partial);
+        if (r == 0) { close(P.fd); P.fd = -1; P.aeof = 1; break; }
+        if (r < 0) break;
+        r += P.partial;
+        P.partial = (int)(r % 4);
+        memcpy(P.pend, (uint8_t *)(P.abuf + P.alen * 2) + r - P.partial, (size_t)P.partial);
+        P.alen += (size_t)(r / 4);
+    }
+    while (P.sent < until && P.alen) {
+        size_t n = (size_t)((until - P.sent) * RATE) + 1;
+        if (n > 4096) n = 4096;
+        if (n > P.alen) n = P.alen;
+        if (pspexp_audio_stream(ctx, P.abuf, (uint32_t)n) < 0) break;
+        memmove(P.abuf, P.abuf + n * 2, (P.alen - n) * 4);
+        P.alen -= n;
+        P.sent += (double)n / RATE;
+    }
 }
 
 static void pipe_feed(PspExpContext *ctx, double until)
 {
+    if (P.video) { film_audio(ctx, until); return; }
     static uint8_t b[4096 * 4 + 4];
     while (P.sent < until && P.fd >= 0) {
         size_t want = (size_t)((until - P.sent) * RATE) + 1;
@@ -439,7 +607,10 @@ static void pipe_feed(PspExpContext *ctx, double until)
         if (want > 4096) want = 4096;
         memcpy(b, P.pend, (size_t)P.partial);
         r = read(P.fd, b + P.partial, want * 4 - (size_t)P.partial);
-        if (r == 0) { P.eof = 1; pipe_close(); break; }
+        if (r == 0) {
+            if (!P.video) { P.eof = 1; pipe_close(); break; }
+            close(P.fd); P.fd = -1; P.aeof = 1; break;   /* a film: it ends with its pictures */
+        }
         if (r < 0) break;   /* nothing yet (EAGAIN) */
         r += P.partial;
         P.partial = (int)(r % 4);
@@ -455,9 +626,10 @@ void player_stop(void)
     if (P.kind == K_PIPE) pipe_close();
     if (P.f) fclose(P.f);
     free(P.buf);
+    free(P.ring); free(P.pic); free(P.abuf);
     if (P.info.cover[0] && !strncmp(P.info.cover, COVER_FILE, strlen(COVER_FILE))) unlink(P.info.cover);
     memset(&P, 0, sizeof(P));
-    P.fd = -1; P.pid = -1;
+    P.fd = -1; P.pid = -1; P.vfd = -1;
     P.reset_due = 1;   /* silence what the PSP still holds */
 }
 
@@ -482,7 +654,14 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
     player_stop();
     if (!ctx || pspexp_link_state(ctx) != PSPEXP_LINK_CONNECTED) { snprintf(err, en, "The PSP is not connected."); return -1; }
     snprintf(P.path, sizeof(P.path), "%s", path);
-    if (dot && !strcasecmp(dot, ".mp3")) {
+    if (player_is_video(path)) {
+        if (!have_ffmpeg()) { snprintf(err, en, "Films play through ffmpeg, which is not installed on the board."); player_stop(); return -1; }
+        if (probe_video(path) < 0) { snprintf(err, en, "No picture found in it (or ffprobe could not read it)."); player_stop(); return -1; }
+        if (!(P.ring = malloc((size_t)P.vw * P.vh * 2 * RING)) || !(P.pic = malloc((size_t)P.vw * P.vh * 2)) || !(P.abuf = malloc((size_t)ABUF * 4))) {
+            snprintf(err, en, "Not enough memory for its pictures."); player_stop(); return -1;
+        }
+        P.video = 1; P.info.video = 1;
+    } else if (dot && !strcasecmp(dot, ".mp3")) {
         if (mp3_open(path, err, en) < 0) { player_stop(); return -1; }
         if (pspexp_audio_mp3_supported(ctx) && !pspexp_audio_local(ctx)) { P.kind = K_MP3; snprintf(P.info.decoder, sizeof(P.info.decoder), "Decoded on the PSP (Media Engine)"); r = 0; }
         else { free(P.buf); P.buf = NULL; }   /* an older runtime: ffmpeg's, below */
@@ -499,9 +678,9 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
             player_stop();
             return -1;
         }
-        probe(path);
-        P.kind = K_PIPE; P.fd = -1; P.pid = -1;
-        snprintf(P.info.decoder, sizeof(P.info.decoder), "Decoded on the board (ffmpeg)");
+        { char keep[sizeof(P.info.format)]; snprintf(keep, sizeof(keep), "%s", P.info.format); probe(path); if (P.video) snprintf(P.info.format, sizeof(P.info.format), "%s", keep); }
+        P.kind = K_PIPE; P.fd = -1; P.pid = -1; P.vfd = -1;
+        snprintf(P.info.decoder, sizeof(P.info.decoder), "%s", P.video ? "Decoded on the board (ffmpeg), drawn by the PSP" : "Decoded on the board (ffmpeg)");
     }
     P.local = pspexp_audio_local(ctx);
     if (P.local && P.kind != K_MP3) snprintf(P.info.decoder, sizeof(P.info.decoder), "%s", P.kind == K_WAV ? "On the board's Bluetooth device" : "Decoded on the board, to Bluetooth");
@@ -569,6 +748,15 @@ void player_pump(PspExpContext *ctx)
     if (P.kind == K_MP3) mp3_feed(ctx, until);
     else if (P.kind == K_WAV) wav_feed(ctx, until);
     else pipe_feed(ctx, until);
+    if (P.video) {
+        video_read();
+        video_show();
+        if (!P.eof && P.veof && ((P.aeof && !P.alen) || !P.has_audio)) {   /* the pictures are over (the silence of a mute film never is) */
+            P.eof = 1;
+            if (!P.has_audio || P.vframes / P.vfps < P.sent - P.base) P.sent = P.base + P.vframes / P.vfps;
+            pipe_close();
+        }
+    }
     if (P.eof && P.base + (now - P.t0) >= P.sent + 0.15) { P.info.ended = 1; P.info.playing = 0; }
 }
 

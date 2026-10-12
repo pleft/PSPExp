@@ -1,4 +1,5 @@
-/* The console's Music app: see music.h */
+/* The console's Media app (once Music): see music.h. A film plays in Now
+ * playing full screen, its controls over it for a few seconds after a key. */
 #include "music.h"
 #include "appview.h"
 #include "notify.h"
@@ -27,6 +28,11 @@ static int g_view, g_dirty = 1, g_exit, g_opts, g_opt_sel;
 static char g_msg[300];            /* a track that would not play, shown until the next key */
 static char g_note[160];           /* what square added to the queue, shown until the next key */
 static char g_cover_key[300];
+static unsigned g_vid_serial;      /* the film's picture last sent to the PSP */
+static unsigned g_vid_shown;       /* pictures sent to the PSP, this film (tests) */
+static int g_vid_loaded;           /* the film's textures are on the PSP */
+static uint64_t g_hud_until;       /* a film's controls shown until then (a key brings them) */
+static uint64_t g_now;
 
 /* ---- the queue -------------------------------------------------------------------------------- */
 
@@ -59,6 +65,7 @@ static int play_at(int k)
     }
     g_at = k;
     g_ended_seen = 0;
+    g_vid_shown = 0; g_vid_serial = 0;
     g_msg[0] = 0;
     g_dirty = 1;
     return 0;
@@ -126,8 +133,8 @@ int music_add(const char *dir, const FEntry *entries, int n)
     for (i = 0; i < n && added < ADD_MAX; i++) added += add_tree(dir, &entries[i], 4);
     if (added && (!have || g_at < 0 || pi.ended)) play_at(first);   /* nothing playing: the first one added */
     if (added == 1) snprintf(g_note, sizeof(g_note), "Added to the queue: %s", g_q[g_order[g_qn - 1]].e.name);
-    else if (added) snprintf(g_note, sizeof(g_note), "Added %d songs to the queue", added);
-    else snprintf(g_note, sizeof(g_note), "No songs to add there");
+    else if (added) snprintf(g_note, sizeof(g_note), "Added %d to the queue", added);
+    else snprintf(g_note, sizeof(g_note), "Nothing to play there");
     g_dirty = 1;
     return added;
 }
@@ -227,10 +234,12 @@ static void places_load(void)
     if (home) {
         snprintf(p, sizeof(p), "%s/Music", home);
         if (is_dir(p)) PLACE(p, "Music", "music");
+        snprintf(p, sizeof(p), "%s/Videos", home);
+        if (is_dir(p)) PLACE(p, "Videos", "clapperboard");
         PLACE(home, "Home", "house");
     }
     for (i = 1; i < nd && g_npl < FOPS_DRIVES + 2; i++) PLACE(d[i].root, d[i].name, "hard-drive");   /* (d[0] is "/") */
-    if (files_psp_available()) { PLACE("ms0:/MUSIC", "PSP: MUSIC", "smartphone"); PLACE("ms0:/", "PSP", "smartphone"); }
+    if (files_psp_available()) { PLACE("ms0:/MUSIC", "PSP: MUSIC", "smartphone"); PLACE("ms0:/VIDEO", "PSP: VIDEO", "smartphone"); PLACE("ms0:/", "PSP", "smartphone"); }
 #undef PLACE
 }
 
@@ -287,9 +296,17 @@ static void mu_open(void)
 
 static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
-    (void)b; (void)now;
+    (void)b;
     if (!pressed && !up && !down && !left && !right) return;
     g_dirty = 1;
+    {   /* over a film: the first key only brings its controls back */
+        PlayerInfo pi;
+        if (g_view == V_NOW && !g_opts && player_info(&pi) && pi.video && !pi.paused && !pi.ended && now >= g_hud_until && !(pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_START))) {
+            g_hud_until = now + 3000000;
+            return;
+        }
+        g_hud_until = now + 3000000;
+    }
     if (g_msg[0] && pressed) g_msg[0] = 0;
     if (g_note[0] && pressed) g_note[0] = 0;
     if (g_opts) {   /* shuffle and repeat */
@@ -315,7 +332,11 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (left) player_seek(-10);
         if (right) player_seek(10);
         if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
-        if (pressed & PSPEXP_BUTTON_CIRCLE) g_exit = 1;   /* the music goes on */
+        if (pressed & PSPEXP_BUTTON_CIRCLE) {   /* the music goes on; a film waits, paused */
+            PlayerInfo pi;
+            if (player_info(&pi) && pi.video && !pi.paused && !pi.ended) player_toggle_pause();
+            g_exit = 1;
+        }
         break;
     case V_BROWSE: {
         int n = g_dir[0] ? g_list.n : g_npl;
@@ -351,7 +372,19 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
 
 static int mu_needs_frame(uint64_t now)
 {
+    const uint16_t *px; int w, h; unsigned serial;
+    static int hud_was;
+    int hud;
     music_tick(now);
+    g_now = now;
+    {   /* a film on the screen: a new picture means a frame; two frames in flight (the next one travels while
+         * the PSP draws one: 272 KB a picture, about 20 a second with one, the round trip each time) */
+        int film = g_view == V_NOW && player_video(&px, &w, &h, &serial);
+        pspexp_set_max_in_flight(g_ctx, film ? 2 : 1);
+        if (film && serial != g_vid_serial) g_dirty = 1;
+    }
+    hud = now < g_hud_until;
+    if (hud != hud_was) { hud_was = hud; g_dirty = 1; }
     return g_dirty;
 }
 
@@ -373,7 +406,7 @@ static void draw_now(uint64_t now)
         gfx_nine(NINE_R10, 24, 44, 128, 128, UI_TILE, 255);
         gfx_icon("music", 64, 24 + 32, 44 + 32, UI_MUTED, 255);
         gfx_text(FONT_TITLE, x, 60, "Nothing playing", UI_TEXT, 255, 0);
-        gfx_text_wrapped(FONT_SMALL, x, 90, "Choose songs in Browse (START), or a song in Files.", UI_SUB, 255, UI_SCREEN_W - x - 16, 14, 3);
+        gfx_text_wrapped(FONT_SMALL, x, 90, "Choose songs or films in Browse (START), or one in Files.", UI_SUB, 255, UI_SCREEN_W - x - 16, 14, 3);
         return;
     }
     if (have && pi.cover[0] && strcmp(g_cover_key, pi.cover)) {
@@ -445,7 +478,7 @@ static void draw_browse(void)
         if (!g_dir[0]) list_row(i, g_btop, i == g_bsel, g_pl[i].icon, g_pl[i].name, UI_TEXT);
         else {
             const FEntry *f = &g_list.e[i];
-            list_row(i, g_btop, i == g_bsel, f->is_up ? "folder-up" : f->is_dir ? "folder" : "file-music", f->is_up ? ".." : f->name, f->is_dir ? UI_TEXT : UI_SUB);
+            list_row(i, g_btop, i == g_bsel, f->is_up ? "folder-up" : f->is_dir ? "folder" : player_is_video(f->name) ? "film" : "file-music", f->is_up ? ".." : f->name, f->is_dir ? UI_TEXT : UI_SUB);
         }
     }
 }
@@ -453,11 +486,11 @@ static void draw_browse(void)
 static void draw_queue(void)
 {
     int i;
-    if (!g_qn) { gfx_text(FONT_BODY, 32, 60, "The queue is empty: choose songs in Browse.", UI_MUTED, 255, 0); return; }
+    if (!g_qn) { gfx_text(FONT_BODY, 32, 60, "The queue is empty: choose songs or films in Browse.", UI_MUTED, 255, 0); return; }
     if (g_qsel < g_qtop) g_qtop = g_qsel;
     if (g_qsel >= g_qtop + ROWS) g_qtop = g_qsel - ROWS + 1;
     for (i = g_qtop; i < g_qn && i < g_qtop + ROWS; i++)
-        list_row(i, g_qtop, i == g_qsel, i == g_at ? "play" : "music", track_name(i), i == g_at ? UI_ACCENT : i < g_at ? UI_MUTED : UI_TEXT);
+        list_row(i, g_qtop, i == g_qsel, i == g_at ? "play" : player_is_video(track_name(i)) ? "film" : "music", track_name(i), i == g_at ? UI_ACCENT : i < g_at ? UI_MUTED : UI_TEXT);
 }
 
 static void draw_opts(void)
@@ -476,18 +509,68 @@ static void draw_opts(void)
     }
 }
 
+/* a film in Now playing: its picture on black, full screen; title, time and
+ * buttons over it while paused or for a few seconds after a key */
+static int draw_film(PspExpContext *ctx, uint64_t now)
+{
+    PlayerInfo pi;
+    const uint16_t *px; int w, h; unsigned serial;
+    if (g_view != V_NOW || g_opts || !player_info(&pi) || !pi.video) {
+        if (g_vid_loaded && !(player_info(&pi) && pi.video)) { gfx_frame(ctx); gfx_video_free(); g_vid_loaded = 0; }   /* the film is over: its textures go */
+        return 0;
+    }
+    gfx_frame(ctx);
+    pspexp_begin_frame(ctx);
+    pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
+    gfx_rect(0, 0, UI_SCREEN_W, UI_SCREEN_H, 0x000000, 255);
+    if (player_video(&px, &w, &h, &serial)) {
+        if (serial != g_vid_serial) { gfx_video_upload(px, w, h); g_vid_serial = serial; g_vid_shown++; g_vid_loaded = 1; }
+        gfx_video_draw((UI_SCREEN_W - w) / 2, (UI_SCREEN_H - h) / 2);
+    } else gfx_text(FONT_SMALL, 16, UI_SCREEN_H / 2 - 8, "Starting the film...", UI_SUB, 255, 0);
+    if (pi.paused || pi.ended || now < g_hud_until || g_msg[0]) {
+        char t1[16], t2[16];
+        int bar_x = 16, bar_w = UI_SCREEN_W - 32, x = 12;
+        gfx_rect(0, 0, UI_SCREEN_W, 28, 0x000000, 150);
+        gfx_icon("clapperboard", 16, 12, 6, UI_ACCENT, 255);
+        gfx_text(FONT_BODY, 34, 4, pi.title, UI_TEXT, 255, UI_SCREEN_W - 120);
+        if (g_qn > 1) { char s[32]; snprintf(s, sizeof(s), "%d / %d", g_at + 1, g_qn); gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 7, s, UI_MUTED, 255, 0); }
+        gfx_rect(0, UI_SCREEN_H - 52, UI_SCREEN_W, 52, 0x000000, 150);
+        gfx_rect(bar_x, UI_SCREEN_H - 46, bar_w, 5, 0x2a3145, 255);
+        if (pi.dur > 0) gfx_rect(bar_x, UI_SCREEN_H - 46, (int)(bar_w * (pi.pos / pi.dur > 1 ? 1 : pi.pos / pi.dur)), 5, UI_ACCENT, 255);
+        fmt_time(pi.pos, t1, sizeof(t1));
+        if (pi.dur > 0) fmt_time(pi.dur, t2, sizeof(t2)); else snprintf(t2, sizeof(t2), "--:--");
+        gfx_text(FONT_SMALL, bar_x, UI_SCREEN_H - 38, t1, UI_SUB, 255, 0);
+        gfx_text(FONT_SMALL, bar_x + bar_w - gfx_text_width(FONT_SMALL, t2), UI_SCREEN_H - 38, t2, UI_SUB, 255, 0);
+        {
+            const char *st = pi.ended ? "Ended" : pi.paused ? "Paused" : "";
+            if (st[0]) gfx_text(FONT_SMALL, (UI_SCREEN_W - gfx_text_width(FONT_SMALL, st)) / 2, UI_SCREEN_H - 38, st, UI_ACCENT, 255, 0);
+        }
+        if (g_msg[0]) gfx_text(FONT_BADGE, 16, UI_SCREEN_H - 62, g_msg, 0xff9a9a, 255, UI_SCREEN_W - 32);
+        x = ui_hint_btn(x, 'x', !pi.paused && !pi.ended ? "Pause" : "Play");
+        x = ui_hint_cap(x, "LEFT/RIGHT", "10 s", UI_SUB);
+        x = ui_hint_btn(x, 's', "Stop");
+        if (g_qn > 1) x = ui_hint_cap(x, "L/R", "Next / previous", UI_SUB);
+        x = ui_hint_cap(x, "START", "View", UI_SUB);
+        x = ui_hint_btn(x, 'o', "Close");
+    }
+    notify_draw(now);
+    pspexp_present(ctx);
+    return 1;
+}
+
 static void mu_render(PspExpContext *ctx, uint64_t now)
 {
     static const char *tab[NVIEWS] = { "Now playing", "Browse", "Queue" };
     int i, x, tx = 120;
     char s[64];
     g_dirty = 0;
+    if (draw_film(ctx, now)) return;
     gfx_frame(ctx);
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_backdrop();
-    gfx_icon("music", 16, 12, 8, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 34, 5, "Music", UI_TEXT, 255, 0);
+    gfx_icon("clapperboard", 16, 12, 8, UI_ACCENT, 255);
+    gfx_text(FONT_TITLE, 34, 5, "Media", UI_TEXT, 255, 0);
     for (i = 0; i < NVIEWS; i++) {   /* the views, as tabs (START) */
         int w = gfx_text_width(FONT_SMALL, tab[i]) + 18, on = i == g_view;
         if (on) gfx_nine(NINE_R6, tx, 7, w, 18, UI_ACCENT, 200);
@@ -527,17 +610,25 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     pspexp_present(ctx);
 }
 
-static int mu_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
+static int mu_take_exit(void)
+{
+    int e = g_exit;
+    g_exit = 0;
+    if (e) pspexp_set_max_in_flight(g_ctx, 1);   /* (Media's two, for a film, end with it) */
+    return e;
+}
 
 static void mu_state(char *out, size_t n)
 {
     PlayerInfo pi;
     static const char *vn[NVIEWS] = { "now", "browse", "queue" }, *rn[3] = { "off", "all", "one" };
-    int have = player_info(&pi);
+    int have = player_info(&pi), va;
+    unsigned long vr, vd;
+    player_video_stats(&vr, &vd, &va);
     size_t l = strlen(out);
-    if (l < n) snprintf(out + l, n - l, "music.view=%s\nmusic.track=%d/%d\nmusic.shuffle=%d\nmusic.repeat=%s\nmusic.playing=%d\nmusic.title=%s\nmusic.pos=%.1f\nmusic.dur=%.1f\nmusic.paused=%d\nmusic.ended=%d\nmusic.folder=%s\nmusic.error=%s\nmusic.note=%s\n",
+    if (l < n) snprintf(out + l, n - l, "music.view=%s\nmusic.track=%d/%d\nmusic.shuffle=%d\nmusic.repeat=%s\nmusic.playing=%d\nmusic.title=%s\nmusic.pos=%.1f\nmusic.dur=%.1f\nmusic.paused=%d\nmusic.ended=%d\nmusic.folder=%s\nmusic.error=%s\nmusic.note=%s\nmusic.video=%d\nmusic.video_frames=%u\nmusic.video_read=%lu\nmusic.video_dropped=%lu\nmusic.video_ahead=%d\nmusic.format=%s\n",
              vn[g_view], g_at + 1, g_qn, g_shuffle, rn[g_repeat], have, have ? pi.title : "", have ? pi.pos : 0, have ? pi.dur : 0,
-             have ? pi.paused : 0, have ? pi.ended : 0, g_dir, g_msg, g_note);
+             have ? pi.paused : 0, have ? pi.ended : 0, g_dir, g_msg, g_note, have ? pi.video : 0, g_vid_shown, vr, vd, va, have ? pi.format : "");
 }
 
 const AppView MUSIC_APP = { "music", mu_open, mu_input, mu_needs_frame, mu_render, mu_take_exit, mu_state };

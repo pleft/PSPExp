@@ -99,6 +99,8 @@ the PSP itself.
   Bluetooth line runs at full speed (2026-10-05; a card made before then needs
   its boot files updated). To switch to another speaker or headphones,
   disconnect the one in use first.
-- **Music**: MP3s are decoded by the PSP; Ogg, FLAC, Opus and M4A by the
+- **Media**: MP3s are decoded by the PSP; Ogg, FLAC, Opus and M4A by the
   GameShell (ffmpeg comes with the image), at a few percent of its processor.
+  Films play too; how smoothly on the GameShell's slower processor is not
+  measured yet.
 - Packages live in `/opt/pspexp`.

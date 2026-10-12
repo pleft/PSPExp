@@ -981,7 +981,7 @@ Files here at the shell's folder; circle at a drive's top goes back there.
 |---|---|
 | d-pad | move (left / right: a page); up from the top row: the drive button |
 | L / R | the left / right panel |
-| cross | open: a folder; a picture full screen (left / right the others); music in the Music app (§10.4); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
+| cross | open: a folder; a picture full screen (left / right the others); music or a film in Media (§10.4); a ROM in its system's emulator; a `.tar.gz` package installed (after asking); a text file in a viewer; the hint names which |
 | circle | the folder above |
 | square | mark and move down |
 | triangle | copy or move to the other panel, delete, rename, new folder, details |
@@ -1378,7 +1378,7 @@ The integration tests have an `apps` suite:
 `--store-writes` adds a remove and reinstall of the smallest package. The
 control port gained `category NAME`.
 
-### 10.4 Music (2026-10-05)
+### 10.4 Music, now Media (2026-10-05; films 2026-10-12)
 
 The file manager's player (§7.2) left the music playing behind the
 launcher with nothing to show it or bring it back, and its few buttons
@@ -1426,6 +1426,47 @@ Other apps can take other kinds of file the same way. Cross on the song
 already playing only shows Music (`music_is_current`; it started over at
 first), and Files marks that song with a note and shows its title at the
 foot of the active panel; START > Music opens the app too (2026-10-06).
+
+**Films: Music becomes Media** (2026-10-12, the user's choice: one app
+for both, not a package of its own). The app keeps its id (`music`,
+`app:music`), shown as **Media** with a clapperboard. A film (by its name:
+`player_is_video`) is a K_PIPE track with a picture: `probe_video`
+(ffprobe) gives its size, fitted into 480x272 (even sides, the pixels'
+shape kept), its rate (halved until 31 or less) and whether it has sound.
+One ffmpeg writes the sound to stdout (s16le, as for music) and the
+picture to fd 3 (`fps`, `scale` with error-diffusion dithering,
+`bgr565le` raw: the PSP's 5650 has red in the low bits; `rgb565le` swapped
+red and blue). A film without sound gets `anullsrc` for the clock, as long
+as the film (`-t`), or ffmpeg never ends. The pictures go into a ring of
+32 (about a second) stamped by their count over the rate; `video_show`
+puts the newest one due by the sound's clock on show. Three things found
+on the Pi 400 with the PSP-1000:
+
+- **The PSP refuses an upload of a texture id it holds**
+  (`PSPEXP_RERR_DUPLICATE_ID`): the first picture stayed. Each picture
+  now replaces the bytes of the tile textures (`pspexp_patch_texture`,
+  PSPEXP_FEATURE_PATCH; an older runtime: release and upload), low
+  priority (main RAM, not VRAM).
+- **One frame in flight capped films at about 20 pictures a second**
+  (272 KB a picture, the round trip each time). While a film is on the
+  screen Media allows two (`pspexp_set_max_in_flight`, back to one when
+  it closes), with two sets of tiles used in turn, so a picture never
+  changes while the PSP may still draw it.
+- **The pipe and the ring**: a 64 KB pipe (`F_SETPIPE_SZ` needs
+  `_GNU_SOURCE`) took four main-loop turns a picture; at 1 MB ffmpeg ran
+  ahead, and a full ring that dropped its oldest pictures dropped the
+  ones due next (the screen stopped). Now a full ring is not read
+  (ffmpeg waits), and a film's sound is read as far ahead as ffmpeg gives
+  it (`film_audio`, 4 s) and sent LEAD ahead of the clock as for music,
+  so neither pipe can hold the other up.
+
+Measured (Pi 400, PSP-1000, `tests/psp/run.py apps`): 720p and 1080p
+H.264 at 29.3–29.5 pictures a second shown, the film's clock 1.00–1.01x,
+ffmpeg about half a core; the first picture about a second after cross.
+In Now playing the film is full screen on black; a key brings the title,
+the time and the buttons for 3 s (the first press only shows them),
+circle closes Media and pauses the film. The textures go when a track
+without a picture plays. Not yet tried: the GameShell (armhf, slower).
 
 **Icons went blank** (found on the Pi the same day, after Music and
 Files): the launcher kept every icon it had drawn, each size apart, in 96

@@ -15,7 +15,7 @@ What you get on the PSP:
   A.I.L.A. Genesis and Theia: The Crimson Eclipse, classic Revolution adventures and more, installed from the **Packages** app in a couple of presses.
 - **Emulators**: NES, SNES, Mega Drive, Game Boy, Game Boy Advance, Atari
   Lynx, WonderSwan. Put your ROMs on the board and they show up with box art.
-- **Music**: an app with folders, a queue, shuffle and repeat, playing on behind everything else; MP3s are decoded by the PSP itself.
+- **Media**: music and films, with folders, a queue, shuffle and repeat; music plays on behind everything else (MP3s decoded by the PSP itself), films full screen.
 - **Bluetooth headphones**, on boards that have Bluetooth.
 - **A file manager** that reaches both the board and the PSP's memory stick.
 - **A real terminal**: the board's Linux shell on the PSP, typed on an

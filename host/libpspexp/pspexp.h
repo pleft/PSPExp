@@ -230,6 +230,8 @@ long pspexp_present(PspExpContext *ctx);
 /* Pacing (section 10.2). */
 int  pspexp_should_render(const PspExpContext *ctx);
 int  pspexp_frames_in_flight(const PspExpContext *ctx);
+/* max_in_flight changed while connected (a film: the next picture travels while the PSP draws one) */
+void pspexp_set_max_in_flight(PspExpContext *ctx, int n);
 /* Pump until should_render() is true, or timeout. 0 ok, 1 timeout, -1 transport gone. */
 int  pspexp_wait_present(PspExpContext *ctx, int timeout_ms);
 

@@ -142,6 +142,7 @@ const PspExpMemoryStatus *pspexp_memory_status(const PspExpContext *ctx) { retur
 const PspExpAudioStatus *pspexp_audio_status(const PspExpContext *ctx) { return &ctx->audio; }
 PspExpTransport *pspexp_transport(PspExpContext *ctx) { return ctx->t; }
 int pspexp_frames_in_flight(const PspExpContext *ctx) { return ctx->in_flight; }
+void pspexp_set_max_in_flight(PspExpContext *ctx, int n) { ctx->cfg.max_in_flight = n < 1 ? 1 : n; }
 
 static void link_lost(PspExpContext *ctx)
 {
