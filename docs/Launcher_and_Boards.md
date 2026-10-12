@@ -1468,6 +1468,28 @@ the time and the buttons for 3 s (the first press only shows them),
 circle closes Media and pauses the film. The textures go when a track
 without a picture plays. Not yet tried: the GameShell (armhf, slower).
 
+**Media servers** (2026-10-12, `upnp.c`): Browse's last place, "Media
+servers", searches the network by SSDP (an M-SEARCH for MediaServer:1 to
+239.255.255.250:1900, sent twice, 2.5 s of answers); each answer's
+description gives the name and the ContentDirectory's control address
+(relative ones resolved, URLBase honoured), one entry per control address,
+sorted by name. A folder is a SOAP Browse (BrowseDirectChildren, 500 at a
+time, up to 5000); the DIDL-Lite inside is read by its few tags (the
+container and item ids, `dc:title`, `upnp:class`, the first `res` and its
+duration). Folders, songs and films are shown (pictures and the rest
+left out); cross on an item plays the folder's songs and films from it
+(the queue's Track has an address, `player_start_stream`: ffmpeg and
+ffprobe read http as they read files; the title and the film-or-song come
+from the server, not a file name), square adds one. Searches and listings
+run on a thread, a spinner meanwhile; circle walks back up (on the folder
+come from), out to the servers, out to the places. HTTP through curl (a
+dependency of pspexp-core since). `pspexp-term --upnp [N [ID]]` lists the
+servers, or a server's folder, for checking by hand. Tried: MiniDLNA on the
+Pi (folders, a film at its 25 fps and an MP3, from Media on the Mac's
+stand-in PSP, and the same listings from the Pi), and a Plex server's
+answer to the search (its name and address read right); `tests/test_upnp.c`
+reads MiniDLNA-shaped answers.
+
 **Icons went blank** (found on the Pi the same day, after Music and
 Files): the launcher kept every icon it had drawn, each size apart, in 96
 textures on the PSP and never let one go; once Music's and Files' icons

@@ -46,6 +46,9 @@ int  player_video(const uint16_t **px, int *w, int *h, unsigned *serial);
 void player_video_stats(unsigned long *read, unsigned long *dropped, int *ahead);
 /* stop whatever plays and start path; -1 and err when it cannot be played */
 int  player_start(PspExpContext *ctx, const char *path, char *err, size_t en);
+/* an address on the network (a media server's http://...): its title and
+ * whether it is a film come from the server, not from a file name */
+int  player_start_stream(PspExpContext *ctx, const char *url, const char *title, int video, char *err, size_t en);
 void player_stop(void);
 void player_toggle_pause(void);
 void player_seek(double delta_s);

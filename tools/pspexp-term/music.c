@@ -8,6 +8,8 @@
 #include "files_psp.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "upnp.h"
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +18,8 @@
 enum { V_NOW, V_BROWSE, V_QUEUE, NVIEWS };
 enum { R_OFF, R_ALL, R_ONE };
 
-typedef struct Track { char dir[FOPS_PATH]; FEntry e; } Track;
+/* a file (dir and entry), or a media server's item (url; e.name its title) */
+typedef struct Track { char dir[FOPS_PATH]; FEntry e; char url[1024]; int video; } Track;
 
 static PspExpContext *g_ctx;
 static Track *g_q;                 /* the queue: a folder's tracks, in the folder's order */
@@ -58,7 +61,8 @@ static int play_at(int k)
     const Track *t;
     if (k < 0 || k >= g_qn) return -1;
     t = &g_q[g_order[k]];
-    if (files_fetch(t->dir, &t->e, path, sizeof(path), err, sizeof(err)) < 0 || player_start(g_ctx, path, err, sizeof(err)) < 0) {
+    if (t->url[0] ? player_start_stream(g_ctx, t->url, t->e.name, t->video, err, sizeof(err)) < 0
+                  : files_fetch(t->dir, &t->e, path, sizeof(path), err, sizeof(err)) < 0 || player_start(g_ctx, path, err, sizeof(err)) < 0) {
         snprintf(g_msg, sizeof(g_msg), "%s: %s", t->e.name, err[0] ? err : "it does not play");
         g_dirty = 1;
         return -1;
@@ -112,6 +116,7 @@ static int add_tree(const char *dir, const FEntry *e, int depth)
         if (e->is_up || !player_handles(e->name) || g_qn >= QUEUE_MAX || q_room(g_qn + 1) < 0) return 0;
         snprintf(g_q[g_qn].dir, sizeof(g_q[g_qn].dir), "%s", dir);
         g_q[g_qn].e = *e;
+        g_q[g_qn].url[0] = 0; g_q[g_qn].video = 0;
         g_order[g_qn] = g_qn;
         g_qn++;
         return 1;
@@ -165,6 +170,7 @@ int music_play_list(const char *dir, const FEntry *entries, int n, int start)
         if (i == start) at = g_qn;
         snprintf(g_q[g_qn].dir, sizeof(g_q[g_qn].dir), "%s", dir);
         g_q[g_qn].e = *f;
+        g_q[g_qn].url[0] = 0; g_q[g_qn].video = 0;
         g_qn++;
     }
     if (!g_qn) return -1;
@@ -221,6 +227,141 @@ static char g_root[FOPS_PATH];     /* the place it is in (circle there goes back
 static FList g_list;               /* its folders and songs */
 static int g_bsel, g_btop, g_qsel, g_qtop;
 
+/* ---- media servers (upnp.c), asked on a thread: a search takes seconds, a big folder too ---------- */
+
+#define UPNP_PLACE "upnp:"
+enum { UP_OFF, UP_SERVERS, UP_FOLDER };
+static int g_up;                       /* where Browse is: UP_OFF (files), the servers, a server's folder */
+static UpnpServer g_srv[16];
+static int g_nsrv, g_srv_at;           /* the servers found; the one being browsed */
+static struct { char id[256], title[128]; int sel; } g_ups[16];   /* the folders gone into (the server's top first) */
+static int g_upd;                      /* how deep */
+static UpnpEntry *g_upl;               /* the folder's folders and what plays in it */
+static int g_upn;
+static pthread_t g_up_thr;
+static volatile int g_up_busy, g_up_done;   /* a search or a listing running; finished, to be taken */
+static int g_up_job;                   /* UP_SERVERS (a search) or UP_FOLDER (a listing) */
+static UpnpServer g_job_srv[16]; static int g_job_nsrv;
+static UpnpEntry *g_job_list; static int g_job_n; static char g_job_err[200], g_job_id[256];
+
+static void *up_thread(void *arg)
+{
+    (void)arg;
+    if (g_up_job == UP_SERVERS) g_job_nsrv = upnp_discover(g_job_srv, 16, 2500);
+    else if (upnp_browse(&g_srv[g_srv_at], g_job_id, &g_job_list, &g_job_n, g_job_err, sizeof(g_job_err)) < 0) { g_job_list = NULL; g_job_n = -1; }
+    g_up_done = 1;
+    return NULL;
+}
+
+static void up_start(int job, const char *id)
+{
+    if (g_up_busy) return;
+    g_up_job = job; g_job_err[0] = 0; g_up_done = 0;
+    snprintf(g_job_id, sizeof(g_job_id), "%s", id ? id : "0");
+    g_up_busy = pthread_create(&g_up_thr, NULL, up_thread, NULL) == 0;
+    if (!g_up_busy) snprintf(g_msg, sizeof(g_msg), "Could not ask the network (no thread)");
+    g_dirty = 1;
+}
+
+/* a search or a listing finished: what Browse shows */
+static void up_take(void)
+{
+    if (!g_up_busy || !g_up_done) return;
+    pthread_join(g_up_thr, NULL);
+    g_up_busy = 0; g_dirty = 1;
+    if (g_up_job == UP_SERVERS) {
+        memcpy(g_srv, g_job_srv, sizeof(g_srv)); g_nsrv = g_job_nsrv;
+        g_up = UP_SERVERS; g_bsel = g_btop = 0;
+        return;
+    }
+    if (g_job_n < 0) {   /* it did not answer: back where it was */
+        snprintf(g_msg, sizeof(g_msg), "%s", g_job_err);
+        if (g_upd > 0) g_upd--; else g_up = UP_SERVERS;
+        return;
+    }
+    {   /* what Media plays: folders, songs, films (not pictures or the rest) */
+        int i, k = 0;
+        for (i = 0; i < g_job_n; i++)
+            if (g_job_list[i].kind == UPNP_FOLDER || g_job_list[i].kind == UPNP_AUDIO || g_job_list[i].kind == UPNP_VIDEO) g_job_list[k++] = g_job_list[i];
+        free(g_upl); g_upl = g_job_list; g_upn = k; g_job_list = NULL;
+    }
+    g_up = UP_FOLDER;
+    g_bsel = g_ups[g_upd].sel < g_upn ? g_ups[g_upd].sel : 0;   /* (back up a folder: on the one come from) */
+    g_btop = 0;
+}
+
+static void up_into(int i)   /* a server, or a folder of it */
+{
+    if (g_up_busy) return;
+    if (g_up == UP_SERVERS) {
+        if (i < 0 || i >= g_nsrv) return;
+        g_srv_at = i; g_upd = 0;
+        snprintf(g_ups[0].id, sizeof(g_ups[0].id), "0");
+        snprintf(g_ups[0].title, sizeof(g_ups[0].title), "%s", g_srv[i].name);
+        g_ups[0].sel = 0;
+        up_start(UP_FOLDER, "0");
+        return;
+    }
+    if (i < 0 || i >= g_upn || g_upd + 1 >= (int)(sizeof(g_ups) / sizeof(g_ups[0]))) return;
+    g_ups[g_upd].sel = i;
+    g_upd++;
+    snprintf(g_ups[g_upd].id, sizeof(g_ups[g_upd].id), "%s", g_upl[i].id);
+    snprintf(g_ups[g_upd].title, sizeof(g_ups[g_upd].title), "%s", g_upl[i].title);
+    g_ups[g_upd].sel = 0;
+    up_start(UP_FOLDER, g_upl[i].id);
+}
+
+static void up_back(void)
+{
+    if (g_up_busy) return;
+    if (g_up == UP_SERVERS) { g_up = UP_OFF; g_bsel = g_btop = 0; g_dirty = 1; return; }   /* back to the places */
+    if (g_upd == 0) { g_up = UP_SERVERS; g_bsel = g_srv_at; g_btop = 0; g_dirty = 1; return; }
+    g_upd--;
+    up_start(UP_FOLDER, g_ups[g_upd].id);
+}
+
+/* the item at i as a Track */
+static void up_track(Track *t, int i)
+{
+    memset(t, 0, sizeof(*t));
+    snprintf(t->dir, sizeof(t->dir), "%s%s", UPNP_PLACE, g_srv[g_srv_at].name);
+    snprintf(t->e.name, sizeof(t->e.name), "%s", g_upl[i].title);
+    snprintf(t->url, sizeof(t->url), "%s", g_upl[i].url);
+    t->video = g_upl[i].kind == UPNP_VIDEO;
+}
+
+/* the folder's songs and films as the queue, from item i (as a folder of files plays) */
+static void up_play(int i)
+{
+    Track *q; int *o, k, at = 0, n = 0;
+    for (k = 0; k < g_upn; k++) n += g_upl[k].kind != UPNP_FOLDER;
+    if (!n) return;
+    q = (Track *)calloc((size_t)n, sizeof(Track)); o = (int *)malloc(sizeof(int) * (size_t)n);
+    if (!q || !o) { free(q); free(o); return; }
+    free(g_q); free(g_order);
+    g_q = q; g_order = o; g_qn = 0; g_qcap = n; g_at = -1;
+    for (k = 0; k < g_upn; k++) {
+        if (g_upl[k].kind == UPNP_FOLDER) continue;
+        if (k == i) at = g_qn;
+        up_track(&g_q[g_qn++], k);
+    }
+    order_build(at);
+    g_view = V_NOW;
+    play_at(g_at >= 0 ? g_at : 0);
+}
+
+/* square on an item: at the end of the queue */
+static void up_add(int i)
+{
+    PlayerInfo pi;
+    if (i < 0 || i >= g_upn || g_upl[i].kind == UPNP_FOLDER || q_room(g_qn + 1) < 0) return;
+    up_track(&g_q[g_qn], i);
+    g_order[g_qn] = g_qn;
+    g_qn++;
+    if (!player_info(&pi) || g_at < 0 || pi.ended) play_at(g_qn - 1);
+    snprintf(g_note, sizeof(g_note), "Added to the queue: %s", g_upl[i].title);
+}
+
 static int is_dir(const char *p) { struct stat st; return stat(p, &st) == 0 && S_ISDIR(st.st_mode); }
 
 static void places_load(void)
@@ -240,6 +381,7 @@ static void places_load(void)
     }
     for (i = 1; i < nd && g_npl < FOPS_DRIVES + 2; i++) PLACE(d[i].root, d[i].name, "hard-drive");   /* (d[0] is "/") */
     if (files_psp_available()) { PLACE("ms0:/MUSIC", "PSP: MUSIC", "smartphone"); PLACE("ms0:/VIDEO", "PSP: VIDEO", "smartphone"); PLACE("ms0:/", "PSP", "smartphone"); }
+    PLACE(UPNP_PLACE, "Media servers", "server");   /* on the network: Plex, Jellyfin, MiniDLNA, a NAS... */
 #undef PLACE
 }
 
@@ -276,6 +418,7 @@ static void browse_choose(void)
 {
     char p[FOPS_PATH];
     if (!g_dir[0]) {
+        if (g_bsel < g_npl && !strcmp(g_pl[g_bsel].path, UPNP_PLACE)) { up_start(UP_SERVERS, NULL); return; }   /* a search: the servers when it ends */
         if (g_bsel < g_npl) { snprintf(g_root, sizeof(g_root), "%s", g_pl[g_bsel].path); dir_load(g_root); }
         return;
     }
@@ -339,7 +482,20 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         }
         break;
     case V_BROWSE: {
-        int n = g_dir[0] ? g_list.n : g_npl;
+        int n = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : g_dir[0] ? g_list.n : g_npl;
+        if (g_up) {   /* a media server's lists */
+            if (up && g_bsel > 0) g_bsel--;
+            if (down && g_bsel < n - 1) g_bsel++;
+            if (left) g_bsel = g_bsel > 6 ? g_bsel - 6 : 0;
+            if (right) g_bsel = g_bsel + 6 < n ? g_bsel + 6 : (n ? n - 1 : 0);
+            if ((pressed & PSPEXP_BUTTON_CROSS) && n) {
+                if (g_up == UP_SERVERS || g_upl[g_bsel].kind == UPNP_FOLDER) up_into(g_bsel);
+                else up_play(g_bsel);
+            }
+            if (pressed & PSPEXP_BUTTON_CIRCLE) up_back();
+            if ((pressed & PSPEXP_BUTTON_SQUARE) && g_up == UP_FOLDER) up_add(g_bsel);
+            break;
+        }
         if (up && g_bsel > 0) g_bsel--;
         if (down && g_bsel < n - 1) g_bsel++;
         if (left) g_bsel = g_bsel > 6 ? g_bsel - 6 : 0;
@@ -376,7 +532,9 @@ static int mu_needs_frame(uint64_t now)
     static int hud_was;
     int hud;
     music_tick(now);
+    up_take();
     g_now = now;
+    if (g_up_busy && g_view == V_BROWSE) { static uint64_t last; if (now - last > 250000u) { last = now; g_dirty = 1; } }   /* the spinner */
     {   /* a film on the screen: a new picture means a frame; two frames in flight (the next one travels while
          * the PSP draws one: 272 KB a picture, about 20 a second with one, the round trip each time) */
         int film = g_view == V_NOW && player_video(&px, &w, &h, &serial);
@@ -470,6 +628,33 @@ static void list_row(int i, int top, int sel, const char *icon, const char *text
 static void draw_browse(void)
 {
     int i, n = g_dir[0] ? g_list.n : g_npl;
+    if (g_up_busy || g_up) {   /* media servers */
+        char where[600] = "";
+        int k;
+        if (g_up_busy) {
+            gfx_icon("loader", 16, 32, 62, UI_ACCENT, 255);
+            gfx_text(FONT_BODY, 56, 60, g_up_job == UP_SERVERS ? "Looking for media servers on the network..." : "Asking the server...", UI_SUB, 255, 0);
+            return;
+        }
+        if (g_up == UP_SERVERS) {
+            gfx_text(FONT_SMALL, 16, 26, "Media servers on the network", UI_MUTED, 255, UI_SCREEN_W - 32);
+            if (!g_nsrv) { gfx_text_wrapped(FONT_BODY, 32, 60, "No media server answered. Plex, Jellyfin, Kodi, MiniDLNA or a NAS with DLNA on, on this network, appear here.", UI_MUTED, 255, UI_SCREEN_W - 64, 18, 4); return; }
+            n = g_nsrv;
+        } else {
+            for (k = 0; k <= g_upd; k++) { size_t l = strlen(where); snprintf(where + l, sizeof(where) - l, "%s%s", k ? " / " : "", g_ups[k].title); }
+            gfx_text(FONT_SMALL, 16, 26, where, UI_MUTED, 255, UI_SCREEN_W - 32);
+            if (!g_upn) { gfx_text(FONT_BODY, 32, 60, "No folders, songs or films here", UI_MUTED, 255, 0); return; }
+            n = g_upn;
+        }
+        if (g_bsel < g_btop) g_btop = g_bsel;
+        if (g_bsel >= g_btop + ROWS) g_btop = g_bsel - ROWS + 1;
+        for (i = g_btop; i < n && i < g_btop + ROWS; i++) {
+            if (g_up == UP_SERVERS) list_row(i, g_btop, i == g_bsel, "server", g_srv[i].name, UI_TEXT);
+            else list_row(i, g_btop, i == g_bsel, g_upl[i].kind == UPNP_FOLDER ? "folder" : g_upl[i].kind == UPNP_VIDEO ? "film" : "file-music",
+                          g_upl[i].title, g_upl[i].kind == UPNP_FOLDER ? UI_TEXT : UI_SUB);
+        }
+        return;
+    }
     if (g_bsel < g_btop) g_btop = g_bsel;
     if (g_bsel >= g_btop + ROWS) g_btop = g_bsel - ROWS + 1;
     gfx_text(FONT_SMALL, 16, 26, g_dir[0] ? g_dir : "Where your music is", UI_MUTED, 255, UI_SCREEN_W - 32);
@@ -595,8 +780,8 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
         if (have) x = ui_hint_btn(x, 's', "Stop");
     } else if (g_view == V_BROWSE) {
         x = ui_hint_btn(x, 'x', "Open / play");
-        x = ui_hint_btn(x, 'o', g_dir[0] ? "Up" : "Close");
-        if (g_dir[0]) x = ui_hint_btn(x, 's', "Add");
+        x = ui_hint_btn(x, 'o', g_dir[0] || g_up ? "Up" : "Close");
+        if (g_dir[0] || g_up == UP_FOLDER) x = ui_hint_btn(x, 's', "Add");
     } else {
         x = ui_hint_btn(x, 'x', "Play");
         x = ui_hint_btn(x, 's', "Remove");
@@ -629,6 +814,18 @@ static void mu_state(char *out, size_t n)
     if (l < n) snprintf(out + l, n - l, "music.view=%s\nmusic.track=%d/%d\nmusic.shuffle=%d\nmusic.repeat=%s\nmusic.playing=%d\nmusic.title=%s\nmusic.pos=%.1f\nmusic.dur=%.1f\nmusic.paused=%d\nmusic.ended=%d\nmusic.folder=%s\nmusic.error=%s\nmusic.note=%s\nmusic.video=%d\nmusic.video_frames=%u\nmusic.video_read=%lu\nmusic.video_dropped=%lu\nmusic.video_ahead=%d\nmusic.format=%s\n",
              vn[g_view], g_at + 1, g_qn, g_shuffle, rn[g_repeat], have, have ? pi.title : "", have ? pi.pos : 0, have ? pi.dur : 0,
              have ? pi.paused : 0, have ? pi.ended : 0, g_dir, g_msg, g_note, have ? pi.video : 0, g_vid_shown, vr, vd, va, have ? pi.format : "");
+    {   /* media servers: where Browse is, what it lists */
+        static const char *un[3] = { "off", "servers", "folder" };
+        int k, cnt = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : 0;
+        l = strlen(out);
+        if (l < n) snprintf(out + l, n - l, "music.upnp=%s%s\nmusic.upnp_items=", un[g_up], g_up_busy ? " busy" : "");
+        for (k = 0; k < cnt; k++) {
+            l = strlen(out);
+            if (l < n) snprintf(out + l, n - l, "%s%s", k ? "|" : "", g_up == UP_SERVERS ? g_srv[k].name : g_upl[k].title);
+        }
+        l = strlen(out);
+        if (l < n) snprintf(out + l, n - l, "\nmusic.browse_sel=%d\n", g_bsel);
+    }
 }
 
 const AppView MUSIC_APP = { "music", mu_open, mu_input, mu_needs_frame, mu_render, mu_take_exit, mu_state };

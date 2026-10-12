@@ -225,8 +225,10 @@ opens it here too. It has three views; **START** goes from one to the next:
 
 - **Now playing**: the song, artist, album and cover, the time, and
   what comes next;
-- **Browse**: your Music and Videos folders, home, the drives, and the
-  PSP's **MUSIC** and **VIDEO** folders. Cross opens a folder, or plays a
+- **Browse**: your Music and Videos folders, home, the drives, the
+  PSP's **MUSIC** and **VIDEO** folders, and **Media servers**: the ones on
+  your network (Plex, Jellyfin, Kodi, MiniDLNA, a NAS or a router with
+  DLNA on), found when you open it. Cross opens a folder, or plays a
   song (or film) and the rest of its folder; **square adds** the song, or a folder's songs (with its
   subfolders'), to the end of the queue; circle goes up;
 - **Queue**: the songs to come. Cross plays one, square takes it out.
@@ -266,7 +268,9 @@ title, the time and the buttons over the picture for a few seconds (the
 first press only shows them); cross pauses, left / right jump 10 seconds,
 square stops. Closing Media pauses a film. A Raspberry Pi 400 shows a
 720p or 1080p H.264 film at 29–30 pictures a second; films need ffmpeg,
-which the card images have.
+which the card images have. From a media server, songs and films play
+straight from it (nothing is copied to the board); the server's folders
+look as it arranges them.
 
 ## Bluetooth headphones
 

@@ -62,6 +62,7 @@
 #include "term_fonts.h"
 #include "term_themes.h"
 #include "files.h"
+#include "upnp.h"
 #include "player.h"
 #include "music.h"
 #include "notify.h"
@@ -2632,7 +2633,8 @@ static void usage(void)
     fprintf(stderr, "usage: pspexp-term [--usb | --tcp host[:port] | --null | --sdl] [--shell PATH] [--cmd \"command\"]\n"
                     "                   [--audio-fifo PATH | --no-audio-fifo] [--pidfile PATH] [--shot N]\n"
                     "                   [--no-host-input] [--no-grab] [--mirror [/dev/fbN]]\n"
-                    "                   [--launcher] [--assets DIR]\n");
+                    "                   [--launcher] [--assets DIR]\n"
+                    "       pspexp-term --upnp [SERVER [FOLDER-ID]]   the network's media servers, a server's folder\n");
 }
 
 /* ---- the PSP's clock, set from this board -------------------------------------------------- */
@@ -3198,6 +3200,25 @@ int main(int argc, char **argv)
 #else
     g_mode = MODE_NULL;
 #endif
+    /* the media servers Media finds: pspexp-term --upnp [SERVER [FOLDER-ID]] (servers by number, from 1) */
+    for (i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--upnp")) {
+            UpnpServer sv[16];
+            UpnpEntry *e;
+            int n = upnp_discover(sv, 16, 2500), k, ne, want = i + 1 < argc ? atoi(argv[i + 1]) : 0;
+            char err[200];
+            static const char *KIND[] = { "folder", "audio", "video", "image", "other" };
+            if (!want) {
+                for (k = 0; k < n; k++) printf("%d  %s  %s\n", k + 1, sv[k].name, sv[k].control);
+                if (!n) printf("no media servers answered\n");
+                return 0;
+            }
+            if (want < 1 || want > n) { fprintf(stderr, "no server %d (%d answered)\n", want, n); return 1; }
+            if (upnp_browse(&sv[want - 1], i + 2 < argc ? argv[i + 2] : "0", &e, &ne, err, sizeof(err)) < 0) { fprintf(stderr, "%s\n", err); return 1; }
+            for (k = 0; k < ne; k++) printf("%-6s  %-20s  %s%s%s\n", KIND[e[k].kind], e[k].id, e[k].title, e[k].url[0] ? "  " : "", e[k].url);
+            free(e);
+            return 0;
+        }
     /* the control port's client: pspexp-term --ctl "COMMAND" [--ctl-timeout S] */
     for (i = 1; i < argc; i++)
         if (!strcmp(argv[i], "--ctl") && i + 1 < argc) {

@@ -647,14 +647,28 @@ static void restart_at(double t)
     P.info.paused = 0; P.info.ended = 0; P.info.playing = 1;
 }
 
+static struct { int on, video; char title[160]; } g_stream;   /* player_start_stream's, for player_start */
+
+int player_start_stream(PspExpContext *ctx, const char *url, const char *title, int video, char *err, size_t en)
+{
+    int r;
+    g_stream.on = 1; g_stream.video = video;
+    snprintf(g_stream.title, sizeof(g_stream.title), "%s", title ? title : "");
+    r = player_start(ctx, url, err, en);
+    g_stream.on = 0;
+    return r;
+}
+
 int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
 {
     const char *dot = strrchr(path, '.'), *sl = strrchr(path, '/');
-    int r = 1;
+    int r = 1, stream = g_stream.on;
     player_stop();
+    if (stream) dot = NULL;   /* an address: ffmpeg reads it, whatever it ends with */
     if (!ctx || pspexp_link_state(ctx) != PSPEXP_LINK_CONNECTED) { snprintf(err, en, "The PSP is not connected."); return -1; }
     snprintf(P.path, sizeof(P.path), "%s", path);
-    if (player_is_video(path)) {
+    if (stream && g_stream.title[0]) snprintf(P.info.title, sizeof(P.info.title), "%s", g_stream.title);
+    if (stream ? g_stream.video : player_is_video(path)) {
         if (!have_ffmpeg()) { snprintf(err, en, "Films play through ffmpeg, which is not installed on the board."); player_stop(); return -1; }
         if (probe_video(path) < 0) { snprintf(err, en, "No picture found in it (or ffprobe could not read it)."); player_stop(); return -1; }
         if (!(P.ring = malloc((size_t)P.vw * P.vh * 2 * RING)) || !(P.pic = malloc((size_t)P.vw * P.vh * 2)) || !(P.abuf = malloc((size_t)ABUF * 4))) {
@@ -673,7 +687,8 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
     }
     if (r) {
         if (!have_ffmpeg()) {
-            snprintf(err, en, dot && !strcasecmp(dot, ".mp3") ? "The PSP's PSPExp is too old to play MP3 (Settings > Update the PSP), and ffmpeg is not installed on the board."
+            snprintf(err, en, stream ? "Music from a media server plays through ffmpeg, which is not installed on the board."
+                              : dot && !strcasecmp(dot, ".mp3") ? "The PSP's PSPExp is too old to play MP3 (Settings > Update the PSP), and ffmpeg is not installed on the board."
                                                                : "Only MP3 and 44.1 kHz WAV play without ffmpeg, which is not installed on the board.");
             player_stop();
             return -1;
@@ -689,7 +704,7 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
         int len = dot && dot > base ? (int)(dot - base) : (int)strlen(base);
         snprintf(P.info.title, sizeof(P.info.title), "%.*s", len, base);
     }
-    cover_beside(path);
+    if (!stream) cover_beside(path);
     restart_at(0);
     return 0;
 }
@@ -733,8 +748,11 @@ void player_pump(PspExpContext *ctx)
         char path[sizeof(P.path)], err[200];
         double at = P.info.paused ? P.paused_at : clock_pos();
         int paused = P.info.paused;
+        char title[sizeof(P.info.title)];
+        int video = P.video, stream = !strncmp(P.path, "http://", 7) || !strncmp(P.path, "https://", 8);
         snprintf(path, sizeof(path), "%s", P.path);
-        if (player_start(ctx, path, err, sizeof(err)) == 0) {
+        snprintf(title, sizeof(title), "%s", P.info.title);
+        if ((stream ? player_start_stream(ctx, path, title, video, err, sizeof(err)) : player_start(ctx, path, err, sizeof(err))) == 0) {
             restart_at(at);
             if (paused) player_toggle_pause();
         }

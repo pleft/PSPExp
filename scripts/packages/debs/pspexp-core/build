@@ -65,7 +65,8 @@ P
 # offscreen driver, which makes its GL context with EGL; Raspberry Pi OS Lite (the card image) has
 # no EGL, and SuperTuxKart failed there ("Couldn't initialise irrlicht device"); GLES for the N64's
 # video plugin (GLideN64)
-# libarchive-tools: bsdtar, which unpacks and makes archives in Files (ZIP, 7z, RAR, tar.*)
+# libarchive-tools: bsdtar, which unpacks and makes archives in Files (ZIP, 7z, RAR, tar.*);
+# curl: Media asks media servers (upnp.c) through it
 GPU_DEPS=""; [ "$ARCH" = arm64 ] && GPU_DEPS=", libegl1, libegl-mesa0, libgles2"
 cat > "$W/control" <<C
 Package: pspexp-core
@@ -74,7 +75,7 @@ Architecture: $ARCH
 Maintainer: PSPExp <info@pspexp.dev>
 Section: games
 Priority: optional
-Depends: libc6, libusb-1.0-0, libsdl2-2.0-0, sudo, gpgv, libarchive-tools, pspexp-runtime$GPU_DEPS
+Depends: libc6, libusb-1.0-0, libsdl2-2.0-0, sudo, gpgv, libarchive-tools, curl, pspexp-runtime$GPU_DEPS
 Description: PSPExp: the PSP as this board's console
  The console and launcher that make a PSP the screen, sound and controller
  of this board, the SDL layer that puts SDL2 programs on the PSP, and the

@@ -99,6 +99,7 @@ cable pull, so pull the cable to read it after a session.
 | PSPExp's apt repository and catalogue: build (signed) / push to the home server / to the public R2 bucket (keys in `~/.pspexp/r2.env`) | `scripts/packages/apt-repo build build/debs` / `scripts/packages/apt-repo push` / `scripts/packages/apt-repo push r2` |
 | **integration tests on a real PSP** (on a board's console; report + the PSP's screenshots in `build/psp-tests/`) | `tests/psp/run.py --host <user@board> [link stick launcher files terminal]` |
 | **every game on the real PSP** from the launcher (starts, fps, sound, nub, START + SELECT, the PSP still there; ~35 s a game; results in /tmp/pspexp-all-games) | on the board, PSP connected: `tests/psp/all-games.sh` / `tests/psp/all-games.sh "Nintendo 64::Super Mario 64" /opt/pspexp/apps/quake/quake.entry` |
+| the media servers Media finds (UPnP / DLNA), a server's folder | `pspexp-term --upnp`, `pspexp-term --upnp 1 0` (server 1's top; a folder by its id) |
 | drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` / `--ctl "volume-bar 40"` |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |
 | Warcraft I and II on a board | Apps > Packages, or on the board `pspexp-pkg install warcraft warcraft2`; your copy's data in `~/Warcraft` (DATA.WAR) / `~/Warcraft2` |
