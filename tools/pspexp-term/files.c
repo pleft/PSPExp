@@ -1002,8 +1002,8 @@ static void draw_panel(int k)
         uint32_t tc = e->marked ? 0xffd479 : e->is_dir ? UI_TEXT : UI_SUB;
         if (sel && active && !p->on_drives) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, UI_ACCENT, 70);
         else if (sel) gfx_nine(NINE_R6, x + 3, y, PANEL_W - 6, ROW_H, 0xffffff, 18);
-        int cur = !e->is_dir && music_is_current(p->path, e->name);   /* the song playing: a note, in the accent */
-        gfx_icon(cur ? "music" : icon_for(e), 12, x + 8, y + 2, e->marked ? 0xffd479 : e->is_dir || cur ? UI_ACCENT : UI_MUTED, 255);
+        int cur = !e->is_dir && music_is_current(p->path, e->name);   /* what Media plays: a note (a film: a clapperboard), in the accent */
+        gfx_icon(cur ? (player_is_video(e->name) ? "clapperboard" : "music") : icon_for(e), 12, x + 8, y + 2, e->marked ? 0xffd479 : e->is_dir || cur ? UI_ACCENT : UI_MUTED, 255);
         if (!e->is_dir && !e->is_up) {
             fops_human(e->size, s, sizeof(s));
             gfx_text(FONT_BADGE, x + PANEL_W - 10 - gfx_text_width(FONT_BADGE, s), y + 3, s, UI_MUTED, 255, 0);
@@ -1021,7 +1021,8 @@ static void draw_panel(int k)
         char t[160]; int paused, w = PANEL_W - 20 - gfx_text_width(FONT_BADGE, s) - 30;
         if (music_now(t, sizeof(t), &paused) && w > 40) {
             if (gfx_text_width(FONT_BADGE, t) < w) w = gfx_text_width(FONT_BADGE, t);
-            gfx_icon(paused ? "pause" : "music", 12, x + PANEL_W - 10 - w - 16, PANEL_Y + PANEL_H - 15, paused ? UI_SUB : UI_ACCENT, 255);
+            PlayerInfo pi;
+            gfx_icon(paused ? "pause" : player_info(&pi) && pi.video ? "clapperboard" : "music", 12, x + PANEL_W - 10 - w - 16, PANEL_Y + PANEL_H - 15, paused ? UI_SUB : UI_ACCENT, 255);
             gfx_text(FONT_BADGE, x + PANEL_W - 10 - w, PANEL_Y + PANEL_H - 14, t, UI_SUB, 255, w);
         }
     }
