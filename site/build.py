@@ -12,7 +12,7 @@ Python's standard library only: Cloudflare Pages runs this as the build command 
 The Markdown converter knows what the manual uses: headings, paragraphs, lists (nested), tables,
 fenced code, block quotes, rules, and inline code, bold, italics, links and images.
 """
-import datetime, html, json, os, re, shutil, sys, urllib.request
+import datetime, hashlib, html, json, os, re, shutil, sys, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = os.path.join(ROOT, "site")
@@ -176,6 +176,12 @@ def markdown(text):
 
 # ---- the pages ----------------------------------------------------------------------------------
 
+def fingerprint(name):
+    """a file's address carries its content's hash: browsers keep style.css for hours (Cloudflare's
+    browser cache), and a changed file then has a new address they fetch at once"""
+    return "%s?v=%s" % (name, hashlib.sha256(open(os.path.join(SITE, name), "rb").read()).hexdigest()[:10])
+
+
 def page(title, body, depth, active="", desc=""):
     up = "../" * depth
     nav = [('index.html', "Home", "home"), ("manual/index.html", "Manual", "manual"), ("download.html", "Download", "download"), (REPO, "GitHub", "github")]
@@ -187,8 +193,8 @@ def page(title, body, depth, active="", desc=""):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>%s</title>
 <meta name="description" content="%s">
-<link rel="stylesheet" href="%sstyle.css">
-<link rel="icon" href="%sicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="%s%s">
+<link rel="icon" href="%s%s" type="image/svg+xml">
 </head>
 <body>
 <header class="bar"><div class="wrap"><a class="brand" href="%sindex.html"><img src="%sicon.svg" alt="" width="28" height="28"><span>PSP<b>Exp</b></span></a><nav>%s</nav></div></header>
@@ -201,7 +207,7 @@ PSPExp is not made by or affiliated with Sony; "PSP" names the console it runs o
 </body>
 </html>
 """ % (html.escape(title), html.escape(desc or "PSPExp: your PSP as the screen, sound and controller of a small Linux board, which runs the games."),
-       up, up, up, up, links, body, REPO, REPO, REPO)
+       up, fingerprint("style.css"), up, fingerprint("icon.svg"), up, up, links, body, REPO, REPO, REPO)
 
 
 def manual_pages():
