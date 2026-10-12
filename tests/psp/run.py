@@ -617,12 +617,14 @@ def suite_apps(r):
     r.check("Packages lists what the repositories offer and what is installed", store)
 
     def film():
-        # a 720p film with sound, made here by ffmpeg, opened from Files: Media shows it full screen
+        # a 720p film with sound, made here by ffmpeg, opened from Files: Media shows it full screen.
+        # Its picture: dim grey noise, new every frame. Never colour bars or anything still and bright:
+        # testsrc2's bars, played for minutes while this was written, left a ghost on an IPS PSP screen.
         if t.sh("command -v ffmpeg || true").strip() == "":
             r.note("media: no ffmpeg on the board, no film tried")
             return
-        t.sh("mkdir -p %s/films && ffmpeg -v error -y -f lavfi -i testsrc2=size=1280x720:rate=30 -f lavfi -i sine=f=440:r=48000 "
-             "-t 12 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest %s/films/film.mp4" % (BOARD_DIR, BOARD_DIR), timeout=300)
+        t.sh("mkdir -p %s/films && ffmpeg -v error -y -f lavfi -i \"nullsrc=size=1280x720:rate=30,geq=lum='40+random(1)*30':cb=128:cr=128\" "
+             "-f lavfi -i sine=f=440:r=48000 -t 8 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest %s/films/film.mp4" % (BOARD_DIR, BOARD_DIR), timeout=300)
         r.ctl("open files %s/films" % BOARD_DIR)
         r.ctl("idle 1500")
         r.select("left", "film.mp4")
@@ -637,11 +639,10 @@ def suite_apps(r):
         f1, p1, t1 = int(s["music.video_frames"]), float(s["music.pos"]), time.time()
         fps, speed = (f1 - f0) / (t1 - t0), (p1 - p0) / (t1 - t0)
         r.note("media: %s; %.1f pictures a second on the PSP, the film's clock at %.2fx" % (s.get("music.format"), fps, speed))
-        r.shot("media-film", "Media: a film, drawn by the PSP")
+        r.press("square", idle=False)   # stop at once (nothing left on the screen), then judge
+        r.press("circle")
         r.expect(fps >= 20, "only %.1f pictures a second" % fps)
         r.expect(0.9 < speed < 1.1, "the film's clock ran at %.2fx" % speed)
-        r.press("square", idle=False)   # stop
-        r.press("circle")
     r.check("Media plays a film from Files, full screen, 20 pictures a second or more", film)
 
     if STORE_WRITES:
