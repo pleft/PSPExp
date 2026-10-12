@@ -196,10 +196,10 @@ Only use ROMs of games you own.
 | d-pad | move (left / right: a page) |
 | up from the top | the drive button: cross lists every drive |
 | L / R | the left / right panel |
-| cross | open: a folder, a picture, a text file, music (in Music), a ROM (plays it), a package (installs it) |
+| cross | open: a folder, a picture, a text file, music (in Music), a ROM (plays it), an archive (unpack it, or see what is in it), a package (installs it) |
 | circle | the folder above; at the top of a drive, close Files |
 | square | mark several files |
-| triangle | copy or move to the other panel, delete, rename, new folder, details |
+| triangle | copy or move to the other panel, delete, rename, new folder, details, compress to a .zip |
 | START | options: hidden files, sorting, the same folder in both panels, a terminal here |
 | SELECT, held | the launcher |
 
@@ -208,6 +208,14 @@ The drives include the board's storage, any USB stick plugged into it, and
 between the PSP and the board is the easy way to bring ROMs, music or
 pictures over: put them on the stick with the PSP in USB mode, start
 PSPExp, copy.
+
+**Archives** (ZIP, 7z, RAR, and tar with .gz, .bz2, .xz or .zst): cross on
+one offers to unpack it into the other panel or here, or to show what is in
+it first. It unpacks into a folder named after it (an archive holding one
+folder unpacks as that folder). Triangle > **Compress to a .zip** packs the
+marked files and folders, or the highlighted one, into a .zip beside them.
+Archives open on the board: one on the PSP's memory stick is copied over
+first. A zipped ROM still goes straight to its emulator.
 
 ## Music
 

@@ -10,7 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <signal.h>
+#include <sys/select.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #if defined(__APPLE__)
 #include <sys/mount.h>
@@ -470,10 +473,214 @@ static int inside(const char *src, const char *dst)
     return !strncmp(dst, src, l) && (dst[l] == '/' || dst[l] == 0);
 }
 
+/* ---- archives: bsdtar, a child whose lines are the progress ------------------- */
+
+static const char *ARC_ENDS[] = { ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tgz", ".tbz2", ".txz",
+                                  ".zip", ".7z", ".rar", ".tar", ".cbz", ".cbr", NULL };
+
+static const char *arc_end(const char *name)
+{
+    size_t l = strlen(name), e;
+    int i;
+    for (i = 0; ARC_ENDS[i]; i++)
+        if (l > (e = strlen(ARC_ENDS[i])) && !strcasecmp(name + l - e, ARC_ENDS[i])) return name + l - e;
+    return NULL;
+}
+
+int fops_is_archive(const char *name) { return arc_end(name) != NULL; }
+
+void fops_archive_stem(const char *name, char *out, size_t n)
+{
+    const char *e = arc_end(name);
+    snprintf(out, n, "%.*s", (int)(e ? (size_t)(e - name) : strlen(name)), name);
+    if (!out[0]) snprintf(out, n, "archive");
+}
+
+/* runs argv with its output (stdout and stderr) to a pipe; the pid, the
+ * pipe's end in *fd, or -1 */
+static pid_t spawn(char *const argv[], int *fd)
+{
+    int p[2];
+    pid_t pid;
+    if (pipe(p) < 0) return -1;
+    pid = fork();
+    if (pid == 0) {
+        int i;
+        dup2(p[1], 1); dup2(p[1], 2);
+        for (i = 3; i < 1024; i++) close(i);   /* not the PSP link */
+        execvp(argv[0], argv);
+        fprintf(stderr, "bsdtar is not installed on this board (package libarchive-tools)\n");
+        _exit(127);
+    }
+    close(p[1]);
+    if (pid < 0) { close(p[0]); return -1; }
+    *fd = p[0];
+    return pid;
+}
+
+/* the child's lines, each counted (count: bsdtar -v names one entry a line);
+ * stops it when the job is cancelled. Its exit status, or -1 */
+/* count 1: files only (a listing or extracting names folders "d/"); 2: every line (creating) */
+static int follow(FJob *j, pid_t pid, int fd, int count, char *last, size_t ln)
+{
+    char buf[4096], line[1024];
+    size_t l = 0;
+    int st = 0;
+    last[0] = 0;
+    for (;;) {
+        fd_set r;
+        struct timeval tv = { 0, 100000 };
+        ssize_t n;
+        int i;
+        if (j && j->cancel) { kill(pid, SIGTERM); break; }
+        FD_ZERO(&r); FD_SET(fd, &r);
+        if (select(fd + 1, &r, NULL, NULL, &tv) <= 0) continue;
+        if ((n = read(fd, buf, sizeof(buf))) <= 0) break;
+        for (i = 0; i < n; i++) {
+            if (buf[i] != '\n') { if (l < sizeof(line) - 1) line[l++] = buf[i]; continue; }
+            line[l] = 0; l = 0;
+            if (!line[0]) continue;
+            snprintf(last, ln, "%s", line);
+            if (j && count) {
+                const char *s = (line[0] == 'x' || line[0] == 'a') && line[1] == ' ' ? line + 2 : line;
+                const char *b = strrchr(s, '/');
+                if (count == 1 && b && !b[1]) continue;   /* a folder */
+                j->files_done++;
+                if (b && !b[1]) { const char *c = b; while (c > s && c[-1] != '/') c--; snprintf(j->current, sizeof(j->current), "%.*s", (int)(b - c), c); }
+                else snprintf(j->current, sizeof(j->current), "%s", b ? b + 1 : s);
+            }
+        }
+    }
+    close(fd);
+    if (waitpid(pid, &st, 0) < 0) return -1;
+    return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
+/* bsdtar's last words, as the job's error ("bsdtar: x: Error ..." made shorter) */
+static void tool_err(FJob *j, const char *what, const char *last, int rc)
+{
+    const char *m = last;
+    if (rc == 127) { snprintf(j->error, sizeof(j->error), "%s", last); return; }
+    if (!strncmp(m, "bsdtar: ", 8)) m += 8;
+    if (!strncmp(m, "tar: ", 5)) m += 5;
+    snprintf(j->error, sizeof(j->error), "%s: %s", what, m[0] ? m : "it failed");
+}
+
+static void extract(FJob *j)
+{
+    char arc[FOPS_PATH], last[512];
+    char *ls[] = { "bsdtar", "-tf", arc, NULL }, *xs[] = { "bsdtar", "-xvf", arc, "-C", j->dst, NULL };
+    int fd, rc;
+    pid_t pid;
+    fops_join(arc, sizeof(arc), j->src, j->names[0]);
+    if (fops_is_remote(arc) || fops_is_remote(j->dst)) {
+        snprintf(j->error, sizeof(j->error), "archives open on this board: copy it from the PSP's memory stick first");
+        return;
+    }
+    /* how many files: the listing's lines that are not folders */
+    if ((pid = spawn(ls, &fd)) < 0) { snprintf(j->error, sizeof(j->error), "%s", strerror(errno)); return; }
+    {
+        FJob count = { 0 };
+        rc = follow(&count, pid, fd, 1, last, sizeof(last));
+        j->files_total = count.files_done;
+    }
+    if (rc) { tool_err(j, "cannot read it", last, rc); return; }
+    if (mkdir(j->dst, 0755) < 0 && errno != EEXIST) { job_err(j, "cannot create", j->dst); return; }
+    if ((pid = spawn(xs, &fd)) < 0) { snprintf(j->error, sizeof(j->error), "%s", strerror(errno)); return; }
+    rc = follow(j, pid, fd, 1, last, sizeof(last));
+    if (!j->cancel && rc) { tool_err(j, "it did not unpack", last, rc); return; }
+    {   /* one folder in it (most archives): that folder in dst's place, not a folder in a folder */
+        FList l = { NULL, 0, 0 };
+        if (!j->cancel && v_entries(j->dst, &l, 1) == 0 && l.n == 1 && l.e[0].is_dir) {
+            char in[FOPS_PATH], up[FOPS_PATH], to[FOPS_PATH], tmp[FOPS_PATH];
+            struct stat st;
+            fops_join(in, sizeof(in), j->dst, l.e[0].name);
+            snprintf(up, sizeof(up), "%s", j->dst);
+            fops_parent(up);
+            fops_join(to, sizeof(to), up, l.e[0].name);
+            snprintf(tmp, sizeof(tmp), "%s.pspexp-unpack", j->dst);
+            /* (through a free name: "to" may be dst itself, "game" in "game") */
+            if ((stat(to, &st) < 0 || !strcmp(to, j->dst)) && rename(in, tmp) == 0) {
+                rmdir(j->dst);
+                if (rename(tmp, to) == 0) snprintf(j->dst, sizeof(j->dst), "%s", to);
+                else rename(tmp, j->dst);
+            }
+        }
+        fops_free(&l);
+    }
+}
+
+/* files and folders below path, with it: what bsdtar -c names, one a line */
+static void count_all(FJob *j, const char *path)
+{
+    FEntry st;
+    if (j->cancel || v_stat(path, &st) < 0) return;
+    j->files_total++;
+    if (st.is_dir) {
+        FList l = { NULL, 0, 0 };
+        int i;
+        if (v_entries(path, &l, 0) == 0)
+            for (i = 0; i < l.n && !j->cancel; i++) { char p[FOPS_PATH]; fops_join(p, sizeof(p), path, l.e[i].name); count_all(j, p); }
+        fops_free(&l);
+    }
+}
+
+static void compress(FJob *j)
+{
+    char out[FOPS_PATH], last[512];
+    char **argv;
+    int i, k = 0, fd, rc;
+    pid_t pid;
+    fops_join(out, sizeof(out), j->dst, j->out);
+    if (fops_is_remote(j->src) || fops_is_remote(out)) {
+        snprintf(j->error, sizeof(j->error), "archives are made on this board: not on the PSP's memory stick");
+        return;
+    }
+    for (i = 0; i < j->nnames && !j->cancel; i++) { char p[FOPS_PATH]; fops_join(p, sizeof(p), j->src, j->names[i]); count_all(j, p); }
+    if (!(argv = calloc((size_t)j->nnames + 8, sizeof(char *)))) { snprintf(j->error, sizeof(j->error), "out of memory"); return; }
+    argv[k++] = "bsdtar"; argv[k++] = "--format"; argv[k++] = "zip"; argv[k++] = "-cvf"; argv[k++] = out;
+    argv[k++] = "-C"; argv[k++] = j->src;
+    for (i = 0; i < j->nnames; i++) argv[k++] = j->names[i];
+    pid = spawn(argv, &fd);
+    free(argv);
+    if (pid < 0) { snprintf(j->error, sizeof(j->error), "%s", strerror(errno)); return; }
+    rc = follow(j, pid, fd, 2, last, sizeof(last));
+    if (j->cancel || rc) { unlink(out); if (!j->cancel) tool_err(j, "it was not made", last, rc); }
+}
+
+int fops_archive_list(const char *path, char *out, size_t n)
+{
+    char *argv[] = { "bsdtar", "-tvf", (char *)path, NULL };
+    int fd, rc;
+    size_t len = 0;
+    ssize_t r;
+    pid_t pid = spawn(argv, &fd);
+    if (pid < 0) { snprintf(out, n, "%s", strerror(errno)); return -1; }
+    while (len + 1 < n && (r = read(fd, out + len, n - 1 - len)) > 0) len += (size_t)r;
+    out[len] = 0;
+    if (len + 1 >= n) kill(pid, SIGTERM);   /* enough to show */
+    close(fd);
+    { int st; waitpid(pid, &st, 0); rc = WIFEXITED(st) ? WEXITSTATUS(st) : -1; }
+    if (rc && len + 1 < n) {
+        char *nl;
+        while (len && out[len - 1] == '\n') out[--len] = 0;
+        if ((nl = strrchr(out, '\n'))) memmove(out, nl + 1, strlen(nl + 1) + 1);
+        if (!strncmp(out, "bsdtar: ", 8)) memmove(out, out + 8, strlen(out + 8) + 1);
+        return -1;
+    }
+    return 0;
+}
+
 void fjob_run(FJob *j)
 {
     int i;
     j->error[0] = 0;
+    if (j->kind == FJOB_EXTRACT || j->kind == FJOB_COMPRESS) {
+        if (j->kind == FJOB_EXTRACT) extract(j); else compress(j);
+        if (j->cancel && !j->error[0]) snprintf(j->error, sizeof(j->error), "cancelled");
+        j->done = 1;
+        return;
+    }
     for (i = 0; i < j->nnames && !j->cancel; i++) {
         char p[FOPS_PATH];
         fops_join(p, sizeof(p), j->src, j->names[i]);

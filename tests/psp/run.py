@@ -408,6 +408,42 @@ def suite_files(r):
         r.expect(not any(x.startswith("pic.png ") for x in rows), "pic.png still on the stick")
     r.check("delete on the stick asks, then deletes", delete)
 
+    def archives():
+        # a folder compressed to a .zip (triangle, Compress), its contents shown, unpacked into the other panel
+        t.sh("mkdir -p %s/board/pack/inner %s/other && printf one > %s/board/pack/a.txt && printf two > %s/board/pack/inner/b.txt"
+             % (BOARD_DIR, BOARD_DIR, BOARD_DIR, BOARD_DIR))
+        r.ctl("open files %s/board" % BOARD_DIR)
+        r.ctl("idle 2500")
+        r.panel_drive("right", "Board")
+        r.ctl("open files %s/board" % BOARD_DIR)   # (the left panel; the right one: the other folder, below)
+        r.ctl("idle 2500")
+        r.select("left", "pack")
+        r.press("triangle")
+        r.press("up")   # the menu wraps: up from the first row is the last, Compress to a .zip
+        r.press("cross")
+        s = r.state()
+        r.expect(s["files.overlay"] == "kbd", "no name asked for the archive (%s)" % s["files.overlay"])
+        r.press("start")   # the keyboard's done: the proposed name, pack.zip
+        s = r.wait_job()
+        r.expect(s["files.overlay"] == "none", "after compressing: %s %s" % (s.get("files.message.title", ""), s.get("files.message.text", "")))
+        t.sh("test -s %s/board/pack.zip" % BOARD_DIR)
+        r.select("left", "pack.zip")
+        r.press("cross")
+        s = r.state()
+        r.expect(s["files.overlay"] == "archive", "cross on the zip: %s" % s["files.overlay"])
+        r.shot("files-archive-menu", "Cross on an archive: unpack it, or see what is in it")
+        r.press("down"); r.press("down"); r.press("cross")   # Show what is in it
+        s = r.state()
+        r.expect(s["files.overlay"] == "view", "no listing (%s %s)" % (s["files.overlay"], s.get("files.message.text", "")))
+        r.shot("files-archive-list", "What is in an archive, before unpacking it")
+        r.press("circle")
+        r.press("cross"); r.press("down"); r.press("cross")   # Unpack here
+        s = r.wait_job()
+        r.expect(s["files.overlay"] == "none", "after unpacking: %s %s" % (s.get("files.message.title", ""), s.get("files.message.text", "")))
+        # the archive holds one folder, "pack", already there: so a new "pack 2" holds it
+        t.sh("cmp %s/board/pack/inner/b.txt '%s/board/pack 2/pack/inner/b.txt'" % (BOARD_DIR, BOARD_DIR))
+    r.check("a folder compressed to a .zip, listed and unpacked again", archives)
+
     def back():
         r.panel_drive("right", "Board")
         r.ctl("fs rmtree " + STICK_DIR)

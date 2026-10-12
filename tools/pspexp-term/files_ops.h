@@ -86,13 +86,17 @@ int  fops_drive_of(const FDrive *d, int n, const char *path);
 
 /* ---- jobs ---------------------------------------------------------------- */
 
-enum { FJOB_COPY, FJOB_MOVE, FJOB_DELETE };
+/* EXTRACT: names[0] (an archive in src) unpacked into dst (made when missing);
+ * COMPRESS: the names in src packed into dst/out (a .zip). Both by bsdtar
+ * (libarchive-tools): ZIP, 7z, RAR, tar and its .gz/.bz2/.xz/.zst read */
+enum { FJOB_COPY, FJOB_MOVE, FJOB_DELETE, FJOB_EXTRACT, FJOB_COMPRESS };
 
 typedef struct FJob {
     /* in */
     int kind;
     char src[FOPS_PATH], dst[FOPS_PATH];   /* folders; dst unused for delete */
     char (*names)[256]; int nnames;         /* in src */
+    char out[256];                          /* COMPRESS: the archive's name, in dst */
     /* progress, written by the job */
     volatile uint64_t bytes_done, bytes_total;
     volatile int files_done, files_total;
@@ -109,6 +113,15 @@ int  fjob_start(FJob *job);
 void fjob_finish(FJob *job);
 /* the same job, run here (tests) */
 void fjob_run(FJob *job);
+
+/* ---- archives ------------------------------------------------------------- */
+
+/* an archive bsdtar opens, by its name */
+int  fops_is_archive(const char *name);
+/* the archive's name without its ending: "game.tar.gz" -> "game" */
+void fops_archive_stem(const char *name, char *out, size_t n);
+/* what is in it (bsdtar -tv), as text: 0, or -1 with the reason in out */
+int  fops_archive_list(const char *path, char *out, size_t n);
 
 /* names that would be replaced in dst (copy / move): how many, the first */
 int  fops_conflicts(const char *dst, char (*names)[256], int n, char *first, size_t fn);

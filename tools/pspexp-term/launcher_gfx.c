@@ -468,7 +468,7 @@ static const IconName ICONS[] = {
     { "arrow-left", 0xe048 }, { "text-search", 0xe5ad }, { "lock", 0xe10b }, { "eye", 0xe0ba }, { "eye-off", 0xe0bb }, { "rabbit", 0xe4f6 }, { "train-front", 0xe506 },
     { "file", 0xe0c0 }, { "file-image", 0xe31c }, { "file-archive", 0xe30d }, { "file-music", 0xe55e }, { "file-code", 0xe0c3 },
     { "corner-left-up", 0xe0a4 }, { "copy", 0xe09e }, { "trash-2", 0xe18e }, { "pencil", 0xe1f9 }, { "folder-plus", 0xe0d9 },
-    { "folder-input", 0xe334 }, { "arrow-right-left", 0xe417 }, { "columns-2", 0xe098 }, { "list-checks", 0xe1d0 },
+    { "folder-input", 0xe334 }, { "folder-output", 0xe337 }, { "folder-down", 0xe332 }, { "package-open", 0xe2cc }, { "arrow-right-left", 0xe417 }, { "columns-2", 0xe098 }, { "list-checks", 0xe1d0 },
     { "folder-symlink", 0xe33b }, { "arrow-up-down", 0xe37d }, { "file-box", 0xe310 },
 };
 

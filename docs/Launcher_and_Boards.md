@@ -1001,6 +1001,24 @@ launcher's lists; a Starting box shows until the game has the PSP, and the
 console comes back to the file manager afterwards. A package runs
 `pspexp-pkg install` in the background, its message shown after.
 
+**Archives** (2026-10-12): `bsdtar` (libarchive-tools, a dependency of
+pspexp-core) run as a child, the way Music runs ffmpeg, not libarchive
+linked in: it reads ZIP, 7z, RAR and tar.gz/bz2/xz/zst and writes ZIP, and
+the Mac has it too. Two job kinds join copy, move and delete
+(`FJOB_EXTRACT`, `FJOB_COMPRESS`), on the same thread with the same
+progress box and cancel: the progress is bsdtar's `-v` lines counted
+against a listing first (`-tf`, files only; creating names folders too, so
+they are counted there), not bytes. Unpacking goes into a new folder named
+after the archive ("game 2" when "game" is there); an archive holding one
+folder becomes that folder when its name is free. A failed unpack leaves
+nothing behind; a cancelled compress removes the partial .zip. Cross on an
+archive opens a menu (unpack into the other panel, unpack here, what is in
+it: `bsdtar -tv` as names and sizes in the text viewer), with "Install as
+a PSPExp package" for a .tar.gz, which used to go straight to installing.
+A zipped ROM still opens in its emulator. Tests: `tests/test_files_ops.c`
+(pack, list, unpack, the one-folder case, a bad archive) and the Files
+suite of `tests/psp/run.py`.
+
 **The music player** (2026-10-03, `player.c` for the sound, `files.c` for
 its screen; since 2026-10-05 an app of its own, Music, §10.4, and this
 screen is gone): cross on MP3, WAV, Ogg, FLAC, Opus, M4A/AAC, WMA or a tracker

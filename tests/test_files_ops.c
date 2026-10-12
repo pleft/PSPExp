@@ -2,7 +2,7 @@
  * The file manager's file work (tools/pspexp-term/files_ops.c), in a scratch
  * folder: listings (".." first, folders, then files, hidden ones hidden),
  * paths, sizes, names; copy, move and delete of a tree; conflicts; copying
- * a folder into itself refused.
+ * a folder into itself refused; archives packed and unpacked by bsdtar.
  */
 #include "test_util.h"
 #include "../tools/pspexp-term/files_ops.h"
@@ -117,6 +117,55 @@ int main(void)
     CHECK(!j.error[0]);
     CHECK(!exists(q));
     fjob_finish(&j);
+
+    /* archives: a folder packed into a .zip, listed, unpacked elsewhere, the same files back */
+    CHECK(fops_is_archive("x.zip") && fops_is_archive("g.TAR.GZ") && fops_is_archive("a.7z") && !fops_is_archive("zip") && !fops_is_archive("a.txt"));
+    fops_archive_stem("game.tar.gz", first, sizeof(first)); CHECK(!strcmp(first, "game"));
+    fops_archive_stem("Some.Thing.zip", first, sizeof(first)); CHECK(!strcmp(first, "Some.Thing"));
+    if (system("command -v bsdtar >/dev/null 2>&1") == 0) {
+        char out[4096];
+        memset(&j, 0, sizeof(j));
+        j.kind = FJOB_COMPRESS;
+        snprintf(j.src, sizeof(j.src), "%s", root); snprintf(j.dst, sizeof(j.dst), "%s", root);
+        snprintf(j.out, sizeof(j.out), "a.zip");
+        j.names = calloc(1, 256); snprintf(j.names[0], 256, "a"); j.nnames = 1;
+        fjob_run(&j);
+        CHECK(!j.error[0]);
+        CHECK(j.files_total >= 4 && j.files_done == j.files_total);   /* a, a/one.txt, a/sub, a/sub/two.txt */
+        fjob_finish(&j);
+        fops_join(p, sizeof(p), root, "a.zip");
+        CHECK_EQ(fops_archive_list(p, out, sizeof(out)), 0);
+        CHECK(strstr(out, "a/sub/two.txt") != NULL);
+        fops_join(q, sizeof(q), root, "unpacked");
+        job(FJOB_EXTRACT, root, q, "a.zip", &j);
+        CHECK(!j.error[0]);
+        CHECK_EQ(j.files_total, 2); CHECK_EQ(j.files_done, 2);   /* files only */
+        fjob_finish(&j);
+        { char a[1024], b[1024];
+          fops_join(a, sizeof(a), root, "a/sub/two.txt"); fops_join(b, sizeof(b), root, "unpacked/a/sub/two.txt");
+          CHECK(same_file(a, b)); }
+        /* one folder in it, unpacked where its name is free: that folder, not a/a */
+        fops_join(q, sizeof(q), root, "two"); mkdir(q, 0755);
+        fops_join(q, sizeof(q), root, "two/a");
+        job(FJOB_EXTRACT, root, q, "a.zip", &j);
+        CHECK(!j.error[0]);
+        fjob_finish(&j);
+        fops_join(p, sizeof(p), root, "two/a/sub/two.txt"); CHECK(exists(p));
+        fops_join(p, sizeof(p), root, "two/a/a"); CHECK(!exists(p));
+        job(FJOB_DELETE, root, "", "two", &j); fjob_finish(&j);
+        fops_join(p, sizeof(p), root, "a.zip");
+        /* not an archive: a reason, no folder left half made */
+        fops_join(p, sizeof(p), root, "bad.zip"); put(p, "not a zip");
+        fops_join(q, sizeof(q), root, "bad");
+        job(FJOB_EXTRACT, root, q, "bad.zip", &j);
+        CHECK(j.error[0] != 0);
+        fjob_finish(&j);
+        CHECK(!exists(q));
+        CHECK(fops_archive_list(p, out, sizeof(out)) < 0 && out[0]);
+        job(FJOB_DELETE, root, "", "unpacked", &j); fjob_finish(&j);
+        job(FJOB_DELETE, root, "", "a.zip", &j); fjob_finish(&j);
+        job(FJOB_DELETE, root, "", "bad.zip", &j); fjob_finish(&j);
+    } else printf("files_ops: no bsdtar here, archives not tried\n");
 
     /* rename and mkdir */
     fops_join(p, sizeof(p), root, "a"); fops_join(q, sizeof(q), root, "c");

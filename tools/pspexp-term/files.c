@@ -52,7 +52,7 @@ static char g_term_path[FOPS_PATH];
 static int g_caret;
 
 /* what is on top of the panels */
-enum { O_NONE, O_DRIVES, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE, O_INSTALLING, O_PLAY };
+enum { O_NONE, O_DRIVES, O_ACTIONS, O_OPTIONS, O_CONFIRM, O_PROGRESS, O_MESSAGE, O_KBD, O_VIEW, O_IMAGE, O_INSTALLING, O_PLAY, O_ARCHIVE };
 static int g_over;
 static int g_msel;                /* the menu's highlighted row (the drive list's too) */
 
@@ -67,7 +67,7 @@ static int g_job_on;
 static char g_msg[300], g_msg_title[64];
 
 /* the keyboard: a new name */
-enum { K_RENAME, K_MKDIR };
+enum { K_RENAME, K_MKDIR, K_ZIP };
 static int g_kmode;
 static UiKbd g_kbd;
 
@@ -361,6 +361,94 @@ static void image_step(int d)
     }
 }
 
+/* ---- archives (files_ops: bsdtar) ------------------------------------------------- */
+
+static char g_arc[256];           /* the archive the archive menu is about, in the active panel */
+
+/* a folder name not there yet in dir: stem, "stem 2", "stem 3"... */
+static void free_name(const char *dir, const char *stem, char *out, size_t n)
+{
+    char p[FOPS_PATH];
+    struct stat st;
+    int k;
+    snprintf(out, n, "%s", stem);
+    for (k = 2; k < 100; k++) {
+        fops_join(p, sizeof(p), dir, out);
+        if (stat(p, &st) < 0) return;
+        snprintf(out, n, "%s %d", stem, k);
+    }
+}
+
+/* unpacks the archive into a new folder named after it, in dir */
+static void extract_to(const char *dir)
+{
+    char stem[256], name[256];
+    if (fops_is_remote(dir)) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "%s", g_arc);
+        snprintf(g_msg, sizeof(g_msg), "Archives unpack into this board's folders, not onto the PSP's memory stick: unpack it here, then copy what you need.");
+        g_over = O_MESSAGE;
+        return;
+    }
+    fops_archive_stem(g_arc, stem, sizeof(stem));
+    free_name(dir, stem, name, sizeof(name));
+    memset(&g_job, 0, sizeof(g_job));
+    g_job.kind = FJOB_EXTRACT;
+    snprintf(g_job.src, sizeof(g_job.src), "%s", act()->path);
+    fops_join(g_job.dst, sizeof(g_job.dst), dir, name);
+    if (!(g_job.names = calloc(1, 256))) return;
+    snprintf(g_job.names[0], 256, "%s", g_arc);
+    g_job.nnames = 1;
+    if (fjob_start(&g_job) < 0) { fjob_finish(&g_job); return; }
+    g_job_on = 1;
+    g_over = O_PROGRESS;
+}
+
+/* what is in it, in the text viewer: each entry's name and size */
+static void archive_show(void)
+{
+    enum { MAX = 256 * 1024 };
+    char path[FOPS_PATH], *out = malloc(MAX), *line, *save = NULL;
+    FILE *f;
+    int files = 0;
+    uint64_t total = 0;
+    if (!out) return;
+    fops_join(path, sizeof(path), act()->path, g_arc);
+    if (fops_archive_list(path, out, MAX) < 0) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "%s", g_arc);
+        snprintf(g_msg, sizeof(g_msg), "It could not be read: %s", out[0] ? out : "not an archive bsdtar knows");
+        g_over = O_MESSAGE;
+        free(out);
+        return;
+    }
+    if (!(f = fopen(VIEW_DIR ".txt", "w"))) { free(out); return; }
+    /* "-rw-r--r--  0 501 20  3 12 Oct 22:24 d/b.txt": the size is the fifth field, the name after the eighth */
+    for (line = strtok_r(out, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+        char *fld[9], *p = line, sz[32];
+        int k;
+        for (k = 0; k < 8 && p; k++) {
+            while (*p == ' ') p++;
+            fld[k] = p;
+            p = strchr(p, ' ');
+            if (p) *p++ = 0;
+        }
+        if (k < 8 || !p) { fprintf(f, "%s\n", line); continue; }
+        while (*p == ' ') p++;
+        if (fld[0][0] == 'd') { fprintf(f, "%s\n", p); continue; }
+        fops_human(strtoull(fld[4], NULL, 10), sz, sizeof(sz));
+        fprintf(f, "%s   (%s)\n", p, sz);
+        files++; total += strtoull(fld[4], NULL, 10);
+    }
+    { char t[32]; fops_human(total, t, sizeof(t)); fprintf(f, "\n%d %s, %s unpacked\n", files, files == 1 ? "file" : "files", t); }
+    fclose(f);
+    free(out);
+    if (view_open(VIEW_DIR ".txt", g_arc) != 0) {
+        snprintf(g_msg_title, sizeof(g_msg_title), "%s", g_arc);
+        snprintf(g_msg, sizeof(g_msg), "Its list could not be shown.");
+        g_over = O_MESSAGE;
+    }
+    unlink(VIEW_DIR ".txt");
+}
+
 static int is_package(const FEntry *e)
 {
     size_t l = strlen(e->name);
@@ -429,6 +517,17 @@ static void open_file(Panel *p, const FEntry *e)
             return;
         }
     }
+    if (fops_is_archive(e->name) && !launcher_system_for(e->name, err, 16)) {   /* (a zipped ROM: its emulator, below) */
+        if (fops_is_remote(p->path)) {
+            snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
+            snprintf(g_msg, sizeof(g_msg), "Archives open on this board: copy it from the PSP's memory stick first (triangle, then Copy).");
+            g_over = O_MESSAGE;
+            return;
+        }
+        snprintf(g_arc, sizeof(g_arc), "%s", e->name);
+        g_msel = 0; g_over = O_ARCHIVE;
+        return;
+    }
     if (fops_is_remote(p->path) && !is_image(e) && (is_package(e) || launcher_system_for(e->name, err, 16))) {
         snprintf(g_msg_title, sizeof(g_msg_title), "%s", e->name);
         snprintf(g_msg, sizeof(g_msg), "This is on the PSP's memory stick: copy it to the board first (triangle, then Copy), and open it there.");
@@ -470,13 +569,19 @@ static void open_file(Panel *p, const FEntry *e)
 /* ---- menus ------------------------------------------------------------------- */
 
 typedef struct MItem { const char *icon, *label; int id; } MItem;
-enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE,
-       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_MUSIC, P_CLOSE };
+enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE, A_ZIP,
+       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_MUSIC, P_CLOSE,
+       X_OTHER, X_HERE, X_LIST, X_INSTALL };
 static const MItem ACTIONS[] = {
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
     { "folder-plus", "New folder", A_MKDIR }, { "info", "Details", A_DETAILS },
-    { "list", "Add to the music queue", A_QUEUE },
+    { "list", "Add to the music queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
+};
+/* cross on an archive */
+static const MItem ARCHIVE[] = {
+    { "folder-output", "Unpack into the other panel", X_OTHER }, { "folder-down", "Unpack here", X_HERE },
+    { "list", "Show what is in it", X_LIST }, { "package-open", "Install as a PSPExp package", X_INSTALL },
 };
 static const MItem OPTIONS[] = {
     { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
@@ -485,6 +590,8 @@ static const MItem OPTIONS[] = {
 };
 #define NACT ((int)(sizeof(ACTIONS) / sizeof(ACTIONS[0])))
 #define NOPT ((int)(sizeof(OPTIONS) / sizeof(OPTIONS[0])))
+/* the archive menu: its install row only for a package (.tar.gz) */
+static int narc(void) { FEntry e; memset(&e, 0, sizeof(e)); snprintf(e.name, sizeof(e.name), "%s", g_arc); return is_package(&e) ? 4 : 3; }
 
 static void details(void)
 {
@@ -587,6 +694,32 @@ static void run_action(int id)
         { int k; for (k = 0; k < p->list.n; k++) p->list.e[k].marked = 0; }
         break;
     }
+    case A_ZIP: {   /* the name first: the highlighted one's, as a .zip */
+        int n; char (*names)[256] = targets(&n), stem[256], name[256];
+        if (!n) break;
+        if (fops_is_remote(p->path)) {
+            free(names);
+            snprintf(g_msg_title, sizeof(g_msg_title), "Compress");
+            snprintf(g_msg, sizeof(g_msg), "Archives are made in this board's folders, not on the PSP's memory stick: copy the files to the board first.");
+            g_over = O_MESSAGE;
+            break;
+        }
+        fops_archive_stem(n == 1 ? names[0] : (strrchr(p->path, '/') && strrchr(p->path, '/')[1] ? strrchr(p->path, '/') + 1 : "archive"), stem, sizeof(stem));
+        { char *d = n == 1 ? strrchr(stem, '.') : NULL; if (d && d != stem && !p->list.e[p->sel].is_dir) *d = 0; }   /* "notes.txt" -> "notes" */
+        free(names);
+        snprintf(name, sizeof(name), "%s.zip", stem);
+        ui_kbd_reset(&g_kbd, name, 0, "Compress"); g_kmode = K_ZIP; g_over = O_KBD;
+        break;
+    }
+    case X_OTHER: extract_to(other()->path); break;
+    case X_HERE: extract_to(p->path); break;
+    case X_LIST: archive_show(); break;
+    case X_INSTALL:
+        fops_join(g_inst_file, sizeof(g_inst_file), p->path, g_arc);
+        snprintf(g_inst_name, sizeof(g_inst_name), "%s", g_arc);
+        snprintf(g_qtext, sizeof(g_qtext), "Install \"%s\" as a PSPExp package? An older version of it is replaced.", g_arc);
+        g_q = Q_INSTALL; g_over = O_CONFIRM;
+        break;
     case P_HIDDEN: g_hidden = !g_hidden; reload_all(); break;
     case P_SORT: g_sort = (g_sort + 1) % 3; reload_all(); break;
     case P_SAME: panel_cd(other(), p->path, NULL); break;
@@ -617,6 +750,27 @@ static void kbd_done(void)
         return;
     }
     fops_join(path, sizeof(path), p->path, name);
+    if (g_kmode == K_ZIP) {
+        struct stat st;
+        int n;
+        char (*names)[256];
+        if (stat(path, &st) == 0) {
+            snprintf(g_msg_title, sizeof(g_msg_title), "Already there");
+            snprintf(g_msg, sizeof(g_msg), "\"%s\" is already in this folder: choose another name.", name);
+            g_over = O_MESSAGE;
+            return;
+        }
+        if (!(names = targets(&n))) return;
+        memset(&g_job, 0, sizeof(g_job));
+        g_job.kind = FJOB_COMPRESS;
+        snprintf(g_job.src, sizeof(g_job.src), "%s", p->path);
+        snprintf(g_job.dst, sizeof(g_job.dst), "%s", p->path);
+        snprintf(g_job.out, sizeof(g_job.out), "%s", name);
+        g_job.names = names; g_job.nnames = n;
+        if (fjob_start(&g_job) < 0) { fjob_finish(&g_job); return; }
+        g_job_on = 1; g_over = O_PROGRESS;
+        return;
+    }
     if (g_kmode == K_MKDIR) {
         if (fops_mkdir(path, err, sizeof(err)) == 0) panel_load(p, name);
         else { snprintf(g_msg_title, sizeof(g_msg_title), "Could not create it"); snprintf(g_msg, sizeof(g_msg), "%s", err); g_over = O_MESSAGE; }
@@ -648,11 +802,11 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     if (launcher_running_title()) return;   /* a program is starting: nothing else meanwhile */
     if (!pressed && !up && !down && !left && !right) return;   /* nothing new: no frame (it used to redraw every turn) */
     switch (g_over) {
-    case O_ACTIONS: case O_OPTIONS: {
-        int n = g_over == O_ACTIONS ? NACT : NOPT;
+    case O_ACTIONS: case O_OPTIONS: case O_ARCHIVE: {
+        int n = g_over == O_ACTIONS ? NACT : g_over == O_ARCHIVE ? narc() : NOPT;
         if (up) { g_msel = (g_msel + n - 1) % n; g_dirty = 1; }
         if (down) { g_msel = (g_msel + 1) % n; g_dirty = 1; }
-        if (pressed & PSPEXP_BUTTON_CROSS) run_action(g_over == O_ACTIONS ? ACTIONS[g_msel].id : OPTIONS[g_msel].id);
+        if (pressed & PSPEXP_BUTTON_CROSS) run_action(g_over == O_ACTIONS ? ACTIONS[g_msel].id : g_over == O_ARCHIVE ? ARCHIVE[g_msel].id : OPTIONS[g_msel].id);
         else if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_over = O_NONE; g_dirty = 1; }
         return;
     }
@@ -1036,6 +1190,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
     case O_DRIVES: draw_drives(); break;
     case O_ACTIONS: draw_menu(ACTIONS, NACT, "Actions"); break;
     case O_OPTIONS: draw_menu(OPTIONS, NOPT, "Options"); break;
+    case O_ARCHIVE: draw_menu(ARCHIVE, narc(), g_arc); break;
     case O_CONFIRM:
         draw_box(g_q == Q_DELETE ? "Delete" : g_q == Q_INSTALL ? "Install" : "Replace", g_qtext, 96);
         { int bx = (UI_SCREEN_W - 340) / 2 + 16, by = (UI_SCREEN_H - 96) / 2 - 8 + 70;
@@ -1047,11 +1202,13 @@ void files_render(PspExpContext *ctx, uint64_t now)
         uint64_t done = g_job.bytes_done, tot = g_job.bytes_total;
         int pct = tot ? (int)(done * 100 / tot) : (g_job.files_total ? g_job.files_done * 100 / g_job.files_total : 0);
         char a[32], t[32], line[96];
-        draw_box(g_job.kind == FJOB_COPY ? "Copying" : g_job.kind == FJOB_MOVE ? "Moving" : "Deleting", g_job.current, h);
+        draw_box(g_job.kind == FJOB_COPY ? "Copying" : g_job.kind == FJOB_MOVE ? "Moving" : g_job.kind == FJOB_EXTRACT ? "Unpacking"
+                 : g_job.kind == FJOB_COMPRESS ? "Compressing" : "Deleting", g_job.current, h);
         gfx_nine(NINE_R6, bx + 16, by + 56, w - 32, 10, 0x151a26, 255);
         if (pct > 0) gfx_nine(NINE_R6, bx + 16, by + 56, (w - 32) * (pct > 100 ? 100 : pct) / 100, 10, UI_ACCENT, 255);
         fops_human(done, a, sizeof(a)); fops_human(tot, t, sizeof(t));
-        snprintf(line, sizeof(line), "%d / %d files   %s / %s", g_job.files_done, g_job.files_total, a, t);
+        if (tot) snprintf(line, sizeof(line), "%d / %d files   %s / %s", g_job.files_done, g_job.files_total, a, t);
+        else snprintf(line, sizeof(line), "%d / %d", g_job.files_done, g_job.files_total);   /* archives: counted, not weighed */
         gfx_text(FONT_BADGE, bx + 16, by + 72, line, UI_MUTED, 255, 0);
         gfx_button('o', bx + w - 80, by + 72); gfx_text(FONT_SMALL, bx + w - 62, by + 71, "Cancel", UI_TEXT, 255, 0);
         break;
@@ -1082,7 +1239,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
 
 void files_state(char *out, size_t n)
 {
-    static const char *over[] = { "none", "drives", "actions", "options", "confirm", "progress", "message", "kbd", "view", "image", "installing", "player" };
+    static const char *over[] = { "none", "drives", "actions", "options", "confirm", "progress", "message", "kbd", "view", "image", "installing", "player", "archive" };
     size_t l = strlen(out);
     int k, i;
 #define ADD(...) do { if (l < n) l += (size_t)snprintf(out + l, n - l, __VA_ARGS__); } while (0)
@@ -1111,6 +1268,7 @@ void files_state(char *out, size_t n)
         ADD("files.message.title=%s\nfiles.message.text=%s\n", g_msg_title, flat);
     }
     if (g_over == O_CONFIRM) ADD("files.question=%s\n", g_qtext);
+    if (g_over == O_ARCHIVE) ADD("files.archive=%s rows=%d\n", g_arc, narc());
     if (g_over == O_PROGRESS) ADD("files.progress=%d/%d files, %llu/%llu bytes\n", g_job.files_done, g_job.files_total, (unsigned long long)g_job.bytes_done, (unsigned long long)g_job.bytes_total);
     if (g_over == O_IMAGE) ADD("files.image=%s %dx%d\n", act()->list.e[g_img_idx].name, g_img_w, g_img_h);
     if (g_over == O_VIEW) ADD("files.viewer=%s lines=%d\n", g_vtitle, g_vn);
