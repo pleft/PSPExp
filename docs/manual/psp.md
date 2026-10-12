@@ -21,8 +21,8 @@ date over the USB cable.
    computer. Its memory stick appears as a drive.
 2. Copy the `PSPExp` folder into `PSP/GAME/` on the stick, so it ends up as
    `PSP/GAME/PSPExp/EBOOT.PBP` (and the files beside it).
-   - The download: `PSPExp-psp-<version>.zip` on PSPExp's
-     [Releases](https://github.com/pleft/PSPExp/releases) page: unzip it at the stick's root (it holds
+   - The download: `PSPExp-psp-<version>.zip` on the
+     [download page](https://pspexp.dev/download): unzip it at the stick's root (it holds
      `PSP/GAME/PSPExp`).
    - From this repository: `scripts/build.sh`, then
      `scripts/packages/runtime-slot --install /Volumes/<stick>/PSP/GAME/PSPExp`

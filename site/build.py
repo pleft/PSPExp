@@ -3,6 +3,8 @@
 The web page at https://pspexp.dev (GOING_PUBLIC: required at launch), built into site/out/:
   python3 site/build.py
 - index.html: the front page, from site/index.html (its {{...}} filled in here);
+- download.html: the three downloads of the latest release, from site/download.html, with the
+  numbers GitHub gives at build time (its own script then asks GitHub for live ones);
 - manual/*.html: the user manual, from docs/manual/*.md, so it is written once (README.md becomes
   manual/index.html; links between its pages follow, links out of it go to GitHub);
 - style.css, the screenshots (docs/images) and the launcher's font (Inter, OFL, beside its licence).
@@ -10,7 +12,7 @@ Python's standard library only: Cloudflare Pages runs this as the build command 
 The Markdown converter knows what the manual uses: headings, paragraphs, lists (nested), tables,
 fenced code, block quotes, rules, and inline code, bold, italics, links and images.
 """
-import html, os, re, shutil, sys
+import datetime, html, json, os, re, shutil, sys, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = os.path.join(ROOT, "site")
@@ -176,7 +178,7 @@ def markdown(text):
 
 def page(title, body, depth, active="", desc=""):
     up = "../" * depth
-    nav = [('index.html', "Home", "home"), ("manual/index.html", "Manual", "manual"), (RELEASES, "Download", "download"), (REPO, "GitHub", "github")]
+    nav = [('index.html', "Home", "home"), ("manual/index.html", "Manual", "manual"), ("download.html", "Download", "download"), (REPO, "GitHub", "github")]
     links = "".join('<a href="%s"%s>%s</a>' % (h if h.startswith("http") else up + h, ' class="on"' if k == active else "", t) for h, t, k in nav)
     return """<!doctype html>
 <html lang="en">
@@ -221,8 +223,49 @@ def front_page():
     if VIDEO:
         video = ('<section class="wrap video"><h2>See it in action</h2><div class="frame"><iframe src="%s" title="PSPExp in action" '
                  'allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></section>' % VIDEO)
-    body = body.replace("{{RELEASES}}", RELEASES).replace("{{REPO}}", REPO).replace("{{VIDEO}}", video)
+    body = body.replace("{{REPO}}", REPO).replace("{{VIDEO}}", video)
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(page("PSPExp: your PSP, playing games it never had", body, 0, "home"))
+
+
+KINDS = {"PSP": r"^PSPExp-psp-.*\.zip$", "PI": r"^pspexp-pi-.*\.img\.xz$", "GS": r"^pspexp-gameshell-.*\.img\.xz$"}
+
+
+def size(b):
+    return "%.2f GB" % (b / 1e9) if b >= 1e9 else "%d MB" % round(b / 1e6) if b >= 1e6 else "%d KB" % max(1, round(b / 1e3))
+
+
+def download_page():
+    """the latest release's three files; without the network (a build offline) the buttons lead to
+    the release on GitHub and the page's script fills in the rest"""
+    v = {"VERSION": "", "DATE": "", "TOTAL": "–", "TOTAL_UNIT": "downloads", "RELEASE_PAGE": RELEASES, "REPO": REPO}
+    for k in KINDS:
+        v.update({k + "_URL": RELEASES, k + "_SIZE": "", k + "_NAME": "", k + "_COUNT": "–", k + "_UNIT": "downloads", k + "_SHA": ""})
+    try:
+        req = urllib.request.Request(REPO.replace("github.com", "api.github.com/repos") + "/releases?per_page=100",
+                                     headers={"Accept": "application/vnd.github+json", "User-Agent": "pspexp-site"})
+        rels = [r for r in json.load(urllib.request.urlopen(req, timeout=20)) if not r["draft"] and not r["prerelease"]]
+    except Exception as e:
+        print("download page: no release information (%s): links to GitHub" % e)
+        rels = []
+    if rels:
+        latest, total = rels[0], 0
+        d = datetime.date.fromisoformat(latest["published_at"][:10])
+        v.update({"VERSION": latest["tag_name"].lstrip("v"), "DATE": "%d %s" % (d.day, d.strftime("%B %Y")),
+                  "RELEASE_PAGE": latest["html_url"]})
+        for k, pat in KINDS.items():
+            n = sum(a["download_count"] for r in rels for a in r["assets"] if re.match(pat, a["name"]))
+            total += n
+            v[k + "_COUNT"], v[k + "_UNIT"] = "{:,}".format(n), "download" if n == 1 else "downloads"
+            for a in latest["assets"]:
+                if re.match(pat, a["name"]):
+                    v.update({k + "_URL": a["browser_download_url"], k + "_SIZE": size(a["size"]), k + "_NAME": a["name"],
+                              k + "_SHA": (a.get("digest") or "").replace("sha256:", "")})
+        v["TOTAL"], v["TOTAL_UNIT"] = "{:,}".format(total), "download" if total == 1 else "downloads"
+    body = open(os.path.join(SITE, "download.html"), encoding="utf-8").read()
+    for k, x in v.items():
+        body = body.replace("{{%s}}" % k, html.escape(x))
+    open(os.path.join(OUT, "download.html"), "w", encoding="utf-8").write(
+        page("Download PSPExp", body, 0, "download", "Download PSPExp: the PSP's part and the card images for the Raspberry Pi and the ClockworkPi GameShell."))
 
 
 def assets():
@@ -242,6 +285,7 @@ def main():
     os.makedirs(OUT)
     assets()
     front_page()
+    download_page()
     manual_pages()
     # by address (Cloudflare Pages matches a rule's https://host/ against the request): the pages.dev
     # copy stays out of search engines so they list pspexp.dev alone; previews are noindex already

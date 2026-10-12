@@ -80,7 +80,10 @@ the SDL layer's test run from CI's folder.
 
 `site/`: the front page (`site/index.html`, `site/style.css`, `site/icon.svg`)
 and `site/build.py`, which writes `site/out/`: the front page in its frame, the
-user manual as pages from `docs/manual/*.md` (its own small Markdown
+download page (`site/download.html`: the latest release's PSP zip and card
+images, sizes, SHA-256 and download counts, written from GitHub's API at
+build time; its script asks the API again in the browser, live, and rolls the
+counters up), the user manual as pages from `docs/manual/*.md` (its own small Markdown
 converter, Python's standard library only: the manual is written once, its
 links between pages follow, links out of it go to GitHub), the screenshots
 (`docs/images`) and the launcher's font. The look is the launcher's: its

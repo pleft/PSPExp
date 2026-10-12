@@ -50,7 +50,7 @@ What you get on the PSP:
 ## Getting started
 
 1. [Prepare the PSP](docs/manual/psp.md): unzip PSPExp from the
-   [Releases](https://github.com/pleft/PSPExp/releases) page onto its memory
+   [download page](https://pspexp.dev/download) onto its memory
    stick. You only do this once.
 2. Set up the board: write its card image from the same page
    ([Raspberry Pi](docs/manual/raspberry-pi.md),
@@ -64,8 +64,9 @@ packages, ROMs, files, music and headphones.
 
 ## Downloads
 
-Each release on the [Releases](https://github.com/pleft/PSPExp/releases)
-page holds the PSP's files and the card images for the Raspberry Pi and the
+The [download page](https://pspexp.dev/download) has the latest release's three files and how
+many times each was downloaded. Each release on the
+[Releases](https://github.com/pleft/PSPExp/releases) page holds the PSP's files and the card images for the Raspberry Pi and the
 GameShell, built by GitHub's CI, each with its SHA-256; what is new and what
 is known not to work is in the [release notes](CHANGELOG.md). The games come
 from PSPExp's package repository (`https://pkg.pspexp.dev`). You can also

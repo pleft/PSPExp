@@ -115,3 +115,27 @@ footer p { margin: 6px 0; }
   .bar nav a { padding: 6px 7px; font-size: .88rem; }
   .brand span { display: none; }
 }
+
+/* the download page */
+.dl-hero { padding: 56px 0 28px; }
+.dl-hero h1 { font-size: clamp(2rem, 4.4vw, 3rem); margin: 0 0 12px; }
+.dl-total { margin: 18px 0 0; color: var(--sub); font-size: 1.05rem; }
+.dl-total .count { font-size: 2.2rem; font-weight: 700; color: var(--accent); margin-right: 6px; font-variant-numeric: tabular-nums; }
+section.wrap:has(.dl-grid) { padding-top: 28px; }
+.dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.dl { display: flex; flex-direction: column; background: var(--tile); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+.dl-icon { width: 56px; height: 36px; color: var(--accent); margin-bottom: 10px; }
+.dl h2 { font-size: 1.3rem; margin: 0 0 4px; }
+.dl .for { color: var(--muted); font-size: .92rem; margin: 0 0 16px; min-height: 3.2em; }
+.dl-btn { text-align: center; font-size: 1.05rem; padding: 13px 18px; }
+.dl-size { font-weight: 400; opacity: .8; margin-left: 4px; }
+.dl-file { margin: 10px 0 0; text-align: center; }
+.dl-file code { font-size: .78rem; background: none; border: 0; color: var(--muted); padding: 0; }
+.dl-count { margin: 12px 0 4px; text-align: center; color: var(--sub); font-size: .95rem; }
+.dl-count .count { font-size: 1.6rem; font-weight: 700; color: var(--text); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.dl .how { color: var(--sub); font-size: .93rem; padding-left: 1.2em; margin: 14px 0 12px; flex: 1; }
+.dl .how li { margin: 6px 0; }
+.sha summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.sha code { display: block; margin-top: 8px; font-size: .72rem; word-break: break-all; }
+.dl-after p { color: var(--sub); }
+@media (max-width: 860px) { .dl-grid { grid-template-columns: 1fr; } .dl .for { min-height: 0; } }
