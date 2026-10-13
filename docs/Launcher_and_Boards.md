@@ -1490,6 +1490,25 @@ stand-in PSP, and the same listings from the Pi), and a Plex server's
 answer to the search (its name and address read right); `tests/test_upnp.c`
 reads MiniDLNA-shaped answers.
 
+**Tracker modules** (2026-10-13, `modplay.c`): MOD, XM, S3M, IT (and MPTM,
+669, MTM, STM) play through libopenmpt in the console itself (K_MOD), no
+longer through ffmpeg, when the board has it: opened at run time
+(`dlopen("libopenmpt.so.0")`; Debian's ffmpeg depends on it, so the card
+images do; the Omega, without it, keeps ffmpeg's way). Each chunk of sound
+sent (1024 frames) is stored with what the module was when it ends
+(position, pattern, row, speed, tempo, every channel's VU), 128 of them;
+the view looks up the one heard by the play clock, not the one decoded
+0.4 s ahead. In Now playing a module shows as a tracker: the title and
+time, position / pattern / row / BPM / speed, each channel's number and
+level, and 13 rows of the pattern with the heard one in the middle, each
+character in its own 6-pixel cell (FONT_BADGE drawn one character at a
+time: Inter is not monospaced) coloured by libopenmpt's highlight letters
+(note, instrument, volume column, effect). A channel is 13 characters
+(`C-5 01 v64 A0F`) while they fit, narrower down to the note with many;
+up / down move along channels that do not fit. Redrawn about 30 times a
+second while playing. Tried on the Mac's stand-in PSP with an XM of 10
+channels.
+
 **Icons went blank** (found on the Pi the same day, after Music and
 Files): the launcher kept every icon it had drawn, each size apart, in 96
 textures on the PSP and never let one go; once Music's and Files' icons

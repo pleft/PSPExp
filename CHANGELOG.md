@@ -1,5 +1,21 @@
 # Release notes
 
+## Since 1.0.0 (not released yet)
+
+These come with the next PSPExp packages: the boards get them as an update
+(Packages, Apps > PSPExp).
+
+- **Media** (once Music) plays **films** as well as music: MP4, MKV, WebM,
+  AVI and whatever ffmpeg reads, full screen, up to 30 pictures a second
+  (a Raspberry Pi 400 keeps 720p and 1080p at 29–30).
+- **Media servers**: Media's Browse finds the UPnP / DLNA servers on your
+  network (Plex, Jellyfin, Kodi, MiniDLNA, a NAS) and plays their songs and
+  films straight from them.
+- **Tracker modules** (MOD, XM, S3M, IT) show their patterns as a tracker
+  does while they play: the rows scrolling, each channel's level.
+- **Archives in Files**: unpack ZIP, 7z, RAR and tar archives, see what is
+  in them, and compress files to a .zip.
+
 ## The first release
 
 The first public release of PSPExp: the PSP as the screen, sound and

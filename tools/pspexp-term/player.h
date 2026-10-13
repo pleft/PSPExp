@@ -16,6 +16,10 @@
  * frames wait in a ring and the one due by the sound's clock is shown
  * (player_video): the PSP draws it as a picture, as Files shows photos.
  *
+ * Tracker modules (MOD, XM, S3M, IT...): libopenmpt decodes them here when
+ * the board has it (modplay.c), and says which pattern row each piece of
+ * sound comes from, for Media's tracker view; ffmpeg otherwise.
+ *
  * Everything runs on the thread that drives the link (player_pump, from
  * pspexp-term's main loop).
  */
@@ -34,6 +38,7 @@ typedef struct PlayerInfo {
     double pos, dur;         /* seconds; dur 0 when unknown */
     int    playing, paused, ended;
     int    video;            /* a film: player_video has its picture */
+    int    module;           /* a tracker module through libopenmpt: player_module has its rows */
 } PlayerInfo;
 
 /* is this a file the player takes (by its name): music, or a film */
@@ -42,6 +47,10 @@ int  player_is_video(const char *name);
 /* the film's picture due now: 1 with its pixels (RGB 5650, w x h) and a
  * number that changes with each new picture; 0 when there is none */
 int  player_video(const uint16_t **px, int *w, int *h, unsigned *serial);
+/* a module's state as heard now (the sound sent ahead is not heard yet), and
+ * the module for its pattern cells (modplay.h); 0 when no module plays */
+struct ModPlay; struct ModState;
+int  player_module(struct ModState *heard, struct ModPlay **m);
 /* pictures read from ffmpeg, dropped unshown (late, or the ring full), waiting now */
 void player_video_stats(unsigned long *read, unsigned long *dropped, int *ahead);
 /* stop whatever plays and start path; -1 and err when it cannot be played */

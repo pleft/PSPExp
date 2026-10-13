@@ -9,6 +9,7 @@
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
 #include "upnp.h"
+#include "modplay.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +37,7 @@ static unsigned g_vid_shown;       /* pictures sent to the PSP, this film (tests
 static int g_vid_loaded;           /* the film's textures are on the PSP */
 static uint64_t g_hud_until;       /* a film's controls shown until then (a key brings them) */
 static uint64_t g_now;
+static int g_mod_ch0;              /* a module: the first channel shown (up / down: more when they do not all fit) */
 
 /* ---- the queue -------------------------------------------------------------------------------- */
 
@@ -474,6 +476,8 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (pressed & PSPEXP_BUTTON_CROSS) music_toggle();
         if (left) player_seek(-10);
         if (right) player_seek(10);
+        if (up && g_mod_ch0 > 0) g_mod_ch0--;   /* a module: its channels, when they do not all fit */
+        if (down) g_mod_ch0++;                   /* (draw_module keeps it in range) */
         if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
         if (pressed & PSPEXP_BUTTON_CIRCLE) {   /* the music goes on; a film waits, paused */
             PlayerInfo pi;
@@ -541,6 +545,10 @@ static int mu_needs_frame(uint64_t now)
         pspexp_set_max_in_flight(g_ctx, film ? 2 : 1);
         if (film && serial != g_vid_serial) g_dirty = 1;
     }
+    {   /* a module in Now playing: its rows and levels move, about 30 frames a second */
+        PlayerInfo pi; static uint64_t last;
+        if (g_view == V_NOW && player_info(&pi) && pi.module && !pi.paused && !pi.ended && now - last >= 33000u) { last = now; g_dirty = 1; }
+    }
     hud = now < g_hud_until;
     if (hud != hud_was) { hud_was = hud; g_dirty = 1; }
     return g_dirty;
@@ -555,11 +563,100 @@ static void fmt_time(double t, char *out, size_t n)
 
 static const char *track_name(int k) { return g_q[g_order[k]].e.name; }
 
+/* ---- a tracker module, as a tracker shows it (libopenmpt: player_module) ---------------------------- */
+
+
+/* text one character a cell (cw wide), each coloured by its kind (libopenmpt's highlight letters) */
+static void mono_cells(int x, int y, const char *t, const char *hl, int cw, int cur)
+{
+    char one[2] = { 0, 0 };
+    int i;
+    for (i = 0; t[i]; i++) {
+        uint32_t c;
+        char k = hl[i] ? hl[i] : ' ';
+        if (t[i] == ' ') continue;
+        switch (k) {
+        case 'n': case 'm': c = 0xf1f4f9; break;   /* the note */
+        case 'i': c = 0xffd479; break;             /* the instrument */
+        case 'u': case 'v': c = 0x7fe3a0; break;   /* the volume column */
+        case 'e': case 'f': c = 0xff9ad5; break;   /* the effect */
+        default: c = 0x45516b; break;              /* an empty field's dots */
+        }
+        if (cur && c == 0x45516b) c = 0x7d8fae;
+        one[0] = t[i];
+        gfx_text(FONT_BADGE, x + i * cw + (cw - gfx_text_width(FONT_BADGE, one)) / 2, y, one, c, 255, 0);
+    }
+}
+
+static void draw_module(const PlayerInfo *pi, const ModState *st, ModPlay *m, uint64_t now)
+{
+    enum { CW = 6, ROWH = 12, NR = 13, TOPY = 86, LX = 10, NUMW = 22 };
+    const int avail = UI_SCREEN_W - LX - NUMW - 8;
+    int width = 13, vis, ch, r, x0, cw_ch;
+    char s[200], t1[16], t2[16];
+    (void)now;
+    /* how wide a channel: whole cells (C-5 01 v64 A0F) while they fit, then narrower, at least the note */
+    if (st->channels * (width * CW + 8) > avail) {
+        width = avail / (st->channels > 0 ? st->channels : 1) / CW - 1;
+        if (width < 3) width = 3;
+    }
+    cw_ch = width * CW + 8;
+    vis = avail / cw_ch;
+    if (vis > st->channels) vis = st->channels;
+    if (g_mod_ch0 > st->channels - vis) g_mod_ch0 = st->channels - vis;
+    if (g_mod_ch0 < 0) g_mod_ch0 = 0;
+    /* the song */
+    gfx_text(FONT_BODY, LX, 28, pi->title, UI_TEXT, 255, 300);
+    fmt_time(pi->pos, t1, sizeof(t1));
+    if (pi->dur > 0) fmt_time(pi->dur, t2, sizeof(t2)); else snprintf(t2, sizeof(t2), "--:--");
+    snprintf(s, sizeof(s), "%s / %s", t1, t2);
+    gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 30, s, UI_SUB, 255, 0);
+    snprintf(s, sizeof(s), "Position %02d/%02d   Pattern %02d   Row %02X/%02X   %.0f BPM   Speed %d%s%s",
+             st->order, st->orders, st->pattern, st->row, st->rows, st->tempo, st->speed, pi->artist[0] ? "   " : "", pi->artist);
+    gfx_text(FONT_BADGE, LX, 47, s, UI_SUB, 255, UI_SCREEN_W - 2 * LX);
+    if (pi->paused || pi->ended) gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, pi->ended ? "Ended" : "Paused"), 45, pi->ended ? "Ended" : "Paused", UI_ACCENT, 255, 0);
+    /* each channel's number and level */
+    x0 = LX + NUMW;
+    for (ch = 0; ch < vis; ch++) {
+        int c = g_mod_ch0 + ch, x = x0 + ch * cw_ch, bw = cw_ch - 8, lv;
+        float v = c < MOD_CHANNELS ? st->vu[c] : 0;
+        snprintf(s, sizeof(s), "%d", c + 1);
+        gfx_text(FONT_BADGE, x, 60, s, UI_MUTED, 255, 0);
+        gfx_rect(x + 14, 63, bw - 14, 6, 0x1b2438, 255);
+        lv = (int)((bw - 14) * (v > 1 ? 1 : v < 0 ? 0 : v));
+        if (lv > 0) gfx_rect(x + 14, 63, lv, 6, v > 0.85f ? 0xff7a6b : v > 0.6f ? 0xffd479 : 0x7fe3a0, 255);
+    }
+    if (st->channels > vis) {
+        snprintf(s, sizeof(s), "%d-%d of %d (up / down)", g_mod_ch0 + 1, g_mod_ch0 + vis, st->channels);
+        gfx_text(FONT_BADGE, UI_SCREEN_W - 12 - gfx_text_width(FONT_BADGE, s), 72, s, UI_MUTED, 255, 0);
+    }
+    /* the pattern: the row heard in the middle */
+    gfx_rect(LX - 4, TOPY + (NR / 2) * ROWH - 1, UI_SCREEN_W - 2 * LX + 8, ROWH, UI_ACCENT, 70);
+    for (r = 0; r < NR; r++) {
+        int row = st->row - NR / 2 + r, y = TOPY + r * ROWH, cur = r == NR / 2;
+        if (row < 0 || row >= st->rows) continue;
+        snprintf(s, sizeof(s), "%02X", row);
+        gfx_text(FONT_BADGE, LX, y, s, cur ? 0xffffff : row % 4 ? 0x5d6d8a : UI_SUB, 255, 0);
+        for (ch = 0; ch < vis; ch++) {
+            char text[64], hl[64];
+            mod_cell(m, st->pattern, row, g_mod_ch0 + ch, width, text, hl, sizeof(text));
+            mono_cells(x0 + ch * cw_ch, y, text, hl, CW, cur);
+        }
+    }
+    /* where in the song */
+    gfx_rect(LX, 245, UI_SCREEN_W - 2 * LX, 3, 0x2a3145, 255);
+    if (pi->dur > 0) gfx_rect(LX, 245, (int)((UI_SCREEN_W - 2 * LX) * (pi->pos / pi->dur > 1 ? 1 : pi->pos / pi->dur)), 3, UI_ACCENT, 255);
+}
+
 static void draw_now(uint64_t now)
 {
     PlayerInfo pi;
     char t1[16], t2[16], s[200];
     int x = 168, y = 44, w, h, bar_x = 24, bar_w = UI_SCREEN_W - 48, bar_y = 200, have = player_info(&pi);
+    {   /* a module: its patterns, as a tracker shows them */
+        ModState ms; ModPlay *mp;
+        if (have && pi.module && player_module(&ms, &mp)) { draw_module(&pi, &ms, mp, now); return; }
+    }
     if (!have && g_at < 0) {
         gfx_nine(NINE_R10, 24, 44, 128, 128, UI_TILE, 255);
         gfx_icon("music", 64, 24 + 32, 44 + 32, UI_MUTED, 255);

@@ -268,7 +268,16 @@ title, the time and the buttons over the picture for a few seconds (the
 first press only shows them); cross pauses, left / right jump 10 seconds,
 square stops. Closing Media pauses a film. A Raspberry Pi 400 shows a
 720p or 1080p H.264 film at 29–30 pictures a second; films need ffmpeg,
-which the card images have. From a media server, songs and films play
+which the card images have.
+
+**Tracker modules** (MOD, XM, S3M, IT) play as a tracker shows them: the
+song's patterns scroll with the row you hear in the middle, each channel's
+notes, instruments, volumes and effects in their colours, and each
+channel's level above; up / down move along the channels when they do not
+all fit. (The board needs libopenmpt, which comes with ffmpeg on the card
+images; without it modules still play, without the patterns.)
+
+From a media server, songs and films play
 straight from it (nothing is copied to the board); the server's folders
 look as it arranges them.
 

@@ -174,7 +174,7 @@ if(PSPEXP_HAVE_USB)
   target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
 endif()
 
-add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/player.c tools/pspexp-term/music.c tools/pspexp-term/upnp.c tools/pspexp-term/notify.c tools/pspexp-term/btaudio.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/apps.c tools/pspexp-term/monitor.c tools/pspexp-term/sysinfo.c tools/pspexp-term/store.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
+add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/player.c tools/pspexp-term/music.c tools/pspexp-term/upnp.c tools/pspexp-term/modplay.c tools/pspexp-term/notify.c tools/pspexp-term/btaudio.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/apps.c tools/pspexp-term/monitor.c tools/pspexp-term/sysinfo.c tools/pspexp-term/store.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
   tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c)
 target_compile_definitions(pspexp-term PRIVATE PSPEXP_LAUNCHER_ASSET_DIR="${CMAKE_SOURCE_DIR}/tools/pspexp-term/assets")
 # the console's version, for About: generated at every build (cmake/pspexp_version.cmake)
@@ -183,7 +183,7 @@ add_custom_target(pspexp_version
   BYPRODUCTS ${CMAKE_BINARY_DIR}/generated/pspexp_version.h)
 add_dependencies(pspexp-term pspexp_version)
 target_include_directories(pspexp-term PRIVATE ${CMAKE_BINARY_DIR}/generated)
-target_link_libraries(pspexp-term PRIVATE pspexp pspexp_null pspexp_tcp)
+target_link_libraries(pspexp-term PRIVATE pspexp pspexp_null pspexp_tcp ${CMAKE_DL_LIBS})   # dl: libopenmpt opened at run time (modplay.c)
 if(NOT APPLE)
   target_link_libraries(pspexp-term PRIVATE util m pthread)
 else()

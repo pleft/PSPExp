@@ -1,6 +1,7 @@
 /* pspexp-term's music player: see player.h */
 #define _GNU_SOURCE   /* F_SETPIPE_SZ: a film's pictures through a 1 MB pipe, not 64 KB (four main-loop turns a picture) */
 #include "player.h"
+#include "modplay.h"
 #include "../../protocol/pspexp_mp3.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -23,7 +24,8 @@
 #define RING 32               /* pictures decoded ahead (about a second): when full, ffmpeg waits */
 #define ABUF (RATE * 4)       /* a film's sound read ahead, frames (4 s: more than the ring holds) */
 
-enum { K_NONE, K_MP3, K_WAV, K_PIPE };
+enum { K_NONE, K_MP3, K_WAV, K_PIPE, K_MOD };
+#define MOD_HIST 128          /* a module's states, each with the time its sound ends: the one heard looked up */
 
 static struct {
     int kind;
@@ -53,6 +55,9 @@ static struct {
     /* a film's sound, read from ffmpeg as far ahead as it gives it (never blocked
      * on it), sent to the PSP LEAD ahead of the clock as for music */
     int16_t *abuf; size_t alen;
+    /* a tracker module (libopenmpt): the file in memory, and what it was at each moment sent */
+    ModPlay *mod; uint8_t *mdata;
+    struct { double t; ModState s; } mhist[MOD_HIST]; int mh_head, mh_n;
     int have_pic;
 } P;
 
@@ -75,7 +80,7 @@ int player_is_video(const char *name)
 
 int player_handles(const char *name)
 {
-    static const char *const EXT[] = { "mp3", "wav", "ogg", "oga", "flac", "opus", "m4a", "aac", "wma", "mod", "xm", "it", "s3m", NULL };
+    static const char *const EXT[] = { "mp3", "wav", "ogg", "oga", "flac", "opus", "m4a", "aac", "wma", "mod", "xm", "it", "s3m", "mptm", "669", "mtm", "stm", NULL };
     return ext_of(name, EXT) || player_is_video(name);
 }
 
@@ -621,12 +626,87 @@ static void pipe_feed(PspExpContext *ctx, double until)
 
 /* ---- the player ---------------------------------------------------------------------- */
 
+/* ---- a tracker module, through libopenmpt ---------------------------------------------- */
+
+static int is_module(const char *name)
+{
+    static const char *const EXT[] = { "mod", "xm", "it", "s3m", "mptm", "669", "mtm", "stm", NULL };
+    return ext_of(name, EXT);
+}
+
+static int mod_start(const char *path, char *err, size_t en)
+{
+    FILE *f = fopen(path, "rb");
+    long n;
+    char s[160];
+    if (!f) { snprintf(err, en, "Cannot read it: %s", strerror(errno)); return -1; }
+    fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+    if (n <= 0 || n > (64L << 20) || !(P.mdata = malloc((size_t)n)) || fread(P.mdata, 1, (size_t)n, f) != (size_t)n) { fclose(f); snprintf(err, en, "It could not be read whole."); return -1; }
+    fclose(f);
+    if (!(P.mod = mod_open(P.mdata, (size_t)n, err, en))) return -1;
+    mod_meta(P.mod, "title", P.info.title, sizeof(P.info.title));
+    mod_meta(P.mod, "artist", P.info.artist, sizeof(P.info.artist));
+    mod_meta(P.mod, "tracker", s, sizeof(s));
+    if (s[0]) snprintf(P.info.album, sizeof(P.info.album), "made with %s", s);
+    {
+        ModState st; char type[16]; char *c;
+        mod_state(P.mod, &st);
+        mod_meta(P.mod, "type", type, sizeof(type));
+        for (c = type; *c; c++) if (*c >= 'a' && *c <= 'z') *c = (char)(*c - 32);
+        snprintf(P.info.format, sizeof(P.info.format), "%s  %d channels  %d positions", type, st.channels, st.orders);
+    }
+    P.info.dur = mod_duration(P.mod);
+    P.info.module = 1;
+    snprintf(P.info.decoder, sizeof(P.info.decoder), "Played on the board (libopenmpt)");
+    return 0;
+}
+
+static void mod_feed(PspExpContext *ctx, double until)
+{
+    static int16_t buf[1024 * 2];
+    while (P.sent < until && !P.eof) {
+        size_t want = (size_t)((until - P.sent) * RATE) + 1, got;
+        if (want > 1024) want = 1024;
+        if (!(got = mod_read(P.mod, RATE, buf, want))) { P.eof = 1; break; }
+        if (pspexp_audio_stream(ctx, buf, (uint32_t)got) < 0) break;   /* (the link: the module goes on from here next turn, a few ms skipped) */
+        P.sent += (double)got / RATE;
+        {   /* what it is when this sound ends */
+            int k = (P.mh_head + P.mh_n) % MOD_HIST;
+            if (P.mh_n == MOD_HIST) { P.mh_head = (P.mh_head + 1) % MOD_HIST; P.mh_n--; k = (P.mh_head + P.mh_n) % MOD_HIST; }
+            P.mhist[k].t = P.sent;
+            mod_state(P.mod, &P.mhist[k].s);
+            P.mh_n++;
+        }
+    }
+}
+
+static double clock_pos(void);
+
+int player_module(ModState *heard, ModPlay **m)
+{
+    double t;
+    int i, best = -1;
+    if (P.kind != K_MOD || !P.mod || !P.mh_n) return 0;
+    t = clock_pos();
+    for (i = 0; i < P.mh_n; i++) {   /* the first whose sound ends after what is heard: that is the one playing */
+        int k = (P.mh_head + i) % MOD_HIST;
+        best = k;
+        if (P.mhist[k].t >= t) break;
+    }
+    if (best < 0) return 0;
+    *heard = P.mhist[best].s;
+    *m = P.mod;
+    return 1;
+}
+
 void player_stop(void)
 {
     if (P.kind == K_PIPE) pipe_close();
     if (P.f) fclose(P.f);
     free(P.buf);
     free(P.ring); free(P.pic); free(P.abuf);
+    if (P.mod) mod_close(P.mod);
+    free(P.mdata);
     if (P.info.cover[0] && !strncmp(P.info.cover, COVER_FILE, strlen(COVER_FILE))) unlink(P.info.cover);
     memset(&P, 0, sizeof(P));
     P.fd = -1; P.pid = -1; P.vfd = -1;
@@ -639,6 +719,7 @@ static void restart_at(double t)
     if (P.info.dur > 0 && t > P.info.dur) t = P.info.dur;
     if (P.kind == K_MP3) mp3_seek(t);
     else if (P.kind == K_WAV) wav_seek(t);
+    else if (P.kind == K_MOD) { mod_seek(P.mod, t); P.mh_n = 0; }
     else pipe_open(t);
     P.base = P.sent = t;
     P.t0 = now_s() + 0.1;   /* the PSP holds back a tenth of a second before it plays */
@@ -675,6 +756,9 @@ int player_start(PspExpContext *ctx, const char *path, char *err, size_t en)
             snprintf(err, en, "Not enough memory for its pictures."); player_stop(); return -1;
         }
         P.video = 1; P.info.video = 1;
+    } else if (!stream && is_module(path) && mod_available()) {
+        if (mod_start(path, err, en) < 0) { player_stop(); return -1; }
+        P.kind = K_MOD; r = 0;
     } else if (dot && !strcasecmp(dot, ".mp3")) {
         if (mp3_open(path, err, en) < 0) { player_stop(); return -1; }
         if (pspexp_audio_mp3_supported(ctx) && !pspexp_audio_local(ctx)) { P.kind = K_MP3; snprintf(P.info.decoder, sizeof(P.info.decoder), "Decoded on the PSP (Media Engine)"); r = 0; }
@@ -765,6 +849,7 @@ void player_pump(PspExpContext *ctx)
     until = P.base + (now - P.t0) + LEAD;
     if (P.kind == K_MP3) mp3_feed(ctx, until);
     else if (P.kind == K_WAV) wav_feed(ctx, until);
+    else if (P.kind == K_MOD) mod_feed(ctx, until);
     else pipe_feed(ctx, until);
     if (P.video) {
         video_read();
