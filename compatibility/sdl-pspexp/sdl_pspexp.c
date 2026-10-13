@@ -199,6 +199,7 @@ static struct {
     int dev_open[8]; SDL_mutex *pace_mu;   /* slots in use; the pacer's lock against an open or a close */
     /* input */
     int nub_mouse, nub_keys, hide_window, cursor_hidden, relative;
+    int own_pointer;   /* PSPEXP_POINTER=0: the game draws its own, never the layer's (Unreal Tournament's menus) */
     SDL_Cursor *blank_cursor[4]; int cursor_blank;   /* see SDL_CreateCursor */
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
@@ -317,6 +318,7 @@ static void connect_once(void)
     S.next_handle = 1;
     S.local_audio = !(getenv("PSPEXP_LOCAL_AUDIO") && !strcmp(getenv("PSPEXP_LOCAL_AUDIO"), "0"));
     S.nub_mouse = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "mouse");
+    S.own_pointer = getenv("PSPEXP_POINTER") && !strcmp(getenv("PSPEXP_POINTER"), "0");
     S.nub_speed = getenv("PSPEXP_NUB_SPEED") && atof(getenv("PSPEXP_NUB_SPEED")) > 0 ? (float)atof(getenv("PSPEXP_NUB_SPEED")) : 300.0f;
     S.mouse_left = B_CROSS; S.mouse_right = B_CIRCLE;
     if (getenv("PSPEXP_MOUSE_BUTTONS")) {   /* "left=r,right=none": which PSP buttons are the mouse's */
@@ -1929,8 +1931,14 @@ static void feed_input(void)
             } else {
                 S.px = fminf(fmaxf(S.px + dx, 0), (float)(S.win_w - 1));
                 S.py = fminf(fmaxf(S.py + dy, 0), (float)(S.win_h - 1));
-                S.rel_x += S.px - ox; S.rel_y += S.py - oy;
-                S.rel_ex += S.px - ox; S.rel_ey += S.py - oy;
+                if (S.own_pointer) {   /* a cursor of its own moved by the motion (Unreal Tournament's menus): the whole
+                                        * motion, or ours stops at the edge while its own, apart, has not got there */
+                    S.rel_x += dx; S.rel_y += dy;
+                    S.rel_ex += dx; S.rel_ey += dy;
+                } else {
+                    S.rel_x += S.px - ox; S.rel_y += S.py - oy;
+                    S.rel_ex += S.px - ox; S.rel_ey += S.py - oy;
+                }
             }
             SDL_zero(ev);
             ev.type = SDL_MOUSEMOTION; ev.motion.x = (int)S.px; ev.motion.y = (int)S.py;
@@ -2709,7 +2717,7 @@ static void end_frame_locked(void)
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
     flush_quads();
-    if (S.nub_mouse && !S.cursor_hidden && !S.cursor_blank && !S.relative) draw_pointer();
+    if (S.nub_mouse && !S.cursor_hidden && !S.cursor_blank && !S.relative && !S.own_pointer) draw_pointer();
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();

@@ -172,6 +172,7 @@ function; the tests check it is current).
 | `PSPEXP_JOYSTICK=0` | no virtual game controller, the keys alone (a game that takes both gets each press twice: SuperTux) |
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
 | `PSPEXP_NUB=keys` | the nub presses the four arrow keys of `PSPEXP_KEYS` (for keyboard-only games such as Doom) |
+| `PSPEXP_POINTER=0` | with `PSPEXP_NUB=mouse`: the game draws its own pointer, moved by the motion: the layer draws none (Unreal Tournament's menus showed two, apart) and passes the nub's whole motion, never stopped at an edge (the layer's invisible one stopped there, and the game's could not reach the screen's far side) |
 | `PSPEXP_NUB_SPEED=N` | with `PSPEXP_NUB=mouse`: the pointer's speed in window pixels a second with the nub fully over (default 300; OpenTTD's recipe 180) |
 | `PSPEXP_TEX_HALF=0` | a streaming texture larger than 512 on a side is kept and sent at half size (the PSP shows such a whole frame at under half anyway: Project: Starfighter's 800x600, 1.2 MB a frame and 13 fps in PPSSPP, 197 KB and 31 fps halved); 0: at full size |
 | `PSPEXP_BT_LATENCY=20ms` | (libpspexp, every program) with the sound routed to a Bluetooth device (System > Sound output): the latency pw-play asks PipeWire for (default 20ms, 60ms on a processor under 1.5 GHz such as the GameShell's; pw-play's own 100ms made games' sound lag) |
