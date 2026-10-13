@@ -1977,6 +1977,8 @@ HOOK(int, SDL_NumJoysticks, (void))
 
 HOOK(Uint32, SDL_GetMouseState, (int *x, int *y))
 {
+    static unsigned k;
+    if (getenv("PSPEXP_LOG_EVENTS") && k++ % 200 == 0) logf_("call: SDL_GetMouseState (%d,%d)", (int)S.px, (int)S.py);
     if (!S.nub_mouse || !S.active) return REAL(SDL_GetMouseState)(x, y);
     if (x) *x = (int)S.px;
     if (y) *y = (int)S.py;
@@ -1998,6 +2000,8 @@ HOOK(Uint32, SDL_GetRelativeMouseState, (int *x, int *y))
  * the nub's pointer is put where the game puts the mouse. */
 HOOK(void, SDL_WarpMouseInWindow, (SDL_Window *win, int x, int y))
 {
+    static unsigned k;
+    if (getenv("PSPEXP_LOG_EVENTS") && k++ % 20 == 0) logf_("call: SDL_WarpMouseInWindow %d,%d", x, y);
     if (S.nub_mouse && S.active) { S.px = (float)x; S.py = (float)y; }
     REAL(SDL_WarpMouseInWindow)(win, x, y);
 }
@@ -2512,6 +2516,7 @@ static void service_link(void)
  * headless board refuses it; the layer keeps it instead, draws no pointer and stops nothing at an edge */
 HOOK(int, SDL_SetRelativeMouseMode, (SDL_bool enabled))
 {
+    if (getenv("PSPEXP_LOG_EVENTS")) logf_("call: SDL_SetRelativeMouseMode %d", (int)enabled);
     if (S.nub_mouse && S.active) { S.relative = enabled == SDL_TRUE; (void)REAL(SDL_SetRelativeMouseMode)(enabled); return 0; }
     return REAL(SDL_SetRelativeMouseMode)(enabled);
 }
@@ -2930,6 +2935,27 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
                     memcpy(t, a + k, m); memcpy(a + k, b + k, m); memcpy(b + k, t, m);
                 }
             }
+            {   /* PSPEXP_FRAME_DUMP=PREFIX[:N]: every Nth frame (default 60) to PREFIX-K.ppm on the board:
+                 * looking at a game drawn here with no PSP or stand-in to show it (tests) */
+                static const char *dump; static int dump_every = -1, dump_k; static unsigned long dump_n;
+                if (dump_every < 0) {
+                    const char *e = getenv("PSPEXP_FRAME_DUMP"), *c = e ? strrchr(e, ':') : NULL;
+                    dump_every = e && *e ? (c && atoi(c + 1) > 0 ? atoi(c + 1) : 60) : 0;
+                    dump = e ? strdup(e) : NULL;
+                    if (dump && c) ((char *)dump)[c - e] = 0;
+                }
+                if (dump_every && dump_n++ % (unsigned long)dump_every == 0) {
+                    char name[600];
+                    FILE *df;
+                    snprintf(name, sizeof(name), "%s-%d.ppm", dump, dump_k++);
+                    if ((df = fopen(name, "wb"))) {
+                        int yy, xx;
+                        fprintf(df, "P6\n%d %d\n255\n", w, h);
+                        for (yy = 0; yy < h; yy++) for (xx = 0; xx < w; xx++) fwrite(buf + (size_t)yy * row + (size_t)xx * 4, 1, 3, df);
+                        fclose(df);
+                    }
+                }
+            }
             {
                 Frame f;
                 f.w = w; f.h = h; f.format = SDL_PIXELFORMAT_ABGR8888; f.pixels = buf; f.pitch = w * 4;
@@ -3089,6 +3115,11 @@ static void log_event(const SDL_Event *ev)
     case SDL_JOYHATMOTION: logf_("event: joystick %d hat %d", (int)ev->jhat.which, ev->jhat.value); break;
     case SDL_CONTROLLERAXISMOTION: if (ev->caxis.value > 16000 || ev->caxis.value < -16000) logf_("event: controller %d axis %s %d", (int)ev->caxis.which, SDL_GameControllerGetStringForAxis((SDL_GameControllerAxis)ev->caxis.axis), ev->caxis.value); break;
     case SDL_CONTROLLERBUTTONDOWN: case SDL_CONTROLLERBUTTONUP: logf_("event: controller %d %s %s", (int)ev->cbutton.which, SDL_GameControllerGetStringForButton((SDL_GameControllerButton)ev->cbutton.button), ev->type == SDL_CONTROLLERBUTTONDOWN ? "down" : "up"); break;
+    case SDL_MOUSEMOTION: {   /* (one in 20: they come every frame) */
+        static unsigned k;
+        if (k++ % 20 == 0) logf_("event: mouse motion to %d,%d by %d,%d", ev->motion.x, ev->motion.y, ev->motion.xrel, ev->motion.yrel);
+        break;
+    }
     case SDL_JOYDEVICEREMOVED: logf_("event: joystick %d removed", (int)ev->jdevice.which); break;
     case SDL_JOYDEVICEADDED: case SDL_CONTROLLERDEVICEADDED: logf_("event: %s device %d added", ev->type == SDL_JOYDEVICEADDED ? "joystick" : "controller", (int)ev->jdevice.which); break;
     default: break;

@@ -122,7 +122,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Media: music | MP3 decoded by the PSP; the Pi does almost nothing |
 | Media: films | 720p and 1080p H.264 at 29–30 pictures a second on the PSP-1000, the film's clock exact (Pi 400; ffmpeg uses about half a core) |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi; its menus 33-60 fps on the PSP-1000 |
-| Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); the sound clean in Mario, Ocarina and Banjo-Tooie; GoldenEye and Perfect Dark still have short gaps where the Pi falls behind |
+| Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); Super Mario 64 plays smoothly, Ocarina of Time well; GoldenEye and Perfect Dark have short sound gaps where the Pi falls behind; Banjo-Tooie is too slow in play on a Pi 400 (its intro runs well, its levels do not) |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000, its music and sound on the PSP |
 | Wolfenstein: Enemy Territory | drawn by the PSP: on the PSP-1000 about 20 fps over Oasis's open ground, up to 60 indoors; online or against bots; id's licence agreement accepted in Packages |
