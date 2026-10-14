@@ -2517,6 +2517,10 @@ static void service_link(void)
 HOOK(int, SDL_SetRelativeMouseMode, (SDL_bool enabled))
 {
     if (getenv("PSPEXP_LOG_EVENTS")) logf_("call: SDL_SetRelativeMouseMode %d", (int)enabled);
+    /* A game with a cursor of its own (PSPEXP_POINTER=0) moves it by the motion from where it starts,
+     * the top-left corner when its menus come (Unreal Tournament's): ours starts there too, or the two
+     * stand apart and its cursor stops short where ours meets an edge (the character creation's) */
+    if (S.own_pointer && S.nub_mouse && S.active && enabled != SDL_TRUE) { S.px = 0; S.py = 0; }
     if (S.nub_mouse && S.active) { S.relative = enabled == SDL_TRUE; (void)REAL(SDL_SetRelativeMouseMode)(enabled); return 0; }
     return REAL(SDL_SetRelativeMouseMode)(enabled);
 }

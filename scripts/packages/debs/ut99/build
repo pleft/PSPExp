@@ -14,7 +14,7 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"
-V=469d-pspexp2
+V=469d-pspexp3
 P469D=https://github.com/OldUnreal/UnrealTournamentPatches/releases/download/v469d/OldUnreal-UTPatch469d-Linux-arm64.tar.bz2
 P469D_SHA=d9ef651c1d768cb4d1f146287cb58bee0834a9bd88a8593a78d0f74f956a031d
 COMMIT=7ebf94345070ff01bf256e495795038afa68d713
@@ -26,6 +26,16 @@ cat > "$W/root/usr/games/ut99" <<'S'
 # Unreal Tournament (package ut99: downloaded when it was installed)
 G=/usr/share/games/ut99
 [ -f "$G/.pspexp-installed" ] || { echo "Unreal Tournament is not there: install the package ut99 again" >&2; exit 1; }
+# The menus in a game (the Tournament's character creation, its ladder) move their own cursor by the
+# mouse's motion times MouseScale, 0.6 by default: the PSP's pointer stops at the screen's edges, so
+# the cursor stopped at 60% across and down (further after going to an edge and back, the two then
+# drifting together). 1.0: the cursor moves just as the pointer, both from the top-left corner (the
+# SDL layer puts its pointer there when the menus come, PSPEXP_POINTER=0), to the same edges.
+# Set at every start (Unreal Tournament writes its settings back on quitting)
+I="$HOME/.utpg/System/UnrealTournament.ini"
+if [ -f "$I" ] && ! awk '/^\[UTMenu.UTConsole\]/{s=1;next} /^\[/{s=0} s&&/^MouseScale=1(\.0*)?$/{f=1} END{exit !f}' "$I"; then
+	awk 'BEGIN{d=0} /^\[UTMenu.UTConsole\]/{print; print "MouseScale=1.000000"; s=1; d=1; next} /^\[/{s=0} s&&/^MouseScale=/{next} {print} END{if(!d){print ""; print "[UTMenu.UTConsole]"; print "MouseScale=1.000000"}}' "$I" > "$I.pspexp" && mv "$I.pspexp" "$I"
+fi
 cd "$G/SystemARM64" && exec ./ut-bin-arm64 "$@"
 S
 chmod 755 "$W/root/usr/games/ut99"
@@ -64,6 +74,7 @@ tar -xjf "\$C/469d.tar.bz2" -C "\$G.new"
 # defaults for the PSP: a 480x272 window, the next weapon on E (Unreal leaves E unbound)
 sed -i 's/^WindowedViewportX=.*/WindowedViewportX=480/; s/^WindowedViewportY=.*/WindowedViewportY=272/; s/^FullscreenViewportX=.*/FullscreenViewportX=480/; s/^FullscreenViewportY=.*/FullscreenViewportY=272/; s/^StartupFullscreen=.*/StartupFullscreen=False/' "\$G.new/SystemARM64/Default.ini"
 sed -i 's/^E=\$/E=NextWeapon/' "\$G.new/SystemARM64/DefUser.ini"
+printf '\n[UTMenu.UTConsole]\nMouseScale=1.000000\n' >> "\$G.new/SystemARM64/Default.ini"   # (the in-game menus' cursor over the whole screen: /usr/games/ut99)
 chmod -R u=rwX,go=rX "\$G.new"
 touch "\$G.new/.pspexp-installed"
 rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
