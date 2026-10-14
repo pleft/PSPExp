@@ -200,6 +200,7 @@ static struct {
     /* input */
     int nub_mouse, nub_keys, hide_window, cursor_hidden, relative;
     int own_pointer;   /* PSPEXP_POINTER=0: the game draws its own, never the layer's (Unreal Tournament's menus) */
+    int sync_corner;   /* such a game left relative mode for its menus: at the nub's next move, both to the top-left first */
     SDL_Cursor *blank_cursor[4]; int cursor_blank;   /* see SDL_CreateCursor */
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
@@ -1925,14 +1926,39 @@ static void feed_input(void)
             float fx = ax / 127.0f, fy = ay / 127.0f, speed = S.nub_speed * dt, ox = S.px, oy = S.py;
             SDL_Event ev;
             float dx = fx * fabsf(fx) * speed, dy = fy * fabsf(fy) * speed;
+            if (S.sync_corner && !S.relative) {
+                /* A game that moves a cursor of its own by the positions' differences (Unreal Tournament's
+                 * menus) puts it where it likes when its menus come (the middle) and stops it at its edges,
+                 * once a frame. At the first move: a jump far to the bottom-right, then, a frame later, to the
+                 * top-left corner: its cursor at its corner whatever its start, ours there too, then in step.
+                 * Without it the two stood apart and its cursor fell short of an edge (60% across in the
+                 * character creation, again after a match) */
+                static Uint32 t_far;
+                SDL_Event j;
+                SDL_zero(j);
+                j.type = SDL_MOUSEMOTION; j.motion.state = S.mbuttons; j.motion.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
+                if (S.sync_corner == 1) {
+                    j.motion.x = S.win_w * 4; j.motion.y = S.win_h * 4;
+                    j.motion.xrel = j.motion.x - (int)S.px; j.motion.yrel = j.motion.y - (int)S.py;
+                    S.px = (float)j.motion.x; S.py = (float)j.motion.y;
+                    SDL_PushEvent(&j);
+                    S.sync_corner = 2; t_far = now;
+                    return;   /* (nothing else this time: the game takes the far one alone) */
+                }
+                if (now - t_far < 100) return;
+                j.motion.x = 0; j.motion.y = 0;
+                j.motion.xrel = -(int)S.px; j.motion.yrel = -(int)S.py;
+                S.px = 0; S.py = 0; ox = 0; oy = 0;
+                SDL_PushEvent(&j);
+                S.sync_corner = 0;
+            }
             if (S.relative) {   /* the game draws its own cursor from the motion alone: never stopped at an edge */
                 S.rel_x += dx; S.rel_y += dy;
                 S.rel_ex += dx; S.rel_ey += dy;
             } else {
                 S.px = fminf(fmaxf(S.px + dx, 0), (float)(S.win_w - 1));
                 S.py = fminf(fmaxf(S.py + dy, 0), (float)(S.win_h - 1));
-                if (S.own_pointer) {   /* a cursor of its own moved by the motion (Unreal Tournament's menus): the whole
-                                        * motion, or ours stops at the edge while its own, apart, has not got there */
+                if (S.own_pointer) {   /* a cursor of its own moved by the motion: the whole motion */
                     S.rel_x += dx; S.rel_y += dy;
                     S.rel_ex += dx; S.rel_ey += dy;
                 } else {
@@ -2517,10 +2543,7 @@ static void service_link(void)
 HOOK(int, SDL_SetRelativeMouseMode, (SDL_bool enabled))
 {
     if (getenv("PSPEXP_LOG_EVENTS")) logf_("call: SDL_SetRelativeMouseMode %d", (int)enabled);
-    /* A game with a cursor of its own (PSPEXP_POINTER=0) moves it by the motion from where it starts,
-     * the top-left corner when its menus come (Unreal Tournament's): ours starts there too, or the two
-     * stand apart and its cursor stops short where ours meets an edge (the character creation's) */
-    if (S.own_pointer && S.nub_mouse && S.active && enabled != SDL_TRUE) { S.px = 0; S.py = 0; }
+    if (S.own_pointer && enabled != SDL_TRUE) S.sync_corner = 1;   /* (see feed_input: the cursor's corner) */
     if (S.nub_mouse && S.active) { S.relative = enabled == SDL_TRUE; (void)REAL(SDL_SetRelativeMouseMode)(enabled); return 0; }
     return REAL(SDL_SetRelativeMouseMode)(enabled);
 }
@@ -2951,7 +2974,9 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
                 if (dump_every && dump_n++ % (unsigned long)dump_every == 0) {
                     char name[600];
                     FILE *df;
-                    snprintf(name, sizeof(name), "%s-%d.ppm", dump, dump_k++);
+                    static Uint32 dump_t0;   /* (the name carries the ms since the first: matched against PSPEXP_SCRIPT's times) */
+                    if (!dump_t0) dump_t0 = SDL_GetTicks() ? SDL_GetTicks() : 1;
+                    snprintf(name, sizeof(name), "%s-%d-%ums.ppm", dump, dump_k++, (unsigned)(SDL_GetTicks() - dump_t0));
                     if ((df = fopen(name, "wb"))) {
                         int yy, xx;
                         fprintf(df, "P6\n%d %d\n255\n", w, h);
@@ -3142,10 +3167,10 @@ static int drop_event(const SDL_Event *ev)
 
 static void fake_focus_once(void)
 {
-    static int done;
+    static SDL_Window *done;   /* each window once (a game may make a new one: Unreal Tournament does) */
     SDL_Event ev;
-    if (done || !hide_focus_loss() || !S.win) return;
-    done = 1;
+    if (done == S.win || !hide_focus_loss() || !S.win) return;
+    done = S.win;
     SDL_zero(ev);
     ev.type = SDL_WINDOWEVENT; ev.window.event = SDL_WINDOWEVENT_FOCUS_GAINED; ev.window.windowID = SDL_GetWindowID(S.win);
     SDL_PushEvent(&ev);
