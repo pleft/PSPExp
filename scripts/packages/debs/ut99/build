@@ -36,6 +36,11 @@ I="$HOME/.utpg/System/UnrealTournament.ini"
 if [ -f "$I" ] && ! awk '/^\[UTMenu.UTConsole\]/{s=1;next} /^\[/{s=0} s&&/^MouseScale=1(\.0*)?$/{f=1} END{exit !f}' "$I"; then
 	awk 'BEGIN{d=0} /^\[UTMenu.UTConsole\]/{print; print "MouseScale=1.000000"; s=1; d=1; next} /^\[/{s=0} s&&/^MouseScale=/{next} {print} END{if(!d){print ""; print "[UTMenu.UTConsole]"; print "MouseScale=1.000000"}}' "$I" > "$I.pspexp" && mv "$I.pspexp" "$I"
 fi
+# Turning: the nub's motion times MouseSensitivity, 3 by default (a desktop mouse's); with the nub
+# left and right were too slow (the user). 6 while it is still the default: a value chosen in the
+# game's own Options > Preferences > Input stays
+U="$HOME/.utpg/System/User.ini"
+[ -f "$U" ] && sed -i '/^\[Engine.PlayerPawn\]/,/^\[/ s/^MouseSensitivity=3\.0*$/MouseSensitivity=6.000000/' "$U"
 cd "$G/SystemARM64" && exec ./ut-bin-arm64 "$@"
 S
 chmod 755 "$W/root/usr/games/ut99"
@@ -73,7 +78,7 @@ tar -xjf "\$C/469d.tar.bz2" -C "\$G.new"
 [ -x "\$G.new/SystemARM64/ut-bin-arm64" ] || { rm -rf "\$G.new" "\$C"; echo "no game program after installing" >&2; exit 1; }
 # defaults for the PSP: a 480x272 window, the next weapon on E (Unreal leaves E unbound)
 sed -i 's/^WindowedViewportX=.*/WindowedViewportX=480/; s/^WindowedViewportY=.*/WindowedViewportY=272/; s/^FullscreenViewportX=.*/FullscreenViewportX=480/; s/^FullscreenViewportY=.*/FullscreenViewportY=272/; s/^StartupFullscreen=.*/StartupFullscreen=False/' "\$G.new/SystemARM64/Default.ini"
-sed -i 's/^E=\$/E=NextWeapon/' "\$G.new/SystemARM64/DefUser.ini"
+sed -i 's/^E=\$/E=NextWeapon/; s/^MouseSensitivity=3\.0*\$/MouseSensitivity=6.000000/' "\$G.new/SystemARM64/DefUser.ini"
 printf '\n[UTMenu.UTConsole]\nMouseScale=1.000000\n' >> "\$G.new/SystemARM64/Default.ini"   # (the in-game menus' cursor over the whole screen: /usr/games/ut99)
 chmod -R u=rwX,go=rX "\$G.new"
 touch "\$G.new/.pspexp-installed"
