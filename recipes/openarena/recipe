@@ -10,7 +10,11 @@
 # (up / down) and crouches (left). One texture unit (PSPEXP_GL_UNITS=1): told of
 # two, with its lightmaps on (its saved config can turn them on) the engine
 # multitextures every surface, drawn twice here: 160 KB a frame, 15 fps
-# on the PSP-1000, against 62-98 KB and 30.
+# on the PSP-1000, against 62-98 KB and 30. The engine keeps ioq3.pid while it
+# runs; one left by a run that was cut off (a power loss, a kill) makes the
+# next start ask "safe video settings?" in a dialog on the board's own desktop,
+# which the PSP never shows: the game then looks frozen. So a pid file whose
+# process is gone is removed first.
 
 [package]
 id=openarena
@@ -18,7 +22,7 @@ title=OpenArena
 description=Fast arena shooter on the Quake 3 engine: deathmatch and capture the flag against bots, with rail guns, rockets and jump pads.
 category=game
 license=GPL-2.0 (ioquake3, OpenArena)
-version=4
+version=5
 
 [debian]
 apt=openarena
@@ -28,7 +32,7 @@ title=OpenArena
 type=game
 description=Fast arena shooter on the Quake 3 engine: deathmatch and capture the flag against bots, with rail guns, rockets and jump pads.
 icon=swords
-exec=/usr/games/openarena +set cl_renderer opengl1 +set r_mode -1 +set r_customwidth 480 +set r_customheight 272 +set r_fullscreen 0 +set r_vertexLight 1 +set r_lodbias 2 +set r_subdivisions 25 +set r_lodCurveError 1000 +set cg_simpleItems 1 +set r_dynamiclight 0 +set cg_marks 0 +set cg_gibs 0 +set r_fastsky 1 +set cg_shadows 0 +set r_flares 0 +set cg_brassTime 0 +set r_drawSun 0 +set sensitivity 25 +bind q weapprev
+exec=sh -c 'p=$HOME/.openarena/baseoa/ioq3.pid; kill -0 "$(cat "$p" 2>/dev/null)" 2>/dev/null || rm -f "$p"; exec /usr/games/openarena "$@"' openarena +set cl_renderer opengl1 +set r_mode -1 +set r_customwidth 480 +set r_customheight 272 +set r_fullscreen 0 +set r_vertexLight 1 +set r_lodbias 2 +set r_subdivisions 25 +set r_lodCurveError 1000 +set cg_simpleItems 1 +set r_dynamiclight 0 +set cg_marks 0 +set cg_gibs 0 +set r_fastsky 1 +set cg_shadows 0 +set r_flares 0 +set cg_brassTime 0 +set r_drawSun 0 +set sensitivity 25 +bind q weapprev
 keys=triangle=w,cross=s,square=a,circle=d,l=space,up=slash,down=q,left=c,start=escape,select=tab
 nub=mouse
 env=PSPEXP_JOYSTICK=0

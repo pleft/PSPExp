@@ -169,6 +169,12 @@ to let them go, for your phone or tablet. Details:
 
 ## Good to know
 
+- **A good power supply matters**: the PSP charges from the Pi's USB port,
+  and on a weak supply (or a thin cable) the Pi slows itself down to stay
+  safe. The N64 and the 3D games then stutter and their sound breaks up.
+  `vcgencmd get_throttled` in the terminal says `throttled=0x0` when all is
+  well; anything else means the Pi has been short of power since it started.
+  Use the Pi's official supply, or charge the PSP first.
 - **The Pi 400's keyboard** types into the PSP's terminal while the PSP is
   connected.
 - **Music in other formats** (Ogg, FLAC, Opus, M4A) is decoded on the Pi by
