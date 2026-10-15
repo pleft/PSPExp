@@ -177,9 +177,12 @@ def markdown(text):
 # ---- the pages ----------------------------------------------------------------------------------
 
 def fingerprint(name):
-    """a file's address carries its content's hash: browsers keep style.css for hours (Cloudflare's
-    browser cache), and a changed file then has a new address they fetch at once"""
-    return "%s?v=%s" % (name, hashlib.sha256(open(os.path.join(SITE, name), "rb").read()).hexdigest()[:10])
+    """a file's name carries its content's hash (style.<hash>.css, copied so by assets()): browsers
+    keep style.css for hours (Cloudflare's browser cache), and a changed file then has a new address
+    they fetch at once. In the name, not a query (?v=): Cloudflare's cache answered style.css?v=new
+    with the old style.css right after a push (the headline's colours missing, 2026-10-15)"""
+    stem, ext = os.path.splitext(name)
+    return "%s.%s%s" % (stem, hashlib.sha256(open(os.path.join(SITE, name), "rb").read()).hexdigest()[:10], ext)
 
 
 def page(title, body, depth, active="", desc=""):
@@ -275,8 +278,9 @@ def download_page():
 
 
 def assets():
-    shutil.copy(os.path.join(SITE, "style.css"), OUT)
-    shutil.copy(os.path.join(SITE, "icon.svg"), OUT)
+    for f in ("style.css", "icon.svg"):
+        shutil.copy(os.path.join(SITE, f), OUT)
+        shutil.copy(os.path.join(SITE, f), os.path.join(OUT, fingerprint(f)))
     os.makedirs(os.path.join(OUT, "images"), exist_ok=True)
     for f in os.listdir(os.path.join(ROOT, "docs/images")):
         shutil.copy(os.path.join(ROOT, "docs/images", f), os.path.join(OUT, "images", f))

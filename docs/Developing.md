@@ -86,8 +86,9 @@ build time; its script asks the API again in the browser, live, and rolls the
 counters up), the user manual as pages from `docs/manual/*.md` (its own small Markdown
 converter, Python's standard library only: the manual is written once, its
 links between pages follow, links out of it go to GitHub), the screenshots
-(`docs/images`) and the launcher's font (the pages ask for `style.css?v=<hash>`: Cloudflare lets
-browsers keep it 4 hours, so a changed stylesheet gets a new address). The look is the launcher's: its
+(`docs/images`) and the launcher's font (the pages ask for `style.<hash>.css` and `icon.<hash>.svg`, copies named by their
+content: Cloudflare lets browsers keep them 4 hours, so a changed file gets a new address; in the
+name, not as `?v=<hash>`, which Cloudflare's cache once answered with the old stylesheet). The look is the launcher's: its
 colours (`launcher_ui.h`) and Inter; light and dark. Cloudflare Pages builds
 it on every push (build command `python3 site/build.py`, output `site/out`).
 Until launch day `LAUNCHED = False`: every page carries `X-Robots-Tag:
