@@ -50,6 +50,7 @@ section.wrap { padding-top: 56px; }
 .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 44px; align-items: center; }
 .kicker { color: var(--muted); font-size: .9rem; letter-spacing: .02em; margin: 0 0 10px; }
 .hero h1 { font-size: clamp(2rem, 4.4vw, 3.1rem); margin: 0 0 16px; }
+.hero h1 b { color: var(--accent); font-weight: inherit; }
 .lead { color: var(--sub); font-size: 1.1rem; margin: 0 0 24px; }
 .cta { display: flex; gap: 12px; flex-wrap: wrap; margin: 0; }
 .button { display: inline-block; background: var(--accent); color: var(--accent-ink); font-weight: 600; padding: 11px 22px; border-radius: 10px; }

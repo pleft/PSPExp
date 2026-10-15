@@ -230,7 +230,7 @@ def front_page():
         video = ('<section class="wrap video"><h2>See it in action</h2><div class="frame"><iframe src="%s" title="PSPExp in action" '
                  'allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></section>' % VIDEO)
     body = body.replace("{{REPO}}", REPO).replace("{{VIDEO}}", video)
-    open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(page("PSPExp: your PSP, playing games it never had", body, 0, "home"))
+    open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(page("PSPExp: Experiment. Experience. Expand.", body, 0, "home"))
 
 
 KINDS = {"PSP": r"^PSPExp-psp-.*\.zip$", "PI": r"^pspexp-pi-.*\.img\.xz$", "GS": r"^pspexp-gameshell-.*\.img\.xz$"}
