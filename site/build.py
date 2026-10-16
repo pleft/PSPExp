@@ -188,7 +188,7 @@ def fingerprint(name):
 
 def page(title, body, depth, active="", desc=""):
     up = "../" * depth
-    nav = [('index.html', "Home", "home"), ("manual/index.html", "Manual", "manual"), ("download.html", "Download", "download"), (REPO, "GitHub", "github")]
+    nav = [('index.html', "Home", "home"), ("games.html", "Games", "games"), ("manual/index.html", "Manual", "manual"), ("download.html", "Download", "download"), (REPO, "GitHub", "github")]
     links = "".join('<a href="%s"%s>%s</a>' % (h if h.startswith("http") else up + h, ' class="on"' if k == active else "", t) for h, t, k in nav)
     return """<!doctype html>
 <html lang="en">
@@ -280,6 +280,119 @@ def download_page():
         page("Download PSPExp", body, 0, "download", "Download PSPExp: the PSP's part and the card images for the Raspberry Pi and the ClockworkPi GameShell."))
 
 
+# ---- the games page: what Packages offers, read from recipes/ -------------------------------------
+
+BOARDS = [("pi", "Raspberry Pi"), ("gameshell", "GameShell"), ("omega", "Omega2+")]
+SYSTEM_ART = os.path.join(ROOT, "tools/pspexp-term/assets/systems")
+EXTRA_ART = {"celeste64": "docs/images/celeste64.png", "freedoom": "scripts/packages/art/freedoom-phase1.png"}
+
+
+def read_recipe(path):
+    """sections -> {key: value} (a repeated key: the last), as pspexp-pkg's rget reads them"""
+    secs, sec = {}, None
+    for line in open(path, encoding="utf-8"):
+        t = line.strip()
+        if not t or t.startswith("#"):
+            continue
+        if t.startswith("[") and t.endswith("]"):
+            sec = t[1:-1]; secs.setdefault(sec, {}); continue
+        if "=" in t and sec is not None:
+            k, v = t.split("=", 1)
+            secs[sec][k.strip()] = v.strip()
+    return secs
+
+
+def rget(secs, sec, key, board):
+    """[SECTION:board] over [SECTION], as on the board"""
+    ov = secs.get("%s:%s" % (sec, board), {})
+    return ov[key] if key in ov else secs.get(sec, {}).get(key, "")
+
+
+def recipes():
+    out = []
+    root = os.path.join(ROOT, "recipes")
+    for rid in sorted(os.listdir(root)):
+        path = os.path.join(root, rid, "recipe")
+        if not os.path.isfile(path):
+            continue
+        r = read_recipe(path)
+        fam = lambda b: "omega" if b == "omega" else "debian"
+        boards = [b for b, _ in BOARDS if rget(r, fam(b), "apt", b) or rget(r, fam(b), "build", b)]
+        cover = None
+        if os.path.isfile(os.path.join(root, rid, "cover.png")):
+            cover = os.path.join(root, rid, "cover.png")
+        elif r.get("system", {}).get("thumbs") and os.path.isfile(os.path.join(SYSTEM_ART, r["system"]["thumbs"] + ".png")):
+            cover = os.path.join(SYSTEM_ART, r["system"]["thumbs"] + ".png")
+        elif rid in EXTRA_ART:
+            cover = os.path.join(ROOT, EXTRA_ART[rid])
+        g = r.get("entry", {}).get("graphics") or r.get("system", {}).get("graphics", "")
+        out.append({"id": rid, "title": rget(r, "package", "title", "pi"), "desc": rget(r, "package", "description", "pi"),
+                    "category": r.get("package", {}).get("category", "game"), "terms": bool(r.get("package", {}).get("terms")),
+                    "boards": boards, "graphics": g, "cover": cover, "warn": rget(r, "debian", "warn", "gameshell")})
+    return out
+
+
+def games_page():
+    items = [x for x in recipes() if x["boards"]]
+    os.makedirs(os.path.join(OUT, "covers"), exist_ok=True)
+
+    def card(x):
+        if x["cover"]:
+            name = x["id"] + os.path.splitext(x["cover"])[1]
+            shutil.copy(x["cover"], os.path.join(OUT, "covers", name))
+            art = '<img src="covers/%s" alt="" loading="lazy" width="96" height="96"%s>' % (html.escape(name), ' class="sys"' if x["category"] == "system" else "")
+        else:
+            art = '<span>%s</span>' % html.escape(x["title"])
+        tags = "".join('<span class="tag board">%s</span>' % n for b, n in BOARDS if b in x["boards"])
+        notes = []
+        if re.search(r"your own|own copy", x["desc"], re.I):
+            notes.append("your own copy")
+        if x["terms"]:
+            notes.append("terms to accept")
+        if x["graphics"] == "board-gpu":
+            notes.append("drawn by the Pi's GPU")
+        elif x["graphics"] == "opengl":
+            notes.append("drawn by the PSP's GPU")
+        tags += "".join('<span class="tag">%s</span>' % html.escape(n) for n in notes)
+        return ('<article class="pkg" data-boards="%s" data-text="%s"><div class="pkg-art">%s</div><div class="pkg-body"><h3>%s</h3><p>%s</p><div class="tags">%s</div></div></article>'
+                % (" ".join(x["boards"]), html.escape((x["title"] + " " + x["desc"]).lower()), art, html.escape(x["title"]), html.escape(x["desc"]), tags))
+
+    games = [x for x in items if x["category"] != "system"]
+    systems = [x for x in items if x["category"] == "system"]
+    count = {b: sum(1 for x in items if b in x["boards"]) for b, _ in BOARDS}
+    chips = '<button class="chip on" data-board="">All <b>%d</b></button>' % len(items) + "".join(
+        '<button class="chip" data-board="%s">%s <b>%d</b></button>' % (b, n, count[b]) for b, n in BOARDS)
+    body = """<main class="wrap games">
+<section class="games-hero">
+  <h1>Games and emulators</h1>
+  <p class="lead">Everything here installs from the PSP itself: <b>Apps &gt; Packages</b>, then cross. %d games and %d emulated systems; the board does the downloading. Some need your own copy of the game, and a few are drawn by the Raspberry Pi's graphics chip, so they are on a Pi only.</p>
+  <div class="filters">%s<input type="search" placeholder="Search" aria-label="Search the games"></div>
+</section>
+<h2>Games</h2>
+<div class="pkg-grid">%s</div>
+<h2>Emulators</h2>
+<p class="sub">Bring your own ROMs: copy them to the system's folder (Apps &gt; Files).</p>
+<div class="pkg-grid">%s</div>
+<p class="credits">The list is the packages' recipes in <a href="%s/tree/main/recipes">the repository</a>, as the boards read them. Pictures: the games' own, see <a href="%s/blob/main/scripts/packages/art/README.md">their sources and licences</a>; the systems' from the <a href="https://github.com/libretro/retroarch-assets">RetroArch assets</a> (CC BY 4.0).</p>
+</main>
+<script>
+(function () {
+  var board = "", text = "", chips = document.querySelectorAll(".chip"), box = document.querySelector(".filters input");
+  function apply() {
+    document.querySelectorAll(".pkg").forEach(function (c) {
+      var ok = (!board || c.dataset.boards.split(" ").indexOf(board) >= 0) && (!text || c.dataset.text.indexOf(text) >= 0);
+      c.style.display = ok ? "" : "none";
+    });
+  }
+  chips.forEach(function (b) { b.addEventListener("click", function () { chips.forEach(function (x) { x.classList.remove("on"); }); b.classList.add("on"); board = b.dataset.board; apply(); }); });
+  box.addEventListener("input", function () { text = box.value.trim().toLowerCase(); apply(); });
+})();
+</script>""" % (len(games), len(systems), chips, "".join(card(x) for x in games), "".join(card(x) for x in systems), REPO, REPO)
+    open(os.path.join(OUT, "games.html"), "w", encoding="utf-8").write(
+        page("Games · PSPExp", body, 0, "games", "The games and emulators PSPExp installs from the PSP: what runs on a Raspberry Pi, a ClockworkPi GameShell or an Omega2+."))
+    print("games page: %d games, %d systems (%s)" % (len(games), len(systems), ", ".join("%s %d" % (n, count[b]) for b, n in BOARDS)))
+
+
 def assets():
     for f in ("style.css", "icon.svg"):
         shutil.copy(os.path.join(SITE, f), OUT)
@@ -298,6 +411,7 @@ def main():
     os.makedirs(OUT)
     assets()
     front_page()
+    games_page()
     download_page()
     manual_pages()
     # by address (Cloudflare Pages matches a rule's https://host/ against the request): the pages.dev

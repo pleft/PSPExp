@@ -96,7 +96,7 @@ noindex` (`_headers`, by address), and the site is reviewed at its
 `pages.dev` address; on launch day pspexp.dev is attached and `LAUNCHED`
 became True on launch day (2026-10-11): pspexp.dev is indexed, while
 `pspexp.pages.dev` and `www.pspexp.dev` keep their noindex for good (one
-address in search results). `VIDEOS`:
+address in search results). The games page (`games.html`) is made from `recipes/` at each build: every recipe a board can install (the same `[section:board]` rules as `pspexp-pkg`), its title, description, boards and notes (your own copy, terms, who draws it), its cover (the recipe's `cover.png`, a system's RetroArch icon, else its name), with filters by board and a search. `VIDEOS`:
 the videos shown under "See it in action", each its embed address
 (youtube-nocookie) and caption, side by side (one above the other on a phone).
 Try it: `python3 site/build.py && python3 -m http.server -d site/out`.

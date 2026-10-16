@@ -144,3 +144,28 @@ section.wrap:has(.dl-grid) { padding-top: 28px; }
 .sha code { display: block; margin-top: 8px; font-size: .72rem; word-break: break-all; }
 .dl-after p { color: var(--sub); }
 @media (max-width: 860px) { .dl-grid { grid-template-columns: 1fr; } .dl .for { min-height: 0; } }
+
+/* the games page (games_page in build.py) */
+.games-hero { padding: 48px 0 8px; }
+.games-hero h1 { font-size: clamp(2rem, 4.4vw, 3rem); margin: 0 0 12px; }
+.games h2 { margin: 34px 0 14px; }
+.games .sub, .games .credits { color: var(--sub); }
+.games .credits { margin: 40px 0 0; font-size: .9rem; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.chip { background: var(--tile); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: .95rem; cursor: pointer; }
+.chip b { color: var(--muted); font-weight: 600; margin-left: 4px; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip.on b { color: inherit; opacity: .8; }
+.filters input { flex: 1 1 180px; max-width: 280px; margin-left: auto; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font: inherit; }
+.pkg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.pkg { display: flex; gap: 14px; background: var(--tile); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.pkg-art { flex: 0 0 96px; height: 96px; border-radius: 12px; overflow: hidden; background: #0b1226; display: flex; align-items: center; justify-content: center; }
+.pkg-art img { width: 96px; height: 96px; object-fit: cover; image-rendering: auto; }
+.pkg-art img.sys { width: 72px; height: 72px; object-fit: contain; }
+.pkg-art span { color: #5aa9ff; font-weight: 700; font-size: .85rem; text-align: center; padding: 8px; line-height: 1.2; }
+.pkg-body h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.pkg-body p { margin: 0 0 8px; color: var(--sub); font-size: .9rem; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { font-size: .75rem; color: var(--sub); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+.tag.board { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 760px) { .filters input { margin-left: 0; max-width: none; } }
