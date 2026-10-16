@@ -203,7 +203,8 @@ static struct {
     int sync_corner;   /* such a game left relative mode for its menus: at the nub's next move, both to the top-left first */
     SDL_Cursor *blank_cursor[4]; int cursor_blank;   /* see SDL_CreateCursor */
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
-    int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
+    int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */
+    int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
      * pushed events, and games that poll it (Chromium B.S.U.) would not */
     Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y, rel_ex, rel_ey;
@@ -334,6 +335,11 @@ static void connect_once(void)
             if (!strcmp(tok, "left")) S.mouse_left = which;
             else if (!strcmp(tok, "right")) S.mouse_right = which;
         }
+    }
+    S.magnify_btn = -1;
+    if (getenv("PSPEXP_MAGNIFY")) {   /* "r": that button switches between the whole frame shrunk and its own pixels */
+        int b;
+        for (b = 0; b < B_COUNT; b++) if (!strcmp(getenv("PSPEXP_MAGNIFY"), BUTTON_NAMES[b])) S.magnify_btn = b;
     }
     S.nub_keys = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "keys");
     S.hide_window = getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
@@ -477,17 +483,32 @@ static void try_reconnect(void)
 
 /* ---- geometry -------------------------------------------------------------- */
 
-static void update_scale(void)
+/* The frame fitted to the PSP's 480x272, or, magnified (PSPEXP_MAGNIFY), at its own size with the
+ * pointer's surroundings in view: a 640x480 game's small text, 57% in the fitted frame (Heroes II's
+ * 4-5 pixel labels), readable at 1:1. The view follows the pointer, stopped at the frame's edges. */
+static void place_frame(int log)
 {
     int lw = S.log_w > 0 ? S.log_w : S.win_w, lh = S.log_h > 0 ? S.log_h : S.win_h;
     float s;
     if (lw <= 0 || lh <= 0) { lw = 480; lh = 272; }
     s = fminf(480.0f / lw, 272.0f / lh);
-    S.sx = S.sy = s;
-    S.ox = (int)((480 - lw * s) / 2);
-    S.oy = (int)((272 - lh * s) / 2);
-    logf_("geometry: window %dx%d, logical %dx%d -> scale %.3f, offset %d,%d", S.win_w, S.win_h, S.log_w, S.log_h, s, S.ox, S.oy);
+    if (S.magnify && s < 1.0f) {
+        int ww = S.win_w > 0 ? S.win_w : lw, wh = S.win_h > 0 ? S.win_h : lh;
+        int cx = (int)lroundf(S.px * lw / (float)ww), cy = (int)lroundf(S.py * lh / (float)wh);
+        S.sx = S.sy = 1.0f;
+        S.ox = lw > 480 ? 240 - cx : (480 - lw) / 2;
+        S.oy = lh > 272 ? 136 - cy : (272 - lh) / 2;
+        if (lw > 480) S.ox = S.ox > 0 ? 0 : S.ox < 480 - lw ? 480 - lw : S.ox;
+        if (lh > 272) S.oy = S.oy > 0 ? 0 : S.oy < 272 - lh ? 272 - lh : S.oy;
+    } else {
+        S.sx = S.sy = s;
+        S.ox = (int)((480 - lw * s) / 2);
+        S.oy = (int)((272 - lh * s) / 2);
+    }
+    if (log) logf_("geometry: window %dx%d, logical %dx%d -> scale %.3f, offset %d,%d%s", S.win_w, S.win_h, S.log_w, S.log_h, S.sx, S.ox, S.oy, S.magnify ? " (magnified)" : "");
 }
+
+static void update_scale(void) { place_frame(1); }
 
 static int16_t X(float x) { return (int16_t)lroundf(S.ox + (x + (S.has_viewport ? S.viewport.x : 0)) * S.sx); }
 static int16_t Y(float y) { return (int16_t)lroundf(S.oy + (y + (S.has_viewport ? S.viewport.y : 0)) * S.sy); }
@@ -507,6 +528,7 @@ static void begin_frame(void)
     if (!S.frame_open) {
         pspexp_begin_frame(S.ctx); S.frame_open = 1; S.clip_sent = 0;
         if (!S.no_batch) pspexp_batch_begin(S.ctx);   /* the frame's uploads and audio: one transfer (end_frame) */
+        if (S.magnify) place_frame(0);   /* the view follows the pointer */
         if (S.ren && !S.gl_window && (S.ox > 0 || S.oy > 0)) {
             /* letterboxed: the bars black every frame (a game that draws a full background and never
              * clears, Blobby Volley, left them showing whatever the PSP had there) */
@@ -1831,6 +1853,17 @@ static void feed_input(void)
     pressed = in->buttons & ~S.prev_buttons;
     released = S.prev_buttons & ~in->buttons;
     S.prev_buttons = in->buttons;
+    if (S.magnify_btn >= 0) {   /* the magnifier's button is the layer's alone: the game never sees it */
+        uint32_t m = BUTTON_BITS[S.magnify_btn];
+        if (pressed & m) {
+            Tex *tx;
+            S.magnify = !S.magnify;
+            update_scale();
+            for (tx = S.textures; tx; tx = tx->next) tx->dirty = 1;   /* sent again at the new size */
+            if (S.surface_tex) S.surface_tex->dirty = 1;
+        }
+        pressed &= ~m; released &= ~m;
+    }
 
     setup_vjoy();
     if (S.vjoy_handle) {
@@ -2597,8 +2630,9 @@ static void draw_pointer(void)
 {
     int r, x, y, ww = S.win_w > 0 ? S.win_w : 480, wh = S.win_h > 0 ? S.win_h : 272;
     const uint16_t black = pspexp_color_5650(0, 0, 0), white = pspexp_color_5650(255, 255, 255);
-    x = S.ox + (int)lroundf(S.px * (480 - 2 * S.ox) / (float)ww);
-    y = S.oy + (int)lroundf(S.py * (272 - 2 * S.oy) / (float)wh);
+    int lw = S.log_w > 0 ? S.log_w : ww, lh = S.log_h > 0 ? S.log_h : wh;
+    x = S.ox + (int)lroundf(S.px * lw * S.sx / (float)ww);   /* (fitted: the frame's 480 - 2 x offset; magnified: its own size) */
+    y = S.oy + (int)lroundf(S.py * lh * S.sy / (float)wh);
     pspexp_set_clip(S.ctx, 0, 0, 480, 272);
     S.clip_sent = 0;   /* the program's clip again next frame */
     for (r = 0; r < 12; r++) {
