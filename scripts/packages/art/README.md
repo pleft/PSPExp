@@ -23,6 +23,7 @@
 | `recipes/openarena/cover.png` | Debian's openarena package, its 128x128 icon | GPL-2.0 (OpenArena) |
 | `recipes/xmoto/cover.png` | Debian's xmoto package, its 256x256 pixmap, scaled | GPL-2.0+ (X-Moto) |
 | `recipes/blobby/cover.png` | Debian's blobby package, its 128x128 icon | GPL-2.0+ (Blobby Volley 2) |
+| `recipes/heroes2/cover.png` | Debian's fheroes2 package, its 128x128 icon | GPL-2.0 (fheroes2) |
 | `recipes/trigger-rally/cover.png` | Debian's trigger-rally package, its 128x128 pixmap | GPL-2.0+ (Trigger Rally) |
 | `recipes/teeworlds/cover.png` | Debian's teeworlds package, its 128x128 icon | Zlib (Teeworlds) |
 | `recipes/dreamchess/cover.png` | Debian's dreamchess package, its 256x256 icon, scaled | GPL-3+ (DreamChess) |

@@ -1,0 +1,43 @@
+# Heroes of Might and Magic II: the demo (one scenario, Broken Alliance) on
+# fheroes2, Debian's free re-creation of the engine; the demo downloaded at
+# install from archive.org (package heroes2-demo). fheroes2 draws at 640x480 at
+# the least, shrunk to 57% on the PSP: its maps and pictures read well, its
+# small text (skill labels, the status line, dialogs) is 4-5 pixels high, so R
+# is a magnifier (PSPEXP_MAGNIFY): the game's own pixels round the pointer,
+# following it; R again the whole screen. The nub is the mouse, cross clicks,
+# circle the right button (held: what a creature, building or spell is); L the
+# next hero, triangle ends the turn (asked first while heroes can still move),
+# square moves the hero along its path, the d-pad scrolls the map, START
+# cancels (on the map: back to the main menu), SELECT answers OK. The first
+# start's settings are written first: a 640x480 window, the language and
+# resolution questions (unanswerable before the game knows the PSP) skipped.
+
+[package]
+id=heroes2
+title=Heroes of Might and Magic II (demo)
+description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic's demo on fheroes2.
+category=game
+license=GPL-2.0 (fheroes2); demo (Heroes of Might and Magic II, New World Computing, 1996), downloaded at install
+version=1
+
+[debian]
+apt=heroes2-demo
+
+# (on a Pi only for now: fheroes2 is in Debian's contrib section, not yet
+# tried on the GameShell's image)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Heroes II
+type=game
+description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic's demo on fheroes2.
+icon=swords
+exec=/usr/games/heroes2-demo
+keys=l=h,triangle=e,square=m,up=up,down=down,left=left,right=right,start=escape,select=return
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
+env=PSPEXP_MAGNIFY=r
+env=PSPEXP_JOYSTICK=0
+first-run=.config/fheroes2/fheroes2.cfg:videomode = 640x480:640x480\nfullscreen = off\nfirst time game run = off\nshow game intro = off\n
+graphics=sdl
