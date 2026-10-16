@@ -1955,6 +1955,12 @@ static void feed_input(void)
             if (S.relative) {   /* the game draws its own cursor from the motion alone: never stopped at an edge */
                 S.rel_x += dx; S.rel_y += dy;
                 S.rel_ex += dx; S.rel_ey += dy;
+                /* the hidden pointer still moves, stopped at the edges, as SDL's does in relative mode:
+                 * kept still at the window's centre (where it starts), every motion came "at the centre",
+                 * which AssaultCube drops as the echo of its own warp there (skipmousemotion, in a
+                 * window): its nub aimed nothing on the PSP's 480x272 */
+                S.px = fminf(fmaxf(S.px + dx, 0), (float)(S.win_w - 1));
+                S.py = fminf(fmaxf(S.py + dy, 0), (float)(S.win_h - 1));
             } else {
                 S.px = fminf(fmaxf(S.px + dx, 0), (float)(S.win_w - 1));
                 S.py = fminf(fmaxf(S.py + dy, 0), (float)(S.win_h - 1));

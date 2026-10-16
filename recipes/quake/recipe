@@ -22,7 +22,7 @@ title=Quake
 type=game
 description=id Software's 1996 first-person shooter: the shareware episode, Dimension of the Doomed, on Quakespasm, its 3D drawn by the PSP's graphics chip.
 icon=swords
-exec=/usr/games/quake-shareware -width 480 -height 272 -window +set sensitivity 15
+exec=sh -c 'f=${XDG_DATA_HOME:-$HOME/.local/share}/quake-shareware/id1/autoexec.cfg; mkdir -p "${f%/*}"; grep -qs "^sensitivity" "$f" || echo "sensitivity 25 // PSPExp: aiming with the nub (3 is for a desktop mouse)" >> "$f"; exec /usr/games/quake-shareware "$@"' quake -width 480 -height 272 -window
 keys=triangle=up,cross=down,square=comma,circle=period,r=lctrl+return,l=slash,up=space,right=slash,left=y,down=none,start=escape,select=tab
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=none,right=none

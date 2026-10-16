@@ -13,7 +13,7 @@
 # fires: the demo fires with the mouse button alone) and
 # runs it after Quake II's own config (one line, no backslashes: the entry is
 # written with sh's echo, which would turn \n into new lines); without it the face buttons moved
-# nothing (the user, 2026-10-16). Mouse sensitivity 15 (3 by default, for a
+# nothing (the user, 2026-10-16). Mouse sensitivity 25 (3 by default, for a
 # desktop mouse; the nub moves far less: aiming was too slow), as OpenArena's.
 
 [package]
@@ -32,7 +32,7 @@ title=Quake II
 type=game
 description=id Software's 1997 first-person shooter against the Strogg: the demo's levels on Yamagi Quake II, its 3D drawn by the PSP's graphics chip.
 icon=swords
-exec=sh -c 'd=$HOME/.yq2/baseq2; mkdir -p "$d" && printf "%s" "bind UPARROW +forward; bind DOWNARROW +back; bind , +moveleft; bind . +moveright; bind SPACE +moveup; bind c +movedown; bind / weapnext; bind CTRL +attack; set sensitivity 15" > "$d/pspexp.cfg"; exec /usr/games/quake2-demo +exec pspexp.cfg "$@"' quake2
+exec=sh -c 'd=$HOME/.yq2/baseq2; mkdir -p "$d" && printf "%s" "bind UPARROW +forward; bind DOWNARROW +back; bind , +moveleft; bind . +moveright; bind SPACE +moveup; bind c +movedown; bind / weapnext; bind CTRL +attack; set sensitivity 25" > "$d/pspexp.cfg"; exec /usr/games/quake2-demo +exec pspexp.cfg "$@"' quake2
 keys=triangle=up,cross=down,square=comma,circle=period,r=lctrl+return,l=slash,up=space,down=c,right=slash,left=y,start=escape,select=tab
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=none,right=none
