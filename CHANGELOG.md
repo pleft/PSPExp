@@ -16,9 +16,12 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   does while they play: the rows scrolling, each channel's level.
 - **Archives in Files**: unpack ZIP, 7z, RAR and tar archives, see what is
   in them, and compress files to a .zip.
-- **Shooters with the PSP's own controls**: Unreal Tournament, Quake,
-  Quake II and AssaultCube move on the face buttons, aim with the nub and
-  fire with R; Unreal Tournament's menu cursor reaches the whole screen.
+- **Shooters with the PSP's own controls**: Unreal Tournament, Quake and
+  Quake II move on the face buttons, aim with the nub and fire with R;
+  Unreal Tournament's menu cursor reaches the whole screen.
+- **AssaultCube is no longer offered**: its text was too small to read on
+  the PSP's screen and it did not play well; a board that has it keeps it
+  until removed in Packages.
 - **OpenArena** no longer seems to hang after a run that was cut off.
 
 ## The first release

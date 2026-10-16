@@ -131,7 +131,6 @@ Measured on the PSP-1000 with a Pi 400:
 | SRB2Kart | drawn by the PSP: 56-57 fps on the PSP-1000; races online |
 | Red Alert, Tiberian Dawn on OpenRA | drawn by the Pi's graphics chip (only on a Pi): a skirmish 16-17 fps on the PSP-1000, menus 13-20; the first start installs the game's content (Quick Install) |
 | Command & Conquer, Red Alert | drawn by the PSP: 25-28 fps in the emulator; EA's freeware, about 600 MB each to download |
-| AssaultCube | drawn by the PSP: about 20 fps in its menus on the PSP-1000, online matches |
 | Lugaru HD | drawn by the PSP: about 58 fps in its menus on the PSP-1000 |
 | Quake II (demo) | drawn by the PSP, like Quake: 31-60 fps in its first seconds on the PSP-1000 |
 | Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): its menus about 58 fps on the PSP-1000 |

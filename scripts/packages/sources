@@ -24,9 +24,6 @@ GH = "https://github.com/"
 # component: (name, upstream address, ref (tag, branch-free commit), local checkout or None)
 # ours: the files of this repository that build it (build scripts, patches)
 PACKAGES = {
-    "pspexp-assaultcube": dict(what="AssaultCube's client", comps=[("AssaultCube", GH + "assaultcube/AC", "v1.3.0.2", None)],
-                               licences={"AssaultCube": ["source/README.txt", "source/README_CUBEENGINE.txt"]},
-                               ours=[P + "build-assaultcube.sh"]),
     "pspexp-easyrpg": dict(what="EasyRPG Player", comps=[("EasyRPG Player", GH + "EasyRPG/Player", "0.8.1.1", None),
                                                      ("liblcf", GH + "EasyRPG/liblcf", "0.8.1", None)],
                            ours=[P + "build-easyrpg.sh"]),

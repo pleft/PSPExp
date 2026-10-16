@@ -867,8 +867,7 @@ cores) and our files that build it. A package's build calls
   LGPL-2.1, MIT, zlib, BSD, Apache-2.0), where the source archive is
   (`https://pkg.pspexp.dev/sources/PACKAGE/...`), and the licence texts out
   of the source itself (found by name, `LICENSE`, `COPYING`, `LICENSES`...,
-  or named in the table where a project keeps it elsewhere: AssaultCube's
-  `source/README*.txt`, Hurrican's `README.txt`, Handy's
+  or named in the table where a project keeps it elsewhere: Hurrican's `README.txt`, Handy's
   `lynx/license.txt`).
 
 `apt-repo push` uploads `build/sources/out` beside the repository, added
