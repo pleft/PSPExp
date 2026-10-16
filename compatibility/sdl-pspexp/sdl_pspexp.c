@@ -145,6 +145,10 @@ typedef struct Tex {
     int argb;                  /* the shadow is in the game's ARGB8888: no conversion to compare */
     int shadow16;              /* the shadow is the game's RGB565, 2 bytes a pixel (emulators' usual output) */
     int half;                  /* a large streaming texture kept at half size (tex_half) */
+    int fit;                   /* a frame larger than the PSP's screen kept at the size it is shown (fit_update) */
+    int full_w, full_h;        /* fit: the game's size, its pixels (ARGB8888) in full */
+    uint32_t *full;
+    float fitf;                /* fit: the shadow's size over the game's (the frame's scale; 1 magnified) */
     int dirty, unsupported, streaming;   /* streaming: re-uploaded often, small pages */
     int is_target;             /* SDL_TEXTUREACCESS_TARGET: holds recorded draws, not pixels */
     int baked;                 /* a target composed into its pixels (bake_target): an ordinary texture since */
@@ -508,7 +512,13 @@ static void place_frame(int log)
     if (log) logf_("geometry: window %dx%d, logical %dx%d -> scale %.3f, offset %d,%d%s", S.win_w, S.win_h, S.log_w, S.log_h, S.sx, S.ox, S.oy, S.magnify ? " (magnified)" : "");
 }
 
-static void update_scale(void) { place_frame(1); }
+static void fit_rescale(Tex *x);
+static void update_scale(void)
+{
+    Tex *tx;
+    place_frame(1);
+    for (tx = S.textures; tx; tx = tx->next) if (tx->fit) fit_rescale(tx);
+}
 
 static int16_t X(float x) { return (int16_t)lroundf(S.ox + (x + (S.has_viewport ? S.viewport.x : 0)) * S.sx); }
 static int16_t Y(float y) { return (int16_t)lroundf(S.oy + (y + (S.has_viewport ? S.viewport.y : 0)) * S.sy); }
@@ -1237,11 +1247,85 @@ static int halve(const Tex *x, const SDL_Rect *rect, Uint32 format, const void *
     return 0;
 }
 
+/* A whole frame between the PSP's size and 512 a side (fheroes2's 640x480), shown shrunk: the GE
+ * draws a shrunk texture by its nearest texels, every other column and row skipped somewhere, so
+ * thin lines and edges sparkled as the map scrolled ("tiny dots", the user). Kept instead at the
+ * size it is shown, each pixel the average of the game's pixels under it, and drawn 1:1; the
+ * game's pixels kept in full for the magnifier (PSPEXP_MAGNIFY), which shows them at 1:1. */
+static uint32_t *g_fit; static size_t g_fit_n;
+static void fit_rect(Tex *x, const SDL_Rect *r)   /* the shadow's pixels under the game's rectangle r, from x->full */
+{
+    float f = x->fitf, inv = 1.0f / f;
+    int X0 = (int)floorf(r->x * f), Y0 = (int)floorf(r->y * f), X1 = (int)ceilf((r->x + r->w) * f), Y1 = (int)ceilf((r->y + r->h) * f), X, Y;
+    size_t need;
+    SDL_Rect o;
+    if (X1 > x->w) X1 = x->w;
+    if (Y1 > x->h) Y1 = x->h;
+    if (X1 <= X0 || Y1 <= Y0) return;
+    need = (size_t)(X1 - X0) * (size_t)(Y1 - Y0);
+    if (need > g_fit_n) { uint32_t *b = (uint32_t *)realloc(g_fit, need * 4); if (!b) return; g_fit = b; g_fit_n = need; }
+    for (Y = Y0; Y < Y1; Y++) {
+        int sy0 = (int)(Y * inv), sy1 = (int)((Y + 1) * inv);
+        if (sy1 > x->full_h) sy1 = x->full_h;
+        if (sy1 <= sy0) sy1 = sy0 + 1;
+        for (X = X0; X < X1; X++) {
+            int sx0 = (int)(X * inv), sx1 = (int)((X + 1) * inv), xx, yy;
+            uint32_t a = 0, rr = 0, gg = 0, bb = 0, n;
+            if (sx1 > x->full_w) sx1 = x->full_w;
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            n = (uint32_t)((sx1 - sx0) * (sy1 - sy0));
+            for (yy = sy0; yy < sy1; yy++) {
+                const uint32_t *row = x->full + (size_t)yy * x->full_w;
+                for (xx = sx0; xx < sx1; xx++) { uint32_t c = row[xx]; a += c >> 24; rr += (c >> 16) & 255; gg += (c >> 8) & 255; bb += c & 255; }
+            }
+            g_fit[(size_t)(Y - Y0) * (X1 - X0) + (X - X0)] = ((a / n) << 24) | ((rr / n) << 16) | ((gg / n) << 8) | (bb / n);
+        }
+    }
+    o.x = X0; o.y = Y0; o.w = X1 - X0; o.h = Y1 - Y0;
+    shadow_update_(x, &o, SDL_PIXELFORMAT_ARGB8888, g_fit, o.w * 4);
+}
+static void fit_update(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch)
+{
+    SDL_Rect r = rect ? *rect : (SDL_Rect){ 0, 0, x->full_w, x->full_h };
+    if (r.x < 0 || r.y < 0 || r.x + r.w > x->full_w || r.y + r.h > x->full_h || r.w <= 0 || r.h <= 0) return;
+    if (SDL_ConvertPixels(r.w, r.h, format, pixels, pitch, SDL_PIXELFORMAT_ARGB8888, x->full + (size_t)r.y * x->full_w + r.x, x->full_w * 4) < 0) return;
+    if (x->fitf >= 1.0f) shadow_update_(x, &r, SDL_PIXELFORMAT_ARGB8888, x->full + (size_t)r.y * x->full_w + r.x, x->full_w * 4);
+    else fit_rect(x, &r);
+}
+/* the frame's scale changed (the window, the magnifier): the shadow again at the new size */
+static void fit_rescale(Tex *x)
+{
+    float f = S.sx > 0 && S.sx < 1.0f ? S.sx : 1.0f;
+    int w = (int)ceilf(x->full_w * f), h = (int)ceilf(x->full_h * f);
+    SDL_Rect all = { 0, 0, x->full_w, x->full_h };
+    uint32_t *b;
+    if (f == x->fitf && x->w == w && x->h == h) return;
+    if (!(b = (uint32_t *)realloc(x->rgba, (size_t)w * h * 4))) return;
+    x->rgba = b; x->w = w; x->h = h; x->fitf = f;
+    x->argb = 0; x->shadow16 = 0; x->dirty = 1;
+    if (f >= 1.0f) shadow_update_(x, &all, SDL_PIXELFORMAT_ARGB8888, x->full, x->full_w * 4);
+    else fit_rect(x, &all);
+}
+
+/* a texture larger than the PSP's screen (a whole frame) made a fitted one: its pixels, if any, from
+ * surf; PSPEXP_TEX_FIT=0: not */
+static int make_fit(Tex *x, int w, int h, SDL_Surface *surf)
+{
+    if (!(w > 480 || h > 272) || (getenv("PSPEXP_TEX_FIT") && !strcmp(getenv("PSPEXP_TEX_FIT"), "0"))) return 0;
+    if (!(x->full = (uint32_t *)calloc((size_t)w * h, 4))) return 0;
+    x->fit = 1; x->full_w = w; x->full_h = h; x->fitf = 0;   /* (0: fit_rescale makes the shadow) */
+    if (surf) SDL_ConvertPixels(w, h, surf->format->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ARGB8888, x->full, w * 4);
+    fit_rescale(x);
+    logf_("texture %dx%d kept at the size shown (%dx%d)", w, h, x->w, x->h);
+    return 1;
+}
+
 /* the game's new pixels into the shadow; its CPU time counts as texture work */
 static void shadow_update(Tex *x, const SDL_Rect *rect, Uint32 format, const void *pixels, int pitch)
 {
     uint64_t t0 = cpu_ns(), w0 = wall_ns();
-    if (x->half) {
+    if (x->fit) fit_update(x, rect, format, pixels, pitch);
+    else if (x->half) {
         SDL_Rect h;
         int hp;
         if (halve(x, rect, format, pixels, pitch, &h, &hp) == 0) shadow_update_(x, &h, format, g_half, hp);
@@ -1373,6 +1457,10 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
     if ((x->dirty || x->pdirty) && upload_tex(x) < 0) return;
     s = src ? *src : (SDL_Rect){ 0, 0, x->w, x->h };
     if (x->half && src) { int x1 = (s.x + s.w + 1) / 2, y1 = (s.y + s.h + 1) / 2; s.x /= 2; s.y /= 2; s.w = x1 - s.x; s.h = y1 - s.y; }   /* (a half-size texture) */
+    if (x->fit && src) {   /* (a texture kept at the size it is shown) */
+        int x0 = (int)floorf(s.x * x->fitf), y0 = (int)floorf(s.y * x->fitf), x1 = (int)ceilf((s.x + s.w) * x->fitf), y1 = (int)ceilf((s.y + s.h) * x->fitf);
+        s.x = x0; s.y = y0; s.w = (x1 > x->w ? x->w : x1) - x0; s.h = (y1 > x->h ? x->h : y1) - y0;
+    }
     color = tint_for(x, &fmt);
     /* the source may span pages: split it */
     for (i = 0; i < x->npages; i++) {
@@ -2297,7 +2385,7 @@ HOOK(SDL_Texture *, SDL_CreateTexture, (SDL_Renderer *r, Uint32 format, int acce
             if ((w > 512 || h > 512) && !(getenv("PSPEXP_TEX_HALF") && !strcmp(getenv("PSPEXP_TEX_HALF"), "0"))) {
                 x->half = 1; x->w = (w + 1) / 2; x->h = (h + 1) / 2;
                 logf_("streaming texture %dx%d kept at half size (%dx%d)", w, h, x->w, x->h);
-            }
+            } else make_fit(x, w, h, NULL);
         }
         if (x) x->blend = SDL_BLENDMODE_NONE;   /* SDL's default for SDL_CreateTexture */
     }
@@ -2309,7 +2397,10 @@ HOOK(SDL_Texture *, SDL_CreateTextureFromSurface, (SDL_Renderer *r, SDL_Surface 
     SDL_Texture *t = REAL(SDL_CreateTextureFromSurface)(r, surf);
     if (t && r == S.ren && surf) {
         Tex *x = add_tex(t, surf->w, surf->h);
-        if (x) {
+        if (x && make_fit(x, surf->w, surf->h, surf)) {   /* a whole frame (fheroes2's 640x480, updated since by SDL_UpdateTexture) */
+            x->dirty = 1;
+            SDL_GetTextureBlendMode(t, &x->blend);
+        } else if (x) {
             SDL_Surface *conv = SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_ABGR8888, 0);
             if (conv) {
                 int y;
@@ -2346,6 +2437,7 @@ HOOK(void, SDL_DestroyTexture, (SDL_Texture *t))
             *pp = x->next;
             if (link_up()) release_pages(x);
             free(x->rgba);
+            free(x->full);
             free(x->ops);
             free(x);
             break;
