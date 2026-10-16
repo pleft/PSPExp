@@ -208,7 +208,8 @@ static struct {
     SDL_Cursor *blank_cursor[4]; int cursor_blank;   /* see SDL_CreateCursor */
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */
-    int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
+    int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */
+    float drawn_px, drawn_py; Uint32 last_present; unsigned replays;   /* the pointer as last shown (replay_pointer) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
      * pushed events, and games that poll it (Chromium B.S.U.) would not */
     Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y, rel_ex, rel_ey;
@@ -462,6 +463,8 @@ static int host_render(void)
     return render;
 }
 
+static void cursors_forget(void);   /* (a new link: the game's cursors sent again) */
+
 static void try_reconnect(void)
 {
     static Uint32 last;
@@ -482,6 +485,7 @@ static void try_reconnect(void)
         Tex *tx;
         logf_("reconnected");
         for (tx = S.textures; tx; tx = tx->next) tx->dirty = 1;   /* the library replays, but re-upload cheaply anyway */
+        cursors_forget();
     }
 }
 
@@ -532,6 +536,11 @@ static void flush_quads(void)
         S.nquads = 0;
     }
 }
+
+/* the layer draws its pointer over the frame (the nub as the mouse, the game's cursor not hidden or
+ * its own) */
+static int pointer_shown(void) { return S.nub_mouse && !S.cursor_hidden && !S.cursor_blank && !S.relative && !S.own_pointer; }
+static void draw_pointer(void);
 
 static void begin_frame(void)
 {
@@ -1308,10 +1317,11 @@ static void fit_rescale(Tex *x)
 }
 
 /* a texture larger than the PSP's screen (a whole frame) made a fitted one: its pixels, if any, from
- * surf; PSPEXP_TEX_FIT=0: not */
+ * surf. Asked for (PSPEXP_TEX_FIT=1, a recipe's) until the 640x480 games are each looked at again:
+ * it changes how they look (averaged, not sampled) */
 static int make_fit(Tex *x, int w, int h, SDL_Surface *surf)
 {
-    if (!(w > 480 || h > 272) || (getenv("PSPEXP_TEX_FIT") && !strcmp(getenv("PSPEXP_TEX_FIT"), "0"))) return 0;
+    if (!(w > 480 || h > 272) || !(getenv("PSPEXP_TEX_FIT") && !strcmp(getenv("PSPEXP_TEX_FIT"), "1"))) return 0;
     if (!(x->full = (uint32_t *)calloc((size_t)w * h, 4))) return 0;
     x->fit = 1; x->full_w = w; x->full_h = h; x->fitf = 0;   /* (0: fit_rescale makes the shadow) */
     if (surf) SDL_ConvertPixels(w, h, surf->format->format, surf->pixels, surf->pitch, SDL_PIXELFORMAT_ARGB8888, x->full, w * 4);
@@ -2652,6 +2662,22 @@ static void link_mutex_init(void)
 static void link_lock(void) { pthread_once(&link_once, link_mutex_init); pthread_mutex_lock(&link_mutex); }
 static void link_unlock(void) { pthread_mutex_unlock(&link_mutex); }
 
+/* The pointer moved while the game drew nothing (fheroes2 draws 4-8 frames a second, its pointer the
+ * system's): its last frame again, the pointer where it is now, at most every 16 ms and only when
+ * no frame is on its way, so the game's own frames never wait. The frame's draws only: its textures
+ * are on the PSP already (a few hundred bytes). The pointer had moved in jumps (the user). */
+static void replay_pointer(void)
+{
+    Uint32 now = SDL_GetTicks();
+    if (S.frame_open || !pointer_shown() || (S.px == S.drawn_px && S.py == S.drawn_py) || now - S.last_present < 16) return;
+    if (!pspexp_should_render(S.ctx) || pspexp_replay_frame(S.ctx) < 0) return;
+    S.clip_sent = 0;
+    draw_pointer();
+    S.drawn_px = S.px; S.drawn_py = S.py; S.last_present = now;
+    pspexp_present(S.ctx);
+    S.replays++;
+}
+
 static void service_link(void)
 {
     static Uint32 last;
@@ -2663,6 +2689,7 @@ static void service_link(void)
     feed_input();
     audio_drain();
     script_tick();   /* a game waiting for an event (Pinball's menu) gets its scripted keys too */
+    replay_pointer();
     link_unlock();
 }
 
@@ -2705,16 +2732,63 @@ HOOK(SDL_Cursor *, SDL_CreateCursor, (const Uint8 *data, const Uint8 *mask, int 
         for (i = 0; i < 4; i++) if (!S.blank_cursor[i]) { S.blank_cursor[i] = c; break; }
     return c;
 }
+/* A game's own cursor pictures (SDL_CreateColorCursor: fheroes2's, which say what a click does: a
+ * horse to move, a sword to attack), drawn where the layer's arrow would be, at the PSP's pixels
+ * (larger than the shrunk frame: readable), its hot spot on the pointer; sent to the PSP once. */
+typedef struct GameCursor { SDL_Cursor *c; int w, h, hx, hy, texw, texh; uint16_t *px; uint16_t tex; } GameCursor;
+static GameCursor g_cursors[96], *g_cur;
+static void cursors_forget(void)
+{
+    int i;
+    for (i = 0; i < (int)(sizeof(g_cursors) / sizeof(g_cursors[0])); i++) g_cursors[i].tex = 0;
+}
+static GameCursor *game_cursor(SDL_Cursor *c)
+{
+    int i;
+    for (i = 0; i < (int)(sizeof(g_cursors) / sizeof(g_cursors[0])); i++) if (c && g_cursors[i].c == c) return &g_cursors[i];
+    return NULL;
+}
+HOOK(SDL_Cursor *, SDL_CreateColorCursor, (SDL_Surface *surf, int hot_x, int hot_y))
+{
+    SDL_Cursor *c = REAL(SDL_CreateColorCursor)(surf, hot_x, hot_y);
+    GameCursor *g = game_cursor(NULL);
+    int i, y, x;
+    for (i = 0; !g && i < (int)(sizeof(g_cursors) / sizeof(g_cursors[0])); i++) if (!g_cursors[i].c) g = &g_cursors[i];
+    if (c && g && surf && surf->w > 0 && surf->h > 0 && surf->w <= 64 && surf->h <= 64) {
+        SDL_Surface *cv = SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_ABGR8888, 0);
+        int tw = 8, th = 8;
+        while (tw < surf->w) tw *= 2;
+        while (th < surf->h) th *= 2;
+        if (cv && (g->px = (uint16_t *)calloc((size_t)tw * th, 2))) {
+            for (y = 0; y < surf->h; y++)
+                for (x = 0; x < surf->w; x++) {
+                    uint32_t v = ((const uint32_t *)(const void *)((const Uint8 *)cv->pixels + (size_t)y * cv->pitch))[x];
+                    g->px[(size_t)y * tw + x] = (uint16_t)(((v >> 4) & 0xF) | (((v >> 12) & 0xF) << 4) | (((v >> 20) & 0xF) << 8) | (((v >> 28) & 0xF) << 12));
+                }
+            g->c = c; g->w = surf->w; g->h = surf->h; g->hx = hot_x; g->hy = hot_y; g->texw = tw; g->texh = th; g->tex = 0;
+        }
+        if (cv) SDL_FreeSurface(cv);
+    }
+    return c;
+}
 HOOK(void, SDL_SetCursor, (SDL_Cursor *c))
 {
     int i;
     if (c) for (S.cursor_blank = 0, i = 0; i < 4; i++) if (S.blank_cursor[i] == c) S.cursor_blank = 1;
+    if (c) g_cur = game_cursor(c);
     REAL(SDL_SetCursor)(c);
 }
 HOOK(void, SDL_FreeCursor, (SDL_Cursor *c))
 {
     int i;
+    GameCursor *g = game_cursor(c);
     for (i = 0; i < 4; i++) if (c && S.blank_cursor[i] == c) S.blank_cursor[i] = NULL;
+    if (g) {
+        if (g->tex && link_up()) pspexp_release(S.ctx, g->tex);
+        free(g->px);
+        if (g_cur == g) g_cur = NULL;
+        memset(g, 0, sizeof(*g));
+    }
     REAL(SDL_FreeCursor)(c);
 }
 
@@ -2725,6 +2799,27 @@ static void draw_pointer(void)
     int lw = S.log_w > 0 ? S.log_w : ww, lh = S.log_h > 0 ? S.log_h : wh;
     x = S.ox + (int)lroundf(S.px * lw * S.sx / (float)ww);   /* (fitted: the frame's 480 - 2 x offset; magnified: its own size) */
     y = S.oy + (int)lroundf(S.py * lh * S.sy / (float)wh);
+    if (g_cur && g_cur->px) {   /* the game's own cursor picture */
+        PspExpQuadExRec q;
+        if (!g_cur->tex) {
+            PspExpTextureDesc d;
+            PspExpFrame f;
+            memset(&d, 0, sizeof(d));
+            d.width = (uint16_t)g_cur->texw; d.height = (uint16_t)g_cur->texh; d.format = PSPEXP_TEX_4444;
+            d.layout = PSPEXP_LAYOUT_LINEAR; d.priority = PSPEXP_PRIORITY_NORMAL;
+            f.u0 = 0; f.v0 = 0; f.w = (uint16_t)g_cur->texw; f.h = (uint16_t)g_cur->texh;
+            g_cur->tex = alloc_handle();
+            if (pspexp_upload_texture(S.ctx, g_cur->tex, &d, g_cur->px, (uint32_t)((size_t)g_cur->texw * g_cur->texh * 2), &f, 1) < 0) { g_cur->tex = 0; goto arrow; }
+        }
+        memset(&q, 0, sizeof(q));
+        q.x = (int16_t)(x - g_cur->hx); q.y = (int16_t)(y - g_cur->hy); q.w = (int16_t)g_cur->w; q.h = (int16_t)g_cur->h;
+        q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)g_cur->w; q.v1 = (uint16_t)g_cur->h; q.color = 0xFFFF;
+        pspexp_set_clip(S.ctx, 0, 0, 480, 272);
+        S.clip_sent = 0;
+        pspexp_draw_quad_ex_batch(S.ctx, g_cur->tex, &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_4444);
+        return;
+    }
+arrow:
     pspexp_set_clip(S.ctx, 0, 0, 480, 272);
     S.clip_sent = 0;   /* the program's clip again next frame */
     for (r = 0; r < 12; r++) {
@@ -2881,7 +2976,9 @@ static void end_frame_locked(void)
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
     flush_quads();
-    if (S.nub_mouse && !S.cursor_hidden && !S.cursor_blank && !S.relative && !S.own_pointer) draw_pointer();
+    pspexp_frame_mark(S.ctx);   /* (the frame kept without the pointer: replay_pointer) */
+    if (pointer_shown()) { draw_pointer(); S.drawn_px = S.px; S.drawn_py = S.py; }
+    S.last_present = SDL_GetTicks();
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();
@@ -2926,9 +3023,10 @@ static void end_frame_locked(void)
                       (double)S.prof_wait / 1e6 / fr, (double)S.prof_send / 1e6 / fr);
             S.prof_shadow = S.prof_convert = S.prof_write = S.prof_wait = S.prof_send = S.prof_flush = S.prof_flush_cpu = 0;
             S.prof_game = S.prof_game_cpu = 0;
-            logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)",
+            logf_("link %.1f KB/frame  pages sent %u (clut8 %u) kept %u  texture work %.2f ms/frame (CPU)%s",
                   (double)(st->bytes_sent - S.rep_bytes) / 1024.0 / fr, S.pages_sent, S.pages_t8, S.pages_kept,
-                  (double)S.up_ticks / 1e6 / fr);
+                  (double)S.up_ticks / 1e6 / fr, S.replays ? "  +pointer frames" : "");
+            if (S.replays) { logf_("pointer frames %u (the last frame again, the pointer moved)", S.replays); S.replays = 0; }
             S.tot_pages_sent += S.pages_sent; S.tot_pages_t8 += S.pages_t8; S.tot_pages_kept += S.pages_kept; S.tot_up_ticks += S.up_ticks;
             S.rep_bytes = st->bytes_sent; S.pages_sent = S.pages_t8 = S.pages_kept = 0; S.up_ticks = 0;
             S.last_report = now; S.frames = 0; S.uploads = 0;

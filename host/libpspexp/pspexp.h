@@ -232,6 +232,12 @@ int  pspexp_should_render(const PspExpContext *ctx);
 int  pspexp_frames_in_flight(const PspExpContext *ctx);
 /* max_in_flight changed while connected (a film: the next picture travels while the PSP draws one) */
 void pspexp_set_max_in_flight(PspExpContext *ctx, int n);
+/* Marks the open frame: what is drawn after the mark (a pointer) is not kept. The last presented
+ * frame's draws are kept (up to its mark) until a resource is released; pspexp_replay_frame
+ * begins a new frame holding them, to draw something new on top (the pointer moved while the
+ * program drew nothing: SDL layer) and present. -1: none kept, or a frame is open. */
+void pspexp_frame_mark(PspExpContext *ctx);
+int  pspexp_replay_frame(PspExpContext *ctx);
 /* Pump until should_render() is true, or timeout. 0 ok, 1 timeout, -1 transport gone. */
 int  pspexp_wait_present(PspExpContext *ctx, int timeout_ms);
 

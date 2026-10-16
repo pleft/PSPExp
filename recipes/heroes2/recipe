@@ -4,7 +4,8 @@
 # the least, shrunk to 57% on the PSP: its maps and pictures read well, its
 # small text (skill labels, the status line, dialogs) is 4-5 pixels high, so R
 # is a magnifier (PSPEXP_MAGNIFY): the game's own pixels round the pointer,
-# following it; R again the whole screen. The nub is the mouse, cross clicks,
+# following it; R again the whole screen. The shrunk frame is averaged on the
+# board (PSPEXP_TEX_FIT): sampled by the GE, the scrolling map sparkled. The nub is the mouse, cross clicks,
 # circle the right button (held: what a creature, building or spell is); L the
 # next hero, triangle ends the turn (asked first while heroes can still move),
 # square moves the hero along its path, the d-pad scrolls the map, START
@@ -38,6 +39,7 @@ keys=l=h,triangle=e,square=m,up=up,down=down,left=left,right=right,start=escape,
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
 env=PSPEXP_MAGNIFY=r
+env=PSPEXP_TEX_FIT=1
 env=PSPEXP_JOYSTICK=0
 first-run=.config/fheroes2/fheroes2.cfg:videomode = 640x480:640x480\nfullscreen = off\nfirst time game run = off\nshow game intro = off\n
 graphics=sdl

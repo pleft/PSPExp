@@ -102,6 +102,15 @@ void *pspexp_writer_reserve(PspExpWriter *w, size_t len)
     return p;
 }
 
+int pspexp_writer_raw(PspExpWriter *w, const void *data, size_t len)
+{
+    if (w->msg_start != NO_MESSAGE) { w->error = 1; return -1; }
+    if (ensure(w, len) < 0) return -1;
+    memcpy(w->buf + w->len, data, len);
+    w->len += len;
+    return 0;
+}
+
 void *pspexp_writer_regrow(PspExpWriter *w, size_t at, size_t len)
 {
     PspExpMessageHeader h;

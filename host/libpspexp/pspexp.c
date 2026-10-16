@@ -39,6 +39,8 @@ struct PspExpContext {
     PspExpStream in;
     PspExpWriter frame;
     size_t last_draw;            /* where in `frame` the last 3D_DRAW's header is (pspexp_3d_draw_more) */
+    size_t body_start, mark;     /* the frame's draws begin there; pspexp_frame_mark: the kept ones end there */
+    uint8_t *kept; size_t kept_len, kept_cap;   /* the last frame's draws, for pspexp_replay_frame (0: none) */
     PspExpWriter msg;
     uint8_t *rx;
     PspExpLinkState state;
@@ -126,6 +128,7 @@ void pspexp_destroy(PspExpContext *ctx)
     free(ctx->res);
     free(ctx->rx);
     free(ctx->batch);
+    free(ctx->kept);
     pspexp_stream_free(&ctx->in);
     pspexp_writer_free(&ctx->frame);
     pspexp_writer_free(&ctx->msg);
@@ -657,6 +660,7 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms)
 int pspexp_connect(PspExpContext *ctx, int timeout_ms)
 {
     uint64_t deadline = pspexp_time_us() + (uint64_t)timeout_ms * 1000u;
+    ctx->kept_len = 0;   /* a new link: nothing of the kept frame is resident */
     while (ctx->state != PSPEXP_LINK_CONNECTED) {
         uint64_t now = pspexp_time_us();
         int remaining;
@@ -940,6 +944,7 @@ int pspexp_release(PspExpContext *ctx, uint16_t id)
     Resource *r = find_res(ctx, id);
     int was_known = r && (r->state == PSPEXP_RES_PENDING || r->state == PSPEXP_RES_RESIDENT);
     if (r) remove_res(ctx, r);
+    ctx->kept_len = 0;   /* the kept frame may draw it */
     if (!was_known || ctx->state != PSPEXP_LINK_CONNECTED) return 0;
     memset(&rid, 0, sizeof(rid));
     rid.id = id;
@@ -982,6 +987,7 @@ void pspexp_begin_frame(PspExpContext *ctx)
     b.frame_seq = ctx->next_frame_seq;
     if (ctx->have_input) { b.input_seq = ctx->input.sequence; b.input_timestamp_us = ctx->input.timestamp_us; }
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_BEGIN_FRAME, 0, &b, sizeof(b));
+    ctx->body_start = ctx->frame.len; ctx->mark = 0;
     rec = &ctx->ring[b.frame_seq % SEND_RING];
     rec->seq = b.frame_seq;
     rec->input_timestamp_us = b.input_timestamp_us;
@@ -1409,6 +1415,12 @@ long pspexp_present(PspExpContext *ctx)
     uint32_t seq = ctx->next_frame_seq;
     FrameRecord *rec;
     if (!ctx->in_frame) return -1;
+    if (!ctx->frame.error) {   /* its draws kept, up to the mark (what is drawn after it, a pointer, is not) */
+        size_t end = ctx->mark ? ctx->mark : ctx->frame.len, n = end > ctx->body_start ? end - ctx->body_start : 0;
+        if (n > ctx->kept_cap) { uint8_t *b = (uint8_t *)realloc(ctx->kept, n); if (b) { ctx->kept = b; ctx->kept_cap = n; } }
+        if (n <= ctx->kept_cap) { if (n) memcpy(ctx->kept, ctx->frame.buf + ctx->body_start, n); ctx->kept_len = n; }
+        else ctx->kept_len = 0;
+    }
     pspexp_writer_message(&ctx->frame, PSPEXP_CH_GRAPHICS, PSPEXP_OP_PRESENT, 0, NULL, 0);
     ctx->in_frame = 0;
     if (ctx->frame.error) { ctx_log(ctx, "frame %u too large", seq); return -1; }
@@ -1438,6 +1450,16 @@ long pspexp_present(PspExpContext *ctx)
     ctx->next_frame_seq++;
     ctx->in_flight++;
     return (long)seq;
+}
+
+void pspexp_frame_mark(PspExpContext *ctx) { if (ctx->in_frame) ctx->mark = ctx->frame.len; }
+
+int pspexp_replay_frame(PspExpContext *ctx)
+{
+    if (!ctx->kept_len || ctx->in_frame || ctx->state != PSPEXP_LINK_CONNECTED) return -1;
+    pspexp_begin_frame(ctx);
+    if (pspexp_writer_raw(&ctx->frame, ctx->kept, ctx->kept_len) < 0) { ctx->in_frame = 0; return -1; }
+    return 0;
 }
 
 int pspexp_should_render(const PspExpContext *ctx)
