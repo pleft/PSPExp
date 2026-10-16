@@ -7,6 +7,9 @@
 # circle strafe (the arrows), the nub aims (and points in menus), R fires (and
 # clicks), L the scope (the right button); the d-pad up jumps, down crouches,
 # right reloads, left the previous weapon; START the menu, SELECT the scores.
+# Mouse sensitivity 15 (3 by default, for a desktop mouse; the nub moves far
+# less: it seemed not to aim at all), as OpenArena's; -e runs after its saved
+# settings.
 
 [package]
 id=assaultcube
@@ -14,7 +17,7 @@ title=AssaultCube
 description=The free online first-person shooter: fast team matches on its own maps, against bots or real players on the Internet. Drawn by the PSP.
 category=game
 license=zlib (AssaultCube); its content under the licences in its README, downloaded at install
-version=2
+version=3
 
 [debian]
 apt=assaultcube-release
@@ -24,7 +27,7 @@ title=AssaultCube
 type=game
 description=The free online first-person shooter: team matches against bots or real players online. Its 3D drawn by the PSP's graphics chip.
 icon=swords
-exec=/usr/games/assaultcube-release
+exec=/usr/games/assaultcube-release '-esensitivity 15'
 keys=triangle=up,cross=down,square=left,circle=right,up=space,down=lshift,right=r,left=q,l=none,r=none,start=escape,select=tab
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=r,right=l

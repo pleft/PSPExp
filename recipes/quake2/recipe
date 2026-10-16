@@ -6,8 +6,14 @@
 # triangle / cross forward and back, square / circle strafe, the nub aims
 # (the mouse), R fires (and selects in menus), L and the d-pad's right the
 # next weapon, the d-pad up jumps, down crouches, left answers Y, SELECT the
-# inventory, START the menu. Quake II binds no next weapon or crouch key by
-# default: the first run adds them.
+# inventory, START the menu. The demo's own bindings are an old layout (E / D
+# forward and back, S / F strafe, space crouches, the right mouse button jumps,
+# no arrows): every start writes pspexp.cfg with the bindings these keys need
+# (arrows, comma / period, space jumps, C crouches, slash the next weapon) and
+# runs it after Quake II's own config (one line, no backslashes: the entry is
+# written with sh's echo, which would turn \n into new lines); without it the face buttons moved
+# nothing (the user, 2026-10-16). Mouse sensitivity 15 (3 by default, for a
+# desktop mouse; the nub moves far less: aiming was too slow), as OpenArena's.
 
 [package]
 id=quake2
@@ -15,7 +21,7 @@ title=Quake II (demo)
 description=id Software's 1997 first-person shooter against the Strogg, its demo levels on Yamagi Quake II: the 3D world drawn by the PSP.
 category=game
 license=GPL-2.0 (Yamagi Quake II); demo (Quake II, id Software, 1997), downloaded at install
-version=2
+version=3
 
 [debian]
 apt=quake2-demo
@@ -25,10 +31,9 @@ title=Quake II
 type=game
 description=id Software's 1997 first-person shooter against the Strogg: the demo's levels on Yamagi Quake II, its 3D drawn by the PSP's graphics chip.
 icon=swords
-exec=/usr/games/quake2-demo
+exec=sh -c 'd=$HOME/.yq2/baseq2; mkdir -p "$d" && printf "%s" "bind UPARROW +forward; bind DOWNARROW +back; bind , +moveleft; bind . +moveright; bind SPACE +moveup; bind c +movedown; bind / weapnext; set sensitivity 15" > "$d/pspexp.cfg"; exec /usr/games/quake2-demo +exec pspexp.cfg "$@"' quake2
 keys=triangle=up,cross=down,square=comma,circle=period,r=lctrl+return,l=slash,up=space,down=c,right=slash,left=y,start=escape,select=tab
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=none,right=none
 env=PSPEXP_JOYSTICK=0
-first-run=.yq2/baseq2/autoexec.cfg:bind / weapnext\nbind c +movedown\n
 graphics=opengl
