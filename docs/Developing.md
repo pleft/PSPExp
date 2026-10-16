@@ -96,9 +96,9 @@ noindex` (`_headers`, by address), and the site is reviewed at its
 `pages.dev` address; on launch day pspexp.dev is attached and `LAUNCHED`
 became True on launch day (2026-10-11): pspexp.dev is indexed, while
 `pspexp.pages.dev` and `www.pspexp.dev` keep their noindex for good (one
-address in search results). `VIDEO`:
-the demo video's embed address (youtube-nocookie; the video is unlisted
-until launch day, public then).
+address in search results). `VIDEOS`:
+the videos shown under "See it in action", each its embed address
+(youtube-nocookie) and caption, side by side (one above the other on a phone).
 Try it: `python3 site/build.py && python3 -m http.server -d site/out`.
 
 ## Measure the USB link (v0.1 first milestone)

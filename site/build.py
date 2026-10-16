@@ -19,7 +19,8 @@ SITE = os.path.join(ROOT, "site")
 OUT = os.path.join(SITE, "out")
 REPO = "https://github.com/pleft/PSPExp"
 RELEASES = REPO + "/releases/latest"
-VIDEO = "https://www.youtube-nocookie.com/embed/CQm_w-4Oqfw"   # the demo video (youtu.be/CQm_w-4Oqfw), unlisted until launch day
+VIDEOS = [("https://www.youtube-nocookie.com/embed/CQm_w-4Oqfw", "Part I: the tour"),   # youtu.be/CQm_w-4Oqfw
+          ("https://www.youtube-nocookie.com/embed/_rBYBBLUeNc", "Part II: the games")]   # youtu.be/_rBYBBLUeNc
 LAUNCHED = True    # until launch day: every page says "do not index" (Cloudflare Pages' _headers);
                    # then True, with pspexp.dev attached: pspexp.dev is indexed, pages.dev never is
 HOSTS = ["pspexp.pages.dev", "www.pspexp.dev"]   # always "do not index": one address in search results
@@ -229,9 +230,11 @@ def manual_pages():
 def front_page():
     body = open(os.path.join(SITE, "index.html"), encoding="utf-8").read()
     video = ""
-    if VIDEO:
-        video = ('<section class="wrap video"><h2>See it in action</h2><div class="frame"><iframe src="%s" title="PSPExp in action" '
-                 'allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></section>' % VIDEO)
+    if VIDEOS:
+        video = ('<section class="wrap video"><h2>See it in action</h2><div class="videos">%s</div></section>' % "".join(
+            '<figure><div class="frame"><iframe src="%s" title="PSPExp: %s" allow="encrypted-media; picture-in-picture" '
+            'allowfullscreen loading="lazy"></iframe></div><figcaption>%s</figcaption></figure>' % (u, html.escape(t), html.escape(t))
+            for u, t in VIDEOS))
     body = body.replace("{{REPO}}", REPO).replace("{{VIDEO}}", video)
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(page("PSPExp: Experiment. Experience. Expand.", body, 0, "home"))
 

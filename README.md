@@ -8,7 +8,7 @@ games the PSP never had, and even a tiny board keeps up.
 
 <p align="center"><img src="docs/images/launcher-games.png" width="640" alt="The PSPExp launcher on the PSP: the Games shelf, with Cave Story highlighted"></p>
 
-<p align="center"><a href="https://youtu.be/CQm_w-4Oqfw">▶ Watch the demo</a>: the PSP with a Raspberry Pi 400 and a ClockworkPi GameShell, in 80 seconds.</p>
+<p align="center"><a href="https://youtu.be/CQm_w-4Oqfw">▶ Watch the demo</a>: the PSP with a Raspberry Pi 400 and a ClockworkPi GameShell, in 80 seconds.<br><a href="https://youtu.be/_rBYBBLUeNc">▶ Part II: the games</a>: Super Mario 64, Unreal Tournament, Celeste 64 and more on the PSP-1000.</p>
 
 What you get on the PSP:
 

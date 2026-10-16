@@ -1,9 +1,10 @@
 # Release notes
 
-## Since 1.0.0 (not released yet)
+## Since 1.0.0
 
-These come with the next PSPExp packages: the boards get them as an update
-(Packages, Apps > PSPExp).
+These came as package updates (2026-10-15): a board gets them through
+Packages (Apps > PSPExp); the PSP's part and the card images are unchanged.
+See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 
 - **Media** (once Music) plays **films** as well as music: MP4, MKV, WebM,
   AVI and whatever ffmpeg reads, full screen, up to 30 pictures a second
@@ -15,6 +16,10 @@ These come with the next PSPExp packages: the boards get them as an update
   does while they play: the rows scrolling, each channel's level.
 - **Archives in Files**: unpack ZIP, 7z, RAR and tar archives, see what is
   in them, and compress files to a .zip.
+- **Shooters with the PSP's own controls**: Unreal Tournament, Quake,
+  Quake II and AssaultCube move on the face buttons, aim with the nub and
+  fire with R; Unreal Tournament's menu cursor reaches the whole screen.
+- **OpenArena** no longer seems to hang after a run that was cut off.
 
 ## The first release
 
