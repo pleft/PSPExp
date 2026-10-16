@@ -491,6 +491,21 @@ static void try_reconnect(void)
 
 /* ---- geometry -------------------------------------------------------------- */
 
+/* The pointer (window pixels) in the game's logical pixels, as SDL maps it: with a logical size
+ * unlike the window's, letterboxed (fheroes2 in full screen: a 480x272 window holding 640x480). The
+ * pointer drawn at the window's position scaled to the logical frame had sat left of where the game
+ * took it, 30 pixels at "New Game" (the user). */
+static void pointer_logical(float *lx, float *ly)
+{
+    int ww = S.win_w > 0 ? S.win_w : 480, wh = S.win_h > 0 ? S.win_h : 272;
+    int lw = S.log_w > 0 ? S.log_w : ww, lh = S.log_h > 0 ? S.log_h : wh;
+    if (S.log_w > 0 && S.log_h > 0 && (lw != ww || lh != wh)) {
+        float ls = fminf((float)ww / lw, (float)wh / lh);
+        float vx = floorf((ww - lw * ls) / 2), vy = floorf((wh - lh * ls) / 2);
+        *lx = (S.px - vx) / ls; *ly = (S.py - vy) / ls;
+    } else { *lx = S.px * lw / (float)ww; *ly = S.py * lh / (float)wh; }
+}
+
 /* The frame fitted to the PSP's 480x272, or, magnified (PSPEXP_MAGNIFY), at its own size with the
  * pointer's surroundings in view: a 640x480 game's small text, 57% in the fitted frame (Heroes II's
  * 4-5 pixel labels), readable at 1:1. The view follows the pointer, stopped at the frame's edges. */
@@ -501,8 +516,10 @@ static void place_frame(int log)
     if (lw <= 0 || lh <= 0) { lw = 480; lh = 272; }
     s = fminf(480.0f / lw, 272.0f / lh);
     if (S.magnify && s < 1.0f) {
-        int ww = S.win_w > 0 ? S.win_w : lw, wh = S.win_h > 0 ? S.win_h : lh;
-        int cx = (int)lroundf(S.px * lw / (float)ww), cy = (int)lroundf(S.py * lh / (float)wh);
+        float plx, ply;
+        int cx, cy;
+        pointer_logical(&plx, &ply);
+        cx = (int)lroundf(plx); cy = (int)lroundf(ply);
         S.sx = S.sy = 1.0f;
         S.ox = lw > 480 ? 240 - cx : (480 - lw) / 2;
         S.oy = lh > 272 ? 136 - cy : (272 - lh) / 2;
@@ -2669,7 +2686,10 @@ static void link_unlock(void) { pthread_mutex_unlock(&link_mutex); }
 static void replay_pointer(void)
 {
     Uint32 now = SDL_GetTicks();
-    if (S.frame_open || !pointer_shown() || (S.px == S.drawn_px && S.py == S.drawn_py) || now - S.last_present < 16) return;
+    static Uint32 gap;   /* PSPEXP_POINTER_FPS: at most that many such frames a second (60; the PSP's LCD smears a small
+                          * bright cursor moved often, so fewer and larger steps can look cleaner) */
+    if (!gap) { int f = getenv("PSPEXP_POINTER_FPS") ? atoi(getenv("PSPEXP_POINTER_FPS")) : 60; gap = f > 0 && f <= 60 ? 1000u / (Uint32)f : 16u; }
+    if (S.frame_open || !pointer_shown() || (S.px == S.drawn_px && S.py == S.drawn_py) || now - S.last_present < gap) return;
     if (!pspexp_should_render(S.ctx) || pspexp_replay_frame(S.ctx) < 0) return;
     S.clip_sent = 0;
     draw_pointer();
@@ -2794,11 +2814,12 @@ HOOK(void, SDL_FreeCursor, (SDL_Cursor *c))
 
 static void draw_pointer(void)
 {
-    int r, x, y, ww = S.win_w > 0 ? S.win_w : 480, wh = S.win_h > 0 ? S.win_h : 272;
+    int r, x, y;
     const uint16_t black = pspexp_color_5650(0, 0, 0), white = pspexp_color_5650(255, 255, 255);
-    int lw = S.log_w > 0 ? S.log_w : ww, lh = S.log_h > 0 ? S.log_h : wh;
-    x = S.ox + (int)lroundf(S.px * lw * S.sx / (float)ww);   /* (fitted: the frame's 480 - 2 x offset; magnified: its own size) */
-    y = S.oy + (int)lroundf(S.py * lh * S.sy / (float)wh);
+    float plx, ply;
+    pointer_logical(&plx, &ply);
+    x = S.ox + (int)lroundf(plx * S.sx);   /* (fitted or magnified: the frame's own placing) */
+    y = S.oy + (int)lroundf(ply * S.sy);
     if (g_cur && g_cur->px) {   /* the game's own cursor picture */
         PspExpQuadExRec q;
         if (!g_cur->tex) {
