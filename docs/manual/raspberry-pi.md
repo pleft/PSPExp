@@ -89,6 +89,14 @@ it starts straight away, and its tile shows the game's title screen. The nub mov
 circle is the right mouse button, the d-pad scrolls the map, square adds to
 the selection, START is the game menu.
 
+**Heroes of Might and Magic II** plays its free demo (one scenario) out of
+the box. To play your own copy (the full game, The Price of Loyalty or the
+Gold edition), copy its **DATA** and **MAPS** folders, as an installed copy
+or GOG's game folder has them, into the **Heroes2** folder of your home
+folder on the Pi (Apps > Files; the folder appears after the first start).
+The whole game folder works too. From the next start your copy is played
+instead of the demo.
+
 **Warcraft II** works the same way, with your own copy in the
 **Warcraft2** folder: a disc image of the CD (a `.cue` with its `.img` or
 `.bin`, as DOSBox copies have; the expansion's, Beyond the Dark Portal,
@@ -135,7 +143,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Quake II (demo) | drawn by the PSP, like Quake: 31-60 fps in its first seconds on the PSP-1000 |
 | Luanti (Minetest) | drawn by the Pi's graphics chip (only on a Pi): its menus about 58 fps on the PSP-1000 |
 | Trackballs, Open Surge | drawn by the Pi's graphics chip too (only on a Pi); 51-60 fps in their first seconds on the PSP-1000 |
-| Heroes of Might and Magic II (demo) | the 1996 strategy game's demo (one scenario) on fheroes2, downloaded when installed; the nub is the mouse, cross clicks, circle held shows what a creature or building is; its screen is larger than the PSP's, so **R is a magnifier**: the game's own pixels around the pointer, for its small text, R again the whole screen; L the next hero, triangle ends the turn, square moves the hero, the d-pad scrolls, START cancels, SELECT is OK |
+| Heroes of Might and Magic II | the 1996 strategy game on fheroes2: its demo (one scenario), downloaded when installed, or your own copy (above); the nub is the mouse, cross clicks, circle held shows what a creature or building is; its screen is larger than the PSP's, so **R is a magnifier**: the game's own pixels around the pointer, for its small text, R again the whole screen; L the next hero, triangle ends the turn, square moves the hero, the d-pad scrolls, START cancels, SELECT is OK |
 | Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |
 | Warcraft II | drawn by the PSP: 54-60 fps from the Pi; your own copy (above); menus and game at the PSP's 480x272 |
 

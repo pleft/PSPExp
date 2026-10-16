@@ -5,15 +5,20 @@
 # release from archive.org when it is installed (_installer.sh), the same file
 # and SHA-256 as fheroes2's own script/demo/download_demo_version.sh, nothing of
 # it hosted by PSPExp. fheroes2 reads its folders lowercase (data, maps) and an
-# extra data folder from FHEROES2_DATA. Usage: build OUTDIR
+# extra data folder from FHEROES2_DATA, searched first. The player's own copy
+# (the full game, Price of Loyalty, Gold: its DATA and MAPS folders, as an
+# installed copy or GOG's game folder has them, any letter case) goes in
+# ~/Heroes2, made at the first start; when a HEROES2.AGG is found there (up to
+# two folders down) that copy is played, else the demo. Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=heroes2-demo TITLE="Heroes of Might and Magic II (demo)" VERSION=1.0-pspexp1
+ID=heroes2-demo TITLE="Heroes of Might and Magic II (demo, or your own copy)" VERSION=1.0-pspexp2
 URL=https://archive.org/download/HeroesofMightandMagicIITheSuccessionWars_1020/h2demo.zip
 SHA=12048c8b03875c81e69534a3813aaf6340975e77b762dc1b79a4ff5514240e3c SIZE="22 MB" TOP=""
 AFTER='mv "$G.new/DATA" "$G.new/data" && mv "$G.new/MAPS" "$G.new/maps"'
-RUN='FHEROES2_DATA="$G" exec /usr/games/fheroes2 "$@"'
+RUN='U="$HOME/Heroes2"; mkdir -p "$U"; a=$(find -L "$U" -maxdepth 3 -iname heroes2.agg -print 2>/dev/null | head -1); [ -n "$a" ] && G=$(dirname "$(dirname "$a")"); FHEROES2_DATA="$G" exec /usr/games/fheroes2 "$@"'
 DEPENDS=fheroes2
 ABOUT=" New World Computing's 1996 turn-based fantasy strategy game, its demo:
- the Broken Alliance scenario, for fheroes2."
+ the Broken Alliance scenario, for fheroes2; or the player's own copy of
+ the full game, put in the Heroes2 folder of their home folder."
 build_installer "$1"

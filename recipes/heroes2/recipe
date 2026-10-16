@@ -1,6 +1,8 @@
 # Heroes of Might and Magic II: the demo (one scenario, Broken Alliance) on
 # fheroes2, Debian's free re-creation of the engine; the demo downloaded at
-# install from archive.org (package heroes2-demo). fheroes2 draws at 640x480 at
+# install from archive.org (package heroes2-demo). Or the player's own copy:
+# its DATA and MAPS folders put in ~/Heroes2 (made at the first start), then
+# played instead of the demo (checked: a copy one folder down, upper case). fheroes2 draws at 640x480 at
 # the least, shrunk to 57% on the PSP: its maps and pictures read well, its
 # small text (skill labels, the status line, dialogs) is 4-5 pixels high, so R
 # is a magnifier (PSPEXP_MAGNIFY): the game's own pixels round the pointer,
@@ -15,8 +17,8 @@
 
 [package]
 id=heroes2
-title=Heroes of Might and Magic II (demo)
-description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic's demo on fheroes2.
+title=Heroes of Might and Magic II
+description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic on fheroes2: its demo, or your own copy.
 category=game
 license=GPL-2.0 (fheroes2); demo (Heroes of Might and Magic II, New World Computing, 1996), downloaded at install
 version=1
@@ -32,7 +34,7 @@ apt=
 [entry]
 title=Heroes II
 type=game
-description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic's demo on fheroes2.
+description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic on fheroes2: its demo, or your own copy.
 icon=swords
 exec=/usr/games/heroes2-demo
 keys=l=h,triangle=e,square=m,up=up,down=down,left=left,right=right,start=escape,select=return
