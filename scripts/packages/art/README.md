@@ -24,6 +24,20 @@
 | `recipes/xmoto/cover.png` | Debian's xmoto package, its 256x256 pixmap, scaled | GPL-2.0+ (X-Moto) |
 | `recipes/blobby/cover.png` | Debian's blobby package, its 128x128 icon | GPL-2.0+ (Blobby Volley 2) |
 | `recipes/heroes2/cover.png` | Debian's fheroes2 package, its 128x128 icon | GPL-2.0 (fheroes2) |
+| `recipes/cnc/cover.png` | Vanilla Conquer's `resources/vanillatd_icon.svg`, rendered at 128x128 | GPL-3.0 (Vanilla Conquer) |
+| `recipes/redalert/cover.png` | Vanilla Conquer's `resources/vanillara_icon.svg`, rendered at 128x128 | GPL-3.0 (Vanilla Conquer) |
+| `recipes/openra-cnc/cover.png` | OpenRA's `mods/cnc/icon-3x.png`, scaled | GPL-3.0 (OpenRA) |
+| `recipes/openra-ra/cover.png` | OpenRA's `mods/ra/icon-3x.png`, scaled | GPL-3.0 (OpenRA) |
+| `recipes/devilutionx/cover.png` | DevilutionX's `Packaging/resources/icon.png`, scaled | DevilutionX's (its project's icon) |
+| `recipes/etlegacy/cover.png` | ET: Legacy's `misc/etl.svg`, rendered at 128x128 | GPL-3.0 (ET: Legacy) |
+| `recipes/lugaru/cover.png` | Lugaru's `Dist/Linux/lugaru.png` | GPL-2.0+ (Lugaru) |
+| `recipes/quake2/cover.png` | Yamagi Quake II's `stuff/icon/Quake2.png`, scaled | GPL-2.0 (Yamagi Quake II) |
+| `recipes/srb2/cover.png` | Sonic Robo Blast 2's `srb2.png`, scaled | GPL-2.0 (SRB2) |
+| `recipes/srb2kart/cover.png` | SRB2Kart's `srb2.png` (its tyre), scaled | GPL-2.0 (SRB2Kart) |
+| `recipes/warcraft/cover.png` | War1gus's `war1gus.png`, scaled 2x | GPL-2.0 (War1gus) |
+| `recipes/warcraft2/cover.png` | Wargus's `wargus.png`, scaled 2x | GPL-2.0 (Wargus) |
+| `recipes/zsdx/cover.png` | Zelda: Mystery of Solarus DX's `data/logos/icon_256.png`, scaled | the quest's licence (Solarus Team) |
+| `recipes/ut99/cover.png` | a frame of Unreal Tournament filmed on the PSP (a deathmatch), its screen cropped and scaled | Epic Games' (the game, free with their permission) |
 | `recipes/trigger-rally/cover.png` | Debian's trigger-rally package, its 128x128 pixmap | GPL-2.0+ (Trigger Rally) |
 | `recipes/teeworlds/cover.png` | Debian's teeworlds package, its 128x128 icon | Zlib (Teeworlds) |
 | `recipes/dreamchess/cover.png` | Debian's dreamchess package, its 256x256 icon, scaled | GPL-3+ (DreamChess) |

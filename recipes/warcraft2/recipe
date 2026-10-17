@@ -28,7 +28,7 @@ title=Warcraft II
 description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD or its image, Battle.net Edition or GOG). Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, Wargus); the game's data is your own copy's (Blizzard)
-version=4
+version=5
 
 [debian]
 apt=pspexp-wargus

@@ -17,7 +17,7 @@ title=Unreal Tournament
 description=Epic's 1999 arena shooter, Game of the Year Edition: deathmatch, capture the flag and assault against bots or online. Drawn by the board's GPU.
 category=game
 license=Free with Epic Games' permission (Unreal Tournament GOTY), downloaded at install through OldUnreal; Epic Games Terms of Service
-version=3
+version=4
 terms=Epic Games Terms of Service|https://legal.epicgames.com/en-US/epicgames/tos
 
 [debian]

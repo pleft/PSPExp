@@ -14,7 +14,7 @@ title=SRB2Kart
 description=Kart racing with Sonic and friends: items, drifting and 30+ tracks, against the computer or online. A free fan game, drawn by the PSP.
 category=game
 license=GPL-2.0 (SRB2Kart); freeware assets under their own licences, downloaded at install
-version=1
+version=2
 
 [debian]
 apt=srb2kart

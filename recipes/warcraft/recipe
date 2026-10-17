@@ -26,7 +26,7 @@ title=Warcraft: Orcs & Humans
 description=Blizzard's 1994 real-time strategy game on Stratagus and War1gus: humans against orcs, campaigns and skirmishes. Needs DATA.WAR from your own copy. Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, War1gus); the game's data is your own copy's (Blizzard)
-version=3
+version=4
 
 [debian]
 apt=pspexp-war1gus

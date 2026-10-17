@@ -14,7 +14,7 @@ title=Sonic Robo Blast 2
 description=Sonic in 3D: a free fan game with seven zones, Tails, Knuckles, Amy and more, and online play. Drawn by the PSP.
 category=game
 license=GPL-2.0 (SRB2); its assets under their own licences, downloaded at install
-version=1
+version=2
 
 [debian]
 apt=srb2

@@ -12,7 +12,7 @@ title=Zelda: Mystery of Solarus DX
 description=A fan-made Zelda action-adventure on Solarus: dungeons, puzzles and bosses in the style of A Link to the Past, with a story of its own.
 category=game
 license=GPL-3.0 (Solarus); the quest's own terms (fan game, Solarus Team), downloaded from its release
-version=1
+version=2
 
 [debian]
 apt=zsdx

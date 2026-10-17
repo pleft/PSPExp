@@ -18,7 +18,7 @@ title=Diablo (shareware)
 description=Blizzard's 1996 action RPG on DevilutionX: the shareware's cathedral levels with the Warrior, or your own full game. Drawn by the PSP.
 category=game
 license=DevilutionX: Sustainable Use License (non-commercial); Diablo's shareware data, downloaded at install
-version=1
+version=2
 terms=DevilutionX's licence terms|https://github.com/diasurgical/devilutionX/blob/1.5.5/LICENSE.md
 
 [debian]

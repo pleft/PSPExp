@@ -22,7 +22,7 @@ title=Quake II (demo)
 description=id Software's 1997 first-person shooter against the Strogg, its demo levels on Yamagi Quake II: the 3D world drawn by the PSP.
 category=game
 license=GPL-2.0 (Yamagi Quake II); demo (Quake II, id Software, 1997), downloaded at install
-version=3
+version=4
 
 [debian]
 apt=quake2-demo
