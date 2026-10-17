@@ -1,0 +1,37 @@
+# Hex-a-hop: a puzzle game on hexagonal tiles: break every green tile by
+# hopping off it without trapping yourself; 100 levels, no time limit
+# (Debian's; an SDL 1.2 game, through the layer's build for SDL 1.2
+# programs). Its 640x480 at 57%: its help text reads. It moves in six
+# directions (Q W E, A S D): the d-pad is W, S, A and D (up, down, down-left,
+# down-right), L and R are Q and E (up-left, up-right); the nub is the mouse,
+# cross clicks a tile to hop there (and picks in its menus), circle and
+# triangle undo (right button, U), START and SELECT are Escape (its menu:
+# resume, restart the level, help). Played on the PSP-1000 from the Pi 400
+# (2026-10-17): the first level, moves, undo and its menu; 46-60 fps.
+# Not yet tried on the GameShell.
+
+[package]
+id=hex-a-hop
+title=Hex-a-hop
+description=Puzzle game on hexagonal tiles: break every green tile by hopping off it, without trapping yourself. A hundred levels, no time limit.
+category=game
+license=GPL-2.0+ (Hex-a-hop), its data partly CC0-1.0 and CC-BY-SA-3.0
+version=1
+
+[debian]
+apt=hex-a-hop
+
+# not yet tried on the GameShell
+[debian:gameshell]
+apt=
+
+[entry]
+title=Hex-a-hop
+type=game
+description=Puzzle game on hexagonal tiles: break every green tile by hopping off it, without trapping yourself.
+icon=puzzle
+exec=/usr/games/hex-a-hop
+keys=up=w,down=s,left=a,right=d,l=q,r=e,triangle=u,square=u,start=escape,select=escape
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
+graphics=sdl

@@ -1,0 +1,37 @@
+# Barrage: a shooting range: three minutes to hit as many dummy soldiers,
+# jeeps and tanks as you can with a gun's grenades (Debian's; an SDL 1.2
+# game, through the layer's build for SDL 1.2 programs), windowed (-w: its
+# fullscreen asks for a mode). Its 640x480 at 57%: the soldiers about 5
+# pixels high, the jeeps and tanks larger. The nub aims the crosshair, cross
+# fires a large grenade, square held with cross a small one (Ctrl), circle or
+# triangle reloads (right button, Space), START is Return, SELECT Escape
+# (leaves the range). Played on the PSP-1000 from the Pi 400 (2026-10-17):
+# the menu, the range, grenades landing, the ammunition out and reloaded;
+# 60 fps. Not yet tried on the GameShell.
+
+[package]
+id=barrage
+title=Barrage
+description=Shooting range: three minutes to hit as many dummy soldiers, jeeps and tanks as you can with large and small grenades.
+category=game
+license=GPL-2.0+ (Barrage)
+version=1
+
+[debian]
+apt=barrage
+
+# not yet tried on the GameShell
+[debian:gameshell]
+apt=
+
+[entry]
+title=Barrage
+type=game
+description=Shooting range: three minutes to hit as many dummy soldiers, jeeps and tanks as you can.
+icon=target
+exec=/usr/games/barrage -w
+keys=square=lctrl,triangle=space,start=return,select=escape
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
+env=PSPEXP_JOYSTICK=0
+graphics=sdl
