@@ -16,7 +16,7 @@ version=1
 [debian]
 apt=noiz2sa
 
-# (a Pi only for now: not yet tried on the GameShell)
+# (a Pi only: on the GameShell 27 fps (60 on a Pi): a shooter at half speed, 2026-10-17)
 [debian:gameshell]
 apt=
 

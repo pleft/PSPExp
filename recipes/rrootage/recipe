@@ -17,7 +17,7 @@ version=1
 [debian]
 apt=rrootage
 
-# (a Pi only for now: not yet tried on the GameShell)
+# (a Pi only: on the GameShell 35-47 fps (60 on a Pi): too slow for a bullet-hell, 2026-10-17)
 [debian:gameshell]
 apt=
 

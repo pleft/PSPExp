@@ -19,7 +19,7 @@ version=1
 [debian]
 apt=kobodeluxe
 
-# (a Pi only for now: not yet tried on the GameShell)
+# (a Pi only: on the GameShell its menus about 23 fps; a game not reached in the test, 2026-10-17)
 [debian:gameshell]
 apt=
 

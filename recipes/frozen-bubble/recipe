@@ -8,6 +8,7 @@
 # It takes about 20 s to load on a Pi 400. Played on the PSP-1000
 # (2026-10-17): its menus, a one-player game, aiming both ways, bubbles fired
 # and groups popped, about 49 fps.
+# On the GameShell (2026-10-17, the PSP-1000 on its USB): 37-43 fps in a game.
 
 [package]
 id=frozen-bubble
@@ -20,9 +21,6 @@ version=1
 [debian]
 apt=frozen-bubble
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Frozen Bubble

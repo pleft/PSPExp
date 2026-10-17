@@ -4,6 +4,7 @@
 # as its game controller: the nub aims, cross shoots (held, the power) and
 # confirms. Played on the PSP-1000 (2026-10-17): its menu, hole 1, the aim
 # turned, a shot, the score counted, 54-60 fps.
+# On the GameShell (2026-10-17, the PSP-1000 on its USB): about 57 fps on a hole.
 
 [package]
 id=neverputt
@@ -16,9 +17,6 @@ version=1
 [debian]
 apt=neverputt
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Neverputt

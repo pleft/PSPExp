@@ -6,6 +6,7 @@
 # (Alt), START pauses (P), SELECT is Escape (its menu). Played on the PSP-1000
 # (2026-10-17): a game started, the ship moving both ways, firing, scoring,
 # 60 fps in play.
+# On the GameShell (2026-10-17, the PSP-1000 on its USB): 56-59 fps in play.
 
 [package]
 id=powermanga
@@ -18,9 +19,6 @@ version=1
 [debian]
 apt=powermanga
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Powermanga

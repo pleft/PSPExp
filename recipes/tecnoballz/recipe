@@ -7,6 +7,7 @@
 # triangle releases the ball (Space), square the tilt (Alt), START pauses
 # (P), SELECT its menu (Escape). Played on the PSP-1000 (2026-10-17): the menu,
 # a game started, the paddle both ways, bricks broken, about 51 fps.
+# On the GameShell (2026-10-17, the PSP-1000 on its USB): about 50 fps in play.
 
 [package]
 id=tecnoballz
@@ -19,9 +20,6 @@ version=1
 [debian]
 apt=tecnoballz
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=TecnoballZ

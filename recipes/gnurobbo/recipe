@@ -6,6 +6,7 @@
 # cross and START confirm (Return), SELECT is Escape (which in a level ends
 # Robbo's life: the level again). Played on the PSP-1000 (2026-10-17): its
 # menu, level 1, Robbo moving, 50 fps.
+# On the GameShell (2026-10-17, the PSP-1000 on its USB): about 47 fps in a level.
 
 [package]
 id=gnurobbo
@@ -18,9 +19,6 @@ version=1
 [debian]
 apt=gnurobbo
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=GNU Robbo

@@ -5,6 +5,7 @@
 # menus), L and R glance aside, cross boosts and confirms, START pauses,
 # SELECT is Escape (its menu). Played on the PSP-1000 (2026-10-17): its menu,
 # a race, turns both ways shown on the minimap, a crash, a winner, 56-60 fps.
+# On the GameShell (2026-10-17, the PSP-1000 on its USB): 53-59 fps in a race.
 
 [package]
 id=gltron
@@ -17,9 +18,6 @@ version=1
 [debian]
 apt=gltron
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=GLtron

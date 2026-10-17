@@ -17,7 +17,7 @@ version=1
 [debian]
 apt=parsec47
 
-# (a Pi only for now: not yet tried on the GameShell)
+# (a Pi only: on the GameShell 29-39 fps (60 on a Pi): too slow, 2026-10-17)
 [debian:gameshell]
 apt=
 
