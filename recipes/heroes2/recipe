@@ -26,8 +26,7 @@ version=1
 [debian]
 apt=heroes2-demo
 
-# (on a Pi only for now: fheroes2 is in Debian's contrib section, not yet
-# tried on the GameShell's image)
+# (a Pi only: on the GameShell the game drew 4 frames a second, 2026-10-17)
 [debian:gameshell]
 apt=
 

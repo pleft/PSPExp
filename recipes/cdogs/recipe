@@ -7,6 +7,9 @@
 # confirms, SELECT backs out (Escape).
 # Played on the PSP-1000 (2026-10-17): the menus, a campaign started, the
 # mission's clock running, moving up, right and down-left and firing, 60 fps.
+# On the GameShell (2026-10-17): composed, its CPU managed 16-18 fps in a
+# mission; drawn by the PSP (each sprite mirrored, ~730 a frame) 30. The game
+# keeps its own clock either way (the mission timer near real time).
 
 [package]
 id=cdogs
@@ -19,9 +22,6 @@ version=1
 [debian]
 apt=cdogs-sdl
 
-# (on a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=C-Dogs
@@ -34,3 +34,6 @@ nub=joystick
 env=PSPEXP_COMPOSE=1
 first-run=.config/cdogs-sdl/options.cnf:{"Graphics":{"WindowWidth":480,"WindowHeight":272,"ScaleFactor":1}}\n
 graphics=sdl
+
+[entry:gameshell]
+env=PSPEXP_COMPOSE=0

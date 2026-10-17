@@ -5,6 +5,7 @@
 # The nub is the mouse: cross turns a mirror one way, circle the other; START
 # confirms, SELECT goes back. Played on the PSP-1000 (2026-10-17): straight into
 # a level, a mirror turned (the beam's path changed), the magnifier, 47-50 fps.
+# On the GameShell (2026-10-17): a level at 46-49 fps, the magnifier.
 
 [package]
 id=mirrormagic
@@ -17,9 +18,6 @@ version=1
 [debian]
 apt=mirrormagic
 
-# (on a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Mirror Magic

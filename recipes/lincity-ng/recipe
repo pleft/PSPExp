@@ -20,7 +20,7 @@ version=1
 [debian]
 apt=lincity-ng
 
-# (on a Pi only for now: not yet tried on the GameShell)
+# (a Pi only: on the GameShell 2 frames a second, composed or not, 2026-10-17)
 [debian:gameshell]
 apt=
 

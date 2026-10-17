@@ -7,6 +7,7 @@
 # square the left fire, circle brings the ball back, triangle turbo, START the
 # menu. Played on the PSP-1000 (2026-10-17): menus readable, the paddle both
 # ways, a ball in play, scoring.
+# On the GameShell (2026-10-17): 45-50 fps in play, dips to about 30.
 
 [package]
 id=lbreakouthd
@@ -19,9 +20,6 @@ version=1
 [debian]
 apt=lbreakouthd
 
-# (on a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=LBreakout HD

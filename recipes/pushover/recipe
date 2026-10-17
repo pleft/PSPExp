@@ -6,6 +6,7 @@
 # The tutorial levels' help panel is small on the PSP; the levels themselves
 # are clear. Played on the PSP-1000 (2026-10-17): the menus, into a tutorial
 # level, the figure walking down the steps and back, the timer running.
+# On the GameShell (2026-10-17): its own 18 frames a second, as on a Pi.
 
 [package]
 id=pushover
@@ -18,9 +19,6 @@ version=1
 [debian]
 apt=pushover
 
-# (on a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Pushover

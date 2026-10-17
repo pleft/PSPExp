@@ -113,11 +113,16 @@ rget() {
 	  if (s == sec) base = v; else if (s == sec ":" board) { over = v; have = 1 } }
 	END { if (have) print over; else print base }' "$1"
 }
+# a repeated key's values (env=, first-run=); a board's own section ([entry:gameshell]) that has the
+# key replaces all of them (C-Dogs composed on a Pi, not on the GameShell, whose CPU composed 17 fps)
 rall() {
-	awk -v sec="$2" -v key="$3" '
+	awk -v sec="$2" -v key="$3" -v board="$BOARD" '
 	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }
 	{ i = index($0, "="); if (!i) next; k = substr($0, 1, i - 1); gsub(/^[ \t]+|[ \t]+$/, "", k)
-	  if (s == sec && k == key) { v = substr($0, i + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }' "$1"
+	  if (k != key) next
+	  v = substr($0, i + 1); gsub(/^[ \t]+|[ \t]+$/, "", v)
+	  if (s == sec) base[nb++] = v; else if (s == sec ":" board) over[no++] = v }
+	END { if (no) for (j = 0; j < no; j++) print over[j]; else for (j = 0; j < nb; j++) print base[j] }' "$1"
 }
 
 serial() { tr -dc 0-9 < "${CAT%/recipes}/serial" 2>/dev/null; }

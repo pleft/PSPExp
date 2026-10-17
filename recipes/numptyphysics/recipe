@@ -7,6 +7,8 @@
 # level, square or START pauses the physics, L and R the previous and next
 # level. Checked on the Pi at 480x272 (2026-10-17): the title's labels
 # readable, a line drawn with the nub held, falling as a solid.
+# On the GameShell (2026-10-17): 57-60 fps, 10-37 while many shapes fall; a
+# line drawn, the level solved.
 
 [package]
 id=numptyphysics
@@ -19,9 +21,6 @@ version=1
 [debian]
 apt=numptyphysics
 
-# (on a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Numpty Physics

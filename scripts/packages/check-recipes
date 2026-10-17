@@ -92,8 +92,9 @@ def check(dirpath):
         errs.append("%s: no [debian] or [omega]: nothing to install" % rid)
     if "debian" in sections and "apt" not in sections["debian"]:
         errs.append("%s: [debian] needs apt=" % rid)
-    systems = [s for s in sections if s.split(":")[0].split(".")[0] == "system"]
-    entries = [s for s in sections if s.split(":")[0].split(".")[0] == "entry"]
+    # (a board's own section, [entry:gameshell], only changes some keys of its [entry])
+    systems = [s for s in sections if ":" not in s and s.split(".")[0] == "system"]
+    entries = [s for s in sections if ":" not in s and s.split(".")[0] == "entry"]
     if pk.get("category") == "system":
         if not systems: errs.append("%s: a system needs [system]" % rid)
         for sec in systems:
