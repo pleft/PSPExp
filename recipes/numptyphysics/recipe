@@ -1,0 +1,37 @@
+# Numpty Physics: a drawing puzzle game (Debian's): what you draw becomes solid,
+# a plank, a ramp, a wheel, and falls; get the red token to the star. Its
+# OpenGL drawn by the PSP's GE through the SDL layer (59.9 fps measured), in a
+# window of the PSP's own 480x272 (PSPEXP_WINDOW: the game fills any window,
+# its labels at full size; its own 800x480 was shrunk to 57%). The nub is the
+# pen: cross held draws, circle undoes the last stroke, triangle restarts the
+# level, square or START pauses the physics, L and R the previous and next
+# level. Checked on the Pi at 480x272 (2026-10-17): the title's labels
+# readable, a line drawn with the nub held, falling as a solid.
+
+[package]
+id=numptyphysics
+title=Numpty Physics
+description=Draw shapes that come to life: whatever you draw becomes a solid plank, ramp or wheel. Get the red token to the star, over a hundred levels.
+category=game
+license=GPL-3.0 (Numpty Physics)
+version=1
+
+[debian]
+apt=numptyphysics
+
+# (on a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Numpty Physics
+type=game
+description=Draw shapes that come to life: whatever you draw becomes a solid plank, ramp or wheel. Get the red token to the star, over a hundred levels.
+icon=puzzle
+exec=/usr/games/numptyphysics
+keys=circle=backspace,triangle=r,square=space,start=space,l=p,r=n
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=none
+env=PSPEXP_WINDOW=480x272
+env=PSPEXP_JOYSTICK=0
+graphics=opengl

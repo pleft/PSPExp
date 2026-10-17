@@ -23,6 +23,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   own copy in the Heroes2 folder; R is a magnifier, the game's own pixels
   round the pointer, for its small text; the game's own cursors, moving
   smoothly.
+- **Numpty Physics** (on a Pi): draw with the nub, and what you draw
+  becomes solid.
 - **AssaultCube is no longer offered**: its text was too small to read on
   the PSP's screen and it did not play well; a board that has it keeps it
   until removed in Packages.

@@ -37,6 +37,7 @@
 | `recipes/warcraft/cover.png` | War1gus's `war1gus.png`, scaled 2x | GPL-2.0 (War1gus) |
 | `recipes/warcraft2/cover.png` | Wargus's `wargus.png`, scaled 2x | GPL-2.0 (Wargus) |
 | `recipes/zsdx/cover.png` | Zelda: Mystery of Solarus DX's `data/logos/icon_256.png`, scaled | the quest's licence (Solarus Team) |
+| `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
 | `recipes/ut99/cover.png` | a frame of Unreal Tournament filmed on the PSP (a deathmatch), its screen cropped and scaled | Epic Games' (the game, free with their permission) |
 | `recipes/trigger-rally/cover.png` | Debian's trigger-rally package, its 128x128 pixmap | GPL-2.0+ (Trigger Rally) |
 | `recipes/teeworlds/cover.png` | Debian's teeworlds package, its 128x128 icon | Zlib (Teeworlds) |
