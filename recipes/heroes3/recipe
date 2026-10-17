@@ -13,7 +13,10 @@
 # circle is the right button (what a thing is), the d-pad scrolls the map.
 # Played on the PSP-1000 (2026-10-17) with GOG's Complete edition: its menu,
 # a scenario chosen and begun, its opening message, the hero moved into a
-# fight, the battle; 55-60 fps.
+# fight, the battle; 55-60 fps. On the GameShell (2026-10-17): GOG's installer
+# imported at the first start in about 4 minutes, the game 14-20 fps, which
+# the user played and found quite playable. The pointer doubles while
+# magnified (VCMI hands over its cursor already shrunk to the 45% view).
 
 [package]
 id=heroes3
@@ -21,14 +24,11 @@ title=Heroes III
 description=Turn-based fantasy strategy, the 1999 classic on VCMI: explore, build towns, recruit armies and fight with heroes. Needs your own copy of Shadow of Death or the Complete edition (GOG's) in the Heroes3 folder.
 category=game
 license=GPL-2.0+ (VCMI); the game's data is your own copy's (Ubisoft)
-version=2
+version=3
 
 [debian]
 apt=pspexp-heroes3
 
-# (a Pi only for now: not yet tried on the GameShell)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Heroes III

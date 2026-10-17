@@ -260,6 +260,7 @@ static struct {
     SDL_Window *win;
     int win_w, win_h, log_w, log_h;
     float sx, sy; int ox, oy;          /* logical -> PSP */
+    float pointer_k;                   /* the pointer's size: 1, larger while magnified (draw_pointer) */
     SDL_Rect viewport; int has_viewport;
     SDL_Rect clip; int has_clip;
     float rsx, rsy;                    /* SDL_RenderSetScale */
@@ -600,12 +601,16 @@ static void place_frame(int log)
         pointer_logical(&plx, &ply);
         cx = (int)lroundf(plx); cy = (int)lroundf(ply);
         S.sx = S.sy = 1.0f;
+        /* the pointer grows with the view, at most twice (Heroes III's at 45% looked tiny over its
+         * magnified map, the user) */
+        S.pointer_k = fminf(2.0f, 1.0f / s);
         S.ox = lw > 480 ? 240 - cx : (480 - lw) / 2;
         S.oy = lh > 272 ? 136 - cy : (272 - lh) / 2;
         if (lw > 480) S.ox = S.ox > 0 ? 0 : S.ox < 480 - lw ? 480 - lw : S.ox;
         if (lh > 272) S.oy = S.oy > 0 ? 0 : S.oy < 272 - lh ? 272 - lh : S.oy;
     } else {
         S.sx = S.sy = s;
+        S.pointer_k = 1.0f;
         S.ox = (int)((480 - lw * s) / 2);
         S.oy = (int)((272 - lh * s) / 2);
     }
@@ -2972,7 +2977,11 @@ static void draw_pointer(void)
             if (pspexp_upload_texture(S.ctx, g_cur->tex, &d, g_cur->px, (uint32_t)((size_t)g_cur->texw * g_cur->texh * 2), &f, 1) < 0) { g_cur->tex = 0; goto arrow; }
         }
         memset(&q, 0, sizeof(q));
-        q.x = (int16_t)(x - g_cur->hx); q.y = (int16_t)(y - g_cur->hy); q.w = (int16_t)g_cur->w; q.h = (int16_t)g_cur->h;
+        {
+            float k = S.pointer_k > 1.0f ? S.pointer_k : 1.0f;
+            q.x = (int16_t)(x - lroundf(g_cur->hx * k)); q.y = (int16_t)(y - lroundf(g_cur->hy * k));
+            q.w = (int16_t)lroundf(g_cur->w * k); q.h = (int16_t)lroundf(g_cur->h * k);
+        }
         q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)g_cur->w; q.v1 = (uint16_t)g_cur->h; q.color = 0xFFFF;
         pspexp_set_clip(S.ctx, 0, 0, 480, 272);
         S.clip_sent = 0;
@@ -2982,10 +2991,13 @@ static void draw_pointer(void)
 arrow:
     pspexp_set_clip(S.ctx, 0, 0, 480, 272);
     S.clip_sent = 0;   /* the program's clip again next frame */
-    for (r = 0; r < 12; r++) {
-        int len = r < 9 ? r * 2 / 3 + 1 : (11 - r) * 2 + 1;   /* widening, then the notch */
-        pspexp_fill_rect(S.ctx, (int16_t)x, (int16_t)(y + r), (int16_t)(len + 1), 1, black, 255);
-        if (len > 1 && r < 11) pspexp_fill_rect(S.ctx, (int16_t)(x + 1), (int16_t)(y + r), (int16_t)(len - 1), 1, white, 255);
+    {
+        int k = S.pointer_k >= 1.5f ? 2 : 1;   /* (magnified: twice as large) */
+        for (r = 0; r < 12; r++) {
+            int len = r < 9 ? r * 2 / 3 + 1 : (11 - r) * 2 + 1;   /* widening, then the notch */
+            pspexp_fill_rect(S.ctx, (int16_t)x, (int16_t)(y + r * k), (int16_t)((len + 1) * k), (int16_t)k, black, 255);
+            if (len > 1 && r < 11) pspexp_fill_rect(S.ctx, (int16_t)(x + k), (int16_t)(y + r * k), (int16_t)((len - 1) * k), (int16_t)k, white, 255);
+        }
     }
 }
 
