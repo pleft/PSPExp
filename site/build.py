@@ -282,7 +282,7 @@ def download_page():
 
 # ---- the games page: what Packages offers, read from recipes/ -------------------------------------
 
-BOARDS = [("pi", "Raspberry Pi"), ("gameshell", "GameShell"), ("omega", "Omega2+")]
+BOARDS = [("pi", "Raspberry Pi"), ("gameshell", "GameShell")]   # (the Omega2+ is not shown here: its 12 are all on a Pi too)
 SYSTEM_ART = os.path.join(ROOT, "tools/pspexp-term/assets/systems")
 EXTRA_ART = {"celeste64": "docs/images/celeste64.png", "freedoom": "scripts/packages/art/freedoom-phase1.png"}
 
@@ -389,7 +389,7 @@ def games_page():
 })();
 </script>""" % (len(games), len(systems), chips, "".join(card(x) for x in games), "".join(card(x) for x in systems), REPO, REPO)
     open(os.path.join(OUT, "games.html"), "w", encoding="utf-8").write(
-        page("Games · PSPExp", body, 0, "games", "The games and emulators PSPExp installs from the PSP: what runs on a Raspberry Pi, a ClockworkPi GameShell or an Omega2+."))
+        page("Games · PSPExp", body, 0, "games", "The games and emulators PSPExp installs from the PSP: what runs on a Raspberry Pi or a ClockworkPi GameShell."))
     print("games page: %d games, %d systems (%s)" % (len(games), len(systems), ", ".join("%s %d" % (n, count[b]) for b, n in BOARDS)))
 
 
