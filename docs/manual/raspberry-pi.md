@@ -146,6 +146,7 @@ Measured on the PSP-1000 with a Pi 400:
 | LBreakout HD | breakout at the PSP's own size, 55 fps; the d-pad or nub move the paddle, cross fires, circle brings the ball back, START is the menu |
 | Mirror Magic | laser puzzles; the nub is the pointer, cross / circle turn a mirror, R is the magnifier |
 | Pushover | domino puzzles at the game's own 18 frames a second; the d-pad or nub walk and climb, cross carries or pushes a domino; the tutorials' help panel is small |
+| C-Dogs | top-down run-and-gun at the PSP's own size, more of each map shown: 58-60 fps in a mission on the PSP-1000; the nub moves, cross fires and confirms, SELECT backs out |
 | Numpty Physics | drawn by the PSP, at its own screen size; the nub is the pen (cross held draws), circle undoes a stroke, triangle restarts, L / R the previous / next level |
 | Heroes of Might and Magic II | the 1996 strategy game on fheroes2: its demo (one scenario), downloaded when installed, or your own copy (above); the nub is the mouse, cross clicks, circle held shows what a creature or building is; its screen is larger than the PSP's, so **R is a magnifier**: the game's own pixels around the pointer, for its small text, R again the whole screen; L the next hero, triangle ends the turn, square moves the hero, the d-pad scrolls, START cancels, SELECT is OK |
 | Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |

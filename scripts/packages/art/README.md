@@ -37,6 +37,7 @@
 | `recipes/warcraft/cover.png` | War1gus's `war1gus.png`, scaled 2x | GPL-2.0 (War1gus) |
 | `recipes/warcraft2/cover.png` | Wargus's `wargus.png`, scaled 2x | GPL-2.0 (Wargus) |
 | `recipes/zsdx/cover.png` | Zelda: Mystery of Solarus DX's `data/logos/icon_256.png`, scaled | the quest's licence (Solarus Team) |
+| `recipes/cdogs/cover.png` | Debian's cdogs-sdl package, its 128x128 icon | GPL-2.0+ (C-Dogs SDL) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
 | `recipes/lbreakouthd/cover.png` | Debian's lbreakouthd package, its 256x256 icon, scaled | GPL-3.0+ (LBreakout HD) |
 | `recipes/mirrormagic/cover.png` | a screenshot of Mirror Magic on the PSP (a level, the beam drawn), cropped and scaled | GPL-2.0 (Mirror Magic) |

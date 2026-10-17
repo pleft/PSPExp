@@ -27,6 +27,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   becomes solid.
 - **LBreakout HD, Mirror Magic and Pushover** (on a Pi), each played on the
   PSP-1000 before being offered.
+- **C-Dogs** (on a Pi): top-down run-and-gun at the PSP's own size, 60
+  fps in a mission on the PSP-1000.
 - **AssaultCube is no longer offered**: its text was too small to read on
   the PSP's screen and it did not play well; a board that has it keeps it
   until removed in Packages.

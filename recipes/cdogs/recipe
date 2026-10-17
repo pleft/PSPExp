@@ -1,0 +1,36 @@
+# C-Dogs SDL: top-down run-and-gun, a campaign of missions, co-op and
+# deathmatch (Debian's cdogs-sdl). At the PSP's own 480x272, more of the
+# battlefield shown rather than enlarged (its options.cnf: WindowWidth 480,
+# WindowHeight 272, ScaleFactor 1; the rest left to its defaults), composed on
+# the board (PSPEXP_COMPOSE: it keeps a texture a sprite and draws ~900 a
+# frame). The PSP is its game controller: the nub moves, cross fires and
+# confirms, SELECT backs out (Escape).
+# Played on the PSP-1000 (2026-10-17): the menus, a campaign started, the
+# mission's clock running, moving up, right and down-left and firing, 60 fps.
+
+[package]
+id=cdogs
+title=C-Dogs
+description=Top-down run-and-gun: missions through bases and caves, weapons to pick, creatures and guards to clear. A campaign, co-op and deathmatch.
+category=game
+license=GPL-2.0+ (C-Dogs SDL; its data under several free licences)
+version=1
+
+[debian]
+apt=cdogs-sdl
+
+# (on a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=C-Dogs
+type=game
+description=Top-down run-and-gun: missions through bases and caves, weapons to pick, creatures and guards to clear. A campaign, co-op and deathmatch.
+icon=swords
+exec=/usr/games/cdogs-sdl
+keys=select=escape
+nub=joystick
+env=PSPEXP_COMPOSE=1
+first-run=.config/cdogs-sdl/options.cnf:{"Graphics":{"WindowWidth":480,"WindowHeight":272,"ScaleFactor":1}}\n
+graphics=sdl
