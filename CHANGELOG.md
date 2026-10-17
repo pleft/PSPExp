@@ -43,6 +43,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - On the GameShell, games that keep shared high scores (Kobo Deluxe's
   players, LBreakout HD, Mirror Magic, Powermanga, TecnoballZ) can now save
   them: the board's user joins the games group.
+- **Freeciv**, the Civilization-style strategy game: the nub as the mouse,
+  R to read its small text. It takes a while to load, and its menu shows
+  once you move the pointer.
 - **Neverball** now fills the PSP's screen (480x272) on a new install.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
   Pi's graphics chip, 60 fps.
