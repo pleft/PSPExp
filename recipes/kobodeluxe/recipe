@@ -1,0 +1,35 @@
+# Kobo Deluxe: shoot your way through space stations in a scrolling maze,
+# destroying every base's core (Debian's; an SDL 1.2 game, run on SDL2 by
+# sdl12-compat: pspexp-run's SDL 1.2 bridge). At the PSP's own 480x272
+# (-width/-height): its playfield widened to the screen, the radar and score
+# at the right. The d-pad or the nub move (two at once for diagonals), cross
+# fires, square too (Shift), circle confirms (Return) in its menus and name
+# entry, START is its menu (Escape). Played on the PSP-1000 (2026-10-17): the
+# name entry, its menu, a game started, the ship moving and firing, 30 fps
+# (the PSP's pace for its whole-screen frame; the board alone 95).
+
+[package]
+id=kobodeluxe
+title=Kobo Deluxe
+description=Scrolling space shooter in a maze of space stations: destroy each base's core while its turrets and ships hunt you. Fifty levels.
+category=game
+license=GPL-2.0+ and LGPL-2.1+ (Kobo Deluxe)
+version=1
+
+[debian]
+apt=kobodeluxe
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Kobo Deluxe
+type=game
+description=Scrolling space shooter in a maze of space stations: destroy each base's core while its turrets and ships hunt you.
+icon=rocket
+exec=/usr/games/kobodl -width 480 -height 272
+keys=cross=lctrl,square=lshift,circle=return,start=escape,select=return,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl
