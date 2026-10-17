@@ -1,0 +1,60 @@
+#!/bin/sh
+# pspexp-flycast: Flycast (GPL-2.0), the Dreamcast emulator, which Debian 13
+# does not package, built by scripts/packages/build-flycast.sh ARCH. Installs
+# /usr/lib/pspexp/flycast/flycast and /usr/games/pspexp-dreamcast, which starts
+# it on one disc image for the PSP. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/flycast"
+[ -x "$B/flycast" ] && [ -s "$B/depends.txt" ] || { echo "no $B/flycast: scripts/packages/build-flycast.sh $ARCH first" >&2; exit 1; }
+V=2.7+git20261017-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L=/usr/lib/pspexp/flycast
+mkdir -p "$W/root$L" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-flycast"
+cp "$B/flycast" "$W/root$L/"
+cat > "$W/root/usr/games/pspexp-dreamcast" <<S
+#!/bin/sh
+# Flycast on one disc image (.cdi .gdi .chd), for the PSP (package
+# pspexp-flycast). The PSP's controller is the layer's virtual game controller,
+# which Flycast maps by itself as a Dreamcast pad: cross A, circle B, square X,
+# triangle Y, L and R the triggers (fully pressed), START Start, the d-pad the
+# d-pad, the nub the analog stick; SELECT opens Flycast's menu, whose Exit ends
+# it (started from the command line, Exit quits rather than going to its game
+# list). The Dreamcast's BIOS is not needed (Flycast's own HLE BIOS); a
+# player's own dc_boot.bin and dc_flash.bin in ~/roms/dreamcast/bios are used
+# when there. Flycast quits on a disc it cannot read with exit status 0: the
+# reason goes to the launcher (PSPEXP_MESSAGE).
+D="\${XDG_DATA_HOME:-\$HOME/.local/share}/flycast"
+BIOS="\$HOME/roms/dreamcast/bios"
+mkdir -p "\$D" "\$HOME/.cache"
+for f in dc_boot.bin dc_flash.bin; do
+	[ -f "\$BIOS/\$f" ] && [ ! -e "\$D/\$f" ] && ln -s "\$BIOS/\$f" "\$D/\$f"
+done
+E="\$HOME/.cache/pspexp-dreamcast.log"
+"$L/flycast" \\
+	-config config:rend.Resolution=480 -config config:FetchBoxart=no \\
+	-config config:Dreamcast.ContentPath="\$HOME/roms/dreamcast" \\
+	"\$@" 2> "\$E"
+s=\$(sed -n 's/.*Flycast has stopped: //p' "\$E" | tail -1)
+[ -n "\$s" ] && { echo "Dreamcast: \$s" >&2; [ -n "\$PSPEXP_MESSAGE" ] && echo "Dreamcast: \$s" > "\$PSPEXP_MESSAGE"; exit 1; }
+exit 0
+S
+chmod 755 "$W/root/usr/games/pspexp-dreamcast"
+cp "$B/LICENSE" "$W/root/usr/share/doc/pspexp-flycast/COPYING"
+echo "Flycast (https://github.com/flyinghead/flycast, its master branch on 2026-10-17), GPL-2.0, with the libraries it bundles as submodules, built by PSPExp. No games and no BIOS: Dreamcast discs are the user's own, in ~/roms/dreamcast; Flycast's HLE BIOS is used unless dc_boot.bin and dc_flash.bin are placed in ~/roms/dreamcast/bios." > "$W/root/usr/share/doc/pspexp-flycast/README"
+cat > "$W/control" <<C
+Package: pspexp-flycast
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <info@pspexp.dev>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Flycast, the Sega Dreamcast emulator, for PSPExp
+ Flycast built for OpenGL ES 3 and Debian's SDL2, which Debian does not
+ package, and a launch script for the PSP (pspexp-dreamcast). Packaged by
+ PSPExp.
+C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-flycast "$V" "$W/root/usr/share/doc/pspexp-flycast"   # licences, and where the complete source is (Package_Manager §6.2)
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-flycast_${V}_$ARCH.deb"

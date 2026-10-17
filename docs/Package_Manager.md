@@ -216,7 +216,8 @@ graphics=sdl
 A system may instead run a program of its own: `exec=` in `[system]`, with
 `%ROM%` where the ROM goes, and no `core=` (the Nintendo 64,
 `recipes/n64/recipe`: `exec=/usr/games/pspexp-n64 %ROM%`, Mupen64Plus drawn by
-the board's GPU with `env=PSPEXP_HOSTGL=1`). Its video driver is then left to
+the board's GPU with `env=PSPEXP_HOSTGL=1`; the Dreamcast's `recipes/dreamcast/recipe` the
+same way, with Flycast's `/usr/games/pspexp-dreamcast`). Its video driver is then left to
 `pspexp-run` rather than set to `dummy`.
 
 Example 3, a game Debian lacks: our own `.deb` from PSPExp's apt repository

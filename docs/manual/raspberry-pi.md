@@ -70,12 +70,14 @@ you never need to log in to it again.
 On the PSP: **Apps > Packages**. Pick a game (Freedoom, OpenTyrian, Cave
 Story, Dink Smallwood, Alter A.I.L.A. Genesis, Theia, SuperTux, Quake, Quake II...) and press cross to install it; it appears under
 **Games** when done. Emulators install the same way (NES, SNES, Mega Drive,
-Game Boy, Game Boy Advance, Lynx, WonderSwan, and on a Pi the Nintendo 64)
+Game Boy, Game Boy Advance, Lynx, WonderSwan, and on a Pi the Nintendo 64 and
+the Dreamcast)
 and appear as their own tiles once you have ROMs for them.
 
 **ROMs** go in folders in your home folder on the Pi: `roms/nes`,
 `roms/snes`, `roms/md`, `roms/gb` and `roms/gbc`, `roms/gba`, `roms/lynx`,
-`roms/ws`, `roms/n64`. Copy them with the file manager (**Apps > Files**) from a USB
+`roms/ws`, `roms/n64`, and `roms/dreamcast` for Dreamcast discs (`.chd`, `.gdi` or
+`.cdi`; no BIOS needed). Copy them with the file manager (**Apps > Files**) from a USB
 stick or from the PSP's memory stick, or over the network as you would to
 any Linux machine. Only use ROMs of games you own.
 
@@ -153,6 +155,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Media: films | 720p and 1080p H.264 at 29–30 pictures a second on the PSP-1000, the film's clock exact (Pi 400; ffmpeg uses about half a core) |
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi; its menus 33-60 fps on the PSP-1000 |
 | Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); Super Mario 64 plays smoothly, Ocarina of Time well; GoldenEye and Perfect Dark have short sound gaps where the Pi falls behind; Banjo-Tooie is too slow in play on a Pi 400 (its intro runs well, its levels do not) |
+| Dreamcast (Power Stone, Rayman 2) | Flycast, drawn by the Pi's graphics chip (only on a Pi): Power Stone 50-60 fps, Rayman 2 48-57, sound steady; the PSP is a Dreamcast pad (cross A, circle B, square X, triangle Y, L and R the triggers, the nub the stick); SELECT opens Flycast's menu, whose Exit quits |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000, its music and sound on the PSP |
 | Wolfenstein: Enemy Territory | drawn by the PSP: on the PSP-1000 about 20 fps over Oasis's open ground, up to 60 indoors; online or against bots; id's licence agreement accepted in Packages |

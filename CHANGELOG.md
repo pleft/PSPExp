@@ -47,6 +47,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   R to read its small text, the d-pad moves a unit, square goes to the next
   one, triangle founds a city, START ends the turn. It takes a while to
   load, and its menu shows once you move the pointer.
+- **The Dreamcast** on a Pi (Flycast, drawn by the Pi's graphics chip):
+  your own discs in `roms/dreamcast`; Power Stone and Rayman 2 play at
+  about 50-60 frames a second. Install it from Packages.
 - **Hex-a-hop**, the hexagon puzzle (a hundred levels), and **Barrage**, a
   three-minute shooting range, on a Pi.
 - **No more pointer trail** in games that draw only on change (Freeciv,

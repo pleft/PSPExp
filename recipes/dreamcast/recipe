@@ -1,0 +1,37 @@
+# The Sega Dreamcast: Flycast (package pspexp-flycast), drawn by the board's
+# own GPU (PSPEXP_HOSTGL: the Pi 400's V3D, OpenGL ES 3.1), each frame sent to
+# the PSP as a picture. Its own program, not a libretro core (exec=, %ROM% the
+# disc image): Flycast's libretro core needs hardware rendering, which
+# pspexp-retro does not give. The PSP's controller is the Dreamcast's through
+# the layer's virtual game controller (pspexp-dreamcast): cross A, circle B,
+# square X, triangle Y, L and R the triggers, START Start, the nub the stick;
+# SELECT opens Flycast's menu (Exit quits). No keyboard keys. No BIOS needed
+# (Flycast's HLE BIOS); the player's own in ~/roms/dreamcast/bios if wanted.
+# The GameShell's GPU (OpenGL ES 2) is too small: not offered there.
+
+[package]
+id=dreamcast
+title=Dreamcast
+description=Sega Dreamcast: Flycast, drawn by the board's GPU (Raspberry Pi); disc images in ~/roms/dreamcast
+category=system
+license=GPL-2.0 (Flycast); pspexp-dreamcast is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-flycast
+
+[debian:gameshell]
+apt=
+
+[system]
+id=dreamcast
+name=Dreamcast
+short=DC
+icon=gamepad
+ext=cdi,gdi,chd
+roms=~/roms/dreamcast
+thumbs=Sega - Dreamcast
+exec=/usr/games/pspexp-dreamcast %ROM%
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+env=PSPEXP_HOSTGL=1
+graphics=board-gpu

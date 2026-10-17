@@ -43,6 +43,7 @@ packages/          what the launcher offers, for any board
   build-retro-remote.sh   the emulator player and a core, compiled on a glibc board
   build-mupen64plus.sh    Mupen64Plus (main branch) and GLideN64 for a Debian 13 board, in a
                      container (the N64; GLideN64 patched to ask for OpenGL ES 3.0)
+  build-flycast.sh   Flycast for a Debian 13 board, in a container (the Dreamcast, OpenGL ES 3)
   build-opensurge.sh, build-hurrican.sh, build-egoboo.sh, build-solarus.sh, build-easyrpg.sh, build-luanti.sh, build-vanillaconquer.sh, build-srb2kart.sh, build-srb2.sh, build-etlegacy.sh, build-openra.sh, build-stratagus.sh
                      engines Debian lacks, the same way
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board
@@ -51,7 +52,8 @@ packages/          what the launcher offers, for any board
                      pspexp-runtime, pspexp-retro, pspexp-cavestory, tyrian-data,
                      jazz-shareware-data, quake-shareware-data, pspexp-libretro (cores Debian lacks for a
                      board: the GameShell's PicoDrive and snes9x2005, and Handy for the Lynx),
-                     pspexp-mupen64plus (the N64, with its launch script pspexp-n64), and the
+                     pspexp-mupen64plus (the N64, with its launch script pspexp-n64), pspexp-flycast
+                     (the Dreamcast, with pspexp-dreamcast), and the
                      engines and installers of the games above
   mkdeb.py           a .deb without dpkg (the Mac has none)
   apt-repo           the signed apt repository and catalogue: build, push to the home server or
