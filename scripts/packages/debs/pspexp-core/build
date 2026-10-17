@@ -69,6 +69,12 @@ cat > "$W/postinst" <<'P'
 set -e
 [ "$1" = configure ] || exit 0
 sysctl -q -p /etc/sysctl.d/90-pspexp-routes.conf >/dev/null 2>&1 || true
+# the board's user (uid 1000, the console's) in the games group: Debian's games keep their shared
+# scores there and pspexp-run starts a setgid game as the user (the SDL layer loads then); without
+# the group Kobo Deluxe could not save a player on the GameShell ("Cannot save player profile").
+# Raspberry Pi OS's user is in it already; in effect at the console's next start
+u=$(getent passwd 1000 | cut -d: -f1)
+if [ -n "$u" ] && getent group games >/dev/null && ! id -nG "$u" | grep -qw games; then usermod -a -G games "$u" || true; fi
 exit 0
 P
 # the board-GPU layer (libsdl-pspexp-hostgl: SuperTuxKart, Celeste 64, the N64...) draws through SDL's

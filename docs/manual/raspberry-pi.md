@@ -175,7 +175,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Powermanga | the arcade shooter, shown at two thirds: 60 fps; the d-pad or nub move, cross fires, square the special weapon, START pauses |
 | TecnoballZ | breakout with a shop and gadgets, in its small mode so it shows larger: about 51 fps; the nub moves the paddle and the menu's cursor, cross clicks and fires, triangle releases the ball, START pauses |
 | Frozen Bubble | the bubble-popping puzzle: about 49 fps; it takes about 20 s to load; the d-pad aims, cross fires, START confirms in its menus |
-| rRootage, Parsec47, Tumiki Fighters | Kenta Cho's shooters, drawn by the PSP in OpenGL: 60 fps; the d-pad or nub move, cross fires, circle the second button, START pauses |
+| rRootage, Parsec47, Tumiki Fighters | Kenta Cho's shooters, drawn by the PSP in OpenGL: 60 fps; the d-pad or nub move, cross fires, circle the second button, START or SELECT pauses |
 | GLtron | light cycles in 3D, drawn by the PSP: 56-60 fps; the d-pad turns, L and R glance, cross boosts, START pauses |
 | Neverputt | minigolf on Neverball's engine at the PSP's size: 54-60 fps; the nub aims, cross putts |
 | Noiz2sa | Kenta Cho's abstract shooter: 60 fps; the d-pad or nub move, cross fires |

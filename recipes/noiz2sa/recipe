@@ -2,8 +2,9 @@
 # (Debian's; an SDL 1.2 game drawn in 2D, through the layer's build for SDL
 # 1.2 programs). Its 640x480 window (-window) at the PSP's size. The d-pad or
 # the nub move, cross fires (Z), circle slows the ship (X), START or SELECT
-# pause (Escape). Played on the PSP-1000 (2026-10-17): into a game, moving
+# pause (P; Escape, on START before, quit the game). Played on the PSP-1000 (2026-10-17): into a game, moving
 # both ways and firing, 60 fps.
+# On the GameShell (2026-10-17): 27 fps (60 on a Pi), which the user found very fluid.
 
 [package]
 id=noiz2sa
@@ -16,9 +17,6 @@ version=1
 [debian]
 apt=noiz2sa
 
-# (a Pi only: on the GameShell 27 fps (60 on a Pi): a shooter at half speed, 2026-10-17)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Noiz2sa
@@ -26,7 +24,7 @@ type=game
 description=Abstract shooter: dodge the patterns of bullets on a pale field and shoot down the waves.
 icon=rocket
 exec=/usr/games/noiz2sa -window
-keys=cross=z,circle=x,start=escape,select=escape,up=up,down=down,left=left,right=right
+keys=cross=z,circle=x,start=p,select=p,up=up,down=down,left=left,right=right
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl

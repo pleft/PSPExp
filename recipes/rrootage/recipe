@@ -2,9 +2,10 @@
 # through the layer's build for SDL 1.2 programs: the PSP draws its OpenGL).
 # Its 640x480 window (-window) drawn at the PSP's size by the PSP itself, the
 # lines and shapes sharp. The d-pad or the nub move, cross fires (Z), circle
-# and square the second button (X), START or SELECT pause (Escape). Played on
+# and square the second button (X), START or SELECT pause (P; Escape, on START before, quit the game). Played on
 # the PSP-1000 (2026-10-17): from its title into a game, its beam firing and the score climbing,
 # moving left, right and up, 60 fps.
+# On the GameShell (2026-10-17): 35-47 fps, slower than on a Pi, which the user keeps.
 
 [package]
 id=rrootage
@@ -17,9 +18,6 @@ version=1
 [debian]
 apt=rrootage
 
-# (a Pi only: on the GameShell 35-47 fps (60 on a Pi): too slow for a bullet-hell, 2026-10-17)
-[debian:gameshell]
-apt=
 
 [entry]
 title=rRootage
@@ -27,7 +25,7 @@ type=game
 description=Bullet-hell shooter: destroy each boss through its storm of bullets, with four ways to play.
 icon=rocket
 exec=/usr/games/rrootage -window
-keys=cross=z,circle=x,square=x,start=escape,select=escape,up=up,down=down,left=left,right=right
+keys=cross=z,circle=x,square=x,start=p,select=p,up=up,down=down,left=left,right=right
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl

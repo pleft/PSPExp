@@ -57,7 +57,7 @@ chroot "$R" locale-gen >/dev/null
 echo 'LANG=en_US.UTF-8' > "$R/etc/default/locale"
 
 # ---- the cpi user ----------------------------------------------------------------
-chroot "$R" useradd -m -u 1000 -s /bin/bash -G sudo,audio,video,plugdev,netdev,input,dialout cpi
+chroot "$R" useradd -m -u 1000 -s /bin/bash -G sudo,audio,video,plugdev,netdev,input,dialout,games cpi
 echo 'cpi:cpi' | chroot "$R" chpasswd
 echo 'cpi ALL=(ALL) NOPASSWD: ALL' > "$R/etc/sudoers.d/cpi"; chmod 440 "$R/etc/sudoers.d/cpi"
 # cpi's PipeWire runs without a login (as loginctl enable-linger would): the console is a

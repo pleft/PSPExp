@@ -40,6 +40,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   Pi), the first of the SDL 1.2 games, which PSPExp now runs too, and
   Kenta Cho's OpenGL shooters **rRootage**, **Parsec47** and **Tumiki
   Fighters**, drawn by the PSP at 60 fps; **GLtron**, **Neverputt**, **Noiz2sa** and **GNU Robbo** too.
+- On the GameShell, games that keep shared high scores (Kobo Deluxe's
+  players, LBreakout HD, Mirror Magic, Powermanga, TecnoballZ) can now save
+  them: the board's user joins the games group.
 - **Neverball** now fills the PSP's screen (480x272) on a new install.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
   Pi's graphics chip, 60 fps.
