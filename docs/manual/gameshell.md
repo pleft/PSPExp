@@ -41,12 +41,13 @@ Everything else happens on the PSP: **Apps > Packages** to install games.
 Revolution adventures, the emulators and more. Each appears under
 **Games** (or as its system's tile) once installed. The card image comes
 with none, so you choose what takes space. Packages offers the GameShell 50
-of PSPExp's 68 packages: not the ten drawn by a Raspberry Pi's graphics
+of PSPExp's 69 packages: not the ten drawn by a Raspberry Pi's graphics
 chip (SuperTuxKart, Celeste 64, Nintendo 64, Unreal Tournament,
 Luanti, Trackballs, Open Surge, OpenRA's Red Alert and Tiberian Dawn,
 Taisei: its own chip is too small for them),
 nor Diablo and Wolfenstein: Enemy Territory, nor Heroes II, LinCity-NG and
-C-Dogs (too slow on it), nor Heroes III, Kobo Deluxe and Powermanga (not yet tried on it).
+C-Dogs (too slow on it), nor Heroes III, Kobo Deluxe, Powermanga and TecnoballZ (not yet tried on
+it).
 
 **ROMs** go in folders in the home folder: `roms/nes`, `roms/snes`,
 `roms/md` (and `roms/sms`, `roms/gg`), `roms/gb`, `roms/gbc`, `roms/gba`,
