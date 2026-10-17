@@ -1,0 +1,36 @@
+# LBreakout HD: Breakout with power-ups, bonuses and over a hundred levels
+# (Debian's, LGames). At the PSP's own 480x272. It draws ~1500 small pictures a
+# frame, which the PSP-1000 drew at 33 fps; composed on the board
+# (PSPEXP_COMPOSE: SDL's software renderer makes the frame, the PSP gets one
+# picture, its changed pages) 55 fps, measured on the PSP. Controls: the d-pad
+# or the nub move the paddle, cross fires and launches (and confirms in menus),
+# square the left fire, circle brings the ball back, triangle turbo, START the
+# menu. Played on the PSP-1000 (2026-10-17): menus readable, the paddle both
+# ways, a ball in play, scoring.
+
+[package]
+id=lbreakouthd
+title=LBreakout HD
+description=Breakout with power-ups, bonuses and over a hundred levels: break every brick with the ball, catch the extras.
+category=game
+license=GPL-3.0+ (LBreakout HD)
+version=1
+
+[debian]
+apt=lbreakouthd
+
+# (on a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=LBreakout HD
+type=game
+description=Breakout with power-ups, bonuses and over a hundred levels: break every brick with the ball, catch the extras.
+icon=gamepad-2
+exec=/usr/games/lbreakouthd
+keys=cross=space+return,square=v,circle=backspace,triangle=x,start=escape,select=return,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_COMPOSE=1
+graphics=sdl

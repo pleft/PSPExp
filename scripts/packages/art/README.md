@@ -38,6 +38,9 @@
 | `recipes/warcraft2/cover.png` | Wargus's `wargus.png`, scaled 2x | GPL-2.0 (Wargus) |
 | `recipes/zsdx/cover.png` | Zelda: Mystery of Solarus DX's `data/logos/icon_256.png`, scaled | the quest's licence (Solarus Team) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
+| `recipes/lbreakouthd/cover.png` | Debian's lbreakouthd package, its 256x256 icon, scaled | GPL-3.0+ (LBreakout HD) |
+| `recipes/mirrormagic/cover.png` | a screenshot of Mirror Magic on the PSP (a level, the beam drawn), cropped and scaled | GPL-2.0 (Mirror Magic) |
+| `recipes/pushover/cover.png` | a screenshot of Pushover on the PSP (magnified: the figure on its steps), cropped and scaled | GPL-3.0+ (Domino-Chain) |
 | `recipes/ut99/cover.png` | a frame of Unreal Tournament filmed on the PSP (a deathmatch), its screen cropped and scaled | Epic Games' (the game, free with their permission) |
 | `recipes/trigger-rally/cover.png` | Debian's trigger-rally package, its 128x128 pixmap | GPL-2.0+ (Trigger Rally) |
 | `recipes/teeworlds/cover.png` | Debian's teeworlds package, its 128x128 icon | Zlib (Teeworlds) |

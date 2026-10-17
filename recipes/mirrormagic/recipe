@@ -1,0 +1,35 @@
+# Mirror Magic: turn mirrors, prisms and beam splitters so the laser reaches
+# the target, with the Deflektor levels (Debian's, Holger Schemel's Rocks'n'
+# Diamonds engine). Its 672x560 shrunk to the PSP (averaged on the board,
+# PSPEXP_TEX_FIT); R is the magnifier, the game's own pixels round the pointer.
+# The nub is the mouse: cross turns a mirror one way, circle the other; START
+# confirms, SELECT goes back. Played on the PSP-1000 (2026-10-17): straight into
+# a level, a mirror turned (the beam's path changed), the magnifier, 47-50 fps.
+
+[package]
+id=mirrormagic
+title=Mirror Magic
+description=Laser puzzles: turn mirrors, prisms and beam splitters until the beam reaches its target, with the classic Deflektor levels.
+category=game
+license=GPL-2.0 (Mirror Magic)
+version=1
+
+[debian]
+apt=mirrormagic
+
+# (on a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Mirror Magic
+type=game
+description=Laser puzzles: turn mirrors, prisms and beam splitters until the beam reaches its target, with the classic Deflektor levels.
+icon=puzzle
+exec=/usr/games/mirrormagic
+keys=start=return,select=escape
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
+env=PSPEXP_MAGNIFY=r
+env=PSPEXP_TEX_FIT=1
+graphics=sdl

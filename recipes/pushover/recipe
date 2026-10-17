@@ -1,0 +1,35 @@
+# Pushover (Domino-Chain): push the dominoes so they all fall in one chain and
+# the exit door opens, a remake of the 1992 game (Debian's). Its 800x600
+# composed on the board and shrunk, averaged (PSPEXP_COMPOSE), the game running
+# at its own 18 frames a second. The d-pad or the nub walk and climb, cross
+# carries or pushes a domino (and confirms in menus), circle or START the menu.
+# The tutorial levels' help panel is small on the PSP; the levels themselves
+# are clear. Played on the PSP-1000 (2026-10-17): the menus, into a tutorial
+# level, the figure walking down the steps and back, the timer running.
+
+[package]
+id=pushover
+title=Pushover
+description=Domino puzzles: carry and place the dominoes so a single push topples them all and the exit door opens. A remake of the 1992 classic.
+category=game
+license=GPL-3.0+ (Domino-Chain)
+version=1
+
+[debian]
+apt=pushover
+
+# (on a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Pushover
+type=game
+description=Domino puzzles: carry and place the dominoes so a single push topples them all and the exit door opens. A remake of the 1992 classic.
+icon=puzzle
+exec=/usr/games/pushover
+keys=cross=space+return,circle=escape,start=escape,select=return,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+env=PSPEXP_COMPOSE=1
+graphics=sdl

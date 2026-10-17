@@ -25,6 +25,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   smoothly.
 - **Numpty Physics** (on a Pi): draw with the nub, and what you draw
   becomes solid.
+- **LBreakout HD, Mirror Magic and Pushover** (on a Pi), each played on the
+  PSP-1000 before being offered.
 - **AssaultCube is no longer offered**: its text was too small to read on
   the PSP's screen and it did not play well; a board that has it keeps it
   until removed in Packages.
