@@ -114,7 +114,7 @@ rget() {
 	END { if (have) print over; else print base }' "$1"
 }
 # a repeated key's values (env=, first-run=); a board's own section ([entry:gameshell]) that has the
-# key replaces all of them (C-Dogs composed on a Pi, not on the GameShell, whose CPU composed 17 fps)
+# key replaces all of them (an env= for one board only)
 rall() {
 	awk -v sec="$2" -v key="$3" -v board="$BOARD" '
 	/^\[.*\][ \t]*$/ { s = $0; sub(/^\[/, "", s); sub(/\][ \t]*$/, "", s); next }

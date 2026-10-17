@@ -40,13 +40,13 @@ Everything else happens on the PSP: **Apps > Packages** to install games.
 **Apps > Packages**: Freedoom, OpenTyrian, Cave Story, SuperTux, the
 Revolution adventures, the emulators and more. Each appears under
 **Games** (or as its system's tile) once installed. The card image comes
-with none, so you choose what takes space. Packages offers the GameShell 51
+with none, so you choose what takes space. Packages offers the GameShell 50
 of PSPExp's 65 packages: not the ten drawn by a Raspberry Pi's graphics
 chip (SuperTuxKart, Celeste 64, Nintendo 64, Unreal Tournament,
 Luanti, Trackballs, Open Surge, OpenRA's Red Alert and Tiberian Dawn,
 Taisei: its own chip is too small for them),
-nor Diablo and Wolfenstein: Enemy Territory, nor Heroes II and LinCity-NG
-(4 and 2 pictures a second on it).
+nor Diablo and Wolfenstein: Enemy Territory, nor Heroes II, LinCity-NG and
+C-Dogs (too slow on it).
 
 **ROMs** go in folders in the home folder: `roms/nes`, `roms/snes`,
 `roms/md` (and `roms/sms`, `roms/gg`), `roms/gb`, `roms/gbc`, `roms/gba`,

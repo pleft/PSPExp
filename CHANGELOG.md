@@ -28,8 +28,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   becomes solid.
 - **LBreakout HD, Mirror Magic and Pushover**, each played on the
   PSP-1000 before being offered.
-- **C-Dogs**: top-down run-and-gun at the PSP's own size, 60 fps in a
-  mission on the PSP-1000 (a Pi), 30 on a GameShell.
+- **C-Dogs** (on a Pi): top-down run-and-gun at the PSP's own size, 60 fps
+  in a mission on the PSP-1000.
 - **LinCity-NG** (on a Pi): the city builder, the nub as the mouse, R the
   magnifier.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the

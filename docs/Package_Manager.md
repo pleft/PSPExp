@@ -379,8 +379,7 @@ it without the checksum; §4.3).
   its own `description`, for instance, when it plays the title with a
   different core. A key that repeats (`env=`, `first-run=`) is replaced as a
   whole: if `[entry:gameshell]` has any `env=`, the GameShell gets those and
-  none of `[entry]`'s (C-Dogs composed on a Pi, drawn by the PSP on the
-  GameShell).
+  none of `[entry]`'s.
 - **The Omega2+:** `[omega]` names our static build (`build=`, made by
   `scripts/packages/recipes/ID.sh`), and `warn=` says what the board can't
   do well; the Packages app shows it first ("Too heavy for the Omega2+: ...").
