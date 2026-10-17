@@ -17,7 +17,8 @@
 # GameShell with the PSP-1000 (2026-10-17) the user played it: slower to load,
 # playable; then a scripted game there: New Game, Start, the d-pad's four
 # directions, square to the Settlers, triangle and Return founded a city, START
-# ended the turn; about 9 fps on the map.
+# ended the turn; about 9 fps on the map. The same on the Pi 400 with the PSP
+# (2026-10-17): 9-12 fps on the map (17-19 in the stand-in).
 
 [package]
 id=freeciv
