@@ -18,14 +18,16 @@ arm64)
 	if [ -d "$SRC_HOST" ]; then   # a build made elsewhere (a Debian 13 arm64 container: the same libraries as Raspberry Pi OS)
 		cp "$SRC_HOST/pspexp-term" "$SRC_HOST/libsdl-pspexp.so" "$W/b/"
 		cp "$SRC_HOST/pspexp-ms" "$SRC_HOST/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true
+		cp "$SRC_HOST/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true   # SDL 1.2 programs (pspexp-run)
 	else
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-term" "$SRC_HOST:pspexp/src/build/libsdl-pspexp.so" "$W/b/"
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-ms" "$W/b/" 2>/dev/null || true
 	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true   # the board's GPU draws (pspexp-run PSPEXP_HOSTGL)
+	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true   # SDL 1.2 programs (pspexp-run)
 	fi ;;
 armhf)
 	cp "$ROOT/build/gameshell/bin/pspexp-term" "$W/b/"
-	cp "$ROOT/build/gameshell/lib/libsdl-pspexp.so" "$W/b/" 2>/dev/null || true
+	cp "$ROOT/build/gameshell/lib/libsdl-pspexp.so" "$ROOT/build/gameshell/lib/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true
 	cp "$ROOT/build/gameshell/bin/pspexp-ms" "$W/b/" 2>/dev/null || true ;;
 *) echo "arch: arm64 | armhf" >&2; exit 2 ;;
 esac
@@ -36,6 +38,7 @@ install -m 755 "$W/b/pspexp-term" "$R/usr/bin/pspexp-term"
 [ -f "$W/b/pspexp-ms" ] && install -m 755 "$W/b/pspexp-ms" "$R/usr/bin/pspexp-ms"
 [ -f "$W/b/libsdl-pspexp.so" ] && install -m 644 "$W/b/libsdl-pspexp.so" "$R/usr/lib/pspexp/libsdl-pspexp.so"
 [ -f "$W/b/libsdl-pspexp-hostgl.so" ] && install -m 644 "$W/b/libsdl-pspexp-hostgl.so" "$R/usr/lib/pspexp/libsdl-pspexp-hostgl.so"
+[ -f "$W/b/libsdl-pspexp-sdl12.so" ] && install -m 644 "$W/b/libsdl-pspexp-sdl12.so" "$R/usr/lib/pspexp/libsdl-pspexp-sdl12.so"
 for f in pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-notify; do install -m 755 "$ROOT/scripts/board/$f" "$R/usr/bin/$f"; done
 install -m 755 "$ROOT/scripts/board/pspexp-pkg-apt" "$R/usr/sbin/pspexp-pkg-apt"
 mkdir -p "$R/etc/wireplumber/wireplumber.conf.d"   # (macOS install has no -D)

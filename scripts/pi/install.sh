@@ -85,7 +85,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		libusb-1.0-0-dev libsdl2-dev >/dev/null'
 	ssh "$PI" 'set -e; cd ~/pspexp/src
 		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
-		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp sdl-pspexp-hostgl pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
+		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp sdl-pspexp-hostgl sdl-pspexp-sdl12 pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
 		[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
 	if [ "$PSPEXP_CORE" = build ]; then
 		echo "built on $PI (~/pspexp/src/build): package it with scripts/packages/debs/pspexp-core/build OUTDIR arm64 $PI"
@@ -102,6 +102,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		sudo install -m 0644 $S/build/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp.so.new && sudo mv /usr/local/lib/libsdl-pspexp.so.new /usr/local/lib/libsdl-pspexp.so
 		# the board-GPU layer (pspexp-run PSPEXP_HOSTGL=1: SuperTuxKart, Celeste 64...), as the package installs it
 		if [ -f $S/build/libsdl-pspexp-hostgl.so ]; then sudo install -m 0644 $S/build/libsdl-pspexp-hostgl.so /usr/local/lib/libsdl-pspexp-hostgl.so.new && sudo mv /usr/local/lib/libsdl-pspexp-hostgl.so.new /usr/local/lib/libsdl-pspexp-hostgl.so; fi
+		if [ -f $S/build/libsdl-pspexp-sdl12.so ]; then sudo install -m 0644 $S/build/libsdl-pspexp-sdl12.so /usr/local/lib/libsdl-pspexp-sdl12.so.new && sudo mv /usr/local/lib/libsdl-pspexp-sdl12.so.new /usr/local/lib/libsdl-pspexp-sdl12.so; fi
 		for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 			sudo install -m 0644 $S/tools/pspexp-term/assets/$f /usr/local/share/pspexp/launcher/$f
 		done
@@ -117,7 +118,7 @@ else
 		rm -f /tmp/keyring.gpg /tmp/pspexp-apt-setup /tmp/pspexp-pkg-apt
 		# copies from the older way would come first in PATH and shadow the package's
 		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
-		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp-hostgl.so /usr/local/share/pspexp/launcher
+		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp-hostgl.so /usr/local/lib/libsdl-pspexp-sdl12.so /usr/local/share/pspexp/launcher
 		dpkg-query -W pspexp-core pspexp-runtime"
 	CONSOLE=/usr/bin/pspexp-term
 fi

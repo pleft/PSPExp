@@ -106,7 +106,9 @@ if(SDL2_FOUND)
     target_compile_definitions(sdl-pspexp PRIVATE PSPEXP_HAVE_USB=1)
   endif()
   if(NOT APPLE)
-    target_link_libraries(sdl-pspexp PRIVATE ${CMAKE_DL_LIBS} m)
+    # (its calls to its own functions stay its own: loaded privately for an SDL 1.2 program, the
+    # global names of the same spelling are SDL 1.2's)
+    target_link_libraries(sdl-pspexp PRIVATE ${CMAKE_DL_LIBS} m -Wl,-Bsymbolic-functions)
   else()
     # gl_pspexp.c interposes the framework's OpenGL functions
     target_link_libraries(sdl-pspexp PRIVATE "-framework OpenGL")
@@ -124,7 +126,11 @@ if(SDL2_FOUND)
     target_compile_definitions(sdl-pspexp-hostgl PRIVATE PSPEXP_HAVE_USB=1)
   endif()
   if(NOT APPLE)
-    target_link_libraries(sdl-pspexp-hostgl PRIVATE ${CMAKE_DL_LIBS} m)
+    target_link_libraries(sdl-pspexp-hostgl PRIVATE ${CMAKE_DL_LIBS} m -Wl,-Bsymbolic-functions)
+    # SDL 1.2 programs (sdl12-compat): preloaded instead of the layer, which it loads privately
+    add_library(sdl-pspexp-sdl12 SHARED compatibility/sdl-pspexp/sdl12_bridge.c)
+    target_link_libraries(sdl-pspexp-sdl12 PRIVATE ${CMAKE_DL_LIBS})
+    set_target_properties(sdl-pspexp-sdl12 PROPERTIES OUTPUT_NAME "sdl-pspexp-sdl12" PREFIX "lib")
   endif()
 
   add_executable(sdl-game examples/sdl-game/main.c)

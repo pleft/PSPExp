@@ -168,6 +168,8 @@ function; the tests check it is current).
 | `PSPEXP_SHOT_TRIGGER=FILE` | when FILE appears, the PSP's screen is copied back to FILE-N.bmp (looking at a game someone is playing) |
 | `PSPEXP_WINDOW=480x272` | the program's window this size and never full screen, whatever it asks (`SDL_CreateWindow`, `SDL_SetWindowFullscreen`): a program that goes full screen gets the headless board's display size otherwise (the offscreen driver's 1024x768: Celeste 64's 16:9 letterboxed in it, three times the pixels read back) |
 | `PSPEXP_QUANT=1` / `=0` | a changed page of more than 256 colours reduced to its 256 best (median cut on its 5650 colours, no dithering) and sent as CLUT8: about half its bytes, nothing new on the PSP. On by default in `libsdl-pspexp-hostgl` (frames from the board's GPU: SuperTuxKart's race 230 to 137 KB a frame for 0.4 ms more of the board's CPU, the picture alike even enlarged), off in the PSP-rendered layer |
+| `PSPEXP_SDL12=1` / `=0` | `pspexp-run`: the program is an SDL 1.2 one (or never one); by default found by the program's own file naming `libSDL-1.2.so`, which misses a game started through a script |
+| `PSPEXP_SDL12_LAYER=PATH` | set by `pspexp-run` for an SDL 1.2 program: the layer the SDL 1.2 bridge loads privately (`PSPEXP_SDL12_BRIDGE=PATH`: another bridge than the one beside the layer) |
 | `PSPEXP_SCRIPT="8000:return,16000:+up,40000:-up"` | keys pressed at those times, in ms from the first frame or wait for an event (+ held, - let go, else a tap): a game tested past its menus with nobody at the PSP; a game blocked in `SDL_WaitEvent` gets them too (Emilia Pinball draws its menus only when a key comes); `@XxY` moves the pointer there (window pixels), `~DXxDY` by that much (games that make their own cursor from the motion), `click` / `+click` / `-click` the left mouse button, for menus that want a mouse (Lugaru); `pad:cross` (any PSP button's name, `+pad:` / `-pad:` held and let go) a PSP button as if pressed on the PSP, its keys and the virtual controller both: games that tell a pad from a keyboard (DevilutionX names a new hero only for a pad); `nub:XxY` holds the nub there (-127..127, right and down positive; `nub:0x0` lets go) |
 | `PSPEXP_JOYSTICK=0` | no virtual game controller, the keys alone (a game that takes both gets each press twice: SuperTux) |
 | `PSPEXP_NUB=mouse` | the nub moves the mouse, cross / circle click (default: `joystick`) |
@@ -238,6 +240,28 @@ underruns; then all link bytes per frame, texture pages sent (of them
 CLUT8) and kept, and the CPU time the shim spent on textures per frame
 (this thread's CPU time: waiting for the link does not count). At exit a
 totals line sums up the run.
+
+## SDL 1.2 programs
+
+Debian runs SDL 1.2 programs on SDL2 through sdl12-compat (`libSDL-1.2.so.0`),
+which opens SDL2 and looks each of its functions up by name (`dlsym`). The
+layer is not preloaded into them: SDL 1.2 and SDL2 share many names
+(`SDL_Init`, `SDL_PollEvent`, ...), and the program's own SDL 1.2 calls reached
+the layer's SDL2 hooks (an SDL2 event written into SDL 1.2's smaller one:
+Kobo Deluxe's stack smashed). `pspexp-run` preloads the small SDL 1.2 bridge
+instead (`libsdl-pspexp-sdl12.so`, `sdl12_bridge.c`), which overrides only
+`dlsym`, loads the layer privately and answers sdl12-compat's lookups of the
+functions the layer hooks with the hooks. The program's calls go to
+sdl12-compat, and sdl12-compat's to SDL2 through the layer.
+
+Two things make the layer work loaded that way. Its own calls to SDL2
+functions it does not hook go to SDL2 by name (`sdl2_direct.h`: with SDL 1.2
+loaded first, `SDL_CreateThread` was SDL 1.2's, and a worker thread got its
+name as its data), and the real functions behind its hooks are looked up in
+SDL2 itself, not as "the next after the layer" (that was SDL 1.2's
+`SDL_Init`, which called the hook again). It is linked `-Bsymbolic-functions`
+(`-Bsymbolic` on the GameShell), so its calls to its own functions stay its
+own.
 
 ## Where the bytes go
 

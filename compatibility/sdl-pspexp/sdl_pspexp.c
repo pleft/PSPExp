@@ -86,12 +86,67 @@
 #else
 #define HOOK(ret, fn, params) ret fn params
 #define REAL(fn) ((__typeof__(&fn))(uintptr_t)real_symbol(#fn))   /* via uintptr_t: no pedantic object/function cast warning */
+#ifdef __GLIBC__
+static void *(*g_real_dlsym)(void *, const char *);
+static void *real_dlsym(void *handle, const char *name);
+#endif
 static void *real_symbol(const char *name)
 {
-    void *p = dlsym(RTLD_NEXT, name);
+    void *p = NULL;
+#ifdef __GLIBC__
+    /* an SDL function from SDL2 itself: with sdl12-compat loaded (SDL 1.2 games) the next SDL_Init
+     * after the layer was SDL 1.2's, which called the layer's again, round and round to a crash */
+    static void *sdl2;
+    if (!sdl2) sdl2 = dlopen("libSDL2-2.0.so.0", RTLD_LAZY | RTLD_NOLOAD);
+    if (sdl2 && !strncmp(name, "SDL_", 4)) p = real_dlsym(sdl2, name);
+    if (!p) p = real_dlsym(RTLD_NEXT, name);   /* (RTLD_NEXT: called from here, after the layer) */
+#else
+    p = dlsym(RTLD_NEXT, name);
+#endif
     if (!p) { fprintf(stderr, "[sdl-pspexp] cannot find %s\n", name); abort(); }
     return p;
 }
+
+#ifdef __GLIBC__
+static Dl_info g_self;
+/* glibc's dlsym, called from the layer (RTLD_NEXT then means: after the layer). (The SDL 1.2 bridge,
+ * sdl12_bridge.c, overrides dlsym in the program; this one is glibc's own.) */
+static void *real_dlsym(void *handle, const char *name)
+{
+    if (!g_real_dlsym) {
+        static const char *const v[] = { "GLIBC_2.34", "GLIBC_2.17", "GLIBC_2.4", "GLIBC_2.2.5", "GLIBC_2.0" };
+        size_t i;
+        for (i = 0; i < sizeof(v) / sizeof(v[0]) && !g_real_dlsym; i++)
+            g_real_dlsym = (void *(*)(void *, const char *))(uintptr_t)dlvsym(RTLD_NEXT, "dlsym", v[i]);
+        if (!g_real_dlsym) abort();
+        dladdr((void *)(uintptr_t)&real_dlsym, &g_self);
+    }
+    return g_real_dlsym(handle, name);
+}
+
+/* SDL 1.2 games (sdl12_bridge.c): sdl12-compat looks each SDL2 function up by name in SDL2; one the
+ * layer hooks is answered with the hook. p: what SDL2 answered. The layer is loaded privately there
+ * (the game's own SDL 1.2 calls of the same names must reach SDL 1.2), so the hook is looked up in
+ * the layer itself */
+void *pspexp_sdl12_redirect(void *p, const char *name)
+{
+    static void *self;
+    void *mine;
+    Dl_info in;
+    if (!p || strncmp(name, "SDL_", 4) != 0) return p;
+    if (!dladdr(p, &in) || !in.dli_fname || !strstr(in.dli_fname, "libSDL2")) return p;
+    if (!self) { (void)real_dlsym(RTLD_DEFAULT, "SDL_Init"); self = dlopen(g_self.dli_fname, RTLD_LAZY | RTLD_NOLOAD); }
+    mine = self ? real_dlsym(self, name) : NULL;
+    if (mine && mine != p && dladdr(mine, &in) && in.dli_fbase == g_self.dli_fbase) return mine;
+    return p;
+}
+#endif
+/* the layer's direct calls to SDL2 (sdl2_direct.h): the same lookup, from SDL2 itself */
+void *pspexp_sdl2_symbol(const char *name) { return real_symbol(name); }
+#endif
+
+#if defined(__GLIBC__) && !defined(PSPEXP_STATIC_RENAME)
+#include "sdl2_direct.h"
 #endif
 
 /* ---- crash report (Linux MIPS hosts: no debugger on the Omega2) -------------- */

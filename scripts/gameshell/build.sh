@@ -175,9 +175,11 @@ C="$GNU/cmake"
 # calls resolve from the board's own SDL2
 nm -u "$GNU/sdl_pspexp.o" | awk '{print $NF}' | grep '^SDL_' | sort -u | sed 's/.*/void &(void) {}/' > "$GNU/sdl-stub.c"
 "$GNU/zcc" -shared -fPIC -Wl,-soname,libSDL2-2.0.so.0 "$GNU/sdl-stub.c" -o "$GNU/libSDL2.so"
-"$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp.so "$GNU/sdl_pspexp.o" "$GNU/gl_pspexp.o" "$GNU/glsl_pspexp.o" \
+"$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp.so -Wl,-Bsymbolic "$GNU/sdl_pspexp.o" "$GNU/gl_pspexp.o" "$GNU/glsl_pspexp.o" \
 	"$C/libpspexp_usb.a" "$C/libpspexp_tcp.a" "$C/libpspexp_null.a" "$C/libpspexp.a" "$C/libpspexp_runtime.a" "$C/libpspexp_protocol.a" \
 	"$GNU/prefix/lib/libusb-1.0.a" -L"$GNU" -lSDL2 -ldl -lm -lpthread -o "$OUT/lib/libsdl-pspexp.so"
+# SDL 1.2 programs: preloaded instead of the layer, which it loads privately (sdl12_bridge.c)
+"$GNU/zcc" -O2 -fPIC -shared -D_GNU_SOURCE -Wl,-soname,libsdl-pspexp-sdl12.so "$ROOT/compatibility/sdl-pspexp/sdl12_bridge.c" -ldl -o "$OUT/lib/libsdl-pspexp-sdl12.so"
 cp "$ROOT/scripts/board/pspexp-run" "$OUT/lib/"
 ls -la "$OUT/lib"
 echo "shim for $TARGET in build/gameshell/lib"
