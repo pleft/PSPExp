@@ -35,8 +35,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - **Heroes of Might and Magic III** (on a Pi), on VCMI, with your own copy
   (GOG's installer, or the folder of an installed game) in the Heroes3
   folder; R magnifies its small text.
-- **Kobo Deluxe**, **Powermanga** and **TecnoballZ** (on a Pi), the first of
-  the SDL 1.2 games, which PSPExp now runs too.
+- **Kobo Deluxe**, **Powermanga**, **TecnoballZ** and **Frozen Bubble** (on a
+  Pi), the first of the SDL 1.2 games, which PSPExp now runs too.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
   Pi's graphics chip, 60 fps.
 - **The PSP no longer stays black after a game** (its memory stick's light

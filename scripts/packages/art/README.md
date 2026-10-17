@@ -45,6 +45,7 @@
 | `recipes/kobodeluxe/cover.png` | Debian's kobodeluxe package, its 32x32 icon, scaled 4x | GPL-2.0+ (Kobo Deluxe) |
 | `recipes/powermanga/cover.png` | Debian's powermanga package, its 32x32 icon, scaled 4x | GPL-3.0+ (Powermanga) |
 | `recipes/tecnoballz/cover.png` | Debian's tecnoballz package, its 32x32 icon, scaled 4x | GPL-3.0+ (TecnoballZ) |
+| `recipes/frozen-bubble/cover.png` | Debian's frozen-bubble package, its 64x64 icon, scaled 2x | GPL-2.0 (Frozen Bubble) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
 | `recipes/lbreakouthd/cover.png` | Debian's lbreakouthd package, its 256x256 icon, scaled | GPL-3.0+ (LBreakout HD) |
 | `recipes/mirrormagic/cover.png` | a screenshot of Mirror Magic on the PSP (a level, the beam drawn), cropped and scaled | GPL-2.0 (Mirror Magic) |

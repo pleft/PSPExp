@@ -1,0 +1,37 @@
+# Frozen Bubble: aim and fire coloured bubbles to pop groups of three before
+# the ceiling comes down (Debian's; a Perl game on SDL 1.2, run on SDL2 by
+# sdl12-compat: pspexp-run's SDL 1.2 bridge, asked for with PSPEXP_SDL12=1, as
+# the program is Perl, not one that names SDL 1.2 itself). Its 640x480 shown at
+# 57%: its menus' text small, the game's bubbles large. The d-pad or the nub
+# aim (left / right) and move in its menus (up / down), cross fires (Up),
+# circle centres the aim (Down), START confirms (Return), SELECT is Escape.
+# It takes about 20 s to load on a Pi 400. Played on the PSP-1000
+# (2026-10-17): its menus, a one-player game, aiming both ways, bubbles fired
+# and groups popped, about 49 fps.
+
+[package]
+id=frozen-bubble
+title=Frozen Bubble
+description=Aim and fire coloured bubbles to pop groups of three or more before the ceiling comes down. A hundred levels.
+category=game
+license=GPL-2.0 (Frozen Bubble)
+version=1
+
+[debian]
+apt=frozen-bubble
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Frozen Bubble
+type=game
+description=Aim and fire coloured bubbles to pop groups of three or more before the ceiling comes down.
+icon=puzzle
+exec=/usr/games/frozen-bubble
+keys=cross=up,circle=down,start=return,select=escape,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_SDL12=1
+env=PSPEXP_JOYSTICK=0
+graphics=sdl
