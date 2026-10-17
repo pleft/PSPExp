@@ -1,5 +1,8 @@
 # Neverball: Debian's package, an OpenGL game drawn by the PSP's GE. Tilt the
-# floor with the nub; it reads the PSP as its game controller.
+# floor with the nub; it reads the PSP as its game controller. At the PSP's
+# 480x272 from its first start (its settings, shared with Neverputt: it was
+# 800x600, 4:3, the PSP's sides black); its menus and name entry fit, 30 fps
+# on the PSP-1000 (2026-10-17).
 
 [package]
 id=neverball
@@ -7,7 +10,7 @@ title=Neverball
 description=Tilt the floor to roll a ball through obstacle courses to the goal, collecting coins against the clock, over many level sets.
 category=game
 license=GPL-2.0+ (Neverball)
-version=2
+version=3
 
 [debian]
 apt=neverball
@@ -18,4 +21,5 @@ type=game
 description=Tilt the floor to roll a ball through obstacle courses to the goal, collecting coins against the clock, over many level sets.
 icon=trophy
 exec=/usr/games/neverball
+first-run=.neverball/neverballrc:fullscreen 0\nwidth 480\nheight 272\n
 graphics=opengl

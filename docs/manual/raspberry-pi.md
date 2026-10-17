@@ -165,6 +165,8 @@ Measured on the PSP-1000 with a Pi 400:
 | TecnoballZ | breakout with a shop and gadgets, in its small mode so it shows larger: about 51 fps; the nub moves the paddle and the menu's cursor, cross clicks and fires, triangle releases the ball, START pauses |
 | Frozen Bubble | the bubble-popping puzzle: about 49 fps; it takes about 20 s to load; the d-pad aims, cross fires, START confirms in its menus |
 | rRootage, Parsec47, Tumiki Fighters | Kenta Cho's shooters, drawn by the PSP in OpenGL: 60 fps; the d-pad or nub move, cross fires, circle the second button, START pauses |
+| GLtron | light cycles in 3D, drawn by the PSP: 56-60 fps; the d-pad turns, L and R glance, cross boosts, START pauses |
+| Neverputt | minigolf on Neverball's engine at the PSP's size: 54-60 fps; the nub aims, cross putts |
 | Numpty Physics | drawn by the PSP, at its own screen size; the nub is the pen (cross held draws), circle undoes a stroke, triangle restarts, L / R the previous / next level |
 | Heroes of Might and Magic III | on VCMI, your own copy (above): 55-60 fps on the PSP-1000; the nub is the mouse, cross clicks, circle shows what a thing is, the d-pad scrolls the map, R the magnifier, START Escape |
 | Heroes of Might and Magic II | the 1996 strategy game on fheroes2: its demo (one scenario), downloaded when installed, or your own copy (above); the nub is the mouse, cross clicks, circle held shows what a creature or building is; its screen is larger than the PSP's, so **R is a magnifier**: the game's own pixels around the pointer, for its small text, R again the whole screen; L the next hero, triangle ends the turn, square moves the hero, the d-pad scrolls, START cancels, SELECT is OK |

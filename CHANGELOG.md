@@ -38,7 +38,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - **Kobo Deluxe**, **Powermanga**, **TecnoballZ** and **Frozen Bubble** (on a
   Pi), the first of the SDL 1.2 games, which PSPExp now runs too, and
   Kenta Cho's OpenGL shooters **rRootage**, **Parsec47** and **Tumiki
-  Fighters**, drawn by the PSP at 60 fps.
+  Fighters**, drawn by the PSP at 60 fps; **GLtron** and **Neverputt** too.
+- **Neverball** now fills the PSP's screen (480x272) on a new install.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
   Pi's graphics chip, 60 fps.
 - **The PSP no longer stays black after a game** (its memory stick's light

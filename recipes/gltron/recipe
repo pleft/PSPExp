@@ -1,0 +1,33 @@
+# GLtron: light cycles on the grid, the walls of light behind you, against
+# the computer's riders (Debian's; SDL 1.2 and OpenGL, through the layer's
+# build for SDL 1.2 programs: the PSP draws its OpenGL). 4:3, its own sizes,
+# the PSP's sides black. The d-pad turns left and right (and moves in its
+# menus), L and R glance aside, cross boosts and confirms, START pauses,
+# SELECT is Escape (its menu). Played on the PSP-1000 (2026-10-17): its menu,
+# a race, turns both ways shown on the minimap, a crash, a winner, 56-60 fps.
+
+[package]
+id=gltron
+title=GLtron
+description=Light-cycle racing on the grid: cut off the other riders with the wall of light behind you, and don't hit one yourself.
+category=game
+license=GPL-2.0+ (GLtron)
+version=1
+
+[debian]
+apt=gltron
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=GLtron
+type=game
+description=Light-cycle racing on the grid: cut off the other riders with the wall of light behind you, and don't hit one yourself.
+icon=gauge
+exec=/usr/games/gltron
+keys=left=left+a,right=right+s,up=up,down=down,l=q,r=w,cross=return+e,start=p,select=escape
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=opengl

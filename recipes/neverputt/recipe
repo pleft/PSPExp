@@ -1,0 +1,30 @@
+# Neverputt: minigolf on Neverball's engine, hole after hole of ramps and
+# loops (Debian's; SDL2 and OpenGL, drawn by the PSP). At the PSP's 480x272
+# from its first start (its settings, shared with Neverball). It reads the PSP
+# as its game controller: the nub aims, cross shoots (held, the power) and
+# confirms. Played on the PSP-1000 (2026-10-17): its menu, hole 1, the aim
+# turned, a shot, the score counted, 54-60 fps.
+
+[package]
+id=neverputt
+title=Neverputt
+description=Minigolf in 3D: aim and putt through courses of ramps, loops and bumpers, alone or with friends.
+category=game
+license=GPL-2.0+ (Neverputt)
+version=1
+
+[debian]
+apt=neverputt
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Neverputt
+type=game
+description=Minigolf in 3D: aim and putt through courses of ramps, loops and bumpers, alone or with friends.
+icon=trophy
+exec=/usr/games/neverputt
+first-run=.neverball/neverballrc:fullscreen 0\nwidth 480\nheight 272\n
+graphics=opengl
