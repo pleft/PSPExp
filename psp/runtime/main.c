@@ -147,6 +147,7 @@ static int link_write(const void *data, int len)
  * main loop waits for a new one), and the first few such failures logged, then one in 100: logged
  * each time, a PSP stuck so wrote its log twice a second, its memory stick's light never off */
 static unsigned g_lost_gen;
+static unsigned g_unanswered;   /* syncs from the board since the last session (the main loop) */
 static uint32_t g_lost_at;
 static void link_lost(PspExpRuntime *rt, unsigned gen, const char *what)
 {
@@ -518,6 +519,22 @@ int main(int argc, char *argv[])
         }
         g_lost_at = 0;
         if (!connected || gen != link_generation()) {
+            /* The board synced again and again and never heard the answers (2026-10-17, after two
+             * console restarts 3 s apart: a thousand failed writes, a new sync every 1.5 s, the
+             * board's "no sync reply"): the way out was a replug. After 6 syncs without a session,
+             * USB is stopped and started again: the board sees the PSP leave and come back, both
+             * ends' endpoints fresh */
+            if (!rt.connected && g_link == LINK_USB && gen != link_generation() && ++g_unanswered >= 6) {
+                trace("the board's syncs go unanswered: USB restarted");
+                g_unanswered = 0;
+                connected = 0;
+                pspexp_runtime_disconnect(&rt);
+                pspexpUsbStop();
+                sceKernelDelayThread(500000);
+                pspexpUsbStart();
+                gen = link_generation();
+                continue;
+            }
             gen = link_generation();
             connected = 1;
             pspexp_runtime_connect(&rt);      /* queues HELLO */
@@ -553,7 +570,7 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        if (rt.connected) slot_confirm();
+        if (rt.connected) { slot_confirm(); g_unanswered = 0; }   /* (a session: the count of unanswered syncs starts again) */
         now = sceKernelGetSystemTimeLow();
         if (now - last_input >= 16666) {
             last_input = now;

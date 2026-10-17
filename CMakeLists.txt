@@ -127,9 +127,24 @@ if(SDL2_FOUND)
   endif()
   if(NOT APPLE)
     target_link_libraries(sdl-pspexp-hostgl PRIVATE ${CMAKE_DL_LIBS} m -Wl,-Bsymbolic-functions)
-    # SDL 1.2 programs (sdl12-compat): preloaded instead of the layer, which it loads privately
-    add_library(sdl-pspexp-sdl12 SHARED compatibility/sdl-pspexp/sdl12_bridge.c)
-    target_link_libraries(sdl-pspexp-sdl12 PRIVATE ${CMAKE_DL_LIBS})
+    # the layer for SDL 1.2 programs (sdl12-compat): its hooks renamed pspexp_SDL_* and reached through
+    # sdl12-compat's lookups (its own dlsym), its OpenGL as the layer's (README, "SDL 1.2 programs")
+    add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/sdl12/sdl12_rename.h
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/sdl12
+      COMMAND sh ${CMAKE_SOURCE_DIR}/compatibility/sdl-pspexp/make-sdl12-rename.sh ${CMAKE_SOURCE_DIR}/compatibility/sdl-pspexp/sdl_pspexp.c ${CMAKE_BINARY_DIR}/sdl12/sdl12_rename.h
+      DEPENDS compatibility/sdl-pspexp/sdl_pspexp.c compatibility/sdl-pspexp/make-sdl12-rename.sh)
+    add_library(sdl-pspexp-sdl12 SHARED compatibility/sdl-pspexp/sdl_pspexp.c compatibility/sdl-pspexp/gl_pspexp.c compatibility/sdl-pspexp/glsl_pspexp.c ${CMAKE_BINARY_DIR}/sdl12/sdl12_rename.h)
+    # (not linked against SDL2, nor with the SDL window executor: SDL2 loaded at startup came before
+    # the SDL 1.2 libraries a Perl game loads later, and SDL_image 1.2's calls went to SDL2's
+    # functions of the same names; the layer finds SDL2 itself, privately, as sdl12-compat does)
+    target_compile_definitions(sdl-pspexp-sdl12 PRIVATE PSPEXP_SDL12_MODE=1 PSPEXP_NO_SDL_EXECUTOR=1)
+    target_include_directories(sdl-pspexp-sdl12 PRIVATE ${SDL2_INCLUDE_DIRS} ${CMAKE_BINARY_DIR}/sdl12)
+    target_compile_options(sdl-pspexp-sdl12 PRIVATE ${SDL2_CFLAGS_OTHER})
+    target_link_libraries(sdl-pspexp-sdl12 PRIVATE pspexp pspexp_null pspexp_tcp ${CMAKE_DL_LIBS} m -Wl,-Bsymbolic-functions)
+    if(PSPEXP_HAVE_USB)
+      target_link_libraries(sdl-pspexp-sdl12 PRIVATE pspexp_usb)
+      target_compile_definitions(sdl-pspexp-sdl12 PRIVATE PSPEXP_HAVE_USB=1)
+    endif()
     set_target_properties(sdl-pspexp-sdl12 PROPERTIES OUTPUT_NAME "sdl-pspexp-sdl12" PREFIX "lib")
   endif()
 

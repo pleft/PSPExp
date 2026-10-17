@@ -84,7 +84,15 @@
 #define HOOK(ret, fn, params) ret pspexp_##fn params
 #define REAL(fn) fn
 #else
+#ifdef PSPEXP_SDL12_MODE
+/* the build for SDL 1.2 programs (libsdl-pspexp-sdl12.so, "SDL 1.2 programs" in the README): its
+ * hooks are pspexp_SDL_*, reached only through sdl12-compat's lookups (dlsym below); the program's
+ * own SDL 1.2 calls of the same names stay SDL 1.2's. Its OpenGL keeps its names: the program's
+ * OpenGL calls are the layer's, as for an SDL2 program */
+#define HOOK(ret, fn, params) ret pspexp_##fn params
+#else
 #define HOOK(ret, fn, params) ret fn params
+#endif
 #define REAL(fn) ((__typeof__(&fn))(uintptr_t)real_symbol(#fn))   /* via uintptr_t: no pedantic object/function cast warning */
 #ifdef __GLIBC__
 static void *(*g_real_dlsym)(void *, const char *);
@@ -98,6 +106,9 @@ static void *real_symbol(const char *name)
      * after the layer was SDL 1.2's, which called the layer's again, round and round to a crash */
     static void *sdl2;
     if (!sdl2) sdl2 = dlopen("libSDL2-2.0.so.0", RTLD_LAZY | RTLD_NOLOAD);
+#ifdef PSPEXP_SDL12_MODE
+    if (!sdl2) sdl2 = dlopen("libSDL2-2.0.so.0", RTLD_LAZY | RTLD_LOCAL);   /* (not linked: privately, as sdl12-compat) */
+#endif
     if (sdl2 && !strncmp(name, "SDL_", 4)) p = real_dlsym(sdl2, name);
     if (!p) p = real_dlsym(RTLD_NEXT, name);   /* (RTLD_NEXT: called from here, after the layer) */
 #else
@@ -109,8 +120,8 @@ static void *real_symbol(const char *name)
 
 #ifdef __GLIBC__
 static Dl_info g_self;
-/* glibc's dlsym, called from the layer (RTLD_NEXT then means: after the layer). (The SDL 1.2 bridge,
- * sdl12_bridge.c, overrides dlsym in the program; this one is glibc's own.) */
+/* glibc's dlsym, called from the layer (RTLD_NEXT then means: after the layer). (The build for SDL 1.2
+ * programs overrides dlsym in the program; this one is glibc's own.) */
 static void *real_dlsym(void *handle, const char *name)
 {
     if (!g_real_dlsym) {
@@ -124,22 +135,27 @@ static void *real_dlsym(void *handle, const char *name)
     return g_real_dlsym(handle, name);
 }
 
-/* SDL 1.2 games (sdl12_bridge.c): sdl12-compat looks each SDL2 function up by name in SDL2; one the
- * layer hooks is answered with the hook. p: what SDL2 answered. The layer is loaded privately there
- * (the game's own SDL 1.2 calls of the same names must reach SDL 1.2), so the hook is looked up in
- * the layer itself */
-void *pspexp_sdl12_redirect(void *p, const char *name)
+#ifdef PSPEXP_SDL12_MODE
+/* sdl12-compat (Debian's SDL 1.2) opens SDL2 and looks each function up by name: a lookup that SDL2
+ * answers with a function the layer hooks gets the hook (pspexp_SDL_*). A dlsym(RTLD_NEXT, ...) is
+ * passed on as a tail call, so glibc still sees its real caller (RTLD_NEXT is relative to it) */
+void *dlsym(void *handle, const char *name)
 {
-    static void *self;
-    void *mine;
+    void *p, *mine;
+    char hook[96];
     Dl_info in;
-    if (!p || strncmp(name, "SDL_", 4) != 0) return p;
-    if (!dladdr(p, &in) || !in.dli_fname || !strstr(in.dli_fname, "libSDL2")) return p;
-    if (!self) { (void)real_dlsym(RTLD_DEFAULT, "SDL_Init"); self = dlopen(g_self.dli_fname, RTLD_LAZY | RTLD_NOLOAD); }
-    mine = self ? real_dlsym(self, name) : NULL;
-    if (mine && mine != p && dladdr(mine, &in) && in.dli_fbase == g_self.dli_fbase) return mine;
+    if (handle == RTLD_NEXT || handle == RTLD_DEFAULT || strncmp(name, "SDL_", 4) != 0) {
+        if (!g_real_dlsym) (void)real_dlsym(RTLD_DEFAULT, "dlsym");
+        return g_real_dlsym(handle, name);
+    }
+    p = real_dlsym(handle, name);
+    if (!p || !dladdr(p, &in) || !in.dli_fname || !strstr(in.dli_fname, "libSDL2")) return p;
+    if (snprintf(hook, sizeof(hook), "pspexp_%s", name) >= (int)sizeof(hook)) return p;
+    mine = real_dlsym(RTLD_DEFAULT, hook);
+    if (mine && dladdr(mine, &in) && in.dli_fbase == g_self.dli_fbase) return mine;
     return p;
 }
+#endif
 #endif
 /* the layer's direct calls to SDL2 (sdl2_direct.h): the same lookup, from SDL2 itself */
 void *pspexp_sdl2_symbol(const char *name) { return real_symbol(name); }
@@ -147,6 +163,11 @@ void *pspexp_sdl2_symbol(const char *name) { return real_symbol(name); }
 
 #if defined(__GLIBC__) && !defined(PSPEXP_STATIC_RENAME)
 #include "sdl2_direct.h"
+#endif
+#ifdef PSPEXP_SDL12_MODE
+/* the layer's own calls to the functions it hooks: its hooks (pspexp_SDL_*), as in the SDL2 build;
+ * made from this file's HOOK lines when built */
+#include "sdl12_rename.h"
 #endif
 
 /* ---- crash report (Linux MIPS hosts: no debugger on the Omega2) -------------- */
@@ -2296,7 +2317,11 @@ static int headless_display(void)
  * window, whatever its size, is shrunk to the PSP like any other) */
 static int psp_display(void)
 {
-    return headless_display() && !getenv("PSPEXP_SDL12_LAYER");
+#ifdef PSPEXP_SDL12_MODE
+    return 0;
+#else
+    return headless_display();
+#endif
 }
 
 static void psp_mode(SDL_DisplayMode *m)

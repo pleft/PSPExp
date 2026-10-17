@@ -53,13 +53,14 @@ fi
 # start it through the loader itself, as the user (no extra group: a shared
 # score file may not be writable), and the SDL layer loads as for any other
 PROG=$(command -v "$1" 2>/dev/null || echo "$1")
-# an SDL 1.2 program (Debian runs them on SDL2 through sdl12-compat): the layer cannot be preloaded,
-# its SDL2 hooks share names with SDL 1.2's functions; its SDL 1.2 bridge is, and loads the layer
-# privately for sdl12-compat's own lookups (compatibility/sdl-pspexp/sdl12_bridge.c). Found by the
-# program's own file; PSPEXP_SDL12=1 for one started through a script, 0 for never
+# an SDL 1.2 program (Debian runs them on SDL2 through sdl12-compat): the layer's build for them,
+# its hooks renamed (they share names with SDL 1.2's functions) and reached through sdl12-compat's own
+# lookups (compatibility/sdl-pspexp/README.md, "SDL 1.2 programs"). Found by the program's own file;
+# PSPEXP_SDL12=1 for one started through a script, 0 for never
 if [ "${PSPEXP_SDL12:-}" = 1 ] || { [ -z "${PSPEXP_SDL12:-}" ] && grep -qa 'libSDL-1\.2\.so' "$PROG" 2>/dev/null; }; then
-	B=${PSPEXP_SDL12_BRIDGE:-$(dirname "$LIB")/libsdl-pspexp-sdl12.so}
-	[ -f "$B" ] && { export PSPEXP_SDL12_LAYER="$LIB"; LIB="$B"; }
+	B=$(dirname "$LIB")/libsdl-pspexp-sdl12.so
+	[ -n "${PSPEXP_SHIM:-}" ] && [ -n "${PSPEXP_SHIM_SDL12:-}" ] && B=$PSPEXP_SHIM_SDL12
+	[ -f "$B" ] && LIB="$B"
 fi
 if [ -u "$PROG" ] || [ -g "$PROG" ]; then
 	for LD in /lib/ld-linux-aarch64.so.1 /lib/ld-linux-armhf.so.3 /lib64/ld-linux-x86-64.so.2 /lib/ld-linux.so.3; do

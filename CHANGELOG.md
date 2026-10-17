@@ -41,8 +41,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   Pi's graphics chip, 60 fps.
 - **The PSP no longer stays black after a game** (its memory stick's light
   flashing until switched off): when the board's console restarted while
-  the PSP was sending, the two never found each other again. The fix is in
-  the PSP's part: Settings > Update the PSP.
+  the PSP was sending, the two never found each other again; and when its
+  USB gets stuck it now restarts it by itself, as a replug would. The fix is
+  in the PSP's part: Settings > Update the PSP.
 - **A worn nub that rests off the middle** no longer moves the pointer,
   the player or the arrows by itself.
 - **AssaultCube is no longer offered**: its text was too small to read on

@@ -178,8 +178,13 @@ nm -u "$GNU/sdl_pspexp.o" | awk '{print $NF}' | grep '^SDL_' | sort -u | sed 's/
 "$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp.so -Wl,-Bsymbolic "$GNU/sdl_pspexp.o" "$GNU/gl_pspexp.o" "$GNU/glsl_pspexp.o" \
 	"$C/libpspexp_usb.a" "$C/libpspexp_tcp.a" "$C/libpspexp_null.a" "$C/libpspexp.a" "$C/libpspexp_runtime.a" "$C/libpspexp_protocol.a" \
 	"$GNU/prefix/lib/libusb-1.0.a" -L"$GNU" -lSDL2 -ldl -lm -lpthread -o "$OUT/lib/libsdl-pspexp.so"
-# SDL 1.2 programs: preloaded instead of the layer, which it loads privately (sdl12_bridge.c)
-"$GNU/zcc" -O2 -fPIC -shared -D_GNU_SOURCE -Wl,-soname,libsdl-pspexp-sdl12.so "$ROOT/compatibility/sdl-pspexp/sdl12_bridge.c" -ldl -o "$OUT/lib/libsdl-pspexp-sdl12.so"
+# the layer for SDL 1.2 programs: its hooks renamed pspexp_SDL_*, reached through sdl12-compat's lookups
+sh "$ROOT/compatibility/sdl-pspexp/make-sdl12-rename.sh" "$ROOT/compatibility/sdl-pspexp/sdl_pspexp.c" "$GNU/sdl12_rename.h"
+"$GNU/zcc" -O2 -fPIC -c -D_GNU_SOURCE -DPSPEXP_HAVE_USB -DPSPEXP_NO_SDL_EXECUTOR -DPSPEXP_SDL12_MODE -D_REENTRANT \
+	-I"$SDLINC" -I"$GNU/prefix/include" -I"$GNU" "$ROOT/compatibility/sdl-pspexp/sdl_pspexp.c" -o "$GNU/sdl_pspexp_sdl12.o"
+"$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp-sdl12.so -Wl,-Bsymbolic "$GNU/sdl_pspexp_sdl12.o" "$GNU/gl_pspexp.o" "$GNU/glsl_pspexp.o" \
+	"$C/libpspexp_usb.a" "$C/libpspexp_tcp.a" "$C/libpspexp_null.a" "$C/libpspexp.a" "$C/libpspexp_runtime.a" "$C/libpspexp_protocol.a" \
+	"$GNU/prefix/lib/libusb-1.0.a" -ldl -lm -lpthread -o "$OUT/lib/libsdl-pspexp-sdl12.so"   # (not SDL2: it finds it itself, privately)
 cp "$ROOT/scripts/board/pspexp-run" "$OUT/lib/"
 ls -la "$OUT/lib"
 echo "shim for $TARGET in build/gameshell/lib"
