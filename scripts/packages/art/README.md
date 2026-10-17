@@ -37,6 +37,7 @@
 | `recipes/warcraft/cover.png` | War1gus's `war1gus.png`, scaled 2x | GPL-2.0 (War1gus) |
 | `recipes/warcraft2/cover.png` | Wargus's `wargus.png`, scaled 2x | GPL-2.0 (Wargus) |
 | `recipes/zsdx/cover.png` | Zelda: Mystery of Solarus DX's `data/logos/icon_256.png`, scaled | the quest's licence (Solarus Team) |
+| `recipes/celeste64/cover.png` | a screenshot of Celeste 64 on the PSP (Madeline in the first level), cropped and scaled | the game's (Extremely OK Games: MIT code; its art theirs) |
 | `recipes/cdogs/cover.png` | Debian's cdogs-sdl package, its 128x128 icon | GPL-2.0+ (C-Dogs SDL) |
 | `recipes/lincity-ng/cover.png` | Debian's lincity-ng package, its 128x128 icon | GPL-2.0+ (LinCity-NG) |
 | `recipes/taisei/cover.png` | Debian's taisei package, its 128x128 icon | MIT (Taisei) |

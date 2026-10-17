@@ -16,7 +16,7 @@ title=Celeste 64
 description=The makers of Celeste's free 3D platformer in the style of the N64: Madeline climbs, dashes and collects strawberries up a mountain. Drawn by the board's GPU.
 category=game
 license=Free (Celeste 64, Maddy Makes Games; code MIT), downloaded at install from the developers
-version=1
+version=2
 
 [debian]
 apt=celeste64

@@ -284,7 +284,7 @@ def download_page():
 
 BOARDS = [("pi", "Raspberry Pi"), ("gameshell", "GameShell")]   # (the Omega2+ is not shown here: its 12 are all on a Pi too)
 SYSTEM_ART = os.path.join(ROOT, "tools/pspexp-term/assets/systems")
-EXTRA_ART = {"celeste64": "docs/images/celeste64.png", "freedoom": "scripts/packages/art/freedoom-phase1.png"}
+EXTRA_ART = {"freedoom": "scripts/packages/art/freedoom-phase1.png"}
 
 
 def read_recipe(path):
