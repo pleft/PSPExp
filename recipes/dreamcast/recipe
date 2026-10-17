@@ -34,4 +34,5 @@ thumbs=Sega - Dreamcast
 exec=/usr/games/pspexp-dreamcast %ROM%
 keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
 env=PSPEXP_HOSTGL=1
+env=PSPEXP_FRAME_DROP=2
 graphics=board-gpu

@@ -3319,13 +3319,18 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
     static size_t cap;
     int w = 0, h = 0;
     static int drop = -1;
-    if (drop < 0) drop = getenv("PSPEXP_FRAME_DROP") && atoi(getenv("PSPEXP_FRAME_DROP")) > 0;
+    if (drop < 0) drop = getenv("PSPEXP_FRAME_DROP") ? atoi(getenv("PSPEXP_FRAME_DROP")) : 0;
+    if (drop < 0) drop = 0;
     /* PSPEXP_FRAME_DROP=1: while the PSP still has the frame before, this one is not sent (nor read
      * back) rather than waited for: a program that keeps time by its sound (Mupen64Plus, its audio
      * plugin pacing the emulation) then runs at its own speed. Waiting held the N64 to the PSP's
-     * 50-57 fps, the emulation 5-10% slow and its sound short: a crackle. */
+     * 50-57 fps, the emulation 5-10% slow and its sound short: a crackle.
+     * PSPEXP_FRAME_DROP=2: two frames may be on their way before one is left out. With one, a game
+     * a little faster than the PSP (Flycast's 50 a second, the PSP's about 45) found it busy every
+     * other frame: 22 a second shown. */
     if (drop && S.active && link_up()) {
         link_lock();
+        if (drop > 1) pspexp_set_max_in_flight(S.ctx, drop > 3 ? 3 : drop);
         pspexp_pump(S.ctx, 0);
         if (!pspexp_should_render(S.ctx)) { S.dropped++; link_unlock(); REAL(SDL_GL_SwapWindow)(win); return; }
         link_unlock();
