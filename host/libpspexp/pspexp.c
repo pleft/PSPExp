@@ -1459,6 +1459,7 @@ int pspexp_replay_frame(PspExpContext *ctx)
     if (!ctx->kept_len || ctx->in_frame || ctx->state != PSPEXP_LINK_CONNECTED) return -1;
     pspexp_begin_frame(ctx);
     if (pspexp_writer_raw(&ctx->frame, ctx->kept, ctx->kept_len) < 0) { ctx->in_frame = 0; return -1; }
+    ctx->mark = ctx->frame.len;   /* kept again as it was: a pointer drawn over it is not (each replay's pointer had stayed, a trail) */
     return 0;
 }
 

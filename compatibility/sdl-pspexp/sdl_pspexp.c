@@ -357,6 +357,8 @@ static SDL_Keycode key_from_name(const char *name)
         { "minus", SDLK_MINUS }, { "equals", SDLK_EQUALS }, { "plus", SDLK_PLUS },
         { "enter", SDLK_RETURN }, { "esc", SDLK_ESCAPE }, { "backspace", SDLK_BACKSPACE },
         { "pgup", SDLK_PAGEUP }, { "pgdn", SDLK_PAGEDOWN }, { "ins", SDLK_INSERT }, { "del", SDLK_DELETE },
+        { "kp1", SDLK_KP_1 }, { "kp2", SDLK_KP_2 }, { "kp3", SDLK_KP_3 }, { "kp4", SDLK_KP_4 }, { "kp6", SDLK_KP_6 },
+        { "kp7", SDLK_KP_7 }, { "kp8", SDLK_KP_8 }, { "kp9", SDLK_KP_9 },   /* (the keypad's directions: Freeciv's six-sided tiles have no plain right) */
         { "none", SDLK_UNKNOWN },
     };
     size_t i;
@@ -2842,6 +2844,7 @@ static void replay_pointer(void)
     S.replays++;
 }
 
+static void shot_trigger(void);
 static void service_link(void)
 {
     static Uint32 last;
@@ -2854,6 +2857,7 @@ static void service_link(void)
     audio_drain();
     script_tick();   /* a game waiting for an event (Pinball's menu) gets its scripted keys too */
     replay_pointer();
+    shot_trigger();   /* (a game that draws only on change, Freeciv: its screenshots taken between frames too) */
     link_unlock();
 }
 

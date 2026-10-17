@@ -8,12 +8,16 @@
 # It draws only when something changes: after its start (about 35 s of
 # loading on a Pi 400) the menu shows once the pointer moves over it.
 # The nub is the mouse, cross clicks, circle is the right button, the d-pad
-# moves the active unit, triangle builds a city (B), START ends the turn
-# (Shift+Return), SELECT is Escape. Tried in the stand-in (2026-10-17): the
+# moves the active unit (right is Keypad 9: its six-sided tiles have no plain
+# right, which did nothing), square goes to the next unit (W, wait: the first
+# unit is often an explorer, which founds nothing), triangle builds a city
+# (B), START ends the turn (Shift+Return), SELECT is Escape. Tried in the stand-in (2026-10-17): the
 # menu, a new game, the unit moved, the magnifier, two turns ended (4000 to
 # 3900 BCE); 17-19 fps while units blink, about 100 KB a frame. On the
 # GameShell with the PSP-1000 (2026-10-17) the user played it: slower to load,
-# playable.
+# playable; then a scripted game there: New Game, Start, the d-pad's four
+# directions, square to the Settlers, triangle and Return founded a city, START
+# ended the turn; about 9 fps on the map.
 
 [package]
 id=freeciv
@@ -21,7 +25,7 @@ title=Freeciv
 description=Turn-based strategy in the style of Civilization: found cities, research technologies, build wonders and lead your nation from 4000 BC to the space age.
 category=game
 license=GPL-2.0+ (Freeciv)
-version=1
+version=2
 
 [debian]
 apt=freeciv-client-sdl freeciv-server
@@ -33,7 +37,7 @@ type=game
 description=Turn-based strategy in the style of Civilization: found cities, research technologies and lead your nation through history.
 icon=house
 exec=/usr/games/freeciv-sdl2 -- -F 14
-keys=up=up,down=down,left=left,right=right,triangle=b,start=lshift+return,select=escape
+keys=up=up,down=down,left=left,right=kp9,triangle=b,square=w,start=lshift+return,select=escape
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
 env=PSPEXP_MAGNIFY=r

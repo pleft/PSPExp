@@ -44,8 +44,11 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   players, LBreakout HD, Mirror Magic, Powermanga, TecnoballZ) can now save
   them: the board's user joins the games group.
 - **Freeciv**, the Civilization-style strategy game: the nub as the mouse,
-  R to read its small text. It takes a while to load, and its menu shows
-  once you move the pointer.
+  R to read its small text, the d-pad moves a unit, square goes to the next
+  one, triangle founds a city, START ends the turn. It takes a while to
+  load, and its menu shows once you move the pointer.
+- **No more pointer trail** in games that draw only on change (Freeciv,
+  Heroes II): the pointer no longer leaves copies of itself behind.
 - **Neverball** now fills the PSP's screen (480x272) on a new install.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
   Pi's graphics chip, 60 fps.
