@@ -164,6 +164,7 @@ typedef struct Tex {
     Uint8 r, g, b, a;          /* colour / alpha mod */
     void *lock_pixels; int lock_pitch; SDL_Rect lock_rect; int locked;
     struct Tex *next;
+    struct Tex *hnext;         /* its bucket in g_tex_hash (find_tex) */
 } Tex;
 
 static struct {
@@ -714,11 +715,25 @@ static uint8_t draw_alpha(void) { return S.dblend == SDL_BLENDMODE_NONE ? 255 : 
 
 /* ---- textures -------------------------------------------------------------- */
 
+/* Textures by their SDL_Texture, hashed: a game with thousands of small textures (C-Dogs, a texture
+ * a sprite) walked the whole list at every draw, 900 draws a frame: 1.5 fps, the board's CPU all in
+ * the walk. The last one found is kept (a run of draws from one texture). */
+#define TEX_HASH 4096
+static Tex *g_tex_hash[TEX_HASH], *g_tex_last;
+static unsigned tex_slot(SDL_Texture *t) { return (unsigned)((((uintptr_t)t >> 4) * 2654435761u) >> 8) & (TEX_HASH - 1); }
 static Tex *find_tex(SDL_Texture *t)
 {
     Tex *x;
-    for (x = S.textures; x; x = x->next) if (x->sdl == t) return x;
+    if (g_tex_last && g_tex_last->sdl == t) return g_tex_last;
+    for (x = g_tex_hash[tex_slot(t)]; x; x = x->hnext) if (x->sdl == t) return g_tex_last = x;
     return NULL;
+}
+static void tex_unhash(Tex *x)
+{
+    Tex **pp = &g_tex_hash[tex_slot(x->sdl)];
+    while (*pp && *pp != x) pp = &(*pp)->hnext;
+    if (*pp) *pp = x->hnext;
+    if (g_tex_last == x) g_tex_last = NULL;
 }
 
 static Tex *add_tex(SDL_Texture *t, int w, int h)
@@ -731,6 +746,8 @@ static Tex *add_tex(SDL_Texture *t, int w, int h)
     x->dirty = 1;
     x->next = S.textures;
     S.textures = x;
+    x->hnext = g_tex_hash[tex_slot(t)];
+    g_tex_hash[tex_slot(t)] = x;
     return x;
 }
 
@@ -2464,6 +2481,7 @@ HOOK(void, SDL_DestroyTexture, (SDL_Texture *t))
         if ((*pp)->sdl == t) {
             Tex *x = *pp;
             *pp = x->next;
+            tex_unhash(x);
             if (link_up()) release_pages(x);
             free(x->rgba);
             free(x->full);
