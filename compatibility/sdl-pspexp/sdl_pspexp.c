@@ -208,6 +208,7 @@ static struct {
     SDL_Cursor *blank_cursor[4]; int cursor_blank;   /* see SDL_CreateCursor */
     float nub_speed;                   /* pointer: window pixels a second, the nub fully over */
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */
+    int compose;                   /* PSPEXP_COMPOSE=1: the frame drawn on the board, sent whole (host_render, SDL_RenderPresent) */
     int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */
     float drawn_px, drawn_py; Uint32 last_present; unsigned replays;   /* the pointer as last shown (replay_pointer) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
@@ -341,6 +342,7 @@ static void connect_once(void)
             else if (!strcmp(tok, "right")) S.mouse_right = which;
         }
     }
+    S.compose = getenv("PSPEXP_COMPOSE") && !strcmp(getenv("PSPEXP_COMPOSE"), "1");
     S.magnify_btn = -1;
     if (getenv("PSPEXP_MAGNIFY")) {   /* "r": that button switches between the whole frame shrunk and its own pixels */
         int b;
@@ -452,7 +454,7 @@ static int host_render(void)
 {
     static int decided, render;
     const char *drv;
-    if (!S.active) return 1;
+    if (!S.active || S.compose) return 1;   /* (composed: SDL's own rendering is the frame) */
     if (!decided) {
         decided = 1;
         drv = SDL_GetCurrentVideoDriver();
@@ -701,7 +703,7 @@ static void record_op(SDL_Texture *tex, const SDL_Rect *src, const SDL_Rect *dst
 
 static int drawing(void)
 {
-    if (!link_up() || S.target) return 0;
+    if (!link_up() || S.target || S.compose) return 0;   /* (composed: nothing mirrored, the frame is sent whole) */
     begin_frame();
     apply_clip();
     return 1;
@@ -3055,10 +3057,18 @@ static void end_frame_locked(void)
     }
 }
 
+/* PSPEXP_COMPOSE=1, for 2D games that draw hundreds of small pictures a frame: each was mirrored to
+ * the PSP as a draw of its own (Ri-li 778 a frame, 6 fps on the PSP-1000; LBreakout HD 1500, 33 fps:
+ * the PSP's CPU 9 ms a frame on them). Composed, SDL's software renderer draws the frame on the board
+ * into the window's surface and it goes to the PSP as one picture, its changed pages only. */
+static void stream_surface(SDL_Window *win);
 HOOK(void, SDL_RenderPresent, (SDL_Renderer *r))
 {
     if (host_render()) REAL(SDL_RenderPresent)(r);
-    if (r == S.ren) end_frame();
+    if (r == S.ren) {
+        if (S.compose && S.win && link_up()) stream_surface(S.win);
+        else end_frame();
+    }
 }
 
 /* ---- hooks: OpenGL (gl_pspexp.c draws; here the context and the frames) ---------- */
@@ -3519,10 +3529,23 @@ static void stream_frame_locked(SDL_Window *win, const Frame *surf)
         int dw = (int)(surf->w * S.sx + 0.5f), dh = (int)(surf->h * S.sy + 0.5f), yy, xx;
         if (dw < 1) dw = 1;
         if (dh < 1) dh = 1;
+        /* each pixel the average of the frame's under it (nearest-pixel shrinking dropped rows and
+         * columns, which sparkled as things moved); in place: a row is written over rows already read */
         for (yy = 0; yy < dh; yy++) {
-            const uint32_t *src = x->rgba + (size_t)(yy * surf->h / dh) * surf->w;
+            int sy0 = yy * surf->h / dh, sy1 = (yy + 1) * surf->h / dh;
             uint32_t *dst = x->rgba + (size_t)yy * dw;
-            for (xx = 0; xx < dw; xx++) dst[xx] = src[xx * surf->w / dw];
+            if (sy1 <= sy0) sy1 = sy0 + 1;
+            for (xx = 0; xx < dw; xx++) {
+                int sx0 = xx * surf->w / dw, sx1 = (xx + 1) * surf->w / dw, a, b;
+                uint32_t c0 = 0, c1 = 0, c2 = 0, c3 = 0, n;
+                if (sx1 <= sx0) sx1 = sx0 + 1;
+                for (a = sy0; a < sy1; a++) {
+                    const uint32_t *row = x->rgba + (size_t)a * surf->w;
+                    for (b = sx0; b < sx1; b++) { uint32_t c = row[b]; c0 += c & 255; c1 += (c >> 8) & 255; c2 += (c >> 16) & 255; c3 += c >> 24; }
+                }
+                n = (uint32_t)((sy1 - sy0) * (sx1 - sx0));
+                dst[xx] = (c0 / n) | ((c1 / n) << 8) | ((c2 / n) << 16) | ((c3 / n) << 24);
+            }
         }
         x->w = dw; x->h = dh;
         {   /* only the pages that changed since the last frame, as at full size: a frame shrunk from a
