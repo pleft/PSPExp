@@ -143,6 +143,22 @@ static int link_write(const void *data, int len)
     if (g_link == LINK_TCP) return pspexp_tcp_psp_write(data, len);
     return -1;
 }
+/* The link failed (a write or a read): the session dropped, the generation it failed on kept (the
+ * main loop waits for a new one), and the first few such failures logged, then one in 100: logged
+ * each time, a PSP stuck so wrote its log twice a second, its memory stick's light never off */
+static unsigned g_lost_gen;
+static uint32_t g_lost_at;
+static void link_lost(PspExpRuntime *rt, unsigned gen, const char *what)
+{
+    static unsigned n;
+    char b[96];
+    if (n < 5 || n % 100 == 0) { snprintf(b, sizeof(b), "%s (%u)", what, n + 1); trace(b); }
+    n++;
+    g_lost_gen = gen;
+    g_lost_at = sceKernelGetSystemTimeLow() | 1;
+    pspexp_runtime_disconnect(rt);
+}
+
 /* Pick a link: USB first, then TCP; waits briefly. */
 static void link_wait(void)
 {
@@ -488,6 +504,19 @@ int main(int argc, char *argv[])
             link_wait();
             continue;
         }
+        if (g_lost_at && link_generation() == g_lost_gen && now - g_lost_at < 5000000u) {
+            /* The link failed: wait for the board's next sync (a new generation) rather than greet it
+             * again on the old one. Re-sent at once, the HELLO met the board's new sync on the endpoint
+             * and broke its reply, the board synced again, and so on until the PSP was switched off
+             * (black, writing "link write failed" twice a second; 2026-10-17, after a game). What the
+             * old link left is read and dropped, so the sync has a buffer to land in. After 5 s with
+             * no sync, greeted again on the same link (a board that never noticed) */
+            while (link_read(rxbuf, sizeof(rxbuf), 1) > 0) ;   /* (1 us: 0 waits for ever) */
+            if (now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
+            sceKernelDelayThread(10000);
+            continue;
+        }
+        g_lost_at = 0;
         if (!connected || gen != link_generation()) {
             gen = link_generation();
             connected = 1;
@@ -500,7 +529,7 @@ int main(int argc, char *argv[])
             size_t len;
             const void *out = pspexp_runtime_out_peek(&rt, &len);
             if (len == 0) break;
-            if (link_write(out, (int)len) < 0) { trace("link write failed"); connected = 0; pspexp_runtime_disconnect(&rt); if (!g_ho_on) show_status_page(); break; }
+            if (link_write(out, (int)len) < 0) { link_lost(&rt, gen, "link write failed"); connected = 0; if (!g_ho_on) show_status_page(); break; }
             pspexp_runtime_out_consume(&rt);
             rt.stats.messages_out++;
         }
@@ -517,9 +546,8 @@ int main(int argc, char *argv[])
                 continue;
             }
         } else if (rc < 0) {
-            trace("link read failed");
+            link_lost(&rt, gen, "link read failed");
             connected = 0;
-            pspexp_runtime_disconnect(&rt);
             handover_take(&rt, sceKernelGetSystemTimeLow());
             if (!g_ho_on) show_status_page();
             continue;

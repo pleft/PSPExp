@@ -202,8 +202,11 @@ static void handle_rx_done(void)
         sceUsbbdReqCancelAll(EP_IN_BLOCK);
         rx_reset();
         g_stats.resyncs++;
-        g_generation++;
         send_sync_reply();
+        /* the new link announced only once its reply is out: the runtime's HELLO, sent on the new
+         * generation, went out on the same endpoint while the reply waited, and the two broke each
+         * other (no reply on the board, which synced again, cancelling the HELLO: forever) */
+        g_generation++;
         g_connected = 1;
         sceKernelSetEventFlag(g_evc, EVC_CONNECTED);
         rx_submit_next();

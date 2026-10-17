@@ -1804,7 +1804,7 @@ static void handle_input(void)
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
-    if (b || ax * ax + ay * ay > 40 * 40) g_input_at = now;
+    if (b || ax * ax + ay * ay > 64 * 64) g_input_at = now;   /* (a worn nub rests up to ~55 off the middle) */
     /* select: a long hold switches between the terminal and the mirrored
      * screen; a tap is resolved on release (keyboard toggle / Space) */
     {
@@ -1871,10 +1871,10 @@ static void handle_input(void)
 
     /* the wheel: R + nub, the nub alone when the keyboard is hidden, or in
      * scroll mode; faster the further it is pushed */
-    if ((ctrl || !kb_shown || g_scroll_mode) && !T.on_alt && (ay < -30 || ay > 30)) {
+    if ((ctrl || !kb_shown || g_scroll_mode) && !T.on_alt && (ay < -48 || ay > 48)) {
         static uint64_t last; static float acc;
         float dt = last && now - last < 200000u ? (now - last) / 1e6f : 0.016f;
-        float v = (float)((ay < 0 ? -ay : ay) - 30) / 97.0f;   /* 0..1 */
+        float v = (float)((ay < 0 ? -ay : ay) - 48) / 79.0f;   /* 0..1 */
         acc += (ay < 0 ? 1.0f : -1.0f) * v * v * 120.0f * dt;   /* up to 120 lines a second */
         last = now;
         if (acc >= 1.0f || acc <= -1.0f) {

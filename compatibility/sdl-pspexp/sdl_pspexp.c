@@ -1715,7 +1715,23 @@ static void start_audio_fifo(void)
 }
 __attribute__((constructor)) static void audio_fifo_early(void) { start_audio_fifo(); }
 #endif
-#define NUB_DEAD 8000
+/* A worn PSP-1000's nub rests well off the middle: one measured -5400 / +2000 in SDL's units, the
+ * user's PSP (2026-10-17, untouched) -44 / +31 of the nub's 128, years the same. Within NUB_REST of
+ * the middle is the middle, for every use of the nub (joystick, mouse, keys): at 35 the pointer
+ * crept left and down by itself (LinCity-NG's, into the corner, the map edge-scrolling) */
+#define NUB_REST 56
+#define NUB_DEAD (NUB_REST * 258)
+/* the nub past its rest as the pointer's speed, -1..1: the square of its tilt as before, less that at
+ * the rest's edge (no jump there), so a firm push moves as fast as it did (Quake's aim) */
+static float nub_speed_of(int a)
+{
+    int m = a < 0 ? -a : a;
+    float f;
+    if (m <= NUB_REST) return 0.0f;
+    if (m > 127) m = 127;
+    f = (float)(m * m - NUB_REST * NUB_REST) / (float)(127 * 127 - NUB_REST * NUB_REST);
+    return a < 0 ? -f : f;
+}
 static int nub_dead(int v)
 {
     int m = v < 0 ? -v : v;
@@ -2073,10 +2089,11 @@ static void feed_input(void)
         /* The nub as the four arrow keys, with hysteresis so a held diagonal stays held. */
         int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
         uint32_t dirs = 0, changed;
-        if (ax < -50 || (ax < -30 && (S.nub_dirs & PSPEXP_BUTTON_LEFT))) dirs |= PSPEXP_BUTTON_LEFT;
-        if (ax > 50 || (ax > 30 && (S.nub_dirs & PSPEXP_BUTTON_RIGHT))) dirs |= PSPEXP_BUTTON_RIGHT;
-        if (ay < -50 || (ay < -30 && (S.nub_dirs & PSPEXP_BUTTON_UP))) dirs |= PSPEXP_BUTTON_UP;
-        if (ay > 50 || (ay > 30 && (S.nub_dirs & PSPEXP_BUTTON_DOWN))) dirs |= PSPEXP_BUTTON_DOWN;
+        /* (let go only back within NUB_REST: at 30 a nub resting at -44 kept left held once pushed) */
+        if (ax < -(NUB_REST + 14) || (ax < -NUB_REST && (S.nub_dirs & PSPEXP_BUTTON_LEFT))) dirs |= PSPEXP_BUTTON_LEFT;
+        if (ax > NUB_REST + 14 || (ax > NUB_REST && (S.nub_dirs & PSPEXP_BUTTON_RIGHT))) dirs |= PSPEXP_BUTTON_RIGHT;
+        if (ay < -(NUB_REST + 14) || (ay < -NUB_REST && (S.nub_dirs & PSPEXP_BUTTON_UP))) dirs |= PSPEXP_BUTTON_UP;
+        if (ay > NUB_REST + 14 || (ay > NUB_REST && (S.nub_dirs & PSPEXP_BUTTON_DOWN))) dirs |= PSPEXP_BUTTON_DOWN;
         changed = dirs ^ S.nub_dirs;
         S.nub_dirs = dirs;
         if (changed & PSPEXP_BUTTON_LEFT) push_key(S.keys[B_LEFT][0], (dirs & PSPEXP_BUTTON_LEFT) != 0);
@@ -2089,10 +2106,10 @@ static void feed_input(void)
         float dt = (now - S.ptick > 100 ? 100 : now - S.ptick) / 1000.0f;
         int ax = (int)in->analog_x - 128, ay = (int)in->analog_y - 128;
         S.ptick = now;
-        if (abs(ax) > 35 || abs(ay) > 35) {
-            float fx = ax / 127.0f, fy = ay / 127.0f, speed = S.nub_speed * dt, ox = S.px, oy = S.py;
+        if (abs(ax) > NUB_REST || abs(ay) > NUB_REST) {
+            float speed = S.nub_speed * dt, ox = S.px, oy = S.py;
             SDL_Event ev;
-            float dx = fx * fabsf(fx) * speed, dy = fy * fabsf(fy) * speed;
+            float dx = nub_speed_of(ax) * speed, dy = nub_speed_of(ay) * speed;
             if (S.sync_corner && !S.relative) {
                 /* A game that moves a cursor of its own by the positions' differences (Unreal Tournament's
                  * menus) puts it where it likes when its menus come (the middle) and stops it at its edges,
@@ -3485,10 +3502,15 @@ static int wait_event_impl(SDL_Event *ev, int timeout)
         int step, rc;
         service_link();
         step = timeout < 0 ? 20 : (int)(timeout - (SDL_GetTicks() - start));
-        if (timeout >= 0 && step <= 0) return REAL(SDL_PollEvent)(ev);
+        if (timeout >= 0 && step <= 0) {
+            rc = REAL(SDL_PollEvent)(ev);
+            if (rc == 1 && ev) log_event(ev);
+            return rc;
+        }
         if (step > 20) step = 20;
         rc = REAL(SDL_WaitEventTimeout)(ev, step);
         if (rc && ev && drop_event(ev)) continue;
+        if (rc && ev) log_event(ev);   /* (the games that wait, LinCity-NG, logged too) */
         if (rc) return rc;
     }
 }

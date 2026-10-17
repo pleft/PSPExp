@@ -2,8 +2,9 @@
 
 ## Since 1.0.0
 
-These came as package updates (2026-10-15): a board gets them through
-Packages (Apps > PSPExp); the PSP's part and the card images are unchanged.
+These came as package updates (2026-10-15 on): a board gets them through
+Packages (Apps > PSPExp), and the PSP's part through Settings > Update the
+PSP when it is offered; the card images are unchanged.
 See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 
 - **Media** (once Music) plays **films** as well as music: MP4, MKV, WebM,
@@ -29,6 +30,12 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   PSP-1000 before being offered.
 - **C-Dogs** (on a Pi): top-down run-and-gun at the PSP's own size, 60
   fps in a mission on the PSP-1000.
+- **The PSP no longer stays black after a game** (its memory stick's light
+  flashing until switched off): when the board's console restarted while
+  the PSP was sending, the two never found each other again. The fix is in
+  the PSP's part: Settings > Update the PSP.
+- **A worn nub that rests off the middle** no longer moves the pointer,
+  the player or the arrows by itself.
 - **AssaultCube is no longer offered**: its text was too small to read on
   the PSP's screen and it did not play well; a board that has it keeps it
   until removed in Packages.
