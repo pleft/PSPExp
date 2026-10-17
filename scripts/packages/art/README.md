@@ -51,6 +51,8 @@
 | `recipes/tumiki-fighters/cover.png` | Debian's tumiki-fighters package, its 32x32 icon, scaled 4x | BSD-2-Clause (Tumiki Fighters) |
 | `recipes/gltron/cover.png` | Debian's gltron package, its 256x256 icon, scaled | GPL-2.0+ (GLtron) |
 | `recipes/neverputt/cover.png` | Debian's neverputt package, its 128x128 icon | GPL-2.0+ (Neverputt) |
+| `recipes/noiz2sa/cover.png` | Debian's noiz2sa package, its 32x32 icon, scaled 4x | BSD-2-Clause (Noiz2sa) |
+| `recipes/gnurobbo/cover.png` | Debian's gnurobbo package, its 32x32 icon, scaled 4x | GPL-2.0+ (GNU Robbo) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
 | `recipes/lbreakouthd/cover.png` | Debian's lbreakouthd package, its 256x256 icon, scaled | GPL-3.0+ (LBreakout HD) |
 | `recipes/mirrormagic/cover.png` | a screenshot of Mirror Magic on the PSP (a level, the beam drawn), cropped and scaled | GPL-2.0 (Mirror Magic) |

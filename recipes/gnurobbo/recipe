@@ -1,0 +1,34 @@
+# GNU Robbo: the Atari puzzle game: collect the screws and reach the capsule
+# while avoiding the creatures, bombs and lasers, 58 levels and more packs
+# (Debian's; an SDL 1.2 game, through the layer's build for SDL 1.2
+# programs). Its 640x480 at 57%: its text small, its tiles clear. The d-pad
+# moves (and moves in its menus), square held with the d-pad shoots (Shift),
+# cross and START confirm (Return), SELECT is Escape (which in a level ends
+# Robbo's life: the level again). Played on the PSP-1000 (2026-10-17): its
+# menu, level 1, Robbo moving, 50 fps.
+
+[package]
+id=gnurobbo
+title=GNU Robbo
+description=Puzzle game from the Atari: collect the screws and reach the capsule past creatures, bombs and lasers. Fifty-eight levels and more packs.
+category=game
+license=GPL-2.0+ (GNU Robbo)
+version=1
+
+[debian]
+apt=gnurobbo
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=GNU Robbo
+type=game
+description=Puzzle game from the Atari: collect the screws and reach the capsule past creatures, bombs and lasers.
+icon=puzzle
+exec=/usr/games/gnurobbo
+keys=cross=return,square=lshift,start=return,select=escape,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl
