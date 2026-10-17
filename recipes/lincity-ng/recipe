@@ -1,0 +1,39 @@
+# LinCity-NG: build a city and keep it alive, from farms and water to
+# industry and rockets (Debian's). Its own drawing (-s, not OpenGL) in a
+# 720x408 window composed on the board and shrunk, averaged, to the PSP's
+# 480x272: at 480x272 its panels covered almost all the map and its menu
+# overlapped; at 720x408 the map has room and the text is small but readable
+# (R magnifies round the pointer). The game runs at its own 10-13 frames a
+# second; the pointer at 60. The nub is the mouse, cross clicks, circle the
+# right button, the d-pad scrolls the map. Played on the PSP-1000
+# (2026-10-17): its menu, a game started, the map scrolled, a residence chosen
+# and built (its cost shown, the money down), a second spot shown blocked.
+
+[package]
+id=lincity-ng
+title=LinCity-NG
+description=City builder: zone homes, farms and industry, bring water and power, keep the people fed and working, from a village to a city that launches rockets.
+category=game
+license=GPL-2.0+ (LinCity-NG; its data under GPL and CC licences)
+version=1
+
+[debian]
+apt=lincity-ng
+
+# (on a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=LinCity-NG
+type=game
+description=City builder: zone homes, farms and industry, bring water and power, keep the people fed and working, from a village to a city that launches rockets.
+icon=house
+exec=/usr/games/lincity-ng -s -S 720x408 -w
+keys=up=up,down=down,left=left,right=right
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
+env=PSPEXP_MAGNIFY=r
+env=PSPEXP_COMPOSE=1
+env=PSPEXP_JOYSTICK=0
+graphics=sdl
