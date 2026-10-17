@@ -1,0 +1,33 @@
+# Parsec47: one of Kenta Cho's shooters (Debian's; SDL 1.2 and OpenGL 1, run
+# through the layer's build for SDL 1.2 programs: the PSP draws its OpenGL).
+# Its 640x480 window (-window) drawn at the PSP's size by the PSP itself, the
+# lines and shapes sharp. The d-pad or the nub move, cross fires (Z), circle
+# and square the second button (X), START or SELECT pause (Escape). Played on
+# the PSP-1000 (2026-10-17): from its title into a game, the ship among the enemies, firing,
+# moving left, right and up, 60 fps.
+
+[package]
+id=parsec47
+title=Parsec47
+description=Retro-modern shooter: weave through the enemy fire and turn it back with your lance.
+category=game
+license=BSD-2-Clause (Parsec47, Kenta Cho)
+version=1
+
+[debian]
+apt=parsec47
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Parsec47
+type=game
+description=Retro-modern shooter: weave through the enemy fire and turn it back with your lance.
+icon=rocket
+exec=/usr/games/parsec47 -window
+keys=cross=z,circle=x,square=x,start=escape,select=escape,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=opengl
