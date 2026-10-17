@@ -54,6 +54,13 @@ mkdir -p "$R/etc/sysctl.d" "$R/etc/dhcp/dhclient-exit-hooks.d" "$R/etc/dhcp/dhcl
 install -m 644 "$ROOT/scripts/board/pspexp-usb0-dns" "$R/etc/dhcp/dhclient-enter-hooks.d/pspexp-usb0-dns"   # (its name servers after Wi-Fi's)
 install -m 644 "$ROOT/scripts/board/pspexp-usb0-metric" "$R/etc/dhcp/dhclient-exit-hooks.d/pspexp-usb0-metric"   # (the GameShell's USB network after Wi-Fi)
 install -m 644 "$ROOT/scripts/board/90-pspexp-routes.conf" "$R/etc/sysctl.d/90-pspexp-routes.conf"
+# systemd's watchdog for the console (pspexp-term pings it from its main loop): a console stuck for a
+# minute is restarted and takes the PSP back by itself (once it froze taking the PSP back after a game,
+# the PSP black until switched off). A drop-in, so a board set up before gets it with this update; in
+# effect from the next boot (no daemon-reload here: the console running now is an older one that
+# does not ping, and would be stopped)
+mkdir -p "$R/usr/lib/systemd/system/pspexp-term.service.d"
+printf '%s\n' '[Service]' 'WatchdogSec=60' 'NotifyAccess=main' > "$R/usr/lib/systemd/system/pspexp-term.service.d/pspexp-watchdog.conf"
 cat > "$W/postinst" <<'P'
 #!/bin/sh
 set -e

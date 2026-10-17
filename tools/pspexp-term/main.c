@@ -87,6 +87,9 @@
 #include <math.h>
 #include <poll.h>
 #include <signal.h>
+#include <stddef.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <stdarg.h>
 #include <ctype.h>
 #if defined(__linux__)
@@ -1451,6 +1454,55 @@ static void sess_closed(int i)
 static void on_sigchld(int s) { (void)s; g_child_died = 1; }
 static void on_usr1(int s) { (void)s; g_release_req = 1; }
 static void on_usr2(int s) { (void)s; g_acquire_req = 1; }
+
+/* systemd's watchdog (the console's unit: WatchdogSec, NotifyAccess=main): "still here" from the
+ * main loop every 2 s; a loop stuck past the limit is stopped (SIGABRT) and restarted, and takes
+ * the PSP back by itself. Once, after a game ended, the console froze for minutes taking the PSP
+ * back, the PSP black, writing "link write failed" to its log twice a second, until switched off
+ * (the user, 2026-10-17; not reproduced in 11 tries). On SIGABRT the main thread's stack goes to
+ * the log first: where it was stuck. */
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0   /* (macOS: no systemd there anyway) */
+#endif
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+static int g_wd_fd = -1;
+static struct sockaddr_un g_wd_addr;
+static socklen_t g_wd_len;
+static void watchdog_init(void)
+{
+    const char *p = getenv("NOTIFY_SOCKET");
+    size_t n;
+    if (!p || !*p || (n = strlen(p)) >= sizeof(g_wd_addr.sun_path)) return;
+    memset(&g_wd_addr, 0, sizeof(g_wd_addr));
+    g_wd_addr.sun_family = AF_UNIX;
+    memcpy(g_wd_addr.sun_path, p, n);
+    if (p[0] == '@') g_wd_addr.sun_path[0] = 0;   /* an abstract socket */
+    g_wd_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + n);
+    g_wd_fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    unsetenv("NOTIFY_SOCKET");   /* (the programs it starts are not the service) */
+}
+static void watchdog_ping(uint64_t now)
+{
+    static uint64_t last;
+    if (g_wd_fd < 0 || now - last < 2000000u) return;
+    last = now;
+    (void)sendto(g_wd_fd, "WATCHDOG=1", 10, MSG_DONTWAIT | MSG_NOSIGNAL, (struct sockaddr *)&g_wd_addr, g_wd_len);
+}
+#ifdef __GLIBC__
+#include <execinfo.h>
+static void on_abort(int s)
+{
+    void *f[64];
+    int n = backtrace(f, 64);
+    static const char m[] = "[pspexp-term] stopped (SIGABRT: the watchdog, or an abort); the stack:\n";
+    (void)!write(2, m, sizeof(m) - 1);
+    backtrace_symbols_fd(f, n, 2);
+    signal(s, SIG_DFL);
+    raise(s);
+}
+#endif
 static volatile sig_atomic_t g_quit;
 static void on_term(int s) { (void)s; g_quit = 1; }
 
@@ -3281,6 +3333,10 @@ int main(int argc, char **argv)
     signal(SIGCHLD, on_sigchld);
     signal(SIGUSR1, on_usr1);
     signal(SIGUSR2, on_usr2);
+    watchdog_init();
+#ifdef __GLIBC__
+    signal(SIGABRT, on_abort);
+#endif
     signal(SIGTERM, on_term);
     signal(SIGINT, on_term);
     /* the pid file tells pspexp-exec whom to ask for the PSP. A second
@@ -3426,6 +3482,7 @@ int main(int argc, char **argv)
         }
 
         now = pspexp_time_us();
+        watchdog_ping(now);
         connected = pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED;
         host_input_poll(connected);
         if (!connected && !g_released && (g_mode == MODE_USB || g_mode == MODE_TCP) && now - last_try > 1000000u) {
