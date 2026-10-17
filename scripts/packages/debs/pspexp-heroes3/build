@@ -3,7 +3,11 @@
 # Debian's VCMI, the open-source re-creation of its engine. Heroes III is sold,
 # not free: the player brings their own copy into ~/Heroes3 (Apps > Files):
 # GOG's installer (the .exe with its .bin beside it), unpacked with innoextract,
-# or the game's own folder (its Data, Maps and MP3). The first start copies it
+# or an installed game's folder (its Data, Maps and MP3): Shadow of Death or the
+# Complete edition, as VCMI refuses Restoration of Erathia alone (a copy whose
+# Data lacks H3ab_bmp.lod is not taken; the message says why). The CDs
+# themselves are not read: their installer cabinets need an unshield with a fix
+# (a file goes on into the next cabinet). The first start copies it
 # into VCMI's data folder (two to three minutes on a Pi 400 from GOG's
 # installer); without it the launcher says what goes there (PSPEXP_MESSAGE).
 # Nothing of the game is in this package. Arch all.
@@ -11,7 +15,7 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"
-V=1.0-pspexp1
+V=1.0-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-heroes3"
 cat > "$W/root/usr/games/heroes3" <<'S'
@@ -23,6 +27,11 @@ U="$HOME/Heroes3"
 X="$HOME/.cache/pspexp-heroes3"
 say() { echo "heroes3: $1" >&2; [ -n "$PSPEXP_MESSAGE" ] && echo "$1" > "$PSPEXP_MESSAGE"; }
 lod() { find -L "$1" -maxdepth "$2" -iname h3bitmap.lod 2>/dev/null | head -1; }   # the game's Data/H3bitmap.lod
+# Shadow of Death or the Complete edition: their Data has H3ab_bmp.lod (the expansion's), which
+# Restoration of Erathia alone lacks, and VCMI refuses to start on that ("not supported")
+expansion() { [ -n "$(find -L "$1" -maxdepth 1 -iname h3ab_bmp.lod 2>/dev/null | head -1)" ]; }
+ROE="Heroes III needs Shadow of Death or the Complete edition (GOG's): Restoration of Erathia alone does not run on VCMI"
+
 if [ -z "$(lod "$D" 2)" ]; then
 	mkdir -p "$U"
 	src= f=$(lod "$U" 4)
@@ -36,7 +45,8 @@ if [ -z "$(lod "$D" 2)" ]; then
 			break
 		done
 	fi
-	[ -n "$src" ] || { rm -rf "$X"; say "Heroes III needs your own copy: GOG's installer (the .exe and its .bin) or the game's folder, in the Heroes3 folder (Apps > Files)"; exit 1; }
+	[ -n "$src" ] || { rm -rf "$X"; say "Heroes III needs your own copy: GOG's installer (the .exe and its .bin) or an installed game's folder, in the Heroes3 folder (Apps > Files)"; exit 1; }
+	expansion "$(dirname "$(lod "$src" 1)")" || { rm -rf "$X"; say "$ROE"; exit 1; }
 	mkdir -p "$D"
 	for sub in data maps mp3; do   # (VCMI finds the files in them whatever their letter case)
 		s=$(find "$src" -maxdepth 1 -iname "$sub" | head -1)
@@ -48,6 +58,7 @@ if [ -z "$(lod "$D" 2)" ]; then
 	rm -rf "$X"
 	[ -n "$(lod "$D" 2)" ] || { say "Heroes III could not find the game's Data folder in $src"; exit 1; }
 fi
+expansion "$(dirname "$(lod "$D" 2)")" || { say "$ROE"; exit 1; }
 exec pspexp-run /usr/games/vcmiclient "$@"
 S
 chmod 755 "$W/root/usr/games/heroes3"

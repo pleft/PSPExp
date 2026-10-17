@@ -117,13 +117,24 @@ with its own maps and settings. You see less of the map at once than on a
 PC; scroll with the d-pad, or click the minimap. The Map Editor is left
 out on the PSP: it is made for a large screen and a keyboard.
 
-**Heroes of Might and Magic III** needs your own copy too, in the
-**Heroes3** folder: the installer GOG sells (the `.exe` and the `.bin`
-beside it, both), or the folder of the installed game (with its Data, Maps
-and MP3 folders), for instance one installed from the original CDs. The
-first start copies it into place: about 3 minutes from GOG's installer, a
-little over 1 from a game folder; the PSP waits meanwhile. After that you
-may delete what you put in Heroes3. It plays on VCMI, the open-source
+**Heroes of Might and Magic III** needs your own copy too. It plays on
+VCMI, which needs **Shadow of Death** or the **Complete** edition (GOG sells
+the Complete one); Restoration of Erathia alone, the first release, does not
+run on it. Put one of these in the **Heroes3** folder of your home folder
+(Apps > Files; the folder appears after the first start):
+
+- **GOG's installer**: both files, the `setup_heroes_of_might_and_magic_3_complete_….exe`
+  and the `….bin` beside it.
+- **An installed game's folder**, the one holding the **Data**, **Maps** and
+  **MP3** folders, copied from a computer where Heroes III is installed
+  (from GOG, or from the Shadow of Death or Complete CD).
+
+The CDs or their images are not read by themselves: install the game from
+the CD on a computer first and copy that folder. The first start copies the
+game into place: about 3 minutes from GOG's installer, a little over 1 from
+a game folder; the PSP waits meanwhile. If the copy is Restoration of
+Erathia, or nothing is there, the PSP says so. After that you may delete
+what you put in Heroes3. It plays on VCMI, the open-source
 engine for Heroes III. The game is laid out for a bigger screen and shown
 shrunk, so its text is small: hold **R** to see the part around the pointer
 at full size.

@@ -33,8 +33,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - **LinCity-NG** (on a Pi): the city builder, the nub as the mouse, R the
   magnifier.
 - **Heroes of Might and Magic III** (on a Pi), on VCMI, with your own copy
-  (GOG's installer, or the folder of an installed game) in the Heroes3
-  folder; R magnifies its small text.
+  of Shadow of Death or the Complete edition (GOG's installer, or the folder
+  of an installed game) in the Heroes3 folder; R magnifies its small text.
 - **Kobo Deluxe**, **Powermanga**, **TecnoballZ** and **Frozen Bubble** (on a
   Pi), the first of the SDL 1.2 games, which PSPExp now runs too, and
   Kenta Cho's OpenGL shooters **rRootage**, **Parsec47** and **Tumiki

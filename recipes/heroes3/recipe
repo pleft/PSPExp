@@ -1,8 +1,9 @@
 # Heroes of Might and Magic III (New World Computing, 1999) on VCMI, Debian's
 # open-source re-creation of its engine (package pspexp-heroes3: its start
 # script). Heroes III is sold, not free: the player brings their own copy into
-# ~/Heroes3 (Apps > Files): GOG's installer (the .exe and its .bin) or the
-# game's folder; the first start copies it into VCMI's data folder (2-3
+# ~/Heroes3 (Apps > Files): GOG's installer (the .exe and its .bin) or an
+# installed game's folder, Shadow of Death or Complete (VCMI refuses
+# Restoration of Erathia alone: the launcher says so; the CDs are not read); the first start copies it into VCMI's data folder (2-3
 # minutes from GOG's installer on a Pi 400), and without it the launcher says
 # what goes there. Nothing of the game is hosted; the cover is VCMI's icon.
 # VCMI lays itself out at 1066x604 for the PSP's 480x272 (its smallest, 800x600
@@ -17,10 +18,10 @@
 [package]
 id=heroes3
 title=Heroes III
-description=Turn-based fantasy strategy, the 1999 classic on VCMI: explore, build towns, recruit armies and fight with heroes. Put your own copy (GOG's installer) in the Heroes3 folder first.
+description=Turn-based fantasy strategy, the 1999 classic on VCMI: explore, build towns, recruit armies and fight with heroes. Needs your own copy of Shadow of Death or the Complete edition (GOG's) in the Heroes3 folder.
 category=game
 license=GPL-2.0+ (VCMI); the game's data is your own copy's (Ubisoft)
-version=1
+version=2
 
 [debian]
 apt=pspexp-heroes3
@@ -32,7 +33,7 @@ apt=
 [entry]
 title=Heroes III
 type=game
-description=Turn-based fantasy strategy on VCMI: towns, armies and heroes. Put your own copy (GOG's installer .exe and .bin) in the Heroes3 folder of your home folder first.
+description=Turn-based fantasy strategy on VCMI: towns, armies and heroes. Needs your own copy (Shadow of Death or Complete: GOG's installer, or an installed game's folder) in the Heroes3 folder.
 icon=swords
 exec=/usr/games/heroes3
 native=1
