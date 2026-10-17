@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/flycast"
 [ -x "$B/flycast" ] && [ -s "$B/depends.txt" ] || { echo "no $B/flycast: scripts/packages/build-flycast.sh $ARCH first" >&2; exit 1; }
-V=2.7+git20261017-pspexp1
+V=2.7+git20261017-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/flycast
 mkdir -p "$W/root$L" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-flycast"
@@ -24,7 +24,13 @@ cat > "$W/root/usr/games/pspexp-dreamcast" <<S
 # list). The Dreamcast's BIOS is not needed (Flycast's own HLE BIOS); a
 # player's own dc_boot.bin and dc_flash.bin in ~/roms/dreamcast/bios are used
 # when there. Flycast quits on a disc it cannot read with exit status 0: the
-# reason goes to the launcher (PSPEXP_MESSAGE).
+# reason goes to the launcher (PSPEXP_MESSAGE). Its settings keep the emulation
+# at full speed on a Pi 400, which keeps its sound whole: a window of the size
+# the PSP shows (363x272, not 640x480: less to read back each frame), rendered
+# at 240 lines, Flycast's frame skip when it falls behind, a 128 ms sound
+# buffer (Sonic Adventure 2 in play ran at 47 of its 50 frames a second at
+# 480 lines and 640x480, its sound breaking up; with these its music and
+# effects were clear).
 D="\${XDG_DATA_HOME:-\$HOME/.local/share}/flycast"
 BIOS="\$HOME/roms/dreamcast/bios"
 mkdir -p "\$D" "\$HOME/.cache"
@@ -33,7 +39,10 @@ for f in dc_boot.bin dc_flash.bin; do
 done
 E="\$HOME/.cache/pspexp-dreamcast.log"
 "$L/flycast" \\
-	-config config:rend.Resolution=480 -config config:FetchBoxart=no \\
+	-config config:rend.Resolution=240 -config window:fullscreen=no \\
+	-config window:width=363 -config window:height=272 \\
+	-config config:pvr.AutoSkipFrame=2 -config config:aica.BufferSize=5644 \\
+	-config config:FetchBoxart=no \\
 	-config config:Dreamcast.ContentPath="\$HOME/roms/dreamcast" \\
 	"\$@" 2> "\$E"
 s=\$(sed -n 's/.*Flycast has stopped: //p' "\$E" | tail -1)
