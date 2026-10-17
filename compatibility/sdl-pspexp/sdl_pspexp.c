@@ -2315,6 +2315,17 @@ HOOK(SDL_Window *, SDL_CreateWindow, (const char *title, int x, int y, int w, in
     return win;
 }
 
+/* A minimum window size on a headless board: not applied. Taisei makes its window at the PSP's
+ * 480x272 (the display's size) and then asks for at least 640x480, which SDL's offscreen driver
+ * (the board's GPU drawing) applied by growing the window: Taisei drew in the 480x272 it had asked for, the bottom-left
+ * corner of the 640x480 the layer read back */
+HOOK(void, SDL_SetWindowMinimumSize, (SDL_Window *win, int w, int h))
+{
+    const char *d = SDL_GetCurrentVideoDriver();
+    if (headless_display() || (d && !strcmp(d, "offscreen"))) { logf_("window minimum %dx%d not applied (a headless board)", w, h); return; }
+    REAL(SDL_SetWindowMinimumSize)(win, w, h);
+}
+
 /* a window let go: the next one is the program's. ScummVM makes a 32x32 OpenGL window first to see
  * what OpenGL can do and destroys it; the layer kept that one, so the real window's size never came
  * (its games stayed black, or a corner of them blown up 8.5 times) */

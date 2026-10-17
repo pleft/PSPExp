@@ -32,6 +32,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   fps in a mission on the PSP-1000.
 - **LinCity-NG** (on a Pi): the city builder, the nub as the mouse, R the
   magnifier.
+- **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
+  Pi's graphics chip, 60 fps.
 - **The PSP no longer stays black after a game** (its memory stick's light
   flashing until switched off): when the board's console restarted while
   the PSP was sending, the two never found each other again. The fix is in

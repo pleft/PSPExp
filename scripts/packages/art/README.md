@@ -39,6 +39,7 @@
 | `recipes/zsdx/cover.png` | Zelda: Mystery of Solarus DX's `data/logos/icon_256.png`, scaled | the quest's licence (Solarus Team) |
 | `recipes/cdogs/cover.png` | Debian's cdogs-sdl package, its 128x128 icon | GPL-2.0+ (C-Dogs SDL) |
 | `recipes/lincity-ng/cover.png` | Debian's lincity-ng package, its 128x128 icon | GPL-2.0+ (LinCity-NG) |
+| `recipes/taisei/cover.png` | Debian's taisei package, its 128x128 icon | MIT (Taisei) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
 | `recipes/lbreakouthd/cover.png` | Debian's lbreakouthd package, its 256x256 icon, scaled | GPL-3.0+ (LBreakout HD) |
 | `recipes/mirrormagic/cover.png` | a screenshot of Mirror Magic on the PSP (a level, the beam drawn), cropped and scaled | GPL-2.0 (Mirror Magic) |

@@ -1,0 +1,40 @@
+# Taisei: a bullet-hell shooter in the style of the Touhou games, its own
+# story, characters and music (Debian's). It asks for desktop OpenGL 3.3, which
+# the Pi 4's GPU does not report (3.1); with Mesa told 3.3 it draws correctly,
+# on the board's GPU (PSPEXP_HOSTGL), each frame sent to the PSP. Its window at
+# the PSP's 480x272 (its 4:3 picture fills the height; a vertical shooter, its
+# field cannot be widened) with fewer effects (no FXAA, no post-processing,
+# backgrounds and sprites at half resolution): 60 fps in its first stage on
+# the PSP-1000, 17-19 with its defaults. The PSP is its game controller: the
+# nub or d-pad move, cross shoots (and confirms), square focuses, triangle
+# bombs, circle skips dialogue, R the character's special, SELECT pauses.
+# Played on the PSP-1000 (2026-10-17): the menus, the story's opening, the
+# first stage, moving to both edges, shooting, a bomb. A Pi 3's GPU has OpenGL
+# 2.1 only; the GameShell's ES 2: not offered there.
+
+[package]
+id=taisei
+title=Taisei
+description=Bullet-hell shooter in the Touhou style: six stages of dense, beautiful bullet patterns, spell cards and bosses, with its own story and music. Pi 4, 400 or 5.
+category=game
+license=MIT (Taisei); CC BY 4.0 and others (its art and music)
+version=1
+
+[debian]
+apt=taisei
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Taisei
+type=game
+description=Bullet-hell shooter in the Touhou style: dense bullet patterns, spell cards and bosses. Drawn by the board's GPU (Pi 4, 400 or 5).
+icon=sparkles
+exec=/usr/games/taisei
+keys=select=escape
+env=PSPEXP_HOSTGL=1
+env=MESA_GL_VERSION_OVERRIDE=3.3
+env=MESA_GLSL_VERSION_OVERRIDE=330
+first-run=.local/share/taisei/config:fullscreen = 0\nvid_width = 480\nvid_height = 272\nfxaa = 0\npostprocess = 0\nbg_quality = 0.500000\nfg_quality = 0.500000\n
+graphics=board-gpu
