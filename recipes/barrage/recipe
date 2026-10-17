@@ -7,7 +7,8 @@
 # triangle reloads (right button, Space), START is Return, SELECT Escape
 # (leaves the range). Played on the PSP-1000 from the Pi 400 (2026-10-17):
 # the menu, the range, grenades landing, the ammunition out and reloaded;
-# 60 fps. Not yet tried on the GameShell.
+# 60 fps. The user played it on the PSP (2026-10-18): the small targets are
+# fine. Not yet tried on the GameShell.
 
 [package]
 id=barrage
