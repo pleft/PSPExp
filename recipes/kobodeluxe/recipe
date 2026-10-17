@@ -7,6 +7,9 @@
 # entry, START is its menu (Escape). Played on the PSP-1000 (2026-10-17): the
 # name entry, its menu, a game started, the ship moving and firing, 30 fps
 # (the PSP's pace for its whole-screen frame; the board alone 95).
+# On the GameShell (2026-10-17): a name entered and saved (once the board's
+# user was in the games group: before, "Cannot save player profile"), a game,
+# 22-31 fps.
 
 [package]
 id=kobodeluxe
@@ -19,9 +22,6 @@ version=1
 [debian]
 apt=kobodeluxe
 
-# (a Pi only: on the GameShell its menus about 23 fps; a game not reached in the test, 2026-10-17)
-[debian:gameshell]
-apt=
 
 [entry]
 title=Kobo Deluxe
