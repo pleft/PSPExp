@@ -1,0 +1,34 @@
+# Powermanga: an arcade shoot'em up, collect the gems to power up the ship
+# against waves of aliens (Debian's; an SDL 1.2 game, run on SDL2 by
+# sdl12-compat: pspexp-run's SDL 1.2 bridge). Its 640x400 window (--window)
+# shown at 68% on the PSP; its own 320x200 (--320) would be smaller still.
+# The d-pad or the nub move, cross fires (Ctrl), square the special weapon
+# (Alt), START pauses (P), SELECT is Escape (its menu). Played on the PSP-1000
+# (2026-10-17): a game started, the ship moving both ways, firing, scoring,
+# 60 fps in play.
+
+[package]
+id=powermanga
+title=Powermanga
+description=Arcade shoot'em up: fly through waves of aliens and bosses, collect the gems to power up your ship's weapons.
+category=game
+license=GPL-3.0+ (Powermanga)
+version=1
+
+[debian]
+apt=powermanga
+
+# (a Pi only for now: not yet tried on the GameShell)
+[debian:gameshell]
+apt=
+
+[entry]
+title=Powermanga
+type=game
+description=Arcade shoot'em up: fly through waves of aliens and bosses, collect the gems to power up your ship's weapons.
+icon=rocket
+exec=/usr/games/powermanga --window
+keys=cross=lctrl,square=lalt,circle=return,start=p,select=escape,up=up,down=down,left=left,right=right
+nub=keys
+env=PSPEXP_JOYSTICK=0
+graphics=sdl

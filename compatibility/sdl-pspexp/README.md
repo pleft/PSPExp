@@ -263,6 +263,11 @@ SDL2 itself, not as "the next after the layer" (that was SDL 1.2's
 (`-Bsymbolic` on the GameShell), so its calls to its own functions stay its
 own.
 
+An SDL 1.2 program is told the display's real size, not the PSP's: sdl12-compat
+lists the video modes up to the desktop's size, and at 480x272 Powermanga's
+640x400 was refused and it quit. Its window, whatever its size, is shrunk to
+the PSP like any other.
+
 ## Where the bytes go
 
 A frame of the test game is 26 batches, 95 sprites, 3.7 KB. Textures are

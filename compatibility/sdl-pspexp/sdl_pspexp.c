@@ -2291,6 +2291,14 @@ static int headless_display(void)
     return d && !strcmp(d, "dummy");
 }
 
+/* the display reported as the PSP's screen; not to an SDL 1.2 program (sdl12-compat lists the video
+ * modes up to the desktop's size: at 480x272, Powermanga's 640x400 was refused and it quit; its
+ * window, whatever its size, is shrunk to the PSP like any other) */
+static int psp_display(void)
+{
+    return headless_display() && !getenv("PSPEXP_SDL12_LAYER");
+}
+
 static void psp_mode(SDL_DisplayMode *m)
 {
     if (!m) return;
@@ -2302,28 +2310,28 @@ static void psp_mode(SDL_DisplayMode *m)
 HOOK(int, SDL_GetDesktopDisplayMode, (int index, SDL_DisplayMode *mode))
 {
     int r = REAL(SDL_GetDesktopDisplayMode)(index, mode);
-    if (r == 0 && headless_display()) psp_mode(mode);
+    if (r == 0 && psp_display()) psp_mode(mode);
     return r;
 }
 
 HOOK(int, SDL_GetCurrentDisplayMode, (int index, SDL_DisplayMode *mode))
 {
     int r = REAL(SDL_GetCurrentDisplayMode)(index, mode);
-    if (r == 0 && headless_display()) psp_mode(mode);
+    if (r == 0 && psp_display()) psp_mode(mode);
     return r;
 }
 
 HOOK(int, SDL_GetDisplayBounds, (int index, SDL_Rect *rect))
 {
     int r = REAL(SDL_GetDisplayBounds)(index, rect);
-    if (r == 0 && rect && headless_display()) { rect->x = 0; rect->y = 0; rect->w = PSP_W; rect->h = PSP_H; }
+    if (r == 0 && rect && psp_display()) { rect->x = 0; rect->y = 0; rect->w = PSP_W; rect->h = PSP_H; }
     return r;
 }
 
 HOOK(int, SDL_GetDisplayUsableBounds, (int index, SDL_Rect *rect))
 {
     int r = REAL(SDL_GetDisplayUsableBounds)(index, rect);
-    if (r == 0 && rect && headless_display()) { rect->x = 0; rect->y = 0; rect->w = PSP_W; rect->h = PSP_H; }
+    if (r == 0 && rect && psp_display()) { rect->x = 0; rect->y = 0; rect->w = PSP_W; rect->h = PSP_H; }
     return r;
 }
 
