@@ -32,6 +32,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   in a mission on the PSP-1000.
 - **LinCity-NG** (on a Pi): the city builder, the nub as the mouse, R the
   magnifier.
+- **Heroes of Might and Magic III** (on a Pi), on VCMI, with your own copy
+  (GOG's installer, or the folder of an installed game) in the Heroes3
+  folder; R magnifies its small text.
 - **Taisei** (on a Pi 4, 400 or 5): the bullet-hell shooter, drawn by the
   Pi's graphics chip, 60 fps.
 - **The PSP no longer stays black after a game** (its memory stick's light

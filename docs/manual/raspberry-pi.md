@@ -117,6 +117,17 @@ with its own maps and settings. You see less of the map at once than on a
 PC; scroll with the d-pad, or click the minimap. The Map Editor is left
 out on the PSP: it is made for a large screen and a keyboard.
 
+**Heroes of Might and Magic III** needs your own copy too, in the
+**Heroes3** folder: the installer GOG sells (the `.exe` and the `.bin`
+beside it, both), or the folder of the installed game (with its Data, Maps
+and MP3 folders), for instance one installed from the original CDs. The
+first start copies it into place: about 3 minutes from GOG's installer, a
+little over 1 from a game folder; the PSP waits meanwhile. After that you
+may delete what you put in Heroes3. It plays on VCMI, the open-source
+engine for Heroes III. The game is laid out for a bigger screen and shown
+shrunk, so its text is small: hold **R** to see the part around the pointer
+at full size.
+
 ## What it plays like
 
 Measured on the PSP-1000 with a Pi 400:
@@ -150,6 +161,7 @@ Measured on the PSP-1000 with a Pi 400:
 | LinCity-NG | the city builder, its window shrunk to the PSP's screen (small text; R magnifies round the pointer); the nub is the mouse, cross clicks, circle the right button, the d-pad scrolls the map; the game moves at its own 10-13 frames a second |
 | Taisei | the bullet-hell shooter, drawn by the Pi's graphics chip (a Pi 4, 400 or 5): 60 fps in its first stage on the PSP-1000, with fewer effects; cross shoots, square focuses, triangle bombs, circle skips dialogue, SELECT pauses |
 | Numpty Physics | drawn by the PSP, at its own screen size; the nub is the pen (cross held draws), circle undoes a stroke, triangle restarts, L / R the previous / next level |
+| Heroes of Might and Magic III | on VCMI, your own copy (above): 55-60 fps on the PSP-1000; the nub is the mouse, cross clicks, circle shows what a thing is, the d-pad scrolls the map, R the magnifier, START Escape |
 | Heroes of Might and Magic II | the 1996 strategy game on fheroes2: its demo (one scenario), downloaded when installed, or your own copy (above); the nub is the mouse, cross clicks, circle held shows what a creature or building is; its screen is larger than the PSP's, so **R is a magnifier**: the game's own pixels around the pointer, for its small text, R again the whole screen; L the next hero, triangle ends the turn, square moves the hero, the d-pad scrolls, START cancels, SELECT is OK |
 | Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |
 | Warcraft II | drawn by the PSP: 54-60 fps from the Pi; your own copy (above); menus and game at the PSP's 480x272 |

@@ -2456,10 +2456,13 @@ HOOK(SDL_Texture *, SDL_CreateTexture, (SDL_Renderer *r, Uint32 format, int acce
             /* a whole frame larger than 512 on a side (Project: Starfighter's
              * 800x600): the PSP shows it at under half size, so it is kept and
              * sent at half (1.2 MB a frame was 13 fps); PSPEXP_TEX_HALF=0: not */
-            if ((w > 512 || h > 512) && !(getenv("PSPEXP_TEX_HALF") && !strcmp(getenv("PSPEXP_TEX_HALF"), "0"))) {
+            /* (asked for, PSPEXP_TEX_FIT first: VCMI's 1066x604 kept at half, 533x302, was shrunk again by
+             * the PSP, a dark line where its texture's tiles met; fitted it is the PSP's 480x272, 1:1) */
+            if (make_fit(x, w, h, NULL)) ;
+            else if ((w > 512 || h > 512) && !(getenv("PSPEXP_TEX_HALF") && !strcmp(getenv("PSPEXP_TEX_HALF"), "0"))) {
                 x->half = 1; x->w = (w + 1) / 2; x->h = (h + 1) / 2;
                 logf_("streaming texture %dx%d kept at half size (%dx%d)", w, h, x->w, x->h);
-            } else make_fit(x, w, h, NULL);
+            }
         }
         if (x) x->blend = SDL_BLENDMODE_NONE;   /* SDL's default for SDL_CreateTexture */
     }

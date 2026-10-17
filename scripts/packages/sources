@@ -88,6 +88,9 @@ PACKAGES = {
     "pspexp-runtime": dict(what="PSPExp's runtime for the PSP", own=True, comps=[],
                            ours=["scripts/packages/debs/pspexp-runtime/build"], own_licences=["LICENSE"],
                            note="Built with the pspdev toolchain and PSPSDK (BSD), https://github.com/pspdev."),
+    "pspexp-heroes3": dict(what="PSPExp's start script for Heroes III on VCMI", own=True, comps=[],
+                           ours=["scripts/packages/debs/pspexp-heroes3/build"], own_licences=["LICENSE"],
+                           note="VCMI itself is Debian's vcmi package (GPL-2.0+); the game's data is the player's own copy."),
     "pspexp-retro": dict(what="PSPExp's libretro player", own=True, comps=[],
                          ours=["scripts/packages/debs/pspexp-retro/build"], own_licences=["LICENSE", "tools/pspexp-retro/libretro.h"]),
 }

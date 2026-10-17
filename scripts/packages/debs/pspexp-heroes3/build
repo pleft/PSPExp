@@ -1,0 +1,70 @@
+#!/bin/sh
+# pspexp-heroes3: Heroes of Might and Magic III (New World Computing, 1999) on
+# Debian's VCMI, the open-source re-creation of its engine. Heroes III is sold,
+# not free: the player brings their own copy into ~/Heroes3 (Apps > Files):
+# GOG's installer (the .exe with its .bin beside it), unpacked with innoextract,
+# or the game's own folder (its Data, Maps and MP3). The first start copies it
+# into VCMI's data folder (two to three minutes on a Pi 400 from GOG's
+# installer); without it the launcher says what goes there (PSPEXP_MESSAGE).
+# Nothing of the game is in this package. Arch all.
+# Usage: build OUTDIR
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"
+V=1.0-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-heroes3"
+cat > "$W/root/usr/games/heroes3" <<'S'
+#!/bin/sh
+# Heroes III (package pspexp-heroes3): the player's own copy in ~/Heroes3, copied
+# once into VCMI's data folder, then VCMI through the SDL layer
+D="${XDG_DATA_HOME:-$HOME/.local/share}/vcmi"
+U="$HOME/Heroes3"
+X="$HOME/.cache/pspexp-heroes3"
+say() { echo "heroes3: $1" >&2; [ -n "$PSPEXP_MESSAGE" ] && echo "$1" > "$PSPEXP_MESSAGE"; }
+lod() { find -L "$1" -maxdepth "$2" -iname h3bitmap.lod 2>/dev/null | head -1; }   # the game's Data/H3bitmap.lod
+if [ -z "$(lod "$D" 2)" ]; then
+	mkdir -p "$U"
+	src= f=$(lod "$U" 4)
+	if [ -n "$f" ]; then src=$(dirname "$(dirname "$f")"); how=cp
+	else
+		for e in "$U"/*.exe "$U"/*.EXE; do   # GOG's installer: the one innoextract reads
+			[ -f "$e" ] && innoextract -q -i "$e" >/dev/null 2>&1 || continue
+			rm -rf "$X"; mkdir -p "$X"
+			innoextract -q -L -d "$X" "$e" >&2 || { say "Heroes III could not unpack $(basename "$e"): is its .bin beside it?"; rm -rf "$X"; exit 1; }
+			f=$(lod "$X" 4); [ -n "$f" ] && { src=$(dirname "$(dirname "$f")"); how=mv; }
+			break
+		done
+	fi
+	[ -n "$src" ] || { rm -rf "$X"; say "Heroes III needs your own copy: GOG's installer (the .exe and its .bin) or the game's folder, in the Heroes3 folder (Apps > Files)"; exit 1; }
+	mkdir -p "$D"
+	for sub in data maps mp3; do   # (VCMI finds the files in them whatever their letter case)
+		s=$(find "$src" -maxdepth 1 -iname "$sub" | head -1)
+		[ -n "$s" ] || continue
+		rm -rf "$D/$sub.new"
+		if [ "$how" = mv ]; then mv "$s" "$D/$sub.new"; else cp -r "$s" "$D/$sub.new"; fi
+		rm -rf "$D/$sub"; mv "$D/$sub.new" "$D/$sub"
+	done
+	rm -rf "$X"
+	[ -n "$(lod "$D" 2)" ] || { say "Heroes III could not find the game's Data folder in $src"; exit 1; }
+fi
+exec pspexp-run /usr/games/vcmiclient "$@"
+S
+chmod 755 "$W/root/usr/games/heroes3"
+echo "Heroes of Might and Magic III on VCMI (Debian's vcmi, GPL-2.0+). The game's data is the player's own copy, put in ~/Heroes3 and copied into VCMI's data folder at the first start; nothing of the game is in this package." > "$W/root/usr/share/doc/pspexp-heroes3/README"
+cat > "$W/control" <<C
+Package: pspexp-heroes3
+Version: $V
+Architecture: all
+Maintainer: PSPExp <info@pspexp.dev>
+Section: contrib/games
+Priority: optional
+Depends: vcmi, innoextract
+Description: Heroes of Might and Magic III on VCMI, for PSPExp
+ Starts VCMI, the open-source engine for Heroes of Might and Magic III,
+ with the player's own copy: GOG's installer or the game's folder, placed
+ in ~/Heroes3; it is copied into VCMI's data folder on the first start.
+ Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-heroes3 "$V" "$W/root/usr/share/doc/pspexp-heroes3"   # licences, and where the complete source is (Package_Manager §6.2)
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-heroes3_${V}_all.deb"
