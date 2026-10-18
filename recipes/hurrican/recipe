@@ -28,10 +28,10 @@ exec=/usr/games/hurrican
 keys=cross=lalt,square=lctrl,circle=lshift,triangle=space,r=rctrl,l=rshift,select=return,start=esc,up=up,down=down,left=left,right=right
 nub=keys
 graphics=opengl
-control=dpad nub: Run; up aims up, down ducks
+control=dpad nub: Run; up looks up, down ducks
 control=cross: Jump; OK in menus
 control=square: Shoot
-control=circle: Lightning whip; back in menus
+control=circle: Lightning beam; back in menus
 control=triangle: Power line
 control=r: Throw a grenade
 control=l: Smart bomb

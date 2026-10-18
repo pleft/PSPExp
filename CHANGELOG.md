@@ -57,6 +57,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   button does in it, for every game in Packages; an emulated game shows
   which of the console's buttons each PSP button is. Cross plays, circle
   goes back. Installed games get theirs as an update in Packages.
+- **Pinball**: the d-pad moves in its menu again. **SuperTux**: L and R
+  look up and down (they did nothing).
 - **Typing in games**: when a game asks for text (a character's name), the
   PSP's own keyboard opens over it (with the PSP's part updated).
 - **Commander Keen 1 and 4**: id Software's platform classics, their

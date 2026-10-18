@@ -41,5 +41,6 @@ graphics=board-gpu
 control=dpad nub: Move
 control=cross: Shoot; confirm
 control=square: Focus: move slowly, aim closer
-control=circle: Bomb; skip dialogue
+control=triangle: Bomb
+control=circle: Back in menus
 control=select: Pause

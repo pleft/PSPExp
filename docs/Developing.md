@@ -373,7 +373,7 @@ tools/               pspexp-term (the PSP as a console, with the launcher and a
                      PSP for screenshots; PSPEXP_SERVER_TEXT=TEXT answers a game's
                      keyboard request with TEXT, as if typed; PSPEXP_SDL_SHOT=FILE.bmp
                      saves every 30th frame, with a %d in the name every frame,
-                     numbered), pspexp-ms (the memory stick from a
+                     numbered, or every PSPEXP_SDL_SHOT_EVERY-th), pspexp-ms (the memory stick from a
                      shell), usb-bench (pspexp-bench)
 examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)

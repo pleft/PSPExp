@@ -26,6 +26,6 @@ graphics=opengl
 control=nub: Tilt the floor
 control=dpad: Move in the menus
 control=cross: Choose in menus
-control=circle: Back
+control=circle: Back in menus
 control=l r: Turn the view left, right
 control=select: Pause

@@ -90,7 +90,14 @@ read from the entry's file when it is chosen, not kept in the library, so the
 lists of entries and ROMs stay small (`lib_controls`); a ROM shows its
 system's lines, from the `.system` file; the control port's
 `state` says `launcher.mode=controls` while it shows. Shown on the PSP-1000 from a Pi 400
-(Morrowind's, 2026-10-18): readable at its size.
+(Morrowind's, 2026-10-18): readable at its size. The doubtful lines were checked by pressing
+the button in the game (the entry's own command into the stand-in, `pad:` presses in
+`PSPEXP_SCRIPT`, frames before and after): Taisei (triangle bombs, circle only backs
+out), Simutrans (L out, R in, circle drags the map), Hurrican (up looks up, down ducks,
+circle the lightning beam), Neverball and Neverputt (L and R turn Neverball's view,
+the d-pad aims in Neverputt, START does not pause). Two recipes were wrong: Pinball's
+d-pad sent nothing, so its menu could not be moved in, and SuperTux's L and R sent Page
+Up and Down, which it does not use (Home and End look up and down).
 A game started from the launcher is preceded by its "Starting" frame, which
 the PSP keeps with a spinner turning on it until the game draws (the
 hand-over `DISCONNECT`, docs/PSPExp_Technical_Architecture.md §9.2). SELECT

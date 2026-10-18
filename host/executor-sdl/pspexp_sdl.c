@@ -251,11 +251,16 @@ static uint32_t op_present(void *u)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
     /* PSPEXP_SDL_SHOT=<file.bmp>: save every 30th frame (for headless checks); with a %d in the
-     * name, every frame under its number (a program that draws rarely, the launcher) */
+     * name, every frame under its number (a program that draws rarely, the launcher), or every
+     * PSPEXP_SDL_SHOT_EVERY-th */
     static const char *shot = NULL;
     static int shot_checked = 0, frames = 0, every = 0;
-    if (!shot_checked) { shot = getenv("PSPEXP_SDL_SHOT"); shot_checked = 1; every = shot && strstr(shot, "%d"); }
-    if (shot && (every || frames % 30 == 0)) {
+    if (!shot_checked) {
+        const char *n = getenv("PSPEXP_SDL_SHOT_EVERY");
+        shot = getenv("PSPEXP_SDL_SHOT"); shot_checked = 1;
+        if (shot && strstr(shot, "%d")) every = n && atoi(n) > 0 ? atoi(n) : 1;
+    }
+    if (shot && frames % (every ? every : 30) == 0) {
         char name[512];
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(x->ren, &w, &h);
