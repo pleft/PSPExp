@@ -521,7 +521,11 @@ cancelled, or not shown) comes once through `pspexp_text_result`. The SDL
 layer opens it when a game turns text input on (a text field focused) after
 the layer turned it off once the game was drawing (SDL2 starts with it on;
 OpenMW then never turned it on for its first field), and gives the game the
-text as SDL_TEXTINPUT and Enter. Tried: the PSP runtime under PPSSPP opened
+text as SDL_TEXTINPUT and Enter. Only a turn from off to on opens it, never
+within 1.5 s of an answer: X-Moto's first start, asking for a profile name,
+called `SDL_StartTextInput` with text input already on and took Enter back to
+its field, and the keyboard opened 1094 times in a test run (2026-10-18; with
+the check, once). Tried: the PSP runtime under PPSSPP opened
 the keyboard for OpenMW's name field from the Pi; the answer's path through
 the stand-in (`PSPEXP_SERVER_TEXT`: a preset answer), the name taken and
 character creation going on. On the PSP-1000 from the GameShell (a test

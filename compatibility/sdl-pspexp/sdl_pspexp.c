@@ -2606,6 +2606,31 @@ HOOK(int, SDL_SetTextureBlendMode, (SDL_Texture *t, SDL_BlendMode mode))
     return REAL(SDL_SetTextureBlendMode)(t, mode);
 }
 
+/* The renderer followed destroyed: its textures go with it inside SDL (no SDL_DestroyTexture for
+ * them), so their records go here, and the next renderer the game makes is the one followed. Mirror
+ * Magic replaces its renderer once it has loaded: the layer kept the first one and sent nothing more
+ * (0.4 fps); it had worked while the new renderer happened to get the old one's address
+ * (2026-10-18). */
+HOOK(void, SDL_DestroyRenderer, (SDL_Renderer *r))
+{
+    if (r && r == S.ren) {
+        while (S.textures) {
+            Tex *x = S.textures;
+            S.textures = x->next;
+            tex_unhash(x);
+            if (link_up()) release_pages(x);
+            free(x->rgba);
+            free(x->full);
+            free(x->ops);
+            free(x);
+        }
+        S.ren = NULL;
+        S.log_w = S.log_h = 0;
+        logf_("renderer destroyed: the next one is followed");
+    }
+    REAL(SDL_DestroyRenderer)(r);
+}
+
 HOOK(void, SDL_DestroyTexture, (SDL_Texture *t))
 {
     Tex **pp = &S.textures, *y;
@@ -2863,8 +2888,12 @@ static void shot_trigger(void);
  * input on, and OpenMW then never turned it on for its first field (it was on already): the layer
  * turns it off once, when the link is up and the game is drawing (as SDL3 starts), so a game
  * that wants text turns it on; one turning it on before that (at its start) sees no keyboard.
+ * Only a real turn from off to on opens it, and not within 1.5 s of the PSP's answer: X-Moto's
+ * profile name called SDL_StartTextInput over and over with text input on, and took Enter back to
+ * its field, and the keyboard opened 1094 times in a run (2026-10-18).
  * PSPEXP_TEXT=0: never. */
 static int g_text_stopped;   /* text input turned off since the game started drawing (the layer or the game) */
+static Uint32 g_text_answered;   /* when the PSP's keyboard last answered (SDL_GetTicks) */
 static void text_ready(void)
 {
     static int done;
@@ -2878,6 +2907,7 @@ static void text_deliver(void)
     char t[1025];
     int status = 0;
     if (!pspexp_text_result(S.ctx, t, sizeof(t), &status)) return;
+    g_text_answered = SDL_GetTicks();
     logf_("keyboard: %s (%u bytes)", status == PSPEXP_TEXT_OK ? "typed" : status == PSPEXP_TEXT_CANCELLED ? "cancelled" : "not shown", (unsigned)strlen(t));
     if (status != PSPEXP_TEXT_OK) return;
     {
@@ -2906,8 +2936,10 @@ HOOK(void, SDL_StopTextInput, (void))
 
 HOOK(void, SDL_StartTextInput, (void))
 {
+    int was_on = SDL_IsTextInputActive();
     REAL(SDL_StartTextInput)();
-    if (!g_text_stopped || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
+    if (was_on || !g_text_stopped || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
+    if (g_text_answered && SDL_GetTicks() - g_text_answered < 1500) return;
     if (!S.active || !link_up()) return;
     link_lock();
     if (pspexp_text_supported(S.ctx) && !pspexp_text_pending(S.ctx)) {
