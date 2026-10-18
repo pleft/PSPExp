@@ -13,6 +13,7 @@
 # Mars map and first level, Keen 4's Shadowlands; 60 fps; the user played Keen
 # 1 (its jump). On the GameShell with the PSP-1000 (2026-10-18): both
 # episodes, Keen 1's map and Keen 4's Shadowlands, 55-60 fps.
+# The user played both on the GameShell (2026-10-18): fine.
 
 [package]
 id=commander-keen
