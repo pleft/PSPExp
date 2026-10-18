@@ -526,7 +526,15 @@ the keyboard for OpenMW's name field from the Pi; the answer's path through
 the stand-in (`PSPEXP_SERVER_TEXT`: a preset answer), the name taken and
 character creation going on. On the PSP-1000 from the GameShell (a test
 program turning text input off and on): the keyboard opened, the text
-typed on the PSP arrived as SDL_TEXTINPUT followed by Enter, the link kept.*
+typed on the PSP arrived as SDL_TEXTINPUT followed by Enter, the link kept. OpenMW on the Pi from the launcher, with the PSP shooters'
+layout (the nub looks, the face buttons move, L activates and presses a
+dialog's default button, R attacks and clicks): the name typed on the PSP,
+moving and looking right; its pointer at first invisible, two layer fixes
+(the pointer left off-screen when its window shrank from 1920x1080 to
+480x272; its cursor pictures empty, 32x32 with no visible pixel, the arrow
+drawn instead). Its menus are laid out for at least 800x600 (the main menu's
+items over the logo, the options window larger than the screen): not yet
+fitted.*
 
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 

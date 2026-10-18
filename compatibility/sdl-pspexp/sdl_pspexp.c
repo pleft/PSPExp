@@ -623,6 +623,10 @@ static void fit_rescale(Tex *x);
 static void update_scale(void)
 {
     Tex *tx;
+    /* a window made smaller: the pointer back inside it (OpenMW's 1920x1080 window resized to
+     * 480x272 left the pointer at 960,540, off the PSP's screen: no pointer, and clicks off the
+     * dialogs) */
+    if (S.win_w > 0 && S.win_h > 0 && (S.px >= S.win_w || S.py >= S.win_h)) { S.px = S.win_w / 2.0f; S.py = S.win_h / 2.0f; }
     place_frame(1);
     for (tx = S.textures; tx; tx = tx->next) if (tx->fit) fit_rescale(tx);
 }
@@ -2991,12 +2995,19 @@ HOOK(SDL_Cursor *, SDL_CreateColorCursor, (SDL_Surface *surf, int hot_x, int hot
         while (tw < surf->w) tw *= 2;
         while (th < surf->h) th *= 2;
         if (cv && (g->px = (uint16_t *)calloc((size_t)tw * th, 2))) {
+            int seen = 0;
             for (y = 0; y < surf->h; y++)
                 for (x = 0; x < surf->w; x++) {
                     uint32_t v = ((const uint32_t *)(const void *)((const Uint8 *)cv->pixels + (size_t)y * cv->pitch))[x];
                     g->px[(size_t)y * tw + x] = (uint16_t)(((v >> 4) & 0xF) | (((v >> 12) & 0xF) << 4) | (((v >> 20) & 0xF) << 8) | (((v >> 28) & 0xF) << 12));
+                    seen |= (v >> 28) != 0;
                 }
-            g->c = c; g->w = surf->w; g->h = surf->h; g->hx = hot_x; g->hy = hot_y; g->texw = tw; g->texh = th; g->tex = 0;
+            /* a picture with no visible pixel is not taken: the layer's arrow is drawn instead
+             * (OpenMW's cursors, decompressed on the GPU, came out empty on a board's offscreen
+             * context: the pointer was drawn and could not be seen). A game hiding the pointer
+             * this way uses SDL_CreateCursor or SDL_ShowCursor (see SDL_CreateCursor) */
+            if (!seen) { free(g->px); g->px = NULL; }
+            else { g->c = c; g->w = surf->w; g->h = surf->h; g->hx = hot_x; g->hy = hot_y; g->texw = tw; g->texh = th; g->tex = 0; }
         }
         if (cv) SDL_FreeSurface(cv);
     }
