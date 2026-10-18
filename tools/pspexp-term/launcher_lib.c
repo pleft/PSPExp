@@ -414,6 +414,35 @@ LEntry *lib_find(Library *L, const char *id)
     return NULL;
 }
 
+typedef struct { char *out; size_t n, len; int lines; } Controls;
+static void controls_kv(void *u, const char *k, const char *v)
+{
+    Controls *c = (Controls *)u;
+    size_t l = strlen(v);
+    if (strcmp(k, "control") || !strchr(v, ':') || c->len + l + 2 > c->n) return;
+    memcpy(c->out + c->len, v, l);
+    c->len += l;
+    c->out[c->len++] = '\n';
+    c->out[c->len] = 0;
+    c->lines++;
+}
+
+int lib_controls(const Library *L, const LEntry *e, char *out, size_t n)
+{
+    char p[900];
+    const char *slash;
+    Controls c;
+    if (!n) return 0;
+    out[0] = 0;
+    if (!strncmp(e->id, "p:", 2) && (slash = strchr(e->id + 2, '/')))
+        snprintf(p, sizeof(p), "%s/apps/%.*s/%s.entry", L->root, (int)(slash - e->id - 2), e->id + 2, slash + 1);
+    else if (!strncmp(e->id, "e:", 2)) snprintf(p, sizeof(p), "%s/library/%s.entry", L->home, e->id + 2);
+    else return 0;
+    c.out = out; c.n = n; c.len = 0; c.lines = 0;
+    read_kv(p, controls_kv, &c);
+    return c.lines;
+}
+
 void lib_command(const Library *L, const LEntry *e, char *out, size_t n)
 {
     size_t o = 0;

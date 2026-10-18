@@ -371,7 +371,9 @@ tools/               pspexp-term (the PSP as a console, with the launcher and a
                      file manager whose drives include the PSP's memory stick),
                      pspexp-retro (emulator player), pspexp-sdl-server (a stand-in
                      PSP for screenshots; PSPEXP_SERVER_TEXT=TEXT answers a game's
-                     keyboard request with TEXT, as if typed), pspexp-ms (the memory stick from a
+                     keyboard request with TEXT, as if typed; PSPEXP_SDL_SHOT=FILE.bmp
+                     saves every 30th frame, with a %d in the name every frame,
+                     numbered), pspexp-ms (the memory stick from a
                      shell), usb-bench (pspexp-bench)
 examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)

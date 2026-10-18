@@ -31,6 +31,7 @@
 #include "pspexp_version.h"   /* PSPEXP_VERSION: generated at build time (cmake/pspexp_version.cmake) */
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include <strings.h>
 #include <math.h>
@@ -356,6 +357,10 @@ static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
 static int g_spin_x, g_spin_y, g_spin_drawn;   /* the "Starting" frame's spinner square (draw_running) */
 static LEntry g_running_e;
+/* the controls sheet: shown when a game with control= lines is chosen, X starts it, O goes back */
+static int g_sheet, g_sheet_n;
+static LEntry g_sheet_e;
+static char g_sheet_ctl[1200];
 static uint64_t g_confirm_until;
 static char g_confirm[32];
 static int g_bat = -2, g_chg, g_wifi = -2, g_minute = -1;
@@ -773,12 +778,25 @@ static void run_action(LEntry *e, uint64_t now)
 static void open_system(const LEntry *e, uint64_t now);
 static void open_group(LEntry *e, uint64_t now);
 
+static void start_entry(LEntry *e, uint64_t now);
 static void launch(LEntry *e, uint64_t now)
 {
     if (is_system_item(e)) { open_system(e, now); return; }
     if (is_group_item(e)) { open_group(e, now); return; }
     if (e->type == LT_ACTION) { run_action(e, now); return; }
     if (is_builtin(e)) { lib_recent_push(&L, e->id); run_action(e, now); cats_build(); return; }
+    if ((g_sheet_n = lib_controls(&L, e, g_sheet_ctl, sizeof(g_sheet_ctl))) > 0) {   /* its controls first */
+        g_sheet = 1;
+        g_sheet_e = *e;
+        g_dirty = 1;
+        return;
+    }
+    start_entry(e, now);
+}
+
+static void start_entry(LEntry *e, uint64_t now)
+{
+    (void)now;
     lib_command(&L, e, g_launch_cmd, sizeof(g_launch_cmd));
     snprintf(g_launch_cwd, sizeof(g_launch_cwd), "%s", e->dir[0] ? e->dir : "/");
     g_launch_aware = e->pspexp || strstr(g_launch_cmd, "pspexp-") != NULL;
@@ -862,7 +880,7 @@ void launcher_state(char *out, size_t n)
     LEntry *e = cur_entry();
     int i;
     l += (size_t)snprintf(out + l, n > l ? n - l : 0, "launcher.mode=%s\nlauncher.category=%s\nlauncher.selected=%s\nlauncher.items=",
-                          g_mode >= 0 && g_mode < 7 ? modes[g_mode] : "?", g_ncat ? g_cat[g_cur].name : "", e ? e->title : "");
+                          g_sheet ? "controls" : g_mode >= 0 && g_mode < 7 ? modes[g_mode] : "?", g_ncat ? g_cat[g_cur].name : "", e ? e->title : "");
     for (i = 0; g_ncat && i < g_cat[g_cur].n && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[g_cur].it[i]->title);
     if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.categories=");
     for (i = 0; i < g_ncat && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[i].name);
@@ -1679,6 +1697,11 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     LEntry *e;
     if (b || pressed || up || down || left || right) { if (launcher_still(now)) g_dirty = 1; g_input_at = now; }   /* (scrolling starts again) */
     if (g_running || !g_ncat) return;
+    if (g_sheet) {
+        if (pressed & PSPEXP_BUTTON_CROSS) { g_sheet = 0; start_entry(&g_sheet_e, now); }
+        else if (pressed & PSPEXP_BUTTON_CIRCLE) { g_sheet = 0; g_dirty = 1; }
+        return;
+    }
     if (g_mode == M_HOME) { home_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
@@ -2507,6 +2530,68 @@ static void draw_details(float dt)
     }
 }
 
+/* a button's mark on the controls sheet: the face buttons' own, the others' names in a badge;
+ * its width */
+static int sheet_button(const char *b, int x, int y)
+{
+    static const char *const names[][2] = {
+        { "l", "L" }, { "r", "R" }, { "start", "START" }, { "select", "SELECT" }, { "nub", "NUB" },
+        { "dpad", "D-PAD" }, { "up", "UP" }, { "down", "DOWN" }, { "left", "LEFT" }, { "right", "RIGHT" },
+    };
+    const char *t = b;
+    int i, bw;
+    if (!strcmp(b, "cross")) { gfx_button('x', x, y); return 14; }
+    if (!strcmp(b, "circle")) { gfx_button('o', x, y); return 14; }
+    if (!strcmp(b, "triangle")) { gfx_button('t', x, y); return 14; }
+    if (!strcmp(b, "square")) { gfx_button('s', x, y); return 14; }
+    for (i = 0; i < (int)(sizeof(names) / sizeof(names[0])); i++) if (!strcmp(b, names[i][0])) t = names[i][1];
+    bw = gfx_text_width(FONT_BADGE, t) + 10;
+    gfx_nine(NINE_R6, x, y, bw, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, x + 5, y + (14 - gfx_line_height(FONT_BADGE)) / 2, t, C_SUB, 255, 0);
+    return bw;
+}
+
+/* the controls sheet: the game's cover and title at the left, its control= lines at the right
+ * ("cross square: Jump", the buttons' marks then what they do), X to play */
+#define SHEET_X   164
+#define SHEET_KEY 82    /* the buttons' column; a line with more buttons pushes its text along */
+static void draw_sheet(void)
+{
+    const char *p = g_sheet_ctl;
+    int y = 44, x, pitch = g_sheet_n > 10 ? 17 : 19;
+    gfx_shadow(NINE_SHADOW14, 16, 28 + 8, COVER_SIZE, COVER_SIZE, 0x000000, 180);
+    draw_cover(&g_sheet_e, 16, 28, 255);
+    gfx_text(FONT_TITLE, 16, 166, g_sheet_e.title, C_TEXT, 255, COVER_SIZE + 8);
+    gfx_icon("gamepad-2", 18, SHEET_X, 13, C_ACCENT, 255);
+    gfx_text(FONT_TITLE, SHEET_X + 26, 11, "Controls", C_TEXT, 255, 0);
+    while (*p && y + 14 < HINT_Y - 6) {
+        const char *nl = strchr(p, '\n'), *colon = strchr(p, ':');
+        char b[24], text[200];
+        const char *q = p;
+        if (!nl) nl = p + strlen(p);
+        if (!colon || colon > nl) { p = *nl ? nl + 1 : nl; continue; }
+        x = SHEET_X;
+        while (q < colon) {   /* the buttons, space-separated */
+            int n = 0;
+            while (q < colon && *q == ' ') q++;
+            while (q < colon && *q != ' ' && n < (int)sizeof(b) - 1) b[n++] = (char)tolower((unsigned char)*q++);
+            b[n] = 0;
+            if (n) x += sheet_button(b, x, y) + 3;
+        }
+        q = colon + 1;
+        while (*q == ' ') q++;
+        snprintf(text, sizeof(text), "%.*s", (int)(nl - q), q);
+        x = x + 5 > SHEET_X + SHEET_KEY ? x + 5 : SHEET_X + SHEET_KEY;
+        gfx_text(FONT_SMALL, x, y - 1, text, C_SUB, 255, SCREEN_W - 16 - x);
+        y += pitch;
+        p = *nl ? nl + 1 : nl;
+    }
+    x = 16;
+    gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Play", C_SUB, 255, 0) + 14;
+    gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Back", C_SUB, 255, 0);
+    hint_right(SCREEN_W - 16, "START + SELECT", "held, quits the game");
+}
+
 /* the program being started: the last frame the PSP shows before it, which keeps it and turns a
  * spinner on the pill's square (PspExpDisconnect, launcher_handover_spinner) until the program draws */
 #define SPIN_BG 0x16223c
@@ -2736,6 +2821,7 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
     pspexp_set_clip(ctx, 0, 0, SCREEN_W, SCREEN_H);
     gfx_backdrop();
     if (g_running) draw_running();
+    else if (g_sheet) draw_sheet();
     else if (g_mode == M_SEARCH) draw_search(dt);
     else if (g_mode == M_ABOUT) draw_about(dt);
     else if (g_mode == M_PICK) draw_pick(dt);

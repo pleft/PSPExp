@@ -82,6 +82,13 @@ so no SIGUSR2 comes), the console notices within a second that the process
 which sent SIGUSR1 is gone and takes the PSP back itself (2026-10-18: a run
 ended that way left the console released for hours, the PSP on its waiting
 screen, until a SIGUSR2 by hand).
+A game whose entry has `control=` lines (docs/Package_Manager.md §4.2) shows
+them first, the controls sheet: its cover and title at the left, a line per
+control at the right (the face buttons' own marks, the others' names in
+badges), X to play, O back (the user's suggestion, 2026-10-18). The lines are
+read from the entry's file when it is chosen, not kept in the library, so the
+lists of entries and ROMs stay small (`lib_controls`); the control port's
+`state` says `launcher.mode=controls` while it shows.
 A game started from the launcher is preceded by its "Starting" frame, which
 the PSP keeps with a spinner turning on it until the game draws (the
 hand-over `DISCONNECT`, docs/PSPExp_Technical_Architecture.md §9.2). SELECT

@@ -101,7 +101,7 @@ PSP itself:
    scaled down (a 640x480 game shown at 57% halves its text);
 3. its controls are easy to understand: every button checked to do what it should (a shot before
    and after each press), menus as well as play, with a hint of them in the recipe's description
-   and the manual;
+   and the manual, and its `control=` lines (the controls sheet shown before it starts, §4.2);
 4. no native port of it already exists for the PSP: PSPExp brings what the PSP cannot run by
    itself (Wolfenstein 3D, Duke Nukem 3D, Heretic and Hexen, for example, all
    have PSP ports). Look for one first.
@@ -144,6 +144,12 @@ picture on the board (`~/...` or `/...`) for a game whose art cannot be
 hosted: Warcraft's and Warcraft II's title screens from the player's own
 copy, there once the first start has extracted it; until then the launcher
 draws a generated cover, and the picture replaces it when it appears.
+An entry's controls are `control=` lines, one per line of the sheet the
+launcher shows when the game is chosen (X then starts it, O goes back):
+`control=triangle cross: Walk forward, back`, the buttons (`cross`, `circle`,
+`square`, `triangle`, `l`, `r`, `start`, `select`, `up`, `down`, `left`,
+`right`, `dpad`, `nub`) before the colon, what they do after it, at most 40
+characters and 11 lines (what fits); an entry without them starts at once.
 `scripts/packages/check-recipes` checks every recipe in
 `recipes/` (sections, keys, ids, button names); the three examples below are
 the repository's own recipes as they are, and pass it.

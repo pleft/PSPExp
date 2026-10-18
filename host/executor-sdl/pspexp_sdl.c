@@ -250,20 +250,26 @@ static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1
 static uint32_t op_present(void *u)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
-    /* PSPEXP_SDL_SHOT=<file.bmp>: save every 30th frame (for headless checks). */
+    /* PSPEXP_SDL_SHOT=<file.bmp>: save every 30th frame (for headless checks); with a %d in the
+     * name, every frame under its number (a program that draws rarely, the launcher) */
     static const char *shot = NULL;
-    static int shot_checked = 0, frames = 0;
-    if (!shot_checked) { shot = getenv("PSPEXP_SDL_SHOT"); shot_checked = 1; }
-    if (shot && (frames++ % 30) == 0) {
+    static int shot_checked = 0, frames = 0, every = 0;
+    if (!shot_checked) { shot = getenv("PSPEXP_SDL_SHOT"); shot_checked = 1; every = shot && strstr(shot, "%d"); }
+    if (shot && (every || frames % 30 == 0)) {
+        char name[512];
         int w = 0, h = 0;
         SDL_GetRendererOutputSize(x->ren, &w, &h);
         if (w > 0 && h > 0) {
             SDL_Surface *surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
-            if (surf && SDL_RenderReadPixels(x->ren, NULL, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) == 0)
-                SDL_SaveBMP(surf, shot);
+            if (surf && SDL_RenderReadPixels(x->ren, NULL, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch) == 0) {
+                if (every) snprintf(name, sizeof(name), shot, frames);
+                else snprintf(name, sizeof(name), "%s", shot);
+                SDL_SaveBMP(surf, name);
+            }
             if (surf) SDL_FreeSurface(surf);
         }
     }
+    frames++;
     SDL_RenderPresent(x->ren);
     if (!x->vsync) pspexp_sleep_us(16000);
     return (uint32_t)pspexp_time_us();

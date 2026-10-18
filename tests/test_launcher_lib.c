@@ -55,7 +55,8 @@ int main(void)
     /* a package with two entries (Freedoom), one with a cover (Tyrian), a hidden entry */
     put("root/apps/freedoom/phase1.entry",
         "title=Freedoom: Phase 1\ntype=game\nexec=pspexp-run chocolate-doom -iwad ./freedoom1.wad\n"
-        "env=PSPEXP_KEYS=cross=lctrl,circle=space\nenv=PSPEXP_NUB=keys\npspexp=1\ndescription=Episodic Doom\ngraphics=sdl\n");
+        "env=PSPEXP_KEYS=cross=lctrl,circle=space\nenv=PSPEXP_NUB=keys\npspexp=1\ndescription=Episodic Doom\ngraphics=sdl\n"
+        "control=cross: Fire\ncontrol=no colon here\ncontrol=l r: Strafe\n");
     put("root/apps/freedoom/phase2.entry", "title=Freedoom: Phase 2\nexec=pspexp-run chocolate-doom -iwad ./freedoom2.wad\npspexp=1\n");
     put("root/apps/freedoom/phase2.png", "PNG");
     put("root/apps/opentyrian/opentyrian.entry", "title=OpenTyrian\nexec=./run.sh\npspexp=1\n");
@@ -87,6 +88,10 @@ int main(void)
         CHECK(e->art[0] == 0);       /* no phase1.png, no cover.png */
         lib_command(&L, e, cmd, sizeof(cmd));
         CHECK(!strcmp(cmd, "PSPEXP_KEYS='cross=lctrl,circle=space' PSPEXP_NUB='keys' pspexp-run chocolate-doom -iwad ./freedoom1.wad"));
+        /* its controls: the control= lines with a colon, read from its file */
+        CHECK_EQ(lib_controls(&L, e, cmd, sizeof(cmd)), 2);
+        CHECK(!strcmp(cmd, "cross: Fire\nl r: Strafe\n"));
+        CHECK_EQ(lib_controls(&L, e, cmd, 8), 0);   /* too long for the room: left out */
     }
     e = by_title(&L, "Freedoom: Phase 2");
     CHECK(e && strstr(e->art, "/freedoom/phase2.png") != NULL);   /* <stem>.png */
@@ -94,6 +99,7 @@ int main(void)
     CHECK(e && strstr(e->art, "/opentyrian/cover.png") != NULL);
     e = by_title(&L, "Notes");
     CHECK(e && !strcmp(e->id, "e:notes") && e->type == LT_APP && e->pkg[0] == 0);
+    if (e) CHECK_EQ(lib_controls(&L, e, cmd, sizeof(cmd)), 0);   /* none */
     CHECK(!strcmp(L.e[0].title, "Freedoom: Phase 1") && !strcmp(L.e[3].title, "OpenTyrian"));
 
     /* systems: ~ expanded, ROM folders created, ROMs named and sorted */

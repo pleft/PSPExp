@@ -247,6 +247,7 @@ P
 			  rall "$R" "$sec" env | sed 's/^/env=/'
 			  g=$(rget "$R" "$sec" graphics); [ -n "$g" ] && echo "graphics=$g"
 			  art=$(rget "$R" "$sec" art); [ -n "$art" ] && echo "art=$art"
+			  rall "$R" "$sec" control | sed 's/^/control=/'   # the launcher's controls sheet
 			  echo "pspexp=1"; } > "$A/$eid.entry"
 			cov=$(rget "$R" "$sec" cover); cov=${cov:-cover.png}
 			[ -f "$CAT/$ID/$cov" ] && cp "$CAT/$ID/$cov" "$A/$eid.png"

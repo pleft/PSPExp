@@ -100,7 +100,9 @@ see the cheatsheet).
 
 ## Playing
 
-Cross on a game starts it. The launcher shows the game with "Starting" and
+Cross on a game starts it. A game that has a controls sheet shows it
+first: what each of the PSP's buttons does in that game. Cross again
+plays, circle goes back. The launcher then shows the game with "Starting" and
 a turning wheel, which the PSP keeps on screen while the game loads, until
 the game's first picture; when the game ends, the launcher comes back by
 itself.

@@ -46,3 +46,13 @@ env=PSPEXP_HOSTGL=1
 env=PSPEXP_FRAME_DROP=2
 env=PSPEXP_JOYSTICK=0
 graphics=board-gpu
+control=nub: Look around; the pointer in menus
+control=triangle cross: Walk forward, back
+control=square circle: Step left, right
+control=l: Activate: take, talk, open; OK
+control=r: Attack, cast; click in menus
+control=up: Jump
+control=down: Sneak
+control=left right: Ready magic, ready weapon
+control=select: Inventory, map, magic
+control=start: The game's menu
