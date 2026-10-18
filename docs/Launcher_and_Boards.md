@@ -741,7 +741,13 @@ Lessons from the bring-up:
   PSP showed its waiting screen. `musb-h-disable-empty-queue.patch` releases
   such an endpoint as `musb_urb_dequeue` would, and the boot script adds
   `oops=panic`, so any oops reboots the board within 10 s (`panic=10`)
-  instead of leaving it frozen. A kernel's modules go under `/usr/lib/modules`
+  instead of leaving it frozen. Tested on the GameShell with the PSP-1000 (kernel
+  #8, 2026-10-18): 31 times the PSP pulled off the USB or switched off in a game,
+  31 reconnects, no oops, the board up throughout; the driver warned once
+  ("Could not flush host TX2 fifo", from `musb_cleanup_urb` on a disconnect) and
+  carried on, and the power chip's battery readings timed out around some
+  unplugs (harmless: a reading skipped).
+  A kernel's modules go under `/usr/lib/modules`
   (Debian 13 is usrmerged: `/lib` is a link, and unpacking `lib/` at `/`
   replaces it, which leaves the system unable to start a program).
 - No serial console: the boot script leaves markers on the boot partition
