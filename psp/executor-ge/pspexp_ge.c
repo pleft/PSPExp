@@ -1,5 +1,6 @@
 #include "pspexp_ge.h"
 #include <pspgu.h>
+#include <psputility.h>
 #include <pspge.h>
 #include <pspdisplay.h>
 #include <pspkernel.h>
@@ -618,6 +619,7 @@ static uint32_t op_present(void *u)
     t0 = sceKernelGetSystemTimeLow();
     sceGuSync(0, 0);
     ge->stats.last_ge_us = sceKernelGetSystemTimeLow() - t0;
+    if (ge->keyboard) { ge->in_frame = 0; return sceKernelGetSystemTimeLow(); }   /* (a frame already on its way: drawn, not shown) */
     sceDisplayWaitVblankStart();
     sceGuSwapBuffers();
     /* the buffer just drawn is now on screen: draw buffers alternate 0 / FB_BYTES */
@@ -630,6 +632,28 @@ static uint32_t op_present(void *u)
     ge->in_frame = 0;
     ge->stats.frames++;
     return sceKernelGetSystemTimeLow();
+}
+
+void pspexp_ge_keyboard_frame(PspExpGeExecutor *ge, int update)
+{
+    /* as the PSP SDK's own samples drive the system keyboard: a frame cleared, the utility's
+     * update (which draws the keyboard into the buffer being drawn), the swap */
+    if (ge->in_frame) return;
+    sceGuStart(GU_DIRECT, ge->list);
+    sceGuDrawBufferList(GU_PSM_5650, (void *)(uintptr_t)(ge->displayed_offset == 0 ? FB_BYTES : 0), PSPEXP_DISPLAY_STRIDE);
+    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    sceGuClearColor(0xFF201810);
+    sceGuClear(GU_COLOR_BUFFER_BIT);
+    sceGuClearColor(0);
+    sceGuFinish();
+    sceGuSync(0, 0);
+    if (update) sceUtilityOskUpdate(1);   /* (only while it is visible: the samples' rule) */
+    sceDisplayWaitVblankStart();
+    sceGuSwapBuffers();
+    ge->displayed_offset = ge->displayed_offset == 0 ? FB_BYTES : 0;
+    sceDisplaySetFrameBuf((unsigned char *)sceGeEdramGetAddr() + ge->displayed_offset, PSPEXP_DISPLAY_STRIDE,
+                          PSP_DISPLAY_PIXEL_FORMAT_565, PSP_DISPLAY_SETBUF_NEXTFRAME);
+    ge->state_dirty = 1; ge->have_state = 0;   /* (the utility left the GE as it chose: set ours again) */
 }
 
 void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out)

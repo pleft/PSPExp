@@ -2845,6 +2845,67 @@ static void replay_pointer(void)
 }
 
 static void shot_trigger(void);
+/* ---- the PSP's keyboard for a game's text field -------------------------------------------
+ * A game that turns SDL's text input off and on as a text field gains focus (OpenMW: its name
+ * field in character creation) gets the PSP's own keyboard when it turns it on: what is typed
+ * comes back as SDL_TEXTINPUT, then Enter (PSPEXP_TEXT_ENTER=0: no Enter). SDL2 starts with text
+ * input on, and OpenMW then never turned it on for its first field (it was on already): the layer
+ * turns it off once, when the link is up and the game is drawing (as SDL3 starts), so a game
+ * that wants text turns it on; one turning it on before that (at its start) sees no keyboard.
+ * PSPEXP_TEXT=0: never. */
+static int g_text_stopped;   /* text input turned off since the game started drawing (the layer or the game) */
+static void text_ready(void)
+{
+    static int done;
+    if (done || pspexp_stats(S.ctx)->frames_sent < 30 || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
+    done = 1;
+    if (SDL_IsTextInputActive()) REAL(SDL_StopTextInput)();
+    g_text_stopped = 1;
+}
+static void text_deliver(void)
+{
+    char t[1025];
+    int status = 0;
+    if (!pspexp_text_result(S.ctx, t, sizeof(t), &status)) return;
+    logf_("keyboard: %s (%u bytes)", status == PSPEXP_TEXT_OK ? "typed" : status == PSPEXP_TEXT_CANCELLED ? "cancelled" : "not shown", (unsigned)strlen(t));
+    if (status != PSPEXP_TEXT_OK) return;
+    {
+        size_t i = 0, n = strlen(t);
+        while (i < n) {   /* SDL_TEXTINPUT holds 31 bytes: whole UTF-8 characters per event */
+            SDL_Event e;
+            size_t k = n - i < 31 ? n - i : 31;
+            while (k > 0 && i + k < n && ((unsigned char)t[i + k] & 0xC0) == 0x80) k--;
+            if (!k) break;
+            memset(&e, 0, sizeof(e));
+            e.type = SDL_TEXTINPUT;
+            e.text.windowID = S.win ? SDL_GetWindowID(S.win) : 0;
+            memcpy(e.text.text, t + i, k);
+            SDL_PushEvent(&e);
+            i += k;
+        }
+    }
+    if (!getenv("PSPEXP_TEXT_ENTER") || atoi(getenv("PSPEXP_TEXT_ENTER"))) { push_key(SDLK_RETURN, 1); push_key(SDLK_RETURN, 0); }
+}
+
+HOOK(void, SDL_StopTextInput, (void))
+{
+    g_text_stopped = 1;
+    REAL(SDL_StopTextInput)();
+}
+
+HOOK(void, SDL_StartTextInput, (void))
+{
+    REAL(SDL_StartTextInput)();
+    if (!g_text_stopped || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
+    if (!S.active || !link_up()) return;
+    link_lock();
+    if (pspexp_text_supported(S.ctx) && !pspexp_text_pending(S.ctx)) {
+        const char *title = S.win ? SDL_GetWindowTitle(S.win) : NULL;
+        if (pspexp_text_request(S.ctx, title && *title ? title : "Text", "", 64) == 0) logf_("keyboard: opened on the PSP");
+    }
+    link_unlock();
+}
+
 static void service_link(void)
 {
     static Uint32 last;
@@ -2858,6 +2919,8 @@ static void service_link(void)
     script_tick();   /* a game waiting for an event (Pinball's menu) gets its scripted keys too */
     replay_pointer();
     shot_trigger();   /* (a game that draws only on change, Freeciv: its screenshots taken between frames too) */
+    text_ready();
+    text_deliver();
     link_unlock();
 }
 

@@ -8,6 +8,7 @@
 
 struct PspExpSdlExecutor {
     PspExpRuntime rt;
+    int text_asked;   /* a TEXT_REQUEST to answer (PSPEXP_SERVER_TEXT) */
     PspExpTransport transport;
     SDL_Window *win;
     SDL_Renderer *ren;
@@ -389,6 +390,18 @@ static int tr_send(PspExpTransport *t, const void *data, size_t len)
     return pspexp_runtime_feed(&x->rt, data, len);
 }
 
+/* The PSP's keyboard for tests, with no keyboard to show: PSPEXP_SERVER_TEXT=TEXT answers each
+ * TEXT_REQUEST with TEXT as if typed (the layer's path after the PSP's keyboard, tried on a board
+ * with no one at a PSP) */
+static int op_text_begin(void *u, const char *title, const char *text, unsigned max_chars)
+{
+    PspExpSdlExecutor *x = (PspExpSdlExecutor *)u;
+    (void)text; (void)max_chars;
+    fprintf(stderr, "[sdl-server] keyboard asked (%s): answering \"%s\"\n", title, getenv("PSPEXP_SERVER_TEXT"));
+    x->text_asked = 1;
+    return 0;
+}
+
 static long tr_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
 {
     PspExpSdlExecutor *x = (PspExpSdlExecutor *)t->user;
@@ -397,6 +410,7 @@ static long tr_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
     uint64_t now;
     if (x->pump_events) pump_events(x);
     if (x->quit) return -1;
+    if (x->text_asked) { x->text_asked = 0; pspexp_runtime_text_done(&x->rt, PSPEXP_TEXT_OK, getenv("PSPEXP_SERVER_TEXT")); }
     now = pspexp_time_us();
     if (now >= x->next_input_us) {
         uint32_t rate = x->rt.connected && x->rt.ack.input_rate ? x->rt.ack.input_rate : 60;
@@ -476,6 +490,7 @@ PspExpSdlExecutor *pspexp_sdl_create(const PspExpSdlOptions *o, char *err, size_
     ops.audio_unlock = op_audio_unlock;
     ops.log = op_log;
     ops.screenshot = op_screenshot;
+    if (getenv("PSPEXP_SERVER_TEXT")) ops.text_begin = op_text_begin;
     pspexp_fs_posix_install(&ops, NULL);   /* PSPEXP_MS0: a folder as the memory stick (the stand-in PSP) */
     pspexp_clock_posix_install(&ops);      /* a clock CLOCK_SET can move (in this process only) */
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_SDL);

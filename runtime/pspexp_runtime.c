@@ -145,6 +145,7 @@ static void send_hello(PspExpRuntime *rt)
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
                  (rt->ops.power_get ? PSPEXP_FEATURE_POWER : 0) |
                  (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) | (rt->ops.osd_volume ? PSPEXP_FEATURE_OSD : 0) |
+                 (rt->ops.text_begin ? PSPEXP_FEATURE_TEXT : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
                  (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
@@ -964,6 +965,21 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         pspexp_writer_message(&rt->out, PSPEXP_CH_SYSTEM, PSPEXP_OP_POWER_STATUS, 0, &p, sizeof(p));
         return;
     }
+    case PSPEXP_OP_TEXT_REQUEST: {
+        /* the PSP's keyboard: its title and starting text copied out of the message (NUL-ended for
+         * the platform), shown by ops.text_begin; refused at once (BUSY) when it cannot be */
+        const PspExpTextRequest *q = (const PspExpTextRequest *)m->payload;
+        char title[128], text[512];
+        size_t tl, xl;
+        if (!rt->ops.text_begin) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }   /* (not advertised) */
+        if (m->length < sizeof(*q) || sizeof(*q) + (size_t)q->title_len + q->text_len > m->length) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        tl = q->title_len < sizeof(title) - 1 ? q->title_len : sizeof(title) - 1;
+        xl = q->text_len < sizeof(text) - 1 ? q->text_len : sizeof(text) - 1;
+        memcpy(title, (const uint8_t *)m->payload + sizeof(*q), tl); title[tl] = 0;
+        memcpy(text, (const uint8_t *)m->payload + sizeof(*q) + q->title_len, xl); text[xl] = 0;
+        if (rt->ops.text_begin(rt->ops.user, title, text, q->max_chars ? q->max_chars : 64) < 0) pspexp_runtime_text_done(rt, PSPEXP_TEXT_BUSY, NULL);
+        return;
+    }
     case PSPEXP_OP_MEMORY_QUERY: {
         PspExpMemoryStatus s;
         pspexp_cache_status(&rt->cache, &s);
@@ -1197,4 +1213,17 @@ void pspexp_runtime_out_consume(PspExpRuntime *rt)
 {
     rt->stats.bytes_out += rt->out.len;
     pspexp_writer_reset(&rt->out);
+}
+
+void pspexp_runtime_text_done(PspExpRuntime *rt, unsigned status, const char *utf8)
+{
+    PspExpTextResult r;
+    size_t n = utf8 ? strlen(utf8) : 0;
+    if (!rt->connected) return;   /* (the board that asked has gone: nobody to answer) */
+    if (n > 1024) n = 1024;
+    r.status = (uint16_t)status; r.text_len = (uint16_t)n;
+    if (pspexp_writer_begin(&rt->out, PSPEXP_CH_SYSTEM, PSPEXP_OP_TEXT_RESULT, 0) < 0) return;
+    pspexp_writer_append(&rt->out, &r, sizeof(r));
+    if (n) pspexp_writer_append(&rt->out, utf8, n);
+    pspexp_writer_end(&rt->out);
 }

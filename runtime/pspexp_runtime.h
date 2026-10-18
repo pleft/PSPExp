@@ -108,6 +108,11 @@ typedef struct PspExpRuntimeOps {
     /* Optional: a volume bar drawn over the frames for 1.5 s (OSD_VOLUME; < 0 hides
      * it). With it, HELLO advertises PSPEXP_FEATURE_OSD. */
     void (*osd_volume)(void *user, int percent);
+    /* Optional: open the PSP's own keyboard (TEXT_REQUEST) with a title and the text the
+     * field starts with (UTF-8), for at most max_chars characters; returns 0 when it is
+     * shown, < 0 when it cannot be. The answer comes later: pspexp_runtime_text_done.
+     * With it, HELLO advertises PSPEXP_FEATURE_TEXT. */
+    int (*text_begin)(void *user, const char *title, const char *text, unsigned max_chars);
     /* Optional: the memory stick for the host (the FILE channel). With
      * fs_list set, HELLO advertises PSPEXP_FEATURE_FILES. Paths arrive
      * checked: "ms0:/..." or "ef0:/...", no ".." parts. Results: >= 0, or a
@@ -214,6 +219,9 @@ int    pspexp_runtime_in_commit(PspExpRuntime *rt, size_t len);
 
 /* Queue a controller sample (called at the sampling rate, never blocked by frames). */
 void pspexp_runtime_push_input(PspExpRuntime *rt, uint32_t buttons, uint8_t analog_x, uint8_t analog_y);
+/* The keyboard opened by ops.text_begin was closed: queues TEXT_RESULT with
+ * status PSPEXP_TEXT_* and the text typed (UTF-8; NULL for none). */
+void pspexp_runtime_text_done(PspExpRuntime *rt, unsigned status, const char *utf8);
 
 /* Pending PSP -> host bytes. Send them, then call _out_consume(). Produces
  * pending benchmark uplink blocks one at a time when the queue is empty. */

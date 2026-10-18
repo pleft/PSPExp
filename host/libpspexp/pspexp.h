@@ -271,6 +271,18 @@ int pspexp_power_supported(const PspExpContext *ctx);
 int pspexp_power_query(PspExpContext *ctx);
 int pspexp_power_status(const PspExpContext *ctx, PspExpPowerStatus *out, uint64_t *age_us);
 
+/* The PSP's own keyboard, when the runtime offers it (PSPEXP_FEATURE_TEXT):
+ * pspexp_text_request opens it over the screen with a title and the text the
+ * field starts with (UTF-8), for at most max_chars characters, and returns at
+ * once (-1: not offered, one already asked, or in a frame). Until it answers
+ * pspexp_should_render says no (the keyboard owns the screen). The answer
+ * arrives with a later pump: pspexp_text_result gives it once (1), with its
+ * status (PSPEXP_TEXT_OK, _CANCELLED, _BUSY) and the text; 0 while none. */
+int pspexp_text_supported(const PspExpContext *ctx);
+int pspexp_text_request(PspExpContext *ctx, const char *title, const char *text, unsigned max_chars);
+int pspexp_text_pending(const PspExpContext *ctx);
+int pspexp_text_result(PspExpContext *ctx, char *out, size_t cap, int *status);
+
 /* The PSP's memory stick (the FILE channel), when the runtime offers it
  * (PSPEXP_FEATURE_FILES). Paths are the PSP's: "ms0:/PSP/GAME". Each call
  * waits for its reply (pumping the link meanwhile, up to 15 s) and returns

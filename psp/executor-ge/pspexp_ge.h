@@ -28,6 +28,7 @@ typedef struct PspExpGeExecutor {
     uint32_t ring_used;
     int in_frame;
     int osd_percent; uint32_t osd_until;   /* the volume bar (OSD_VOLUME) */
+    int keyboard;                          /* the PSP's keyboard owns the screen: frames drawn, not shown */
     int tex_enabled;
     PspExpCacheEntry *cur_atlas;
     PspExpCacheEntry *cur_palette;
@@ -53,6 +54,11 @@ void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32
 
 /* Copies the displayed framebuffer (480x272 RGB565) into `out` (row stride 480). */
 void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out);
+/* One frame of the PSP's own keyboard (the system's on-screen keyboard, already
+ * started): the screen cleared, the keyboard drawn over it, shown at the next
+ * vertical blank (update: let it draw and take the buttons; only while it is
+ * visible). Only between the host's frames (not while one is open). */
+void pspexp_ge_keyboard_frame(PspExpGeExecutor *ge, int update);
 
 /* Initialises the GU (framebuffers at VRAM 0 and 0x44000; a depth buffer at
  * 0x88000 when the host asks for one). */

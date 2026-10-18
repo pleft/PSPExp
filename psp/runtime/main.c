@@ -299,6 +299,99 @@ static int op_zone_set(void *u, int tz, int dst)
     trace(b);
     return r < 0 ? -1 : 0;
 }
+/* ---- the PSP's own keyboard (TEXT_REQUEST) ------------------------------------------
+ * The system's on-screen keyboard, opened when the board asks for typed text (a game's name
+ * field: OpenMW's character creation): drawn by the main loop between the board's frames, one
+ * frame a pass, the link read and written as ever; the buttons go to it, not to the board;
+ * when it closes, what was typed goes back (TEXT_RESULT). */
+#include <psputility.h>
+static int g_kb;   /* open */
+static unsigned short g_kb_title[128], g_kb_in[256], g_kb_out[256];
+static SceUtilityOskData g_kb_data;
+static SceUtilityOskParams g_kb_params;
+
+static void utf8_to_16(const char *s, unsigned short *o, int cap)
+{
+    const unsigned char *p = (const unsigned char *)s;
+    int n = 0;
+    while (*p && n < cap - 1) {
+        unsigned c = *p++;
+        if (c >= 0xE0 && p[0] && p[1]) { c = (c & 0x0Fu) << 12 | (p[0] & 0x3Fu) << 6 | (p[1] & 0x3Fu); p += 2; }
+        else if (c >= 0xC0 && p[0]) { c = (c & 0x1Fu) << 6 | (p[0] & 0x3Fu); p++; }
+        else if (c >= 0x80) c = '?';
+        o[n++] = (unsigned short)c;
+    }
+    o[n] = 0;
+}
+
+static void utf16_to_8(const unsigned short *s, char *o, int cap)
+{
+    int n = 0;
+    for (; *s; s++) {
+        unsigned c = *s;
+        if (c < 0x80) { if (n + 1 >= cap) break; o[n++] = (char)c; }
+        else if (c < 0x800) { if (n + 2 >= cap) break; o[n++] = (char)(0xC0 | c >> 6); o[n++] = (char)(0x80 | (c & 0x3F)); }
+        else { if (n + 3 >= cap) break; o[n++] = (char)(0xE0 | c >> 12); o[n++] = (char)(0x80 | (c >> 6 & 0x3F)); o[n++] = (char)(0x80 | (c & 0x3F)); }
+    }
+    o[n] = 0;
+}
+
+static int op_text_begin(void *u, const char *title, const char *text, unsigned max_chars)
+{
+    (void)u;
+    if (g_kb) return -1;
+    if (max_chars < 1) max_chars = 1;
+    if (max_chars > 255) max_chars = 255;
+    utf8_to_16(title && *title ? title : "PSPExp", g_kb_title, 128);
+    utf8_to_16(text ? text : "", g_kb_in, 256);
+    memset(g_kb_out, 0, sizeof(g_kb_out));
+    memset(&g_kb_data, 0, sizeof(g_kb_data));
+    g_kb_data.language = PSP_UTILITY_OSK_LANGUAGE_DEFAULT;
+    g_kb_data.lines = 1;
+    g_kb_data.unk_24 = 1;
+    g_kb_data.inputtype = PSP_UTILITY_OSK_INPUTTYPE_ALL;
+    g_kb_data.desc = g_kb_title;
+    g_kb_data.intext = g_kb_in;
+    g_kb_data.outtextlength = (int)max_chars;
+    g_kb_data.outtextlimit = (int)max_chars;
+    g_kb_data.outtext = g_kb_out;
+    memset(&g_kb_params, 0, sizeof(g_kb_params));
+    g_kb_params.base.size = sizeof(g_kb_params);
+    sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_LANGUAGE, &g_kb_params.base.language);
+    sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_UNKNOWN, &g_kb_params.base.buttonSwap);   /* (cross or circle confirms, as the PSP is set) */
+    g_kb_params.base.graphicsThread = 17;
+    g_kb_params.base.accessThread = 19;
+    g_kb_params.base.fontThread = 18;
+    g_kb_params.base.soundThread = 16;
+    g_kb_params.datacount = 1;
+    g_kb_params.data = &g_kb_data;
+    if (sceUtilityOskInitStart(&g_kb_params) < 0) { trace("keyboard: could not open"); return -1; }
+    g_kb = 1;
+    g_ge.keyboard = 1;
+    trace("keyboard open");
+    return 0;
+}
+
+/* a pass of the main loop while it is open: a frame of it; when it has closed, the answer */
+static void keyboard_tick(PspExpRuntime *rt)
+{
+    switch (sceUtilityOskGetStatus()) {
+    case PSP_UTILITY_DIALOG_VISIBLE: pspexp_ge_keyboard_frame(&g_ge, 1); return;
+    case PSP_UTILITY_DIALOG_QUIT: sceUtilityOskShutdownStart(); pspexp_ge_keyboard_frame(&g_ge, 0); return;
+    case PSP_UTILITY_DIALOG_NONE: break;   /* closed: the answer below */
+    default: pspexp_ge_keyboard_frame(&g_ge, 0); return;   /* (starting, or finishing) */
+    }
+    {
+        char out[768];
+        g_kb = 0;
+        g_ge.keyboard = 0;
+        if (g_kb_data.result == PSP_UTILITY_OSK_RESULT_CANCELLED) { trace("keyboard cancelled"); pspexp_runtime_text_done(rt, PSPEXP_TEXT_CANCELLED, NULL); return; }
+        utf16_to_8(g_kb_out, out, sizeof(out));
+        trace("keyboard: text typed");
+        pspexp_runtime_text_done(rt, PSPEXP_TEXT_OK, out);
+    }
+}
+
 static void op_log(void *u, const char *msg)
 {
     strncpy(g_log[g_log_n % 4], msg, sizeof(g_log[0]) - 1);
@@ -429,6 +522,7 @@ int main(int argc, char *argv[])
     ops.clock_set = op_clock_set;
     ops.zone_set = op_zone_set;
     ops.power_get = op_power_get;
+    ops.text_begin = op_text_begin;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 
@@ -575,10 +669,11 @@ int main(int argc, char *argv[])
         if (now - last_input >= 16666) {
             last_input = now;
             sceCtrlPeekBufferPositive(&pad, 1);
-            if (rt.connected)   /* the volume buttons and the note button: kernel mode's to read (the board's
+            if (rt.connected && !g_kb)   /* (the keyboard's buttons are its own) */   /* the volume buttons and the note button: kernel mode's to read (the board's
                                  * Bluetooth volume; the note pauses and resumes the board's music) */
                 pspexp_runtime_push_input(&rt, pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE)), pad.Lx, pad.Ly);
         }
+        if (g_kb) { keyboard_tick(&rt); continue; }   /* (the keyboard owns the screen) */
         /* Keep the status page until the first frame; after that the GE owns the screen. While
          * handing over, the spinner instead */
         handover_take(&rt, now);

@@ -506,7 +506,25 @@ its battery (`PspExpPowerStatus`: charge, the power service's estimate of the
 time left, the battery's current, temperature and voltage, and whether it is
 charging, on the adapter or low), read from `scePower*` at that moment. The
 host library asks without waiting (`pspexp_power_query`) and keeps the last
-answer (`pspexp_power_status`); the launcher asks every 10 s.*
+answer (`pspexp_power_status`); the launcher asks every 10 s. And
+TEXT_REQUEST / TEXT_RESULT (2026-10-18, runtimes with `PSPEXP_FEATURE_TEXT`):
+the host asks for typed text (`PspExpTextRequest`: a title, the text the field
+starts with, a length; `pspexp_text_request`) and the PSP opens its own
+keyboard (`sceUtilityOsk`) over the screen. The runtime draws it from its main
+loop, one frame a pass between the host's frames
+(`pspexp_ge_keyboard_frame`), the link read and written as ever (a keyboard
+that blocked the loop would leave the link silent while someone types);
+the PSP's buttons go to it, not to the host. Until the answer the host
+library says not to draw (`pspexp_should_render`); a frame already on its
+way is drawn and not shown. The answer (`PspExpTextResult`: typed,
+cancelled, or not shown) comes once through `pspexp_text_result`. The SDL
+layer opens it when a game turns text input on (a text field focused) after
+the layer turned it off once the game was drawing (SDL2 starts with it on;
+OpenMW then never turned it on for its first field), and gives the game the
+text as SDL_TEXTINPUT and Enter. Tried: the PSP runtime under PPSSPP opened
+the keyboard for OpenMW's name field from the Pi; the answer's path through
+the stand-in (`PSPEXP_SERVER_TEXT`: a preset answer), the name taken and
+character creation going on.*
 
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 

@@ -370,7 +370,8 @@ compatibility/       existing programs on the PSP: sdl-pspexp (the SDL layer: an
 tools/               pspexp-term (the PSP as a console, with the launcher and a
                      file manager whose drives include the PSP's memory stick),
                      pspexp-retro (emulator player), pspexp-sdl-server (a stand-in
-                     PSP for screenshots), pspexp-ms (the memory stick from a
+                     PSP for screenshots; PSPEXP_SERVER_TEXT=TEXT answers a game's
+                     keyboard request with TEXT, as if typed), pspexp-ms (the memory stick from a
                      shell), usb-bench (pspexp-bench)
 examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)

@@ -73,6 +73,9 @@ struct PspExpContext {
     /* POWER_STATUS, the answer to POWER_QUERY: when it came (0 none on this connection) */
     uint64_t power_at;
     PspExpPowerStatus power;
+    /* the PSP's keyboard (TEXT_REQUEST): asked and not answered yet (no frames meanwhile); the answer */
+    int text_pending, text_have, text_status;
+    char text[1025];
 };
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
@@ -324,6 +327,42 @@ int pspexp_power_status(const PspExpContext *ctx, PspExpPowerStatus *out, uint64
     return 0;
 }
 
+/* ---- the PSP's keyboard ------------------------------------------------------------------ */
+
+int pspexp_text_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_TEXT) != 0;
+}
+
+int pspexp_text_request(PspExpContext *ctx, const char *title, const char *text, unsigned max_chars)
+{
+    uint8_t b[sizeof(PspExpTextRequest) + 128 + 512];
+    PspExpTextRequest q;
+    size_t tl = title ? strlen(title) : 0, xl = text ? strlen(text) : 0;
+    if (!pspexp_text_supported(ctx) || ctx->text_pending || ctx->in_frame) return -1;
+    if (tl > 127) tl = 127;
+    if (xl > 511) xl = 511;
+    memset(&q, 0, sizeof(q));
+    q.max_chars = (uint16_t)(max_chars ? max_chars : 64); q.title_len = (uint16_t)tl; q.text_len = (uint16_t)xl;
+    memcpy(b, &q, sizeof(q));
+    if (tl) memcpy(b + sizeof(q), title, tl);
+    if (xl) memcpy(b + sizeof(q) + tl, text, xl);
+    if (pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_TEXT_REQUEST, b, sizeof(q) + tl + xl) < 0) return -1;
+    ctx->text_pending = 1; ctx->text_have = 0;
+    return 0;
+}
+
+int pspexp_text_pending(const PspExpContext *ctx) { return ctx->text_pending && ctx->state == PSPEXP_LINK_CONNECTED; }
+
+int pspexp_text_result(PspExpContext *ctx, char *out, size_t cap, int *status)
+{
+    if (!ctx->text_have) return 0;
+    ctx->text_have = 0;
+    if (status) *status = ctx->text_status;
+    if (out && cap) { size_t n = strlen(ctx->text); if (n > cap - 1) n = cap - 1; memcpy(out, ctx->text, n); out[n] = 0; }
+    return 1;
+}
+
 /* ---- FILE: the PSP's memory stick ------------------------------------------------------ */
 
 int pspexp_fs_supported(const PspExpContext *ctx)
@@ -537,7 +576,18 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
     switch (m->header->opcode) {
     case PSPEXP_OP_HELLO:
         ctx->power_at = 0;   /* (another PSP, or the same after a restart) */
+        ctx->text_pending = 0;   /* (a keyboard that PSP had open is gone with it) */
         on_hello(ctx, m);
+        break;
+    case PSPEXP_OP_TEXT_RESULT:
+        if (m->length >= sizeof(PspExpTextResult)) {
+            const PspExpTextResult *r = (const PspExpTextResult *)m->payload;
+            size_t n = r->text_len;
+            if (n > m->length - sizeof(*r)) n = m->length - sizeof(*r);
+            if (n > sizeof(ctx->text) - 1) n = sizeof(ctx->text) - 1;
+            memcpy(ctx->text, (const uint8_t *)m->payload + sizeof(*r), n); ctx->text[n] = 0;
+            ctx->text_status = r->status; ctx->text_have = 1; ctx->text_pending = 0;
+        }
         break;
     case PSPEXP_OP_POWER_STATUS:
         if (m->length >= sizeof(PspExpPowerStatus)) { memcpy(&ctx->power, m->payload, sizeof(ctx->power)); ctx->power_at = pspexp_time_us(); }
@@ -1465,7 +1515,7 @@ int pspexp_replay_frame(PspExpContext *ctx)
 
 int pspexp_should_render(const PspExpContext *ctx)
 {
-    return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && ctx->in_flight < ctx->cfg.max_in_flight;
+    return ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && !ctx->text_pending && ctx->in_flight < ctx->cfg.max_in_flight;   /* (the PSP's keyboard owns the screen until it answers) */
 }
 
 int pspexp_link_maintenance(const PspExpContext *ctx) { return ctx->state == PSPEXP_LINK_CONNECTED && ctx->maintenance; }

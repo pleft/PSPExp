@@ -212,6 +212,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_3D_COPY    0x00000400u  /* 3D_COPY: part of the buffer being drawn into a render target */
 #define PSPEXP_FEATURE_POWER      0x00000800u  /* answers POWER_QUERY: the battery and power supply */
 #define PSPEXP_FEATURE_OSD        0x00002000u  /* OSD_VOLUME: the PSP draws a volume bar over the frames itself */
+#define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
@@ -258,6 +259,30 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpPowerStatus) == 16, power_status_size);
 #define PSPEXP_POWER_CHARGING  0x2u
 #define PSPEXP_POWER_EXTERNAL  0x4u   /* on the AC adapter (or USB charging) */
 #define PSPEXP_POWER_LOW       0x8u   /* the PSP's own low-battery warning */
+
+/* Host -> PSP (TEXT_REQUEST): show the PSP's own keyboard (the system's
+ * on-screen keyboard) over the screen and answer with what was typed
+ * (TEXT_RESULT). Followed by title_len bytes of the title (UTF-8, shown above
+ * the field) and text_len bytes of the text the field starts with. The host
+ * sends no frames until the answer: the keyboard owns the screen, and the
+ * PSP's buttons go to it (no INPUT_SAMPLE changes meanwhile). */
+typedef struct PspExpTextRequest {
+    uint16_t max_chars;    /* the longest answer, in characters (1..255) */
+    uint16_t title_len;
+    uint16_t text_len;
+    uint16_t flags;        /* 0 */
+} PspExpTextRequest;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpTextRequest) == 8, text_request_size);
+
+/* PSP -> host (TEXT_RESULT): the answer, followed by text_len bytes of UTF-8 */
+typedef struct PspExpTextResult {
+    uint16_t status;       /* PSPEXP_TEXT_* */
+    uint16_t text_len;
+} PspExpTextResult;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpTextResult) == 4, text_result_size);
+#define PSPEXP_TEXT_OK        0u   /* typed and confirmed */
+#define PSPEXP_TEXT_CANCELLED 1u   /* the keyboard was closed without confirming */
+#define PSPEXP_TEXT_BUSY      2u   /* not shown: one already open, or the PSP could not */
 
 /* Host -> PSP: show a volume bar over whatever is drawn, for 1.5 s from now
  * (the volume of a board's Bluetooth device, which only the board knows).

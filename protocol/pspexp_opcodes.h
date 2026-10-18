@@ -19,6 +19,8 @@ enum PspExpOpcode {
     PSPEXP_OP_POWER_QUERY    = 0x000A,  /* host -> PSP, no payload (only with PSPEXP_FEATURE_POWER) */
     PSPEXP_OP_POWER_STATUS   = 0x000B,  /* PSP -> host, PspExpPowerStatus: the answer */
     PSPEXP_OP_OSD_VOLUME     = 0x000C,  /* host -> PSP, PspExpOsdVolume (only with PSPEXP_FEATURE_OSD) */
+    PSPEXP_OP_TEXT_REQUEST   = 0x000D,  /* host -> PSP, PspExpTextRequest + title + text: the PSP's keyboard (PSPEXP_FEATURE_TEXT) */
+    PSPEXP_OP_TEXT_RESULT    = 0x000E,  /* PSP -> host, PspExpTextResult + text: what was typed, the answer */
 
     /* GRAPHICS (0x01xx) */
     PSPEXP_OP_BEGIN_FRAME       = 0x0101,  /* PspExpBeginFrame */

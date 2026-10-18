@@ -117,6 +117,12 @@ Each game comes with its buttons mapped for the PSP (the analog nub as a
 mouse pointer in the point-and-click adventures and strategy games, as the
 d-pad in others). Triangle on a game in the launcher shows its details.
 
+**Typing in a game.** When a game asks you to type something (a
+character's name), the PSP's own keyboard opens over the game: type as
+you would in the PSP's menus and confirm, and the text goes into the game
+(followed by Enter); cancel it to type nothing. It needs the PSP's part
+from October 18, 2026 or later (Settings > Update the PSP).
+
 ## Packages: installing games
 
 **Apps > Packages** lists what your board can install, in three sections:

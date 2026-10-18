@@ -50,6 +50,8 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - **The Dreamcast** on a Pi (Flycast, drawn by the Pi's graphics chip):
   your own discs in `roms/dreamcast`; Power Stone and Rayman 2 play at
   about 50-60 frames a second. Install it from Packages.
+- **Typing in games**: when a game asks for text (a character's name), the
+  PSP's own keyboard opens over it (with the PSP's part updated).
 - **Commander Keen 1 and 4**: id Software's platform classics, their
   free episodes, at the PSP's own screen size (cross jumps; hold it to jump
   higher).
