@@ -147,9 +147,11 @@ chroot "$R" systemctl enable pspexp-bootlog >/dev/null 2>&1
 # breadcrumbs on the boot partition (no serial console: put the card in a
 # computer to see how far a failed boot got): U-Boot writes pspexp-1-script,
 # pspexp-2-loaded, and pspexp-3-bootm-failed if the kernel was refused
+# oops=panic: a kernel oops reboots the board (panic=10) instead of leaving it frozen with
+# its LED on (2026-10-18: an oops in the USB host driver froze one, its network gone)
 cat > $W/boot.cmd <<'B'
 gpio clear PB7
-setenv bootargs console=ttyS0,115200n8 root=PARTUUID=5053504d-02 rootfstype=ext4 rootwait panic=10 loglevel=7
+setenv bootargs console=ttyS0,115200n8 root=PARTUUID=5053504d-02 rootfstype=ext4 rootwait panic=10 oops=panic loglevel=7
 mw.b 0x4a000000 0x2e 1
 fatwrite mmc 0:1 0x4a000000 pspexp-1-script 1
 fatload mmc 0 0x48000000 uImage

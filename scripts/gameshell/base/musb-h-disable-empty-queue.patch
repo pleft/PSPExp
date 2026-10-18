@@ -1,0 +1,22 @@
+--- a/drivers/usb/musb/musb_host.c	2026-10-18 14:15:20
++++ b/drivers/usb/musb/musb_host.c	2026-10-18 14:15:20
+@@ -2439,6 +2439,19 @@
+ 	if (musb_ep_get_qh(qh->hw_ep, is_in) == qh) {
+ 		urb = next_urb(qh);
+ 
++		/* Nothing queued, yet still the hardware's current qh: its last URB
++		 * was dequeued while !is_ready (musb_urb_dequeue then does not
++		 * recycle it). Recycle it here as musb_urb_dequeue would; urb is
++		 * NULL and urb->unlinked below was an oops (a device gone from a
++		 * GameShell's port mid-transfer froze the board). */
++		if (!urb) {
++			musb_ep_set_qh(qh->hw_ep, is_in, NULL);
++			hep->hcpriv = NULL;
++			list_del(&qh->ring);
++			kfree(qh);
++			goto exit;
++		}
++
+ 		/* make software (then hardware) stop ASAP */
+ 		if (!urb->unlinked)
+ 			urb->status = -ESHUTDOWN;

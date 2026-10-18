@@ -692,7 +692,7 @@ card now gets a current base instead, built entirely on the Mac:
 
 | part | what | how |
 |---|---|---|
-| kernel | Linux 6.18 LTS, `sunxi_defconfig` + `scripts/gameshell/base/kernel.config` | `scripts/gameshell/base/build-kernel.sh` (OrbStack/Docker, ARM64 container, cross-compiled; ~2 min) |
+| kernel | Linux 6.18 LTS, `sunxi_defconfig` + `scripts/gameshell/base/kernel.config`, and the `*.patch` files beside it (`musb-h-disable-empty-queue.patch`) | `scripts/gameshell/base/build-kernel.sh` (OrbStack/Docker, ARM64 container, cross-compiled; ~2 min) |
 | board | `scripts/gameshell/base/sun8i-r16-clockworkpi-cpi3.dts` | written from the running board's device tree; wired like the Banana Pi M2M (AXP223 on RSB, AP6212 Wi-Fi on mmc1 with reset PL6, SD card-detect PB3, USB OTG ID PL4, serial console on PB0/PB1) |
 | system | Debian 13 armhf, minimal, NetworkManager, hostapd, SSH, SDL2, Chocolate Doom | `scripts/gameshell/base/build-image.sh STOCK.img` (mmdebstrap in a container; ~3 min) |
 | boot | the board's own U-Boot 2018.01 and Wi-Fi firmware and calibration, taken from the stock image | not redistributed by the repository |
@@ -712,6 +712,17 @@ Lessons from the bring-up:
   `multi_v7_defconfig` gave 12 MB and the board sat with its green LED
   blinking. `build-kernel.sh` now refuses such a kernel; a steady green LED
   means Linux is up.
+- A kernel oops in the USB host driver froze a board (2026-10-18): the PSP
+  dropped off its USB with transfers still queued and `musb_h_disable`
+  dereferenced a missing URB (the endpoint still the hardware's current one,
+  its queue empty: its last URB had been dequeued while not ready). The oops
+  happened with interrupts off: the network went, the LED stayed green, the
+  PSP showed its waiting screen. `musb-h-disable-empty-queue.patch` releases
+  such an endpoint as `musb_urb_dequeue` would, and the boot script adds
+  `oops=panic`, so any oops reboots the board within 10 s (`panic=10`)
+  instead of leaving it frozen. A kernel's modules go under `/usr/lib/modules`
+  (Debian 13 is usrmerged: `/lib` is a link, and unpacking `lib/` at `/`
+  replaces it, which leaves the system unable to start a program).
 - No serial console: the boot script leaves markers on the boot partition
   (`pspexp-1-script`, `pspexp-2-loaded`, `pspexp-3-bootm-failed`) and Linux
   writes `pspexp-boot-log.txt` there a minute after each boot; put the card

@@ -5,6 +5,7 @@
 # uImage (for the board's own U-Boot: bootm, at most 8 MB), the device tree,
 # modules.tar.gz, the .config. KVER picks the kernel (default: the 6.18
 # long-term release below), KBASE the base configuration (sunxi_defconfig).
+# The *.patch files beside this script are applied to the source first.
 set -e
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 KVER="${KVER:-6.18.54}"
@@ -22,10 +23,14 @@ docker run --rm --platform "${PSPEXP_PLATFORM:-linux/arm64}" \
 	export DEBIAN_FRONTEND=noninteractive
 	apt-get -qq update && apt-get -qq install -y --no-install-recommends \
 		gcc libc6-dev gcc-arm-linux-gnueabihf make bc bison flex libssl-dev libelf-dev u-boot-tools \
-		xz-utils cpio kmod python3 >/dev/null
+		xz-utils cpio kmod python3 patch >/dev/null
 	cd /work
 	[ -d linux-$KVER ] || tar -xJf /out/linux-$KVER.tar.xz
 	cd linux-$KVER
+	for p in /base/*.patch; do   # our fixes to the kernel (each says why), applied once to the kept tree
+		[ -f "$p" ] || continue
+		patch -p1 -N --dry-run -s < "$p" >/dev/null 2>&1 && patch -p1 -N -s < "$p" && echo "applied $(basename "$p")"
+	done
 	cp /base/sun8i-r16-clockworkpi-cpi3.dts arch/arm/boot/dts/allwinner/
 	grep -q clockworkpi-cpi3 arch/arm/boot/dts/allwinner/Makefile ||
 		sed -i "s|sun8i-r16-bananapi-m2m.dtb|sun8i-r16-bananapi-m2m.dtb \\\\\n\tsun8i-r16-clockworkpi-cpi3.dtb|" arch/arm/boot/dts/allwinner/Makefile
