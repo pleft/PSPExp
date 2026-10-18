@@ -22,7 +22,6 @@ exec=/usr/games/rocksndiamonds
 keys=start=return,select=escape
 graphics=sdl
 control=dpad nub: Move, dig
-control=cross: Grab or dig beside you, not moving
-control=circle: Drop dynamite you carry
+control=cross: With a direction: dig or grab, stay put
 control=start: OK in menus
-control=select: Back; leave the level
+control=select: Back; leave the level (asks)

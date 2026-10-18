@@ -31,8 +31,7 @@ env=PSPEXP_JOYSTICK=0
 graphics=sdl
 control=nub dpad: Move
 control=cross: Lay a bomb
-control=circle: Set off your bombs (remote)
-control=square: Jump
 control=triangle: Add a computer player
 control=start: Start the game
 control=l r: Pause
+control=select: Leave the match

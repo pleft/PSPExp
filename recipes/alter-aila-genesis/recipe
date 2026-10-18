@@ -29,5 +29,5 @@ env=PSPEXP_JOYSTICK=0
 graphics=sdl
 control=dpad nub: Walk; move in menus
 control=cross: Talk, examine, confirm
-control=square: Hold to run
+control=square: Hold to walk slowly
 control=circle triangle start: The menu; cancel, back

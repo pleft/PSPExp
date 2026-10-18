@@ -33,4 +33,4 @@ control=circle: Talk, look at things
 control=square: Cast magic
 control=triangle: Inventory
 control=select: The map
-control=start: The menu: save, load, quit
+control=start: The menu: load, restart, quit

@@ -37,6 +37,6 @@ env=PSPEXP_HOSTGL=1
 graphics=board-gpu
 control=nub: Move the pointer
 control=cross: Select units (drag: a box); click
-control=circle: Order: move, attack, harvest
+control=circle: Move, attack there; deploy (on itself)
 control=dpad: Scroll the map
 control=start: The game's menu

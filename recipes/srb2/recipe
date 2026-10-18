@@ -35,4 +35,4 @@ control=left right: Weapon rings in match games
 control=up down: Move in menus
 control=circle: Back in menus
 control=start: The game's menu
-control=select: Scores
+control=select: Scores; alone, the emblems found

@@ -40,6 +40,5 @@ graphics=sdl
 control=dpad nub: Move; you fire the way you face
 control=cross: Fire; OK in menus
 control=circle: Switch weapon
-control=r: Throw a grenade
 control=start: Pause, the game's menu
-control=select: Back out of menus
+control=select: Back out of menus; pause

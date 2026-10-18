@@ -28,6 +28,5 @@ control=nub: Move the pointer
 control=cross: Click: walk, do the chosen action
 control=circle: A thing's usual action
 control=triangle: Skip a line of speech
-control=square: Pause
 control=select: Skip a scene
 control=start: Menu: save, load, quit

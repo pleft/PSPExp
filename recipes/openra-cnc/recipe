@@ -38,5 +38,5 @@ graphics=board-gpu
 control=nub: Move the pointer
 control=dpad: Scroll the map
 control=cross: Select; hold and move to box units
-control=circle: Move or attack there
+control=circle: Move, attack there; deploy (on itself)
 control=start: The game's menu

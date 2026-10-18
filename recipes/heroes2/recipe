@@ -52,5 +52,5 @@ control=dpad: Scroll the map
 control=l: Next hero
 control=square: Move the hero along its path
 control=triangle: End the turn
-control=select: OK
-control=start: Cancel; on the map, the main menu
+control=select: OK; on the map, the hero's screen
+control=start: Cancel; on the map, quit (asks first)

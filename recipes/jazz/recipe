@@ -30,6 +30,5 @@ graphics=sdl
 control=nub dpad: Run
 control=cross: Jump; choose in menus
 control=square: Fire
-control=triangle l r: Change weapon
 control=start circle: The game's menu; back in menus
 control=select: Pause

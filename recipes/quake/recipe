@@ -30,7 +30,7 @@ env=PSPEXP_JOYSTICK=0
 env=PSPEXP_GL_UNITS=3
 graphics=opengl-shaders
 control=nub: Aim
-control=triangle cross: Walk forward, back
+control=triangle cross: Walk forward, back; move in menus
 control=square circle: Step left, right
 control=r: Fire; choose in menus
 control=up: Jump

@@ -43,5 +43,5 @@ control=circle: Close a window
 control=l r: Health potion, mana potion
 control=up down: Inventory, quest log
 control=left right: Character, spellbook
-control=select: Choose a quick spell
-control=start: The game's menu
+control=select: Hold: quick spells on the d-pad
+control=start select: Together: the game's menu

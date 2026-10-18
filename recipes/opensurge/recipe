@@ -35,4 +35,4 @@ control=left right: Run
 control=up down: Look up, crouch (roll when running)
 control=cross: Jump; choose in menus
 control=start: Pause
-control=select: Back
+control=select: Back; in a level, pause, then leave it

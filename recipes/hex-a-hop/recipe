@@ -39,4 +39,4 @@ control=l r: Hop up-left, up-right
 control=nub: Move the pointer
 control=cross: Hop to the tile clicked; choose
 control=circle triangle square: Undo
-control=start select: Menu: resume, restart, help
+control=start select: Menu: resume, restart; again, the title

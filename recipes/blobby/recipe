@@ -28,4 +28,4 @@ control=left right: Move your blob
 control=cross: Jump (d-pad up jumps too)
 control=nub: The pointer, in the menus
 control=circle: Click, in the menus
-control=start select: Leave the match; back
+control=start select: Quit the match (asks); again, play on

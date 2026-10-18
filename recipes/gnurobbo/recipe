@@ -7,6 +7,8 @@
 # Robbo's life: the level again). Played on the PSP-1000 (2026-10-17): its
 # menu, level 1, Robbo moving, 50 fps.
 # On the GameShell (2026-10-17, the PSP-1000 on its USB): about 47 fps in a level.
+# Square sent Left Shift, which the game ignores (it shoots with Right Shift:
+# Robbo walked instead), until 2026-10-18.
 
 [package]
 id=gnurobbo
@@ -26,11 +28,11 @@ type=game
 description=Puzzle game from the Atari: collect the screws and reach the capsule past creatures, bombs and lasers.
 icon=puzzle
 exec=/usr/games/gnurobbo
-keys=cross=return,square=lshift,start=return,select=escape,up=up,down=down,left=left,right=right
+keys=cross=return,square=rshift,start=return,select=escape,up=up,down=down,left=left,right=right
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
 control=dpad nub: Move; choose in menus
 control=square: Hold with the d-pad: shoot that way
 control=cross start: OK
-control=select: Back; in a level, try it again
+control=select: Back; in a level, to the title menu

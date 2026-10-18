@@ -27,4 +27,4 @@ control=dpad nub: Steer; up speeds up, down brakes
 control=cross: Accelerate
 control=square: Brake
 control=start: Choose in menus
-control=select: Back to the menu
+control=select: Pause menu: restart, quit

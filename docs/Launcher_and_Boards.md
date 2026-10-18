@@ -98,6 +98,14 @@ circle the lightning beam), Neverball and Neverputt (L and R turn Neverball's vi
 the d-pad aims in Neverputt, START does not pause). Two recipes were wrong: Pinball's
 d-pad sent nothing, so its menu could not be moved in, and SuperTux's L and R sent Page
 Up and Down, which it does not use (Home and End look up and down).
+Then every game's sheet the same way (three agents, a game each at a time on the
+Pi 400, 2026-10-18): 29 recipes corrected (buttons that did something else or
+nothing), two more key fixes (GNU Robbo's square shoots with Right Shift, GLtron
+pauses on Space), and two faults in the SDL layer found on the way (Mirror Magic's
+renderer, X-Moto's keyboard). Not pressed: Warcraft I and II (the player's own
+data), Unreal Tournament (its terms), and the SDL 1.2 OpenGL games (Parsec47,
+rRootage, Tumiki Fighters) and Lugaru, which the stand-in cannot show; their
+lines are from their PSP tests and their key files.
 A game started from the launcher is preceded by its "Starting" frame, which
 the PSP keeps with a spinner turning on it until the game draws (the
 hand-over `DISCONNECT`, docs/PSPExp_Technical_Architecture.md §9.2). SELECT

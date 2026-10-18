@@ -34,6 +34,5 @@ control=circle: Brake
 control=r: Drift
 control=l: Use your item
 control=square: Look back
-control=triangle: Change the camera
-control=select: Pause
+control=select: Pause; in Time Attack, restart
 control=start: The menu
