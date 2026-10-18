@@ -103,7 +103,7 @@ PSP itself:
    and after each press), menus as well as play, with a hint of them in the recipe's description
    and the manual;
 4. no native port of it already exists for the PSP: PSPExp brings what the PSP cannot run by
-   itself (Wolfenstein 3D, Duke Nukem 3D, Commander Keen, Heretic and Hexen, for example, all
+   itself (Wolfenstein 3D, Duke Nukem 3D, Heretic and Hexen, for example, all
    have PSP ports). Look for one first.
 
 Games made for small screens fit best (the 320x200 DOS era). Six Debian games that ran but failed
