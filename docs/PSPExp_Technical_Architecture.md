@@ -533,8 +533,15 @@ moving and looking right; its pointer at first invisible, two layer fixes
 (the pointer left off-screen when its window shrank from 1920x1080 to
 480x272; its cursor pictures empty, 32x32 with no visible pixel, the arrow
 drawn instead). Its menus are laid out for at least 800x600 (the main menu's
-items over the logo, the options window larger than the screen): not yet
-fitted.*
+items over the logo; the options window's MinSize 640x550). Rendered at
+480x330 with its interface scale at 0.6 (550 virtual lines: every window
+whole), shown by the layer at its own pixels (`PSPEXP_MAGNIFY=pointer`): in
+its menus the 480x272 round the pointer, scrolled as the pointer reaches an
+edge; in play (pointer hidden) the frame's bottom 272 lines, the HUD in view
+and the top 58 lines of the scene cut. Fitting the whole 330 lines instead
+(shrunk to 82%) made the text in play too small; the interface at 1.0 and
+480x272 read best but cut the options window and overlapped the main menu.
+Played on the PSP-1000 this way: playable.*
 
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 

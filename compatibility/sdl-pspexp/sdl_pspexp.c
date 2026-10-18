@@ -288,6 +288,7 @@ static struct {
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */
     int compose;                   /* PSPEXP_COMPOSE=1: the frame drawn on the board, sent whole (host_render, SDL_RenderPresent) */
     int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */
+    int magnify_pointer, magnify_was_shown;   /* PSPEXP_MAGNIFY=pointer: always magnified, round the pointer or (hidden) the frame's bottom */
     float drawn_px, drawn_py; Uint32 last_present; unsigned replays;   /* the pointer as last shown (replay_pointer) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
      * pushed events, and games that poll it (Chromium B.S.U.) would not */
@@ -427,6 +428,10 @@ static void connect_once(void)
     if (getenv("PSPEXP_MAGNIFY")) {   /* "r": that button switches between the whole frame shrunk and its own pixels */
         int b;
         for (b = 0; b < B_COUNT; b++) if (!strcmp(getenv("PSPEXP_MAGNIFY"), BUTTON_NAMES[b])) S.magnify_btn = b;
+    /* PSPEXP_MAGNIFY=pointer: the frame always at its own size: while the game shows its pointer (its
+     * menus) the part round it, scrolled by moving the pointer to an edge; while it hides it (play)
+     * the bottom of the frame, a HUD's place (OpenMW: shrunk to fit, its text was too small) */
+    S.magnify_pointer = getenv("PSPEXP_MAGNIFY") && !strcmp(getenv("PSPEXP_MAGNIFY"), "pointer");
     }
     S.nub_keys = getenv("PSPEXP_NUB") && !strcmp(getenv("PSPEXP_NUB"), "keys");
     S.hide_window = getenv("PSPEXP_WINDOW") && !strcmp(getenv("PSPEXP_WINDOW"), "hide");
@@ -591,6 +596,7 @@ static void pointer_logical(float *lx, float *ly)
 /* The frame fitted to the PSP's 480x272, or, magnified (PSPEXP_MAGNIFY), at its own size with the
  * pointer's surroundings in view: a 640x480 game's small text, 57% in the fitted frame (Heroes II's
  * 4-5 pixel labels), readable at 1:1. The view follows the pointer, stopped at the frame's edges. */
+static int pointer_shown(void);
 static void place_frame(int log)
 {
     int lw = S.log_w > 0 ? S.log_w : S.win_w, lh = S.log_h > 0 ? S.log_h : S.win_h;
@@ -602,6 +608,7 @@ static void place_frame(int log)
         int cx, cy;
         pointer_logical(&plx, &ply);
         cx = (int)lroundf(plx); cy = (int)lroundf(ply);
+        if (S.magnify_pointer && !pointer_shown()) { cx = lw / 2; cy = lh; }   /* (no pointer: the bottom of the frame, a game's HUD) */
         S.sx = S.sy = 1.0f;
         /* the pointer grows with the view, at most twice (Heroes III's at 45% looked tiny over its
          * magnified map, the user) */
@@ -3222,6 +3229,14 @@ static void end_frame_locked(void)
          * Rally goes full screen at the desktop's size, 480x272, and drew into a third of it) */
         if (headless_display() && (REAL(SDL_GetWindowFlags)(S.win) & SDL_WINDOW_FULLSCREEN)) { w = PSP_W; h = PSP_H; }
         if (w > 0 && h > 0 && (w != S.win_w || h != S.win_h)) { S.win_w = w; S.win_h = h; update_scale(); }
+    }
+    if (S.magnify_pointer && (!S.magnify || S.magnify_was_shown != pointer_shown())) {   /* (applies from the next frame) */
+        Tex *tx;
+        S.magnify_was_shown = pointer_shown();
+        S.magnify = 1;
+        update_scale();
+        for (tx = S.textures; tx; tx = tx->next) tx->dirty = 1;
+        if (S.surface_tex) S.surface_tex->dirty = 1;
     }
     if (!link_up()) { S.frame_open = 0; S.nquads = 0; try_reconnect(); return; }
     begin_frame();
