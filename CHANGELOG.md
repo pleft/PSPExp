@@ -5,7 +5,8 @@
 These came as package updates (2026-10-15 on): a board gets them through
 Packages (Apps > PSPExp), and the PSP's part through Settings > Update the
 PSP when it is offered; the card images are unchanged.
-See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
+See the games in [Part II](https://youtu.be/_rBYBBLUeNc), and the Dreamcast in
+[Dreamcast on the PSP](https://youtu.be/ex6nnDBRzHU) (filmed with Flycast on a Mac).
 
 - **Media** (once Music) plays **films** as well as music: MP4, MKV, WebM,
   AVI and whatever ffmpeg reads, full screen, up to 30 pictures a second

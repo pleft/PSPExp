@@ -78,7 +78,7 @@ section.wrap { padding-top: 56px; }
 .faq details p { color: var(--sub); margin: 10px 0 2px; }
 .closing { text-align: center; padding-bottom: 24px; }
 .closing .cta { justify-content: center; }
-.video .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.video .videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
 .video figure { margin: 0; }
 .video figcaption { color: var(--sub); margin-top: 10px; text-align: center; }
 @media (max-width: 760px) { .video .videos { grid-template-columns: 1fr; } }
