@@ -17,7 +17,7 @@ title=Unreal Tournament
 description=Epic's 1999 arena shooter, Game of the Year Edition: deathmatch, capture the flag and assault against bots or online. Drawn by the board's GPU.
 category=game
 license=Free with Epic Games' permission (Unreal Tournament GOTY), downloaded at install through OldUnreal; Epic Games Terms of Service
-version=4
+version=5
 terms=Epic Games Terms of Service|https://legal.epicgames.com/en-US/epicgames/tos
 
 [debian]
@@ -40,3 +40,14 @@ env=PSPEXP_MOUSE_BUTTONS=left=r,right=l
 env=PSPEXP_POINTER=0
 env=PSPEXP_JOYSTICK=0
 graphics=board-gpu
+control=nub: Aim; the pointer in menus
+control=triangle cross: Run forward, back
+control=square circle: Step left, right
+control=r: Fire; click in menus
+control=l: Alternate fire
+control=up: Jump
+control=down: Crouch
+control=right: Next weapon
+control=left: Translocator (teleport gun)
+control=select: Scores
+control=start: The game's menu

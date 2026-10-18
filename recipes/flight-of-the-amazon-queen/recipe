@@ -7,7 +7,7 @@ title=Flight of the Amazon Queen
 description=A 1995 jungle adventure: pilot Joe King crash-lands in the Amazon and stumbles on a mad scientist's plot. Point and click with the nub, with full speech; freeware since 2004.
 category=game
 license=Freeware (John Passfield, Steven Stamatiadis); ScummVM is GPL-3.0
-version=3
+version=4
 
 [debian]
 apt=scummvm flight-of-the-amazon-queen
@@ -24,3 +24,10 @@ exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 -
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Click: walk, do the chosen action
+control=circle: A thing's usual action
+control=triangle: Skip a line of speech
+control=square: Pause
+control=select: Skip a scene
+control=start: Menu: save, load, quit

@@ -14,7 +14,7 @@ title=Mr. Boom
 description=Bomberman-style action: lay bombs, blast walls and trap your rivals in maze arenas, against the computer.
 category=game
 license=MIT (Mr. Boom)
-version=4
+version=5
 
 [debian]
 apt=mrboom
@@ -29,3 +29,10 @@ keys=up=up,down=down,left=left,right=right,cross=rctrl,circle=ralt,square=rshift
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=nub dpad: Move
+control=cross: Lay a bomb
+control=circle: Set off your bombs (remote)
+control=square: Jump
+control=triangle: Add a computer player
+control=start: Start the game
+control=l r: Pause

@@ -6,7 +6,7 @@ title=SNES
 description=Super Nintendo: Debian's Snes9x core; ROMs in ~/roms/snes
 category=system
 license=Snes9x licence (non-commercial); pspexp-retro is part of PSPExp
-version=2
+version=3
 
 [package:gameshell]
 description=Super Nintendo: PSPExp's Snes9x 2005 core (lighter; Debian armhf has no Snes9x); ROMs in ~/roms/snes
@@ -41,3 +41,8 @@ thumbs=Nintendo - Super Nintendo Entertainment System
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: B, A
+control=square triangle: Y, X
+control=l r: L, R
+control=start select: Start, Select

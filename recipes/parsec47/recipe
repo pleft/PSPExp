@@ -13,7 +13,7 @@ title=Parsec47
 description=Retro-modern shooter: weave through the enemy fire and turn it back with your lance.
 category=game
 license=BSD-2-Clause (Parsec47, Kenta Cho)
-version=1
+version=2
 
 [debian]
 apt=parsec47
@@ -29,3 +29,7 @@ keys=cross=z,circle=x,square=x,start=p,select=p,up=up,down=down,left=left,right=
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=nub dpad: Move the ship
+control=cross: Fire; start a game
+control=square circle: Hold: slow, roll shot or lock-on
+control=start select: Pause

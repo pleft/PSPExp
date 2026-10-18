@@ -67,7 +67,7 @@ int main(void)
     /* an emulated system with ROMs in ~/roms, and one without a ROM folder yet */
     put("root/systems/gba.system", "name=Game Boy Advance\nshort=GBA\nroms=~/roms/gba\next=gba,gb\nexec=pspexp-retro /opt/pspexp/cores/mgba.so %ROM%\nthumbs=Nintendo - Game Boy Advance\ngraphics=sdl\npspexp=1\n");
     put("root/systems/snes.system", "name=Super Nintendo\nshort=SNES\nroms=~/roms/snes\next=sfc\nexec=./pspexp-retro snes9x %ROM%\n"
-        "pkg=snes\nenv=PSPEXP_RETRO_ASPECT=pixel\n");
+        "pkg=snes\nenv=PSPEXP_RETRO_ASPECT=pixel\ncontrol=cross circle: B, A\n");
     put("home/roms/snes/Super Game (Europe).sfc", "x");
     put("home/roms/gba/Legend of Zelda, The - The Minish Cap (USA).gba", "x");
     put("home/roms/gba/Golden Sun (USA, Europe).gba", "xx");
@@ -120,6 +120,7 @@ int main(void)
             lib_command(&L, &L.sys[s].roms_list[0], cmd, sizeof(cmd));
             { const char *want = "exec pspexp-retro /opt/pspexp/cores/mgba.so '"; CHECK(!strncmp(cmd, want, strlen(want))); }
             CHECK(strstr(cmd, "Golden Sun (USA, Europe).gba'") != NULL);
+            CHECK_EQ(lib_controls(&L, &L.sys[s].roms_list[0], cmd, sizeof(cmd)), 0);   /* a system without */
         }
     }
 
@@ -134,6 +135,8 @@ int main(void)
             CHECK(!strcmp(L.sys[s].roms_list[0].dir, p));
             lib_command(&L, &L.sys[s].roms_list[0], cmd, sizeof(cmd));
             { const char *want = "PSPEXP_RETRO_ASPECT='pixel' exec ./pspexp-retro snes9x '"; CHECK(!strncmp(cmd, want, strlen(want))); }
+            CHECK_EQ(lib_controls(&L, &L.sys[s].roms_list[0], cmd, sizeof(cmd)), 1);   /* a ROM: its system's controls */
+            CHECK(!strcmp(cmd, "cross circle: B, A\n"));
         }
     }
 

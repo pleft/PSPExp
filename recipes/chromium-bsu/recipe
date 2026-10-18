@@ -7,7 +7,7 @@ title=Chromium B.S.U.
 description=Fast arcade space shooter: fly the cargo ship Chromium B.S.U. through waves of enemies, picking up power-ups, shields and repairs.
 category=game
 license=Clarified Artistic (Chromium B.S.U.)
-version=2
+version=3
 
 [debian]
 apt=chromium-bsu
@@ -22,3 +22,9 @@ keys=start=return,select=escape,square=space,triangle=space,up=up,down=down,left
 nub=mouse
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=nub: Fly the ship
+control=dpad: Fly; move in the menus
+control=cross square triangle: Fire (hold)
+control=circle: Twice quickly: blow up your ship
+control=start: Choose in menus; twice, blow up
+control=select: Pause; the menu

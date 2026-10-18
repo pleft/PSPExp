@@ -18,7 +18,7 @@ title=Wolfenstein: Enemy Territory
 description=The free team shooter of 2003 on ET: Legacy: Axis against Allies, six classes, objectives to take, online or against bots. Drawn by the PSP.
 category=game
 license=GPL-3.0 (ET: Legacy); the game's data free under id Software's licence agreement, downloaded at install
-version=3
+version=4
 terms=id Software's ET licence terms|http://ftp.gwdg.de/pub/misc/ftp.idsoftware.com/idstuff/et/linux/et-linux-2.60.x86.run
 
 [debian]
@@ -39,3 +39,13 @@ env=PSPEXP_JOYSTICK=0
 env=PSPEXP_GL_UNITS=1
 env=PSPEXP_MOUSE_BUTTONS=left=r,right=none
 graphics=opengl
+control=nub: Aim; the pointer in menus
+control=triangle cross: Walk forward, back
+control=square circle: Step left, right
+control=r: Fire; click in menus
+control=l: Jump
+control=up down: Next, previous weapon
+control=left: Crouch, while held
+control=right: Reload
+control=select: Use: doors, ladders, switches
+control=start: The game's menu

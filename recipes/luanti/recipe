@@ -14,7 +14,7 @@ title=Luanti
 description=The voxel sandbox (formerly Minetest) with Minetest Game: explore, dig, build and craft in an endless world of blocks. Drawn by the board's GPU.
 category=game
 license=LGPL-2.1+ (Luanti); LGPL-2.1+ and CC BY-SA 3.0 (Minetest Game)
-version=1
+version=2
 
 [debian]
 apt=pspexp-luanti
@@ -34,3 +34,12 @@ env=PSPEXP_HOSTGL=1
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_MOUSE_BUTTONS=left=square,right=circle
 graphics=board-gpu
+control=nub: Look around; the pointer in menus
+control=dpad: Walk
+control=cross: Jump
+control=square: Dig, hit (hold); click in menus
+control=circle: Place a block; use
+control=triangle: Inventory
+control=l r: Previous, next item in the bar
+control=select: Sneak, while held
+control=start: The game's menu

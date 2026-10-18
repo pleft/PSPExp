@@ -10,7 +10,7 @@ title=Emilia Pinball
 description=3D pinball (Emilia Pinball) with two tables, Tux and the Professor: flippers, ramps, bumpers and high scores.
 category=game
 license=GPL-2 (Emilia Pinball)
-version=2
+version=3
 
 [debian]
 apt=pinball
@@ -25,3 +25,8 @@ keys=l=lshift,r=rshift,cross=return,square=lctrl,circle=rctrl,triangle=space,sta
 env=PINBALL_TABLE=tux
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=l r: Left, right flipper
+control=cross: Launch the ball
+control=square circle: Nudge the table left, right
+control=triangle: Nudge the table up
+control=start select: The menu

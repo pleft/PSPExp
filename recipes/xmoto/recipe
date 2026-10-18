@@ -8,7 +8,7 @@ title=X-Moto
 description=Physics motocross: ride, lean and flip your bike through hundreds of levels, collecting strawberries on the way to the flower.
 category=game
 license=GPL-2.0+ (X-Moto)
-version=2
+version=3
 
 [debian]
 apt=xmoto
@@ -23,3 +23,9 @@ keys=up=up,down=down,left=left,right=right,cross=return,circle=space,start=escap
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=up down: Accelerate, brake
+control=left right: Lean left, right
+control=nub: As the d-pad
+control=circle: Turn the bike round
+control=cross: Choose in menus
+control=start select: The menu

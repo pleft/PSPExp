@@ -7,7 +7,7 @@ title=Game Boy Advance
 description=Nintendo Game Boy Advance: Debian's mGBA core; ROMs in ~/roms/gba
 category=system
 license=MPL-2.0 (mGBA); pspexp-retro is part of PSPExp
-version=2
+version=3
 
 [debian]
 apt=pspexp-retro libretro-mgba
@@ -24,3 +24,7 @@ thumbs=Nintendo - Game Boy Advance
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: B, A
+control=l r: L, R
+control=start select: Start, Select

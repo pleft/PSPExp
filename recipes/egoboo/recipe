@@ -13,7 +13,7 @@ title=Egoboo
 description=A 3D dungeon crawler in the spirit of NetHack: pick a hero, explore dungeons, fight monsters and gather loot, with a sense of humour.
 category=game
 license=GPL-3.0 (Egoboo and its assets), downloaded from its repository
-version=1
+version=2
 
 [debian]
 apt=egoboo
@@ -29,3 +29,11 @@ nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=none
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=nub: The pointer in menus
+control=cross: Click in menus
+control=dpad: Move
+control=square circle: Use the left, right hand's item
+control=r: Jump
+control=l select: Grab with the left, right hand
+control=triangle: Inventory
+control=start: The menu

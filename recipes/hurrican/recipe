@@ -14,7 +14,7 @@ title=Hurrican
 description=A run-and-gun shooter in the spirit of Turrican: blast through huge levels with a spread gun, laser and bouncers, a lightning whip and smart bombs.
 category=game
 license=MIT (the HurricanGame engine); freeware (Hurrican, Poke53280), downloaded from its repository
-version=1
+version=2
 
 [debian]
 apt=hurrican
@@ -28,3 +28,12 @@ exec=/usr/games/hurrican
 keys=cross=lalt,square=lctrl,circle=lshift,triangle=space,r=rctrl,l=rshift,select=return,start=esc,up=up,down=down,left=left,right=right
 nub=keys
 graphics=opengl
+control=dpad nub: Run; up aims up, down ducks
+control=cross: Jump; OK in menus
+control=square: Shoot
+control=circle: Lightning whip; back in menus
+control=triangle: Power line
+control=r: Throw a grenade
+control=l: Smart bomb
+control=select: Change weapon
+control=start: Pause, the menu

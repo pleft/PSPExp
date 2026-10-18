@@ -8,7 +8,7 @@ title=Atari Lynx
 description=Atari Lynx: the Handy core (PSPExp's package), no BIOS needed; ROMs in ~/roms/lynx
 category=system
 license=zlib (Handy, K. Wilkins); pspexp-retro is part of PSPExp
-version=2
+version=3
 
 [debian]
 apt=pspexp-retro pspexp-libretro-handy
@@ -25,3 +25,7 @@ thumbs=Atari - Lynx
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: B, A
+control=l r: Option 1, Option 2
+control=start: Pause

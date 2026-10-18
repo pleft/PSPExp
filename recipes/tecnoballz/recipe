@@ -15,7 +15,7 @@ title=TecnoballZ
 description=Breakout with a shop between levels, gadgets, bosses and up to four paddles at once.
 category=game
 license=GPL-3.0+ (TecnoballZ)
-version=1
+version=2
 
 [debian]
 apt=tecnoballz
@@ -32,3 +32,10 @@ nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=nub: Move the paddle; the menu's pointer
+control=cross: Fire; click in menus
+control=circle: Fire the Gigablitz when you have it
+control=triangle: Release the ball
+control=square: Tilt: nudge the ball
+control=start: Pause
+control=select: The game's menu

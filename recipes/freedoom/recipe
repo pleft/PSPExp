@@ -7,7 +7,7 @@ title=Freedoom
 description=Free Doom-compatible games on Chocolate Doom: Phase 1, four episodes, and Phase 2, a 32-level megawad, with their own levels, monsters and art.
 category=game
 license=BSD-3-Clause (Freedoom); GPL-2.0 (Chocolate Doom)
-version=2
+version=3
 
 [debian]
 apt=chocolate-doom freedoom
@@ -29,6 +29,14 @@ keys=cross=lctrl,circle=space,square=lshift,triangle=return+y,l=comma,r=period,s
 nub=keys
 cover=phase1.png
 graphics=sdl
+control=nub dpad: Walk forward, back; turn
+control=cross: Fire
+control=circle: Open doors, press switches
+control=square: Run, while held
+control=l r: Step left, right
+control=triangle: Choose in menus; yes
+control=select: Map
+control=start: The game's menu
 
 [entry.phase2]
 id=freedoom2
@@ -41,3 +49,11 @@ keys=cross=lctrl,circle=space,square=lshift,triangle=return+y,l=comma,r=period,s
 nub=keys
 cover=phase2.png
 graphics=sdl
+control=nub dpad: Walk forward, back; turn
+control=cross: Fire
+control=circle: Open doors, press switches
+control=square: Run, while held
+control=l r: Step left, right
+control=triangle: Choose in menus; yes
+control=select: Map
+control=start: The game's menu

@@ -12,7 +12,7 @@ title=Nintendo 64
 description=Nintendo 64: Mupen64Plus with GLideN64, drawn by the board's GPU (Raspberry Pi); ROMs in ~/roms/n64
 category=system
 license=GPL-2.0 (Mupen64Plus, GLideN64); pspexp-n64 is part of PSPExp
-version=1
+version=2
 
 [debian]
 apt=pspexp-mupen64plus
@@ -32,3 +32,10 @@ exec=/usr/games/pspexp-n64 %ROM%
 keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
 env=PSPEXP_HOSTGL=1
 graphics=board-gpu
+control=nub: Stick
+control=dpad: C buttons
+control=cross square: A, B
+control=l: Z
+control=r: R
+control=triangle: L
+control=start: Start

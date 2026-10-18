@@ -12,7 +12,7 @@ title=Command & Conquer
 description=Westwood's 1995 real-time strategy game: GDI against the Brotherhood of Nod, the Gold edition. EA's freeware, drawn by the PSP.
 category=game
 license=Freeware (Command & Conquer, EA, under EA's licence agreement), downloaded at install; GPL-3.0 (Vanilla Conquer)
-version=3
+version=4
 
 [debian]
 apt=cnc-freeware
@@ -29,3 +29,8 @@ env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
 env=PSPEXP_TEX_HALF=0
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Select, give orders, click
+control=circle: Deselect
+control=dpad: Scroll the map
+control=start: Options menu

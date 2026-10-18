@@ -437,7 +437,11 @@ int lib_controls(const Library *L, const LEntry *e, char *out, size_t n)
     if (!strncmp(e->id, "p:", 2) && (slash = strchr(e->id + 2, '/')))
         snprintf(p, sizeof(p), "%s/apps/%.*s/%s.entry", L->root, (int)(slash - e->id - 2), e->id + 2, slash + 1);
     else if (!strncmp(e->id, "e:", 2)) snprintf(p, sizeof(p), "%s/library/%s.entry", L->home, e->id + 2);
-    else return 0;
+    else if (e->type == LT_ROM && e->sys >= 0 && e->sys < L->nsys) {   /* a ROM: its system's (the home's file first, as loaded) */
+        struct stat st;
+        snprintf(p, sizeof(p), "%s/systems/%s.system", L->home, L->sys[e->sys].id);
+        if (stat(p, &st) != 0) snprintf(p, sizeof(p), "%s/systems/%s.system", L->root, L->sys[e->sys].id);
+    } else return 0;
     c.out = out; c.n = n; c.len = 0; c.lines = 0;
     read_kv(p, controls_kv, &c);
     return c.lines;

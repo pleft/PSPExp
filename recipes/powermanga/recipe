@@ -14,7 +14,7 @@ title=Powermanga
 description=Arcade shoot'em up: fly through waves of aliens and bosses, collect the gems to power up your ship's weapons.
 category=game
 license=GPL-3.0+ (Powermanga)
-version=1
+version=2
 
 [debian]
 apt=powermanga
@@ -30,3 +30,8 @@ keys=cross=lctrl,square=lalt,circle=return,start=p,select=escape,up=up,down=down
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=dpad nub: Move the ship
+control=cross: Fire
+control=square: Special weapon
+control=start: Pause
+control=select: The game's menu

@@ -7,7 +7,7 @@ title=Beneath a Steel Sky
 description=Revolution's 1994 cyberpunk adventure: Robert Foster is snatched from the Gap and escapes into Union City with his robot friend Joey. Point and click with the nub; freeware since 2003.
 category=game
 license=Freeware (Revolution Software); ScummVM is GPL-3.0
-version=3
+version=4
 
 [debian]
 apt=scummvm beneath-a-steel-sky
@@ -24,3 +24,10 @@ exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 -
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Walk; look at a thing
+control=circle: Use a thing: take, open, talk
+control=triangle: Skip a line of speech
+control=square: Pause
+control=select: Skip a cutscene
+control=start: Save, load, options

@@ -17,7 +17,7 @@ title=Hex-a-hop
 description=Puzzle game on hexagonal tiles: break every green tile by hopping off it, without trapping yourself. A hundred levels, no time limit.
 category=game
 license=GPL-2.0+ (Hex-a-hop), its data partly CC0-1.0 and CC-BY-SA-3.0
-version=2
+version=3
 
 [debian]
 apt=hex-a-hop
@@ -33,3 +33,10 @@ keys=up=w,down=s,left=a,right=d,l=q,r=e,triangle=u,square=u,start=escape,select=
 nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
 graphics=sdl
+control=up down: Hop up, down
+control=left right: Hop down-left, down-right
+control=l r: Hop up-left, up-right
+control=nub: Move the pointer
+control=cross: Hop to the tile clicked; choose
+control=circle triangle square: Undo
+control=start select: Menu: resume, restart, help

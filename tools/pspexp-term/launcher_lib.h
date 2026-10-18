@@ -86,7 +86,8 @@ int  lib_fav_toggle(Library *L, const char *id);   /* returns the new state */
 int  lib_is_fav(const Library *L, const char *id);
 
 /* an entry's controls, its control= lines ("buttons: what they do"), one per line in out; the
- * number of lines (0: none, ROMs and systems have none). Read from its file when asked, so the
+ * number of lines (0: none); a ROM's are its
+ * system's. Read from its file when asked, so the
  * lists of entries and ROMs stay small */
 int  lib_controls(const Library *L, const LEntry *e, char *out, size_t n);
 /* the shell command that starts an entry */

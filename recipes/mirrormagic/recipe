@@ -13,7 +13,7 @@ title=Mirror Magic
 description=Laser puzzles: turn mirrors, prisms and beam splitters until the beam reaches its target, with the classic Deflektor levels.
 category=game
 license=GPL-2.0 (Mirror Magic)
-version=1
+version=2
 
 [debian]
 apt=mirrormagic
@@ -31,3 +31,8 @@ env=PSPEXP_MOUSE_BUTTONS=left=cross,right=circle
 env=PSPEXP_MAGNIFY=r
 env=PSPEXP_TEX_FIT=1
 graphics=sdl
+control=nub: Move the pointer
+control=cross circle: Turn a piece one way, the other
+control=r: Zoom in round the pointer; again, out
+control=start: OK
+control=select: Back

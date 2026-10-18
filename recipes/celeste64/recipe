@@ -16,7 +16,7 @@ title=Celeste 64
 description=The makers of Celeste's free 3D platformer in the style of the N64: Madeline climbs, dashes and collects strawberries up a mountain. Drawn by the board's GPU.
 category=game
 license=Free (Celeste 64, Maddy Makes Games; code MIT), downloaded at install from the developers
-version=2
+version=3
 
 [debian]
 apt=celeste64
@@ -37,3 +37,9 @@ env=MESA_GL_VERSION_OVERRIDE=3.3
 env=MESA_GLSL_VERSION_OVERRIDE=330
 first-run=.local/share/Celeste64/controls.json:{"Actions":{"Jump":[{"Key":"C"},{"Button":"South"},{"Button":"Y"}],"Dash":[{"Key":"X"},{"Button":"West"},{"Button":"East"}],"Climb":[{"Key":"Z"},{"Button":"LeftShoulder"},{"Button":"RightShoulder"}],"Confirm":[{"Key":"C"},{"Button":"South"}],"Cancel":[{"Key":"X"},{"Button":"East"}],"Pause":[{"Key":"Escape"},{"Button":"Start"},{"Button":"Back"}]},"Sticks":{"Move":{"Deadzone":0.35,"Up":[{"Key":"Up"},{"Axis":"LeftY","AxisInverted":true}],"Down":[{"Key":"Down"},{"Axis":"LeftY"}],"Left":[{"Key":"Left"},{"Axis":"LeftX","AxisInverted":true}],"Right":[{"Key":"Right"},{"Axis":"LeftX"}]},"Camera":{"Deadzone":0.35,"Up":[{"Key":"W"},{"Button":"Up"}],"Down":[{"Key":"S"},{"Button":"Down"}],"Left":[{"Key":"A"},{"Button":"Left"}],"Right":[{"Key":"D"},{"Button":"Right"}]},"Menu":{"Deadzone":0.35,"Up":[{"Key":"Up"},{"Button":"Up"},{"Axis":"LeftY","AxisDeadzone":0.5,"AxisInverted":true}],"Down":[{"Key":"Down"},{"Button":"Down"},{"Axis":"LeftY","AxisDeadzone":0.5}],"Left":[{"Key":"Left"},{"Button":"Left"},{"Axis":"LeftX","AxisDeadzone":0.5,"AxisInverted":true}],"Right":[{"Key":"Right"},{"Button":"Right"},{"Axis":"LeftX","AxisDeadzone":0.5}]}}}\n
 graphics=board-gpu
+control=nub: Move
+control=dpad: Turn the camera
+control=cross: Jump; choose in menus
+control=square circle: Dash; circle also backs out
+control=l r: Hold to climb a wall
+control=start: Pause

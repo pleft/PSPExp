@@ -9,7 +9,7 @@ title=SuperTux
 description=Classic 2D jump 'n run: Tux the penguin runs, jumps and slides through icy worlds to rescue Penny.
 category=game
 license=GPL-3.0+ (SuperTux)
-version=2
+version=3
 
 [debian]
 apt=supertux
@@ -24,3 +24,9 @@ keys=cross=space+return,circle=escape,square=lctrl,triangle=lctrl,start=return,s
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl-shaders
+control=nub dpad: Walk; down ducks
+control=cross: Jump; choose in menus
+control=square triangle: Run, carry, throw fireballs
+control=l r: Look up, look down
+control=circle select: The game's menu; back
+control=start: Choose in menus

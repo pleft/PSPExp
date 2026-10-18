@@ -8,7 +8,7 @@ title=openMrac
 description=3D arcade racing: pick a car and race laps on country tracks, chasing your best time.
 category=game
 license=BSD-2-Clause (openMrac)
-version=2
+version=3
 
 [debian]
 apt=openmrac
@@ -23,3 +23,8 @@ keys=cross=up,square=down,start=return,select=escape,up=up,down=down,left=left,r
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl-shaders
+control=dpad nub: Steer; up speeds up, down brakes
+control=cross: Accelerate
+control=square: Brake
+control=start: Choose in menus
+control=select: Back to the menu

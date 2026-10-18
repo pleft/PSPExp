@@ -12,7 +12,7 @@ title=Theia: The Crimson Eclipse
 description=A free 40-hour JRPG made in RPG Maker 2003: Valiant, a soldier of a fallen kingdom, against an empire, with a large cast and long story. On EasyRPG.
 category=game
 license=GPL-3.0 (EasyRPG Player); free game (Theia, MissingSeven, 2019), downloaded from its developer
-version=1
+version=2
 
 [debian]
 apt=theia
@@ -27,3 +27,7 @@ keys=cross=z,circle=x,triangle=x,square=lshift,start=x,select=none,up=up,down=do
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=dpad nub: Walk; move in the menus
+control=cross: Talk, examine, confirm
+control=circle triangle start: The menu; cancel
+control=square: Run (hold)

@@ -14,7 +14,7 @@ title=Tiberian Dawn (OpenRA)
 description=Command & Conquer remade by OpenRA: skirmish against the computer, online battles and the campaigns, with modern controls. Drawn by the board's GPU (Pi).
 category=game
 license=GPL-3.0 (OpenRA); the original game's content downloaded by OpenRA's installer (EA's freeware)
-version=4
+version=5
 
 [debian]
 apt=pspexp-openra
@@ -35,3 +35,8 @@ env=PSPEXP_JOYSTICK=0
 env=PSPEXP_WINDOW=1024x576
 env=PSPEXP_HOSTGL=1
 graphics=board-gpu
+control=nub: Move the pointer
+control=dpad: Scroll the map
+control=cross: Select; hold and move to box units
+control=circle: Move or attack there
+control=start: The game's menu

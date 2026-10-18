@@ -12,7 +12,7 @@ title=Dink Smallwood
 description=A comic action RPG: Dink, a pig farmer, leaves his village and fights, talks and casts his way to hero, in a world full of odd humour. On FreeDink.
 category=game
 license=GPL-3.0+ (FreeDink); free data (Dink Smallwood, RTsoft)
-version=1
+version=2
 
 [debian]
 apt=freedink
@@ -27,3 +27,10 @@ keys=cross=lctrl,circle=space,square=lshift,triangle=return,start=escape,select=
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=dpad nub: Walk; the title screen's pointer
+control=cross: Attack; click on the title screen
+control=circle: Talk, look at things
+control=square: Cast magic
+control=triangle: Inventory
+control=select: The map
+control=start: The menu: save, load, quit

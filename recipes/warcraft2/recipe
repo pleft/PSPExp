@@ -28,7 +28,7 @@ title=Warcraft II
 description=Blizzard's 1995 real-time strategy game on Stratagus and Wargus: humans against orcs on land, at sea and in the air. Needs your own copy (DOS CD or its image, Battle.net Edition or GOG). Drawn by the PSP.
 category=game
 license=GPL-2.0 (Stratagus, Wargus); the game's data is your own copy's (Blizzard)
-version=5
+version=6
 
 [debian]
 apt=pspexp-wargus
@@ -45,3 +45,10 @@ keys=square=lshift,triangle=lctrl,up=up,down=down,left=left,right=right,start=f1
 nub=mouse
 env=PSPEXP_NUB_SPEED=400
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Select units, press buttons
+control=circle: Order: move, attack, gather
+control=square: Hold and click: add to the selection
+control=dpad: Scroll the map
+control=select: Cancel a command; back
+control=start: The game's menu

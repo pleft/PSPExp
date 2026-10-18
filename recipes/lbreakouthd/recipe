@@ -15,7 +15,7 @@ title=LBreakout HD
 description=Breakout with power-ups, bonuses and over a hundred levels: break every brick with the ball, catch the extras.
 category=game
 license=GPL-3.0+ (LBreakout HD)
-version=1
+version=2
 
 [debian]
 apt=lbreakouthd
@@ -32,3 +32,8 @@ nub=keys
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_COMPOSE=1
 graphics=sdl
+control=dpad nub: Move the paddle
+control=cross: Launch the ball, fire; confirm
+control=circle: Bring a stuck ball back
+control=triangle: Turbo: a faster paddle
+control=start: The game's menu

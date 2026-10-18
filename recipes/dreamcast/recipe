@@ -15,7 +15,7 @@ title=Dreamcast
 description=Sega Dreamcast: Flycast, drawn by the board's GPU (Raspberry Pi); disc images in ~/roms/dreamcast
 category=system
 license=GPL-2.0 (Flycast); pspexp-dreamcast is part of PSPExp
-version=1
+version=2
 
 [debian]
 apt=pspexp-flycast
@@ -36,3 +36,10 @@ keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,s
 env=PSPEXP_HOSTGL=1
 env=PSPEXP_FRAME_DROP=2
 graphics=board-gpu
+control=nub: Stick
+control=dpad: D-pad
+control=cross circle: A, B
+control=square triangle: X, Y
+control=l r: Triggers
+control=start: Start
+control=select: Flycast's menu (Exit quits)

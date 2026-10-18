@@ -21,7 +21,7 @@ title=Commander Keen
 description=id Software's platform classics: Keen 1, Marooned on Mars, and Keen 4, Secret of the Oracle, their free episodes on Commander Genius.
 category=game
 license=GPL-2.0+ (Commander Genius); the episodes: id Software / Apogee shareware, freely distributed
-version=1
+version=2
 
 [debian]
 apt=commander-keen1 commander-keen4
@@ -38,6 +38,13 @@ keys=cross=lctrl,circle=lalt,square=space,triangle=return,l=f6,r=f9,start=escape
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=dpad nub: Move; choose in menus
+control=cross: Jump; hold it for a higher jump
+control=circle: Pogo stick
+control=square: Shoot
+control=triangle: Status screen
+control=l r: Quick save, quick load
+control=start select: The menu
 
 [entry.keen4]
 id=keen4
@@ -50,3 +57,10 @@ keys=cross=lctrl,circle=lalt,square=space,triangle=return,l=f6,r=f9,start=escape
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=dpad nub: Move; choose in menus
+control=cross: Jump; hold it for a higher jump
+control=circle: Pogo stick
+control=square: Shoot
+control=triangle: Status screen
+control=l r: Quick save, quick load
+control=start select: The menu

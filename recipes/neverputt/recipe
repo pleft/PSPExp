@@ -12,7 +12,7 @@ title=Neverputt
 description=Minigolf in 3D: aim and putt through courses of ramps, loops and bumpers, alone or with friends.
 category=game
 license=GPL-2.0+ (Neverputt)
-version=1
+version=2
 
 [debian]
 apt=neverputt
@@ -26,3 +26,7 @@ icon=trophy
 exec=/usr/games/neverputt
 first-run=.neverball/neverballrc:fullscreen 0\nwidth 480\nheight 272\n
 graphics=opengl
+control=nub: Aim; move in menus
+control=cross: Putt (hold for power); choose
+control=circle: Back in menus
+control=select: Pause

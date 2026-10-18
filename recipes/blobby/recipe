@@ -8,7 +8,7 @@ title=Blobby Volley 2
 description=Beach volleyball between two blobs with bouncy physics, against the computer: short, quick matches.
 category=game
 license=GPL-2.0+ (Blobby Volley 2)
-version=2
+version=3
 
 [debian]
 apt=blobby
@@ -24,3 +24,8 @@ nub=mouse
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_MOUSE_BUTTONS=left=circle,right=none
 graphics=opengl
+control=left right: Move your blob
+control=cross: Jump (d-pad up jumps too)
+control=nub: The pointer, in the menus
+control=circle: Click, in the menus
+control=start select: Leave the match; back

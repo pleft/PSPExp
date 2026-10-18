@@ -8,7 +8,7 @@ title=OpenTyrian
 description=Tyrian 2.1, the 1995 vertical shooter: fight through a story campaign, earning money between levels to buy weapons and ship upgrades. Freeware since 2004.
 category=game
 license=GPL-2.0 (OpenTyrian); freeware data (Tyrian 2.1)
-version=3
+version=4
 
 [debian]
 apt=opentyrian tyrian-data
@@ -29,3 +29,10 @@ keys=cross=space,circle=lctrl,square=lalt,triangle=return,l=lctrl,r=lalt,start=p
 nub=keys
 first-run=.config/opentyrian/opentyrian.cfg:section video\n\titem fullscreen -1\n\titem scaler None\n\titem scaling_mode integer\n
 graphics=sdl
+control=dpad nub: Fly
+control=cross: Fire
+control=circle l: Fire the left sidekick
+control=square r: Fire the right sidekick
+control=triangle: Rear gun's mode; OK in menus
+control=start: Pause
+control=select: The menu; back

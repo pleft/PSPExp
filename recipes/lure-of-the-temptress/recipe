@@ -7,7 +7,7 @@ title=Lure of the Temptress
 description=Revolution's 1992 fantasy adventure: Diermot escapes a dungeon and helps the town of Turnvale against the sorceress Selena; its people live lives of their own. Freeware since 2003.
 category=game
 license=Freeware (Revolution Software); ScummVM is GPL-3.0
-version=3
+version=4
 
 [debian]
 apt=scummvm lure-of-the-temptress
@@ -24,3 +24,8 @@ exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 -
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Walk, use, talk (click)
+control=circle: The list of actions (right click)
+control=start: Save the game
+control=select: Quit (asks first)

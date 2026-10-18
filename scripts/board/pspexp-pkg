@@ -216,6 +216,7 @@ P
 			  rall "$R" "$sec" env | sed 's/^/env=/'
 			  th=$(rget "$R" "$sec" thumbs); [ -n "$th" ] && echo "thumbs=$th"
 			  g=$(rget "$R" "$sec" graphics); [ -n "$g" ] && echo "graphics=$g"
+			  rall "$R" "$sec" control | sed 's/^/control=/'   # the launcher's controls sheet, for its ROMs
 			  echo "pspexp=1"; } > "$A/systems/$sid.system"
 			cp "$A/systems/$sid.system" "$STAGE/systems/"
 		done

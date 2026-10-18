@@ -13,7 +13,7 @@ title=Lugaru HD
 description=Wolfire's 3D action game: a rabbit warrior fights wolves and rats with kicks, reversals and knives across an island. Drawn by the PSP.
 category=game
 license=GPL-2.0+ (Lugaru); CC BY-SA 3.0 / 4.0 (its data)
-version=2
+version=3
 
 [debian]
 apt=pspexp-lugaru
@@ -29,3 +29,11 @@ nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=none
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=nub: Look around; the pointer in menus
+control=dpad: Move
+control=cross: Attack; click in menus
+control=circle: Jump
+control=square: Crouch; while moving, roll
+control=triangle: Draw a weapon; again, put it away
+control=l: Throw your weapon
+control=start: The menu

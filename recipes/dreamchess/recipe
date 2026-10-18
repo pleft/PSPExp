@@ -11,7 +11,7 @@ title=DreamChess
 description=3D chess against the computer, with several board and piece sets and adjustable difficulty.
 category=game
 license=GPL-3+ (DreamChess)
-version=2
+version=3
 
 [debian]
 apt=dreamchess
@@ -26,3 +26,6 @@ keys=cross=return,circle=escape,start=escape,select=escape
 nub=keys
 env=PSPEXP_GL_EXTENSIONS=GL_ARB_framebuffer_object,GL_ARB_texture_non_power_of_two
 graphics=opengl
+control=dpad nub: Move the selector
+control=cross: Pick a piece, then its square
+control=circle start select: The menu; back

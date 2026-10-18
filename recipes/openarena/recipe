@@ -22,7 +22,7 @@ title=OpenArena
 description=Fast arena shooter on the Quake 3 engine: deathmatch and capture the flag against bots, with rail guns, rockets and jump pads.
 category=game
 license=GPL-2.0 (ioquake3, OpenArena)
-version=5
+version=6
 
 [debian]
 apt=openarena
@@ -39,3 +39,12 @@ env=PSPEXP_JOYSTICK=0
 env=PSPEXP_GL_UNITS=1
 env=PSPEXP_MOUSE_BUTTONS=left=r,right=none
 graphics=opengl
+control=nub: Aim; the pointer in menus
+control=triangle cross: Run forward, back
+control=square circle: Step left, right
+control=r: Fire; click in menus
+control=l: Jump
+control=up down: Next, previous weapon
+control=left: Crouch
+control=select: Scores
+control=start: The menu

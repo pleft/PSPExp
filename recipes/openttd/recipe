@@ -10,7 +10,7 @@ title=OpenTTD
 description=Build a transport empire in Transport Tycoon Deluxe's world: trains, road vehicles, ships and aircraft, with free graphics, sounds and music.
 category=game
 license=GPL-2.0 (OpenTTD, OpenGFX, OpenMSX); CC Sampling Plus 1.0 (OpenSFX)
-version=3
+version=4
 
 [debian]
 apt=openttd openttd-opengfx openttd-opensfx openttd-openmsx
@@ -26,3 +26,11 @@ nub=mouse
 env=PSPEXP_NUB_SPEED=180
 first-run=.config/openttd/openttd.cfg:[network]\nparticipate_survey = no\n
 graphics=sdl
+control=nub: Move the pointer
+control=dpad: Scroll the map
+control=l r: Zoom out, in
+control=cross: Click: build, choose
+control=circle: Right mouse button (button tips)
+control=triangle: Close the top window
+control=square: Close news and errors
+control=start: Cancel the current tool

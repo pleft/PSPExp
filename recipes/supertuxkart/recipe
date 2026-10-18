@@ -15,7 +15,7 @@ title=SuperTuxKart
 description=3D kart racing with Tux and friends: twenty tracks, items and nitro, against the computer. Drawn by the board's own GPU, shown on the PSP.
 category=game
 license=GPL-3.0+ (SuperTuxKart); CC BY-SA and others (its data)
-version=1
+version=2
 
 [debian]
 apt=supertuxkart
@@ -35,3 +35,12 @@ first-run=.config/supertuxkart/config-0.10/config.xml:<?xml version="1.0"?>\n<st
 first-run=.config/supertuxkart/config-0.10/players.xml:<?xml version="1.0"?>\n<players version="1" >\n    <current player="Player"/>\n    <player name="Player" guest="false" use-frequency="0" icon-filename="" unique-id="1" saved-session="false" saved-user="0" saved-token="" last-online-name="" last-was-online="false" remember-password="false" default-kart-color="0">\n    </player>\n</players>\n
 first-run=.config/supertuxkart/config-0.10/input.xml:<input version="1">\n<gamepad name ="Virtual Controller" deadzone="4096" desensitize="0" auto-center="20" force-feedback="0" enabled="true" configName="">\n    <action name="steerLeft" event="3" id="15" />\n    <action name="steerRight" event="3" id="13" />\n    <action name="accel" event="3" id="0" />\n    <action name="brake" event="3" id="2" />\n    <action name="nitro" event="3" id="5" />\n    <action name="drift" event="3" id="4" />\n    <action name="rescue" event="3" id="3" />\n    <action name="fire" event="3" id="1" />\n    <action name="lookBack" event="3" id="7" />\n    <action name="pauserace" event="3" id="6" />\n    <action name="menuUp" event="3" id="12" />\n    <action name="menuDown" event="3" id="14" />\n    <action name="menuLeft" event="3" id="15" />\n    <action name="menuRight" event="3" id="13" />\n    <action name="menuSelect" event="3" id="0" />\n    <action name="menuCancel" event="3" id="1" />\n</gamepad>\n</input>\n
 graphics=board-gpu
+control=dpad: Steer; move in the menus
+control=cross: Accelerate; choose in menus
+control=square: Brake, reverse
+control=circle: Use your item; back in menus
+control=r: Nitro boost
+control=l: Drift (hold while turning)
+control=triangle: Rescue: back on the track
+control=select: Look behind
+control=start: Pause

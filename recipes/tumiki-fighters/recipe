@@ -13,7 +13,7 @@ title=Tumiki Fighters
 description=Side-scrolling shooter: catch the parts of the enemies you shoot down and stick them to your ship.
 category=game
 license=BSD-2-Clause (Tumiki Fighters, Kenta Cho)
-version=1
+version=2
 
 [debian]
 apt=tumiki-fighters
@@ -29,3 +29,7 @@ keys=cross=z,circle=x,square=x,start=p,select=p,up=up,down=down,left=left,right=
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=nub dpad: Move the ship
+control=cross: Fire; start a game
+control=square circle: Hold: slow, pull your pieces in
+control=start select: Pause

@@ -150,6 +150,8 @@ launcher shows when the game is chosen (X then starts it, O goes back):
 `square`, `triangle`, `l`, `r`, `start`, `select`, `up`, `down`, `left`,
 `right`, `dpad`, `nub`) before the colon, what they do after it, at most 40
 characters and 11 lines (what fits); an entry without them starts at once.
+A `[system]` has them too: its ROMs show the console's buttons on the PSP
+(`control=cross circle: B, A`).
 `scripts/packages/check-recipes` checks every recipe in
 `recipes/` (sections, keys, ids, button names); the three examples below are
 the repository's own recipes as they are, and pass it.

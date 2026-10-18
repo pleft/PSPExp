@@ -7,7 +7,7 @@ title=NES
 description=Nintendo Entertainment System: Debian's Nestopia core; ROMs in ~/roms/nes
 category=system
 license=GPL-2.0 (Nestopia); pspexp-retro is part of PSPExp
-version=2
+version=3
 
 [package:omega]
 description=Nintendo Entertainment System: PSPExp's static player with the QuickNES core; ROMs in ~/roms/nes
@@ -33,3 +33,6 @@ thumbs=Nintendo - Nintendo Entertainment System
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: B, A
+control=start select: Start, Select

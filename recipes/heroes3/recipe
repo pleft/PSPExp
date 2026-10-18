@@ -24,7 +24,7 @@ title=Heroes III
 description=Turn-based fantasy strategy, the 1999 classic on VCMI: explore, build towns, recruit armies and fight with heroes. Needs your own copy of Shadow of Death or the Complete edition (GOG's) in the Heroes3 folder.
 category=game
 license=GPL-2.0+ (VCMI); the game's data is your own copy's (Ubisoft)
-version=3
+version=4
 
 [debian]
 apt=pspexp-heroes3
@@ -45,3 +45,10 @@ env=PSPEXP_TEX_FIT=1
 env=PSPEXP_JOYSTICK=0
 first-run=.config/vcmi/settings.json:{ "video" : { "resolution" : { "width" : 480, "height" : 272, "scaling" : 0 }, "fullscreen" : false, "showIntro" : false } }\n
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Click
+control=circle: Hold: what a thing is
+control=dpad: Scroll the map
+control=r: Magnify round the pointer; again, whole
+control=select: OK
+control=start: Cancel; close a window

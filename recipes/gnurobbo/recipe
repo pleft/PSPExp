@@ -14,7 +14,7 @@ title=GNU Robbo
 description=Puzzle game from the Atari: collect the screws and reach the capsule past creatures, bombs and lasers. Fifty-eight levels and more packs.
 category=game
 license=GPL-2.0+ (GNU Robbo)
-version=1
+version=2
 
 [debian]
 apt=gnurobbo
@@ -30,3 +30,7 @@ keys=cross=return,square=lshift,start=return,select=escape,up=up,down=down,left=
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=sdl
+control=dpad nub: Move; choose in menus
+control=square: Hold with the d-pad: shoot that way
+control=cross start: OK
+control=select: Back; in a level, try it again

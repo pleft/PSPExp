@@ -13,7 +13,7 @@ title=GLtron
 description=Light-cycle racing on the grid: cut off the other riders with the wall of light behind you, and don't hit one yourself.
 category=game
 license=GPL-2.0+ (GLtron)
-version=1
+version=2
 
 [debian]
 apt=gltron
@@ -29,3 +29,9 @@ keys=left=left+a,right=right+s,up=up,down=down,l=q,r=w,cross=return+e,start=p,se
 nub=keys
 env=PSPEXP_JOYSTICK=0
 graphics=opengl
+control=left right: Turn left, right
+control=l r: Look left, right
+control=cross: Speed boost; confirm
+control=up down: Move in menus
+control=start: Pause
+control=select: The game's menu

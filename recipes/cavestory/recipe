@@ -7,7 +7,7 @@ title=Cave Story
 description=Cave Story, Studio Pixel's freeware 2004 platformer, on NXEngine-evo: explore the caves of a floating island, find weapons and upgrades, and uncover its story.
 category=game
 license=GPL-3.0 (NXEngine-evo); freeware data (Cave Story, Studio Pixel; English translation by Aeon Genesis)
-version=3
+version=4
 
 [debian]
 apt=pspexp-cavestory cavestory-data
@@ -27,3 +27,11 @@ exec=/usr/games/pspexp-cavestory
 keys=cross=z,square=x,circle=x,l=a,r=s,triangle=q,select=w,start=escape,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad nub: Walk; up aims up
+control=down: Talk, examine; aim down mid-air
+control=cross: Jump
+control=square circle: Fire
+control=l r: Previous, next weapon
+control=triangle: Inventory
+control=select: Map (once you have the Map System)
+control=start: Pause: options, quit

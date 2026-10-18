@@ -21,7 +21,7 @@ title=Heroes of Might and Magic II
 description=Turn-based fantasy strategy: explore, build castles, recruit armies and fight with heroes. The 1996 classic on fheroes2: its demo, or your own copy.
 category=game
 license=GPL-2.0 (fheroes2); demo (Heroes of Might and Magic II, New World Computing, 1996), downloaded at install
-version=1
+version=2
 
 [debian]
 apt=heroes2-demo
@@ -44,3 +44,13 @@ env=PSPEXP_TEX_FIT=1
 env=PSPEXP_JOYSTICK=0
 first-run=.config/fheroes2/fheroes2.cfg:videomode = 640x480:640x480\nfullscreen = off\nfirst time game run = off\nshow game intro = off\n
 graphics=sdl
+control=nub: Move the pointer
+control=cross: Click
+control=circle: Hold: what a creature or building is
+control=r: Magnifier for small text; again, off
+control=dpad: Scroll the map
+control=l: Next hero
+control=square: Move the hero along its path
+control=triangle: End the turn
+control=select: OK
+control=start: Cancel; on the map, the main menu

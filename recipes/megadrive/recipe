@@ -7,7 +7,7 @@ title=Mega Drive
 description=Sega Mega Drive / Genesis: Debian's Genesis Plus GX core; ROMs in ~/roms/md
 category=system
 license=Genesis Plus GX licence (non-commercial); pspexp-retro is part of PSPExp
-version=3
+version=4
 
 [package:gameshell]
 description=Sega Mega Drive / Genesis: PSPExp's PicoDrive core (lighter; Debian armhf has no Mega Drive core); ROMs in ~/roms/md
@@ -42,6 +42,11 @@ thumbs=Sega - Mega Drive - Genesis
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=square cross circle: A, B, C
+control=l triangle r: X, Y, Z (six-button games)
+control=start: Start
+control=select: Mode
 
 [system.sms]
 id=sms
@@ -54,6 +59,9 @@ thumbs=Sega - Master System - Mark III
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: Button 1, button 2
+control=start: Pause
 
 [system.gg]
 id=gg
@@ -66,3 +74,6 @@ thumbs=Sega - Game Gear
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
 graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: Button 1, button 2
+control=start: Start

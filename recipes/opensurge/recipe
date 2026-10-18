@@ -13,7 +13,7 @@ title=Open Surge
 description=A fast 2D platformer in the spirit of the classic Sonic games: Surge the Rabbit runs, jumps and rolls through colourful zones.
 category=game
 license=GPL-3.0 (engine); CC BY-SA, CC BY, CC0, OFL and others (its data)
-version=1
+version=2
 
 [debian]
 apt=pspexp-opensurge
@@ -31,3 +31,8 @@ keys=cross=space,square=lctrl,circle=lshift,triangle=rshift,start=return,select=
 env=PSPEXP_HOSTGL=1
 env=PSPEXP_JOYSTICK=0
 graphics=board-gpu
+control=left right: Run
+control=up down: Look up, crouch (roll when running)
+control=cross: Jump; choose in menus
+control=start: Pause
+control=select: Back

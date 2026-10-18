@@ -54,8 +54,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
   in the Morrowind folder; the PSP's shooter controls, menus that scroll
   with the pointer, play full screen.
 - **A controls sheet before a game**: choosing a game shows what each
-  button does in it; cross plays, circle goes back (Morrowind first; more
-  games as their recipes get it).
+  button does in it, for every game in Packages; an emulated game shows
+  which of the console's buttons each PSP button is. Cross plays, circle
+  goes back. Installed games get theirs as an update in Packages.
 - **Typing in games**: when a game asks for text (a character's name), the
   PSP's own keyboard opens over it (with the PSP's part updated).
 - **Commander Keen 1 and 4**: id Software's platform classics, their

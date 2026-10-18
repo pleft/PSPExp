@@ -8,7 +8,7 @@ title=Rocks'n'Diamonds
 description=A Boulder Dash-style puzzle game: dig for diamonds, dodge falling rocks and reach the exit, across many level sets.
 category=game
 license=GPL-2.0 (Rocks'n'Diamonds)
-version=2
+version=3
 
 [debian]
 apt=rocksndiamonds
@@ -21,3 +21,8 @@ icon=gamepad-2
 exec=/usr/games/rocksndiamonds
 keys=start=return,select=escape
 graphics=sdl
+control=dpad nub: Move, dig
+control=cross: Grab or dig beside you, not moving
+control=circle: Drop dynamite you carry
+control=start: OK in menus
+control=select: Back; leave the level

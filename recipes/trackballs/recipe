@@ -13,7 +13,7 @@ title=Trackballs
 description=Steer a marble through 3D labyrinths against the clock: ramps, traps, enemies and jumps, in the spirit of Marble Madness.
 category=game
 license=GPL-2.0+ (Trackballs and its data)
-version=1
+version=2
 
 [debian]
 apt=trackballs
@@ -35,3 +35,8 @@ env=MESA_GLSL_VERSION_OVERRIDE=330
 env=PSPEXP_MOUSE_BUTTONS=left=cross,right=none
 env=PSPEXP_JOYSTICK=0
 graphics=board-gpu
+control=dpad: Roll the marble
+control=square: Jump
+control=nub: The pointer in menus
+control=cross: Click in menus
+control=start: The game's menu
