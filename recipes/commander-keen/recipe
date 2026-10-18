@@ -11,7 +11,8 @@
 # screen, L / R quick save and load, START its menu.
 # Tried on the PSP-1000 from the Pi 400 (2026-10-18): both intros, menus, Keen 1's
 # Mars map and first level, Keen 4's Shadowlands; 60 fps; the user played Keen
-# 1 (its jump). Not yet tried on the GameShell.
+# 1 (its jump). On the GameShell with the PSP-1000 (2026-10-18): both
+# episodes, Keen 1's map and Keen 4's Shadowlands, 55-60 fps.
 
 [package]
 id=commander-keen
@@ -24,9 +25,6 @@ version=1
 [debian]
 apt=commander-keen1 commander-keen4
 
-# not yet tried on the GameShell
-[debian:gameshell]
-apt=
 
 [entry]
 id=keen1

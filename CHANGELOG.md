@@ -50,7 +50,7 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - **The Dreamcast** on a Pi (Flycast, drawn by the Pi's graphics chip):
   your own discs in `roms/dreamcast`; Power Stone and Rayman 2 play at
   about 50-60 frames a second. Install it from Packages.
-- **Commander Keen 1 and 4** on a Pi: id Software's platform classics, their
+- **Commander Keen 1 and 4**: id Software's platform classics, their
   free episodes, at the PSP's own screen size (cross jumps; hold it to jump
   higher).
 - **Hex-a-hop**, the hexagon puzzle (a hundred levels), and **Barrage**, a
