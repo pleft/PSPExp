@@ -17,7 +17,7 @@ What you get on the PSP:
 - **Games the PSP never had**, installed from the PSP in a couple of
   presses: Doom (Freedoom), Quake, Celeste 64, Unreal Tournament, Diablo,
   Sonic Robo Blast 2, Cave Story, OpenTTD, Command & Conquer, Warcraft I
-  and II (with your own copy's data), SuperTux, and
+  and II and Morrowind (with your own copy's data), SuperTux, and
   [dozens more](docs/manual/raspberry-pi.md#what-it-plays-like).
 - **Emulators**: NES, SNES, Mega Drive, Game Boy (Color, Advance), Lynx,
   WonderSwan and, on a Pi, the Nintendo 64 and the Dreamcast. Bring your own ROMs.

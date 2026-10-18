@@ -1,0 +1,109 @@
+#!/bin/sh
+# pspexp-openmw: OpenMW 0.51.0 (GPL-3.0), the open-source engine for Morrowind,
+# which Debian 13 does not package, built by scripts/packages/build-openmw.sh
+# arm64; and /usr/games/morrowind, which starts it on the player's own copy of
+# Morrowind for the PSP. Morrowind is sold, not free: the player puts it in
+# ~/Morrowind (Apps > Files): an installed game's folder (its "Data Files": Steam's
+# or GOG's) or GOG's installer (the .exe, with its .bin files beside it), unpacked
+# with innoextract at the first start. Drawn by a Pi's GPU (PSPEXP_HOSTGL), at
+# 480x330 with its interface scale at 0.6 (its options window, 640x550 at least,
+# whole), shown by the layer at its own pixels (PSPEXP_MAGNIFY=pointer: menus
+# scrolled with the pointer, play full screen). Nothing of the game is in this
+# package. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/openmw"
+[ -x "$B/root/usr/bin/openmw" ] && [ -s "$B/depends.txt" ] || { echo "no $B: scripts/packages/build-openmw.sh $ARCH first" >&2; exit 1; }
+V=0.51.0-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+cp -a "$B/root" "$W/root"
+rm -rf "$W/root/usr/share/applications" "$W/root/usr/share/metainfo" "$W/root/usr/share/pixmaps" "$W/root/usr/share/icons"
+mkdir -p "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-openmw"
+cat > "$W/root/usr/games/morrowind" <<'S'
+#!/bin/sh
+# Morrowind on OpenMW (package pspexp-openmw): the player's own copy in ~/Morrowind (an installed
+# game's folder, or GOG's installer, unpacked once), OpenMW set to it and to the PSP, then OpenMW
+U="$HOME/Morrowind"
+X="${XDG_DATA_HOME:-$HOME/.local/share}/pspexp-morrowind"
+C="${XDG_CONFIG_HOME:-$HOME/.config}/openmw"
+say() { echo "morrowind: $1" >&2; [ -n "$PSPEXP_MESSAGE" ] && echo "$1" > "$PSPEXP_MESSAGE"; }
+esm() { find -L "$1" -maxdepth 4 -iname morrowind.esm 2>/dev/null | head -1; }   # Data Files/Morrowind.esm
+mkdir -p "$U" "$C"
+f=$(esm "$U"); [ -n "$f" ] || f=$(esm "$X")
+if [ -z "$f" ]; then
+	for e in "$U"/*.exe "$U"/*.EXE; do   # GOG's installer: the one innoextract reads
+		[ -f "$e" ] && innoextract -q -i "$e" >/dev/null 2>&1 || continue
+		say "Morrowind: unpacking $(basename "$e") (a few minutes)"
+		rm -rf "$X"; mkdir -p "$X"
+		innoextract -q -d "$X" "$e" >&2 || { rm -rf "$X"; say "Morrowind could not unpack $(basename "$e"): are its .bin files beside it?"; exit 1; }
+		break
+	done
+	f=$(esm "$X")
+fi
+[ -n "$f" ] || { say "Morrowind needs your own copy: the game's folder (with its Data Files) or GOG's installer, in the Morrowind folder (Apps > Files)"; exit 1; }
+D=$(dirname "$f")
+{
+	echo "# written by /usr/games/morrowind (pspexp-openmw) at each start: your copy"
+	echo "data=\"$D\""
+	for n in Morrowind Tribunal Bloodmoon; do
+		a=$(find "$D" -maxdepth 1 -iname "$n.bsa" | head -1); [ -n "$a" ] && echo "fallback-archive=$(basename "$a")"
+	done
+	for n in Morrowind Tribunal Bloodmoon; do
+		m=$(find "$D" -maxdepth 1 -iname "$n.esm" | head -1); [ -n "$m" ] && echo "content=$(basename "$m")"
+	done
+} > "$C/openmw.cfg"
+S="$C/settings.cfg"
+if [ ! -f "$S" ]; then   # the PSP's: once; the player's own changes kept after
+	cat > "$S" <<'P'
+[Video]
+resolution x = 480
+resolution y = 330
+window mode = 2
+vsync mode = 0
+
+[GUI]
+scaling factor = 0.6
+
+[Windows]
+settings x = 0
+settings y = 0
+settings w = 1
+settings h = 1
+
+[Camera]
+viewing distance = 4096
+
+[Shadows]
+enable shadows = false
+
+[Water]
+shader = false
+
+[Terrain]
+distant terrain = false
+P
+fi
+# the size the layer expects, kept on every start (its menus need the 330 lines and 0.6)
+sed -i -e 's/^resolution x = .*/resolution x = 480/' -e 's/^resolution y = .*/resolution y = 330/' -e 's/^scaling factor = .*/scaling factor = 0.6/' -e 's/^window mode = .*/window mode = 2/' "$S"
+OSG_THREADING=SingleThreaded exec pspexp-run /usr/bin/openmw "$@"
+S
+chmod 755 "$W/root/usr/games/morrowind"
+cp "$B/LICENSE" "$W/root/usr/share/doc/pspexp-openmw/LICENSE"
+echo "OpenMW 0.51.0 (https://github.com/OpenMW/openmw), GPL-3.0, with Bullet 3.17, MyGUI 3.4.3 and OpenMW's RecastNavigation built in, built by PSPExp. Nothing of Morrowind: the player's own copy, in ~/Morrowind." > "$W/root/usr/share/doc/pspexp-openmw/README"
+cat > "$W/control" <<C
+Package: pspexp-openmw
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <info@pspexp.dev>
+Section: contrib/games
+Priority: optional
+Depends: $(cat "$B/depends.txt"), innoextract
+Conflicts: openmw
+Description: OpenMW, the Morrowind engine, for PSPExp
+ OpenMW 0.51.0, which Debian 13 does not package, and morrowind, which
+ starts it on the player's own copy of Morrowind (~/Morrowind) at the
+ PSP's screen size. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-openmw "$V" "$W/root/usr/share/doc/pspexp-openmw"
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-openmw_${V}_$ARCH.deb"

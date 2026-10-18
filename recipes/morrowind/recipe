@@ -1,0 +1,48 @@
+# The Elder Scrolls III: Morrowind (Bethesda, 2002) on OpenMW 0.51.0 (GPL-3.0),
+# the open-source re-creation of its engine, which Debian 13 does not package:
+# our build (pspexp-openmw) with /usr/games/morrowind. Morrowind is sold, not
+# free: the player puts their own copy in ~/Morrowind (Apps > Files): an
+# installed game's folder with its Data Files (Steam's, GOG's), or GOG's
+# installer (.exe with its .bin files), unpacked at the first start; Tribunal
+# and Bloodmoon are used when there. No native PSP port of it exists.
+# Drawn by a Pi's GPU (PSPEXP_HOSTGL), at 480x330 with OpenMW's interface at
+# 0.6 so its 640x550 options window is whole; the layer shows it at its own
+# pixels (PSPEXP_MAGNIFY=pointer): its menus scroll as the pointer reaches an
+# edge, play is full screen with the HUD at the bottom (the top 58 lines of the
+# scene cut). The PSP's shooters' layout: the nub looks (the pointer in menus),
+# triangle / cross forward and back, square / circle sideways, L activates
+# (and a dialog's OK), R attacks (and clicks), d-pad up jumps, down sneaks,
+# left / right ready magic / weapon, SELECT the menus (inventory, map), START
+# the game's menu. A name is typed on the PSP's own keyboard (needs the PSP's
+# part from 2026-10-18). Played on the PSP-1000 from a Pi 400 (2026-10-18):
+# character creation, moving, looking, its menus: playable. A Pi only: the
+# GameShell's GPU is OpenGL ES 2.
+
+[package]
+id=morrowind
+title=Morrowind
+description=The Elder Scrolls III: Morrowind on OpenMW, drawn by the Pi. Needs your own copy (the game's folder, or GOG's installer) in the Morrowind folder.
+category=game
+license=GPL-3.0 (OpenMW); the game is your own copy
+version=1
+
+[debian]
+apt=pspexp-openmw
+
+[debian:gameshell]
+apt=
+
+[entry]
+title=Morrowind
+type=game
+description=The open-world role-playing classic, on OpenMW. The nub looks, the face buttons move, L activates, R attacks, SELECT the inventory. Your own copy in the Morrowind folder.
+icon=swords
+exec=/usr/games/morrowind
+keys=triangle=w,cross=s,square=a,circle=d,l=space,up=e,down=lctrl,left=r,right=f,start=escape,select=none
+nub=mouse
+env=PSPEXP_MOUSE_BUTTONS=left=r,right=select
+env=PSPEXP_MAGNIFY=pointer
+env=PSPEXP_HOSTGL=1
+env=PSPEXP_FRAME_DROP=2
+env=PSPEXP_JOYSTICK=0
+graphics=board-gpu

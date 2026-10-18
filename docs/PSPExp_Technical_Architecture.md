@@ -541,7 +541,12 @@ edge; in play (pointer hidden) the frame's bottom 272 lines, the HUD in view
 and the top 58 lines of the scene cut. Fitting the whole 330 lines instead
 (shrunk to 82%) made the text in play too small; the interface at 1.0 and
 480x272 read best but cut the options window and overlapped the main menu.
-Played on the PSP-1000 this way: playable.*
+Played on the PSP-1000 this way: playable. Packaged: `pspexp-openmw`
+(`build-openmw.sh`: OpenMW 0.51.0 with Bullet 3.17, MyGUI 3.4.3 and its
+RecastNavigation fetched at build, all in the source archive) with
+`/usr/games/morrowind`, which finds the player's copy in ~/Morrowind (a game
+folder or GOG's installer, unpacked by innoextract), writes openmw.cfg for it
+and the PSP's settings once; recipe `morrowind`, a Pi only.*
 
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 

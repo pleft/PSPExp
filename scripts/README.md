@@ -45,6 +45,7 @@ packages/          what the launcher offers, for any board
                      container (the N64; GLideN64 patched to ask for OpenGL ES 3.0)
   build-flycast.sh   Flycast for a Debian 13 board, in a container (the Dreamcast, OpenGL ES 3)
   build-commandergenius.sh  Commander Genius (Commander Keen) for a Debian 13 board, both architectures
+  build-openmw.sh    OpenMW 0.51.0 (Morrowind) for a Debian 13 arm64 board, in a container
   build-opensurge.sh, build-hurrican.sh, build-egoboo.sh, build-solarus.sh, build-easyrpg.sh, build-luanti.sh, build-vanillaconquer.sh, build-srb2kart.sh, build-srb2.sh, build-etlegacy.sh, build-openra.sh, build-stratagus.sh
                      engines Debian lacks, the same way
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board

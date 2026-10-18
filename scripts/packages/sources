@@ -24,6 +24,11 @@ GH = "https://github.com/"
 # component: (name, upstream address, ref (tag, branch-free commit), local checkout or None)
 # ours: the files of this repository that build it (build scripts, patches)
 PACKAGES = {
+    "pspexp-openmw": dict(what="OpenMW", comps=[("OpenMW", GH + "OpenMW/openmw", "openmw-0.51.0", None),
+                                         ("Bullet", GH + "bulletphysics/bullet3", "3.17", None),
+                                         ("MyGUI", GH + "MyGUI/mygui", "MyGUI3.4.3", None),
+                                         ("RecastNavigation", GH + "OpenMW/recastnavigation", "03259f3287ff8330f0d66fcd98d022edddffaa97", None)],
+                          ours=[P + "build-openmw.sh"]),
     "pspexp-commandergenius": dict(what="Commander Genius", comps=[("Commander Genius", GH + "gerstrong/Commander-Genius", "58a3c4fd0782fa2a087e38a039599b2ecf69ccc9", None)],
                                    ours=[P + "build-commandergenius.sh"]),
     "pspexp-easyrpg": dict(what="EasyRPG Player", comps=[("EasyRPG Player", GH + "EasyRPG/Player", "0.8.1.1", None),

@@ -50,6 +50,9 @@ See the games in [Part II](https://youtu.be/_rBYBBLUeNc).
 - **The Dreamcast** on a Pi (Flycast, drawn by the Pi's graphics chip):
   your own discs in `roms/dreamcast`; Power Stone and Rayman 2 play at
   about 50-60 frames a second. Install it from Packages.
+- **Morrowind** on a Pi, on OpenMW: your own copy (Steam, GOG or the CD)
+  in the Morrowind folder; the PSP's shooter controls, menus that scroll
+  with the pointer, play full screen.
 - **Typing in games**: when a game asks for text (a character's name), the
   PSP's own keyboard opens over it (with the PSP's part updated).
 - **Commander Keen 1 and 4**: id Software's platform classics, their

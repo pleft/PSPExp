@@ -141,6 +141,22 @@ engine for Heroes III. The game is laid out for a bigger screen and shown
 shrunk, so its text is small: hold **R** to see the part around the pointer
 at full size.
 
+**Morrowind** (The Elder Scrolls III) needs your own copy too, from Steam,
+GOG or the CD. It plays on OpenMW, the open-source engine for Morrowind,
+drawn by the Pi's graphics chip. Put one of these in the **Morrowind**
+folder of your home folder (Apps > Files; the folder appears after the
+first start):
+
+- **An installed game's folder**, the one holding **Data Files** (from
+  Steam, GOG or the CD installed on a computer).
+- **GOG's installer**: the `setup_…morrowind….exe` with the `….bin` files
+  beside it; the first start unpacks it (a few minutes).
+
+Tribunal and Bloodmoon are played too when they are in Data Files. You type
+your character's name on the PSP's own keyboard. In its menus the screen
+scrolls when the pointer reaches an edge (the menus are made for a larger
+screen); in play it fills the PSP's screen.
+
 ## What it plays like
 
 Measured on the PSP-1000 with a Pi 400:
@@ -189,6 +205,7 @@ Measured on the PSP-1000 with a Pi 400:
 | Freeciv | Civilization-style strategy; small text, R magnifies; it loads for about half a minute and its menu shows once you move the pointer; the nub is the mouse, cross clicks, the d-pad moves a unit, square goes to the next one, triangle founds a city, START ends the turn |
 | Numpty Physics | drawn by the PSP, at its own screen size; the nub is the pen (cross held draws), circle undoes a stroke, triangle restarts, L / R the previous / next level |
 | Heroes of Might and Magic III | on VCMI, your own copy (above): 55-60 fps on the PSP-1000; the nub is the mouse, cross clicks, circle shows what a thing is, the d-pad scrolls the map, R the magnifier, START Escape |
+| Morrowind | on OpenMW, drawn by the Pi's graphics chip, your own copy (above); the nub looks around (the pointer in menus), triangle / cross move forward and back, square / circle sideways, L activates (talk, open, pick up; OK in a dialog), R attacks (clicks in menus), d-pad up jumps and down sneaks, left / right ready magic / weapon, SELECT the inventory and map, START the game's menu |
 | Heroes of Might and Magic II | the 1996 strategy game on fheroes2: its demo (one scenario), downloaded when installed, or your own copy (above); the nub is the mouse, cross clicks, circle held shows what a creature or building is; its screen is larger than the PSP's, so **R is a magnifier**: the game's own pixels around the pointer, for its small text, R again the whole screen; L the next hero, triangle ends the turn, square moves the hero, the d-pad scrolls, START cancels, SELECT is OK |
 | Warcraft: Orcs & Humans | drawn by the PSP: 60 fps from the Pi in the menus and in a game; your own copy's DATA.WAR (above) |
 | Warcraft II | drawn by the PSP: 54-60 fps from the Pi; your own copy (above); menus and game at the PSP's 480x272 |
