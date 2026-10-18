@@ -101,7 +101,10 @@ PSP itself:
    scaled down (a 640x480 game shown at 57% halves its text);
 3. its controls are easy to understand: every button checked to do what it should (a shot before
    and after each press), menus as well as play, with a hint of them in the recipe's description
-   and the manual.
+   and the manual;
+4. no native port of it already exists for the PSP: PSPExp brings what the PSP cannot run by
+   itself (Wolfenstein 3D, Duke Nukem 3D, Commander Keen, Heretic and Hexen, for example, all
+   have PSP ports). Look for one first.
 
 Games made for small screens fit best (the 320x200 DOS era). Six Debian games that ran but failed
 these were dropped the same day: Blob Wars, Meritous, Legend of Edgar and Seven Kingdoms (text too
