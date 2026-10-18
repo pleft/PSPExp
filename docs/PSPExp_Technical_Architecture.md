@@ -524,7 +524,9 @@ OpenMW then never turned it on for its first field), and gives the game the
 text as SDL_TEXTINPUT and Enter. Tried: the PSP runtime under PPSSPP opened
 the keyboard for OpenMW's name field from the Pi; the answer's path through
 the stand-in (`PSPEXP_SERVER_TEXT`: a preset answer), the name taken and
-character creation going on.*
+character creation going on. On the PSP-1000 from the GameShell (a test
+program turning text input off and on): the keyboard opened, the text
+typed on the PSP arrived as SDL_TEXTINPUT followed by Enter, the link kept.*
 
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 
