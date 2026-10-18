@@ -1452,8 +1452,13 @@ static void sess_closed(int i)
 }
 
 static void on_sigchld(int s) { (void)s; g_child_died = 1; }
-static void on_usr1(int s) { (void)s; g_release_req = 1; }
-static void on_usr2(int s) { (void)s; g_acquire_req = 1; }
+/* who asked for the PSP (SIGUSR1's sender: pspexp-exec's shell, which lives while its program
+ * runs): when it is gone without its SIGUSR2 (killed: kill -9 skips its EXIT trap), the PSP is
+ * taken back (2026-10-18: a program killed that way left the console released for hours, the PSP
+ * on its waiting screen) */
+static volatile pid_t g_release_pid;
+static void on_usr1(int s, siginfo_t *si, void *u) { (void)s; (void)u; g_release_pid = si ? si->si_pid : 0; g_release_req = 1; }
+static void on_usr2(int s) { (void)s; g_acquire_req = 1; g_release_pid = 0; }
 
 /* systemd's watchdog (the console's unit: WatchdogSec, NotifyAccess=main): "still here" from the
  * main loop every 2 s; a loop stuck past the limit is stopped (SIGABRT) and restarted, and takes
@@ -3242,7 +3247,7 @@ int main(int argc, char **argv)
     const char *fifo_path = "/tmp/pspexp-audio", *pidfile = "/tmp/pspexp-term.pid";
     static char tcp_host[256];
     int shot_every = 0, i;
-    uint64_t last_blink = 0, last_try = 0;
+    uint64_t last_blink = 0, last_try = 0, last_release_check = 0;
     unsigned frames = 0;
     uint16_t shot_index = 0;
 
@@ -3331,7 +3336,13 @@ int main(int argc, char **argv)
     g_test_keys = getenv("PSPEXP_TERM_KEYS");
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, on_sigchld);
-    signal(SIGUSR1, on_usr1);
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_sigaction = on_usr1;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        sigaction(SIGUSR1, &sa, NULL);
+    }
     signal(SIGUSR2, on_usr2);
     watchdog_init();
 #ifdef __GLIBC__
@@ -3472,6 +3483,14 @@ int main(int argc, char **argv)
         }
         /* hand-over */
         if (g_release_req) { g_release_req = 0; release_psp(); }
+        if (g_released && !g_launch_pid && g_release_pid > 0 && pspexp_time_us() - last_release_check > 1000000u) {
+            last_release_check = pspexp_time_us();
+            if (kill(g_release_pid, 0) < 0 && errno == ESRCH) {
+                fprintf(stderr, "[pspexp-term] the program that took the PSP (pid %d) is gone without giving it back: taken back\n", (int)g_release_pid);
+                g_release_pid = 0;
+                g_acquire_req = 1;
+            }
+        }
         if (g_acquire_req) { g_acquire_req = 0; g_released = 0; last_try = 0; }
         if (g_ctl_relink) {   /* the control port's relink: as a cable pull */
             g_ctl_relink = 0;

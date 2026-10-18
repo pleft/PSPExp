@@ -77,6 +77,11 @@ it with `/usr/local/bin/pspexp-run`.
 `pspexp-run` on the GameShell = LD_PRELOAD + the PSP handoff: it asks
 `pspexp-term` to release the PSP (SIGUSR1, via `pspexp-exec`; only for a program that takes it over USB: one sent to another PSP, `PSPEXP=tcp:...`, took the PSP from the running console until 2026-10-10), the game uses
 the USB link, and the console takes it back (SIGUSR2) when the game ends.
+If the program that asked is killed (`kill -9` skips `pspexp-exec`'s EXIT trap,
+so no SIGUSR2 comes), the console notices within a second that the process
+which sent SIGUSR1 is gone and takes the PSP back itself (2026-10-18: a run
+ended that way left the console released for hours, the PSP on its waiting
+screen, until a SIGUSR2 by hand).
 A game started from the launcher is preceded by its "Starting" frame, which
 the PSP keeps with a spinner turning on it until the game draws (the
 hand-over `DISCONNECT`, docs/PSPExp_Technical_Architecture.md §9.2). SELECT
