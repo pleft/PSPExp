@@ -94,6 +94,20 @@
 
 ## 4. Recipes
 
+**What gets in (the user's rules, 2026-10-18).** A game becomes a recipe only when, tried on the
+PSP itself:
+1. it supports the PSP's own resolution (480x272), or at least renders playably on it;
+2. its text is readable: menus and HUD judged in the PSP's screenshots at their real size, not
+   scaled down (a 640x480 game shown at 57% halves its text);
+3. its controls are easy to understand: every button checked to do what it should (a shot before
+   and after each press), menus as well as play, with a hint of them in the recipe's description
+   and the manual.
+
+Games made for small screens fit best (the 320x200 DOS era). Six Debian games that ran but failed
+these were dropped the same day: Blob Wars, Meritous, Legend of Edgar and Seven Kingdoms (text too
+small; a magnifier only enlarges the blur), Gish (its menus confusing), Super Transball 2 (its
+d-pad did nothing).
+
 ### 4.1 Layout
 
 ```text
