@@ -54,6 +54,7 @@
 | `recipes/noiz2sa/cover.png` | Debian's noiz2sa package, its 32x32 icon, scaled 4x | BSD-2-Clause (Noiz2sa) |
 | `recipes/gnurobbo/cover.png` | Debian's gnurobbo package, its 32x32 icon, scaled 4x | GPL-2.0+ (GNU Robbo) |
 | `recipes/hex-a-hop/cover.png` | Debian's hex-a-hop package, its 128x128 icon | GPL-2.0+ (Hex-a-hop) |
+| `recipes/commander-keen/cover.png` | Commander Genius' own logo (vfsroot/cglogo512.png), scaled | GPL-2.0+ (Commander Genius) |
 | `recipes/barrage/cover.png` | Debian's barrage package, its 48x48 icon, scaled | GPL-2.0+ (Barrage) |
 | `recipes/freeciv/cover.png` | Debian's freeciv package, its icon, scaled to 128x128 | GPL-2.0+ (Freeciv) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |

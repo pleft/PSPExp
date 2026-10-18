@@ -185,6 +185,7 @@ Measured on the PSP-1000 with a Pi 400:
 | GNU Robbo | the Atari puzzle game, its text small: 50 fps; the d-pad moves, square with the d-pad shoots, SELECT restarts the level |
 | Hex-a-hop | the hexagon puzzle, a hundred levels: 46-60 fps; the d-pad and L / R hop (six directions), or cross clicks a tile with the nub's pointer; triangle or circle undoes, START opens its menu |
 | Barrage | three minutes on a shooting range, its targets small: 60 fps; the nub aims, cross fires a large grenade (with square held, a small one), triangle or circle reloads |
+| Commander Keen 1 and 4 | id Software's platformers, their free episodes, at the PSP's own screen size: 60 fps; the d-pad moves, cross jumps (hold it for a higher jump, as in the originals), circle pogos, square fires, triangle shows the status, L / R quick save and load |
 | Freeciv | Civilization-style strategy; small text, R magnifies; it loads for about half a minute and its menu shows once you move the pointer; the nub is the mouse, cross clicks, the d-pad moves a unit, square goes to the next one, triangle founds a city, START ends the turn |
 | Numpty Physics | drawn by the PSP, at its own screen size; the nub is the pen (cross held draws), circle undoes a stroke, triangle restarts, L / R the previous / next level |
 | Heroes of Might and Magic III | on VCMI, your own copy (above): 55-60 fps on the PSP-1000; the nub is the mouse, cross clicks, circle shows what a thing is, the d-pad scrolls the map, R the magnifier, START Escape |

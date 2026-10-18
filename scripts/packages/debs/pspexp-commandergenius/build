@@ -1,0 +1,51 @@
+#!/bin/sh
+# pspexp-commandergenius: Commander Genius (GPL-2.0+), the open-source engine for
+# Commander Keen, which Debian does not package, built by
+# scripts/packages/build-commandergenius.sh ARCH; and /usr/games/pspexp-keen, which
+# starts one episode (installed by commander-keen1 / commander-keen4) at the PSP's own
+# 480x272. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/commandergenius"
+[ -x "$B/root/usr/games/CGeniusExe" ] && [ -s "$B/depends.txt" ] || { echo "no $B: scripts/packages/build-commandergenius.sh $ARCH first" >&2; exit 1; }
+V=3.6.4+git20260930-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+cp -a "$B/root" "$W/root"
+rm -rf "$W/root/usr/share/applications" "$W/root/usr/share/metainfo"   # (no desktop: the launcher's entries start it)
+mkdir -p "$W/root/usr/share/doc/pspexp-commandergenius"
+cat > "$W/root/usr/games/pspexp-keen" <<'S'
+#!/bin/sh
+# Commander Keen on Commander Genius, one episode straight from the launcher (package
+# pspexp-commandergenius): pspexp-keen keen1|keen4. The episodes are in
+# /usr/share/games/commandergenius/games (packages commander-keen1, commander-keen4), which
+# the game searches; it is set to the PSP's own 480x272 (its [Launcher] gameWidth and
+# gameHeight, set again on every start: the game writes its settings back on quitting).
+E="${1:-keen1}"
+C="$HOME/.CommanderGenius/cgenius.cfg"
+mkdir -p "$HOME/.CommanderGenius"
+if grep -q '^\[Launcher\]' "$C" 2>/dev/null; then
+	sed -i '/^\[Launcher\]/,/^\[/{s/^gameWidth = .*/gameWidth = 480/;s/^gameHeight = .*/gameHeight = 272/}' "$C"
+else
+	printf '[Launcher]\ngameHeight = 272\ngameWidth = 480\n\n' >> "$C"
+fi
+exec pspexp-run /usr/games/CGeniusExe "dir=games/$E"
+S
+chmod 755 "$W/root/usr/games/pspexp-keen"
+cp "$B/LICENSE" "$W/root/usr/share/doc/pspexp-commandergenius/COPYRIGHT"
+echo "Commander Genius (https://github.com/gerstrong/Commander-Genius, 3.6.4, its master branch on 2026-09-30), GPL-2.0+, built by PSPExp. No game data: the free Commander Keen episodes are installed by commander-keen1 and commander-keen4." > "$W/root/usr/share/doc/pspexp-commandergenius/README"
+cat > "$W/control" <<C
+Package: pspexp-commandergenius
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <info@pspexp.dev>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Commander Genius, the Commander Keen engine, for PSPExp
+ Commander Genius, the open-source engine for Commander Keen 1-6, which
+ Debian does not package, and pspexp-keen, which starts an episode at the
+ PSP's own screen size. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-commandergenius "$V" "$W/root/usr/share/doc/pspexp-commandergenius"
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-commandergenius_${V}_$ARCH.deb"

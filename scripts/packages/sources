@@ -24,6 +24,8 @@ GH = "https://github.com/"
 # component: (name, upstream address, ref (tag, branch-free commit), local checkout or None)
 # ours: the files of this repository that build it (build scripts, patches)
 PACKAGES = {
+    "pspexp-commandergenius": dict(what="Commander Genius", comps=[("Commander Genius", GH + "gerstrong/Commander-Genius", "58a3c4fd0782fa2a087e38a039599b2ecf69ccc9", None)],
+                                   ours=[P + "build-commandergenius.sh"]),
     "pspexp-easyrpg": dict(what="EasyRPG Player", comps=[("EasyRPG Player", GH + "EasyRPG/Player", "0.8.1.1", None),
                                                      ("liblcf", GH + "EasyRPG/liblcf", "0.8.1", None)],
                            ours=[P + "build-easyrpg.sh"]),

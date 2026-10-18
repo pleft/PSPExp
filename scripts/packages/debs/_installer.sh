@@ -107,7 +107,7 @@ echo "Unpacking..."
 mkdir -p "\$C/x"
 $_unpack
 mkdir -p /usr/share/games   # (not there on a minimal system: a fresh card, or no other game yet)
-rm -rf "\$G.new"; mv "\$C/x/$TOP" "\$G.new"
+rm -rf "\$G.new"; mkdir -p "\$(dirname "\$G")"; mv "\$C/x/$TOP" "\$G.new"   # (a DIR inside another package's folder: commandergenius/games/keen1)
 $AFTER
 chmod -R u=rwX,go=rX "\$G.new"
 echo "$SHA" > "\$G.new/.pspexp-sha256"

@@ -1,0 +1,18 @@
+#!/bin/sh
+# commander-keen4: an installer for Commander Keen 4 (id Software / Apogee, 1991:
+# Goodbye, Galaxy!, episode 4: Secret of the Oracle), the freely distributed shareware episode, on Commander Genius
+# (pspexp-commandergenius): the board downloads it when it is installed, from where
+# Commander Genius' own in-game store fetches it (its catalogue on SourceForge, keen4.zip),
+# into /usr/share/games/commandergenius/games/keen4, which the game searches; nothing of it
+# hosted by PSPExp. Usage: build OUTDIR
+set -e
+. "$(dirname "$0")/../_installer.sh"
+ID=commander-keen4 TITLE="Commander Keen 4 (shareware)" VERSION=1.0-pspexp1
+URL=https://downloads.sourceforge.net/project/clonekeenplus/Downloads/keen4.zip
+SHA=8885dae9b8873129325e2a7b1a7d2601e722339568063280eb7c75c2144688f9 SIZE="600 KB" TOP=keen4
+DIR=commandergenius/games/keen4
+RUN='exec /usr/games/pspexp-keen keen4'
+DEPENDS=pspexp-commandergenius
+ABOUT=" Commander Keen 4, Goodbye, Galaxy!, episode 4: Secret of the Oracle (1991), its freely
+ distributed shareware episode, played on Commander Genius."
+build_installer "$1"
