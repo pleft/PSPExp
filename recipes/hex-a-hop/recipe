@@ -8,7 +8,8 @@
 # triangle undo (right button, U), START and SELECT are Escape (its menu:
 # resume, restart the level, help). Played on the PSP-1000 from the Pi 400
 # (2026-10-17): the first level, moves, undo and its menu; 46-60 fps.
-# Not yet tried on the GameShell.
+# On the GameShell with the PSP-1000 (2026-10-18): the same, 15-31 fps (turn
+# by turn: its hops less smooth).
 
 [package]
 id=hex-a-hop
@@ -16,14 +17,11 @@ title=Hex-a-hop
 description=Puzzle game on hexagonal tiles: break every green tile by hopping off it, without trapping yourself. A hundred levels, no time limit.
 category=game
 license=GPL-2.0+ (Hex-a-hop), its data partly CC0-1.0 and CC-BY-SA-3.0
-version=1
+version=2
 
 [debian]
 apt=hex-a-hop
 
-# not yet tried on the GameShell
-[debian:gameshell]
-apt=
 
 [entry]
 title=Hex-a-hop

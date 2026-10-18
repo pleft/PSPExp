@@ -40,13 +40,13 @@ Everything else happens on the PSP: **Apps > Packages** to install games.
 **Apps > Packages**: Freedoom, OpenTyrian, Cave Story, SuperTux, the
 Revolution adventures, the emulators and more. Each appears under
 **Games** (or as its system's tile) once installed. The card image comes
-with none, so you choose what takes space. Packages offers the GameShell 63
+with none, so you choose what takes space. Packages offers the GameShell 65
 of PSPExp's 81 packages: not the eleven drawn by a Raspberry Pi's graphics
 chip (SuperTuxKart, Celeste 64, Nintendo 64, Dreamcast, Unreal Tournament,
 Luanti, Trackballs, Open Surge, OpenRA's Red Alert and Tiberian Dawn,
 Taisei: its own chip is too small for them),
 nor Diablo and Wolfenstein: Enemy Territory, nor Heroes II, LinCity-NG and
-C-Dogs: too slow on it, nor Hex-a-hop and Barrage, not yet tried on it.
+C-Dogs: too slow on it.
 Kenta Cho's shooters run slower than on a Pi but fluidly (rRootage the
 slowest). Heroes III
 plays on it at 14-20 frames a second; its first start takes about 4 minutes.

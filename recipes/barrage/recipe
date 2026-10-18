@@ -8,7 +8,8 @@
 # (leaves the range). Played on the PSP-1000 from the Pi 400 (2026-10-17):
 # the menu, the range, grenades landing, the ammunition out and reloaded;
 # 60 fps. The user played it on the PSP (2026-10-18): the small targets are
-# fine. Not yet tried on the GameShell.
+# fine. On the GameShell with the PSP-1000 (2026-10-18): 56-60 fps, grenades
+# landing, reloads.
 
 [package]
 id=barrage
@@ -16,14 +17,11 @@ title=Barrage
 description=Shooting range: three minutes to hit as many dummy soldiers, jeeps and tanks as you can with large and small grenades.
 category=game
 license=GPL-2.0+ (Barrage)
-version=1
+version=2
 
 [debian]
 apt=barrage
 
-# not yet tried on the GameShell
-[debian:gameshell]
-apt=
 
 [entry]
 title=Barrage
