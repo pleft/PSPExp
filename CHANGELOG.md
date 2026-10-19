@@ -1,10 +1,12 @@
 # Release notes
 
-## Since 1.0.0
+## 1.1.0 (2026-10-19)
 
-These came as package updates (2026-10-15 on): a board gets them through
-Packages (Apps > PSPExp), and the PSP's part through Settings > Update the
-PSP when it is offered; the card images are unchanged.
+New card images for the Raspberry Pi and the GameShell, with all of the below
+already in; the GameShell's has a kernel fix (the board could freeze when the
+PSP was unplugged during a game). A board already set up gets the same through
+Packages (Apps > PSPExp), and the PSP's part through Settings > Update the PSP
+when it is offered.
 See the games in [Part II](https://youtu.be/_rBYBBLUeNc), and the Dreamcast in
 [Dreamcast on the PSP](https://youtu.be/ex6nnDBRzHU) (filmed with Flycast on a Mac).
 
