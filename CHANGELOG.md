@@ -21,6 +21,11 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
   debug window is gone; Celeste 64 and Theia ask itch.io again when a
   download comes back wrong; Simutrans's first start says on its controls
   sheet that triangle closes the welcome window to play.
+- **Command & Conquer works**: its title screen showed a grid of gaps and
+  its menu stayed black, because part of the game's files sat inside the
+  disc's installer archive and were never unpacked. They are now (its
+  English text too), so its films, menu and missions play. A board that
+  has it downloads the disc once more when it updates.
 - **X-Moto removed** from the packages: its text is too small to read on
   the PSP's screen, and its first start needs a mouse and a typed name.
   The PSP's keyboard keeps what it learned for it (a button can open it,

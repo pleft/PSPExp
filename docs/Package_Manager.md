@@ -348,7 +348,9 @@ runs it weekly (GitHub mails a failed run). itch.io uploads are not checked
 `hurrican`, `egoboo`, `zsdx` and `quake2-demo` came next the same way.
 EA's freeware discs (`cnc-freeware`, `redalert-freeware`) use
 `_discinstaller.sh`: the release (a RAR or an ISO) downloaded and checked,
-the disc image out of it, the game's MIX files out of the image with 7z.
+the disc image out of it, the game's MIX files out of the image with 7z,
+and those inside a disc's InstallShield 3 installer (C&C's `INSTALL/SETUP.Z`)
+with isextract from `pspexp-vanillaconquer`, over the disc's.
 Unreal Tournament (`ut99`) runs OldUnreal's own installer, pinned, after the
 terms are accepted (`terms=`). Wolfenstein: Enemy Territory (`etlegacy`)
 downloads ET: Legacy's official AArch64 release and id's ET 2.60 for Linux

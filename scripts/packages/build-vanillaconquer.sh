@@ -5,13 +5,18 @@
 # in a Debian 13 container of the board's architecture (as build-easyrpg.sh).
 # 8-bit frames drawn on the CPU: the SDL layer sends them as CLUT8 pages, as
 # Doom's. The games' data is not in it: EA's freeware, downloaded at install.
-# Writes build/<arch>/vanillaconquer/ (vanillatd, vanillara, depends.txt).
+# With them isextract (GPL-2.0+, OmniBlade, one of Vanilla Conquer's developers): the C&C disc's
+# INSTALL/SETUP.Z is an InstallShield 3 archive (neither 7z nor unar opens it) holding
+# UPDATE.MIX, UPDATEC.MIX, TRANSIT.MIX, SPEECH.MIX, the ICNH sets and the English CCLOCAL.MIX;
+# without them VanillaTD drew its title with a grid of gaps and its menu black (2026-10-21).
+# Writes build/<arch>/vanillaconquer/ (vanillatd, vanillara, isextract, depends.txt).
 #   scripts/packages/build-vanillaconquer.sh arm64|armhf
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ARCH="${1:?arm64 | armhf}"
 case "$ARCH" in arm64) PLAT=linux/arm64 ;; armhf) PLAT=linux/arm/v7 ;; *) echo "arm64 | armhf" >&2; exit 2 ;; esac
 VER=ce83b59edd99cccac6cebaae054ca04962c744b7   # main, 2026-07: the project tags no releases
+ISX=d9350dadbec6cd6cc86ffce0e0f253987fa5cd68   # OmniBlade/isextract, 2021-10
 OUT="$ROOT/build/$ARCH/vanillaconquer"
 rm -rf "$OUT"; mkdir -p "$OUT"
 docker run --rm --platform "$PLAT" -v "$OUT:/out" debian:trixie sh -ec "
@@ -23,8 +28,10 @@ git -c advice.detachedHead=false clone -q https://github.com/TheAssemblyArmada/V
 cmake -S src -B b -DCMAKE_BUILD_TYPE=Release -DBUILD_VANILLATD=ON -DBUILD_VANILLARA=ON -DSDL2=ON -DOPENAL=ON -DBUILD_TOOLS=OFF >/dev/null
 cmake --build b -j\$(nproc) 2>&1 | grep -m3 -B2 'error:' || true
 for g in vanillatd vanillara; do [ -x b/\$g ]; strip b/\$g; cp b/\$g /out/; done
+git -c advice.detachedHead=false clone -q https://github.com/OmniBlade/isextract.git isx && git -C isx checkout -q $ISX
+make -C isx CXXFLAGS='-O2 -DNDEBUG' >/dev/null && strip -o /out/isextract isx/build/isextract
 mkdir -p debian && printf 'Source: x\n' > debian/control
-dpkg-shlibdeps -O /out/vanillatd /out/vanillara 2>/dev/null | sed 's/^shlibs:Depends=//' > /out/depends.txt
+dpkg-shlibdeps -O /out/vanillatd /out/vanillara /out/isextract 2>/dev/null | sed 's/^shlibs:Depends=//' > /out/depends.txt
 echo built; cat /out/depends.txt
 "
 ls -l "$OUT"

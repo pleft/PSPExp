@@ -35,10 +35,10 @@ set -e
 [ "\$1" = configure ] || exit 0
 G=/usr/share/games/$ID
 C=/var/cache/$ID
-[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "$SHA" ] && exit 0
+[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "$SHA 2" ] && exit 0   # (2: SETUP.Z's files too; before them the disc is fetched again)
 rm -rf "\$C"; mkdir -p "\$C"
 echo "Downloading $TITLE ($SIZE), EA's freeware release..."
-curl -fL --retry 3 --connect-timeout 20 -o "\$C/game.part" "$URL" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
+curl -fL --retry 5 --retry-all-errors --retry-delay 15 --connect-timeout 20 -o "\$C/game.part" "$URL" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
 echo "$SHA  \$C/game.part" | sha256sum -c --quiet - || { rm -rf "\$C"; echo "the download is not the expected file" >&2; exit 1; }
 echo "Unpacking..."
 I="\$C/game.part"
@@ -47,8 +47,17 @@ case "$URL" in *.rar|*.zip) mkdir -p "\$C/x"; unar -q -D -o "\$C/x" "\$C/game.pa
 rm -rf "\$G.new"; mkdir -p "\$G.new"
 7z e -y -r -o"\$G.new" "\$I" '*.MIX' >/dev/null
 ls "\$G.new"/*.MIX >/dev/null 2>&1 || { rm -rf "\$G.new" "\$C"; echo "no game files on the disc" >&2; exit 1; }
+# a disc whose installer is an InstallShield 3 archive (C&C's INSTALL/SETUP.Z): its MIX files over
+# the disc's (UPDATE, UPDATEC, TRANSIT, SPEECH, the ICNH sets, the English CCLOCAL: without them
+# VanillaTD drew its title with a grid of gaps and its menu black, and the disc's flattened
+# folders left a German CCLOCAL)
+7z e -y -r -o"\$C/i" "\$I" 'SETUP.Z' >/dev/null 2>&1 || true
+if [ -f "\$C/i/SETUP.Z" ]; then
+	mkdir -p "\$C/s"; /usr/lib/pspexp/vanillaconquer/isextract x "\$C/i/SETUP.Z" "\$C/s" >/dev/null
+	for f in "\$C/s"/*.MIX; do [ -f "\$f" ] && cp "\$f" "\$G.new/"; done
+fi
 chmod -R u=rwX,go=rX "\$G.new"
-echo "$SHA" > "\$G.new/.pspexp-sha256"
+echo "$SHA 2" > "\$G.new/.pspexp-sha256"
 rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
 P
 	cat > "$_w/ctl/postrm" <<R
@@ -64,7 +73,7 @@ Architecture: all
 Maintainer: PSPExp <info@pspexp.dev>
 Section: contrib/games
 Priority: optional
-Depends: curl, ca-certificates, unar, 7zip, pspexp-vanillaconquer
+Depends: curl, ca-certificates, unar, 7zip, pspexp-vanillaconquer (>= 2026.07+ce83b59-pspexp3)
 Description: $TITLE (installer)
 $ABOUT
  Installing this package downloads EA's freeware release and checks it;
