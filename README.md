@@ -20,7 +20,7 @@ What you get on the PSP:
   and II and Morrowind (with your own copy's data), SuperTux, and
   [dozens more](docs/manual/raspberry-pi.md#what-it-plays-like).
 - **Emulators**: NES, SNES, Mega Drive, Game Boy (Color, Advance), Lynx,
-  WonderSwan and, on a Pi, the Nintendo 64 and the Dreamcast. Bring your own ROMs.
+  WonderSwan and, on a Pi, the Nintendo 64, the Dreamcast and the Nintendo DS. Bring your own ROMs.
 - **A media player for music and films, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
 

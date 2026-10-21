@@ -48,7 +48,8 @@
  * Battery saves (the cartridge's SRAM) go to $PSPEXP_RETRO_SAVES or
  * ~/.local/share/pspexp-retro/saves/<rom name>.srm, written every 10 s when
  * they changed and at exit. Core options: defaults, overridden by KEY=value
- * lines in ~/.config/pspexp-retro/<core>.opt or $PSPEXP_RETRO_OPT
+ * lines in /usr/share/pspexp-retro/<core>.opt (a core's package), ~/.config/pspexp-retro/<core>.opt
+ * or $PSPEXP_RETRO_OPT
  * ("key=value;key=value"). Environment: PSPEXP_RETRO_ASPECT=pixel for square
  * pixels instead of the core's aspect.
  *
@@ -255,8 +256,13 @@ static void opt_load_overrides(void)
     char path[PATH_MAX], line[256], *eq;
     const char *home = getenv("HOME");
     FILE *f;
-    if (home) {
-        snprintf(path, sizeof(path), "%s/.config/pspexp-retro/%s.opt", home, P.core_name);
+    int pass;
+    /* the core's package's defaults first (/usr/share/pspexp-retro/<core>.opt: melonDS DS's screen
+     * layout and touch cursor, longer than the launcher keeps of a system's env), then the player's */
+    for (pass = 0; pass < 2; pass++) {
+        if (pass == 0) snprintf(path, sizeof(path), "/usr/share/pspexp-retro/%s.opt", P.core_name);
+        else if (home) snprintf(path, sizeof(path), "%s/.config/pspexp-retro/%s.opt", home, P.core_name);
+        else continue;
         if ((f = fopen(path, "r"))) {
             while (fgets(line, sizeof(line), f))
                 if (line[0] != '#' && (eq = strchr(line, '='))) { *eq = 0; opt_override(trim(line), trim(eq + 1)); }

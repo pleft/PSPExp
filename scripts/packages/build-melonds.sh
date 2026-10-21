@@ -17,6 +17,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ARCH="${1:?arm64}"
 case "$ARCH" in arm64) PLAT=linux/arm64 ;; *) echo "arm64 only: a Pi 4, 400 or 5 (the GameShell is far too slow)" >&2; exit 2 ;; esac
 MD_VER=v1.4.0   # 2026-09-27
+MD_CORE=16f127dbb587a73371827ce79689c5d237c4b59b   # melonDS itself: v1.4.0 names a branch of JesseTG/melonDS; this is its commit then
 OUT="${MD_OUT:-$ROOT/build/$ARCH/melonds}"
 rm -rf "$OUT"; mkdir -p "$OUT"
 docker run --rm --platform "$PLAT" -e MD_CFLAGS -e MD_LTO -e MD_KEEP_SYMBOLS -v "$OUT:/out" -v "$ROOT/scripts/packages/melonds:/patches:ro" debian:trixie sh -ec "
@@ -25,7 +26,7 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends build-essential cmake git ca-certificates pkg-config dpkg-dev python3 >/dev/null
 cd /tmp
 git clone -q --depth 1 --branch $MD_VER https://github.com/JesseTG/melonds-ds.git md
-cmake -S md -B b -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENGL=OFF -DENABLE_JIT=ON \\
+cmake -S md -B b -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENGL=OFF -DENABLE_JIT=ON -DMELONDS_REPOSITORY_TAG=$MD_CORE \\
 	-DCMAKE_C_FLAGS=\"\$MD_CFLAGS\" -DCMAKE_CXX_FLAGS=\"\$MD_CFLAGS\" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=\${MD_LTO:-OFF} >/tmp/cmake.log 2>&1 || { tail -30 /tmp/cmake.log; exit 1; }
 (cd b/_deps/melonds-src && patch -p1 < /patches/melonds-skip-draw.patch) >/dev/null
 (cd md && patch -p1 < /patches/melondsds-skip-draw.patch) >/dev/null

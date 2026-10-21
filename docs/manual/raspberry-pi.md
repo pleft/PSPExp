@@ -70,14 +70,14 @@ you never need to log in to it again.
 On the PSP: **Apps > Packages**. Pick a game (Freedoom, OpenTyrian, Cave
 Story, Dink Smallwood, Alter A.I.L.A. Genesis, Theia, SuperTux, Quake, Quake II...) and press cross to install it; it appears under
 **Games** when done. Emulators install the same way (NES, SNES, Mega Drive,
-Game Boy, Game Boy Advance, Lynx, WonderSwan, and on a Pi the Nintendo 64 and
-the Dreamcast)
+Game Boy, Game Boy Advance, Lynx, WonderSwan, and on a Pi the Nintendo 64,
+the Dreamcast and the Nintendo DS)
 and appear as their own tiles once you have ROMs for them.
 
 **ROMs** go in folders in your home folder on the Pi: `roms/nes`,
 `roms/snes`, `roms/md`, `roms/gb` and `roms/gbc`, `roms/gba`, `roms/lynx`,
-`roms/ws`, `roms/n64`, and `roms/dreamcast` for Dreamcast discs (`.chd`, `.gdi` or
-`.cdi`; no BIOS needed). Copy them with the file manager (**Apps > Files**) from a USB
+`roms/ws`, `roms/n64`, `roms/nds` for Nintendo DS games (`.nds`), and `roms/dreamcast` for Dreamcast discs (`.chd`, `.gdi` or
+`.cdi`; no BIOS needed for either). Copy them with the file manager (**Apps > Files**) from a USB
 stick or from the PSP's memory stick, or over the network as you would to
 any Linux machine. Only use ROMs of games you own.
 
@@ -172,6 +172,7 @@ Measured on the PSP-1000 with a Pi 400:
 | SuperTuxKart | drawn by the Pi's own graphics chip and sent to the PSP as pictures (only on a Pi); about 29 fps at most from the Pi; its menus 33-60 fps on the PSP-1000 |
 | Nintendo 64 (Super Mario 64, Ocarina of Time, Banjo-Tooie, GoldenEye 007, Perfect Dark) | drawn by the Pi's graphics chip (only on a Pi); Super Mario 64 plays smoothly, Ocarina of Time well; GoldenEye and Perfect Dark have short sound gaps where the Pi falls behind; Banjo-Tooie is too slow in play on a Pi 400 (its intro runs well, its levels do not) |
 | Dreamcast (Power Stone, Sonic Adventure 2, MSR) | Flycast, drawn by the Pi's graphics chip (only on a Pi): Power Stone 1 and 2, Rayman 2, Sonic Adventure 1 and 2, Metropolis Street Racer, Dynamite Cop, Hydro Thunder and Virtua Tennis play, about 40-50 fps on the PSP (Sonic Adventure 2 and MSR played through with clear sound); Sega Rally 2 is too heavy for a Pi 400 (its sound breaks up), like other games built on Windows CE; the PSP is a Dreamcast pad (cross A, circle B, square X, triangle Y, L and R the triggers, the nub the stick); SELECT opens Flycast's menu, whose Exit quits |
+| Nintendo DS (Mario Kart DS, New Super Mario Bros., Zelda: Phantom Hourglass, Pokémon HeartGold, Castlevania: Dawn of Sorrow) | melonDS (Pi 4, 400 and 5): the game and its sound at full speed, 30 pictures a second on the PSP. The PSP shows both screens: the main one sharp at the DS's own size with the other beside it; SELECT + R changes the layout (both equal, or the main one large), SELECT + L swaps which screen is the main one (in Zelda, the touch screen). The nub moves the stylus, SELECT held touches. On a Pi 4 or 400 the busiest games (New Super Mario Bros.) dip at moments; set the Pi to 2.0 GHz for them (`arm_freq=2000` and `over_voltage=6` in the Pi's `/boot/firmware/config.txt`, with a good power supply) or use a Pi 5 |
 | Unreal Tournament | drawn by the Pi's graphics chip (only on a Pi): 30-40 fps in a deathmatch on the PSP-1000; free with Epic's permission, its terms accepted in Packages |
 | Celeste 64 | drawn by the Pi's graphics chip (only on a Pi): 54-60 fps in the level on the PSP-1000, its music and sound on the PSP |
 | Wolfenstein: Enemy Territory | drawn by the PSP: on the PSP-1000 about 20 fps over Oasis's open ground, up to 60 indoors; online or against bots; id's licence agreement accepted in Packages |

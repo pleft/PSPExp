@@ -1,5 +1,17 @@
 # Release notes
 
+## Since 1.1.0
+
+Package updates: a board gets them through Packages (Apps > PSPExp).
+
+- **The Nintendo DS** on a Pi 4, 400 or 5 (melonDS): your own games in
+  `roms/nds`; the PSP shows both screens (three layouts, SELECT + R), the
+  nub is the stylus with SELECT held to touch. Mario Kart DS and New Super
+  Mario Bros. at full game speed, 30 pictures a second; a Pi 4 or 400 at
+  2.0 GHz for the busiest moments. Install it from Packages.
+- **Emulators a little lighter**: the player
+  now tells the emulator which frames won't be shown.
+
 ## 1.1.0 (2026-10-19)
 
 New card images for the Raspberry Pi and the GameShell, with all of the below

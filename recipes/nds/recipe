@@ -1,0 +1,55 @@
+# The Nintendo DS: melonDS DS (melonDS as a libretro core, PSPExp's package pspexp-melonds, built
+# with its ARM64 recompiler and patched to skip a frame's 2D drawing when it is not shown), played
+# by pspexp-retro. The player's own games (.nds) in ~/roms/nds; melonDS's own replacement BIOS. The
+# PSP lays the two screens out itself (PSPEXP_RETRO_DUAL): the main one at its own 256x192 with the
+# other at 224x168 beside it (the default), both at 240x180, or the main one 360x270 with the other
+# 120x90; SELECT+R the next layout, SELECT+L swaps the main screen. The nub moves the stylus
+# (melonDS DS's touch cursor, a stick), SELECT held touches. Every second frame is shown (30 a
+# second), the game and its sound at 60. Played on the PSP-1000 from a Pi 400 (2026-10-21): Mario
+# Kart DS's race 59.8 emulated / 29.9 shown, New Super Mario Bros. 58-60 with the Pi at 2.0 GHz
+# (56-60 at its 1.8), Zelda: Phantom Hourglass, Pokemon HeartGold, Castlevania: Dawn of Sorrow at
+# 60 in their opening screens; all five played by hand. Pi 4, 400 and 5 only: the GameShell is far
+# too slow. No native PSP port of a DS emulator plays games.
+
+[package]
+id=nds
+title=Nintendo DS
+description=Nintendo DS: melonDS DS, the two screens laid out on the PSP, the nub as the stylus (Pi 4, 400, 5; a Pi 4/400 at 2.0 GHz for the busiest games); ROMs in ~/roms/nds
+category=system
+license=GPL-3.0 (melonDS, melonDS DS); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro pspexp-melonds
+core=melondsds_libretro.so
+
+[debian:gameshell]
+apt=
+
+[system]
+id=nds
+name=Nintendo DS
+short=NDS
+icon=gamepad-2
+ext=nds
+roms=~/roms/nds
+thumbs=Nintendo - Nintendo DS
+keys=select=none
+graphics=sdl
+env=PSPEXP_RETRO_NUB=right
+env=PSPEXP_RETRO_MAP=select+r=layout,select+l=swap,select+x=select,select=r2
+env=PSPEXP_RETRO_DUAL=1
+env=PSPEXP_RETRO_LAYOUT=1
+env=PSPEXP_RETRO_VIDEO_DIV=2
+env=PSPEXP_RETRO_CATCHUP=2
+env=PSPEXP_FRAME_DROP=2
+control=dpad: D-pad
+control=cross circle: B, A
+control=square triangle: Y, X
+control=l r: L, R
+control=start: Start
+control=nub: Move the stylus
+control=select: Hold to touch the screen
+control=select r: Next screen layout (3)
+control=select l: Swap the main screen
+control=select triangle: Select

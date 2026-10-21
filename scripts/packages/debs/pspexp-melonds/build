@@ -1,0 +1,45 @@
+#!/bin/sh
+# pspexp-melonds: melonDS DS (the Nintendo DS emulator melonDS as a libretro core, built by
+# scripts/packages/build-melonds.sh, patched to skip a frame's 2D drawing when it will not be shown)
+# in Debian's libretro folder, so the nds recipe names it like any core, and its defaults for the PSP
+# in /usr/share/pspexp-retro/melondsds.opt, which pspexp-retro reads before the player's own: the
+# DS's two screens given stacked (top-bottom) for pspexp-retro to lay out on the PSP
+# (PSPEXP_RETRO_DUAL), the touch cursor moved by a stick (the nub), the JIT on. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+[ "$ARCH" = arm64 ] || { echo "arm64 only (a Pi 4, 400 or 5)" >&2; exit 2; }
+B="$ROOT/build/$ARCH/melonds"
+[ -f "$B/melondsds_libretro.so" ] && [ -s "$B/depends.txt" ] || { echo "no $B/melondsds_libretro.so: scripts/packages/build-melonds.sh $ARCH first" >&2; exit 1; }
+V=1.4.0-pspexp1
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+R="$W/root"; L=/usr/lib/aarch64-linux-gnu/libretro
+mkdir -p "$R$L" "$R/usr/share/pspexp-retro" "$R/usr/share/doc/pspexp-melonds"
+install -m 644 "$B/melondsds_libretro.so" "$R$L/melondsds_libretro.so"
+cat > "$R/usr/share/pspexp-retro/melondsds.opt" <<O
+# melonDS DS for the PSP (package pspexp-melonds); ~/.config/pspexp-retro/melondsds.opt overrides
+melonds_touch_mode=joystick
+melonds_show_cursor=always
+melonds_number_of_screen_layouts=1
+melonds_screen_layout1=top-bottom
+melonds_render_mode=software
+melonds_threaded_renderer=enabled
+melonds_jit_enable=enabled
+O
+cp "$B/LICENSE" "$R/usr/share/doc/pspexp-melonds/COPYING"
+cat > "$W/control" <<C
+Package: pspexp-melonds
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <info@pspexp.dev>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt"), pspexp-retro (>= 2026.10.21)
+Description: melonDS DS, the Nintendo DS emulator, for PSPExp
+ melonDS as a libretro core (melonDS DS), which Debian does not package,
+ built with its ARM64 recompiler, with PSPExp's defaults for playing on the
+ PSP through pspexp-retro. No games and no BIOS: melonDS's own replacement
+ BIOS is used. Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-melonds "$V" "$R/usr/share/doc/pspexp-melonds"   # licences, and where the complete source is (Package_Manager §6.2)
+python3 "$ROOT/scripts/packages/mkdeb.py" "$R" "$W/control" "$OUT/pspexp-melonds_${V}_$ARCH.deb"
