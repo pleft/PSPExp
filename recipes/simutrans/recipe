@@ -1,4 +1,7 @@
-# Simutrans: Debian's game and its pak64 graphics.
+# Simutrans: Debian's game and its pak64 graphics. Its welcome window on a first start is taller
+# than 272 lines: its top (New Game) sits under the toolbar, which Simutrans 124 cannot move (no
+# menupos key; the Display settings dialog only). Closed (triangle) it leaves a world ready to
+# play; the wrench's Return to menu brings it back. Said on the controls sheet (the 2026-10-21 audit).
 
 [package]
 id=simutrans
@@ -6,7 +9,7 @@ title=Simutrans
 description=Build a transport empire: rail, road, ships and planes carrying passengers, mail and goods between growing towns (pak64 graphics).
 category=game
 license=Artistic-1.0 (Simutrans and pak64)
-version=3
+version=4
 
 [debian]
 apt=simutrans simutrans-pak64
@@ -26,4 +29,5 @@ control=circle: Hold and move: drag the map
 control=dpad: Scroll the map
 control=l r: Zoom out, in
 control=triangle start: Close the top window
+control=triangle: First start: close welcome, play
 control=select: Pause

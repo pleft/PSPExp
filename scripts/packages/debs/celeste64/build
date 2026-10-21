@@ -8,8 +8,8 @@
 # Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
-ID=celeste64 TITLE="Celeste 64: Fragments of the Mountain" VERSION=1.1.1-pspexp2
-ITCH=maddymakesgamesinc/celeste64/9667963
+ID=celeste64 TITLE="Celeste 64: Fragments of the Mountain" VERSION=1.1.1-pspexp3
+ITCH=maddymakesgamesinc/celeste64/9667963 FILE=Celeste64-v1.1.1-Linux-arm64.zip
 SHA=b871fd37759e2ab1187b78fa93e99407c69c72949e21993447068017f09c002d SIZE="31 MB" TOP=""
 RUN='exec "$G/Celeste64" "$@"'
 ABOUT=" A free 3D platformer by the makers of Celeste, in the style of the N64:

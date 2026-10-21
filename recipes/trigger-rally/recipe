@@ -1,7 +1,9 @@
 # Trigger Rally: rally racing on dirt and snow, Debian's package, drawn by the
 # PSP's GE (full screen at the PSP's size). The menus by pointer (the nub, R
 # clicks); racing on the d-pad (up / cross throttle, down / square brake,
-# left / right steer), circle the handbrake.
+# left / right steer), circle the handbrake. Its car-choice screen has no buttons and no pointer
+# (keys only: left / right the car, Return takes it, Escape back): cross sends Return too (a
+# race ignores it); before, a player was stuck there (the 2026-10-21 audit).
 
 [package]
 id=trigger-rally
@@ -9,7 +11,7 @@ title=Trigger Rally
 description=Rally racing on dirt, snow and tarmac: drive through the checkpoints against the clock.
 category=game
 license=GPL-2.0+ (Trigger Rally)
-version=3
+version=4
 
 [debian]
 apt=trigger-rally
@@ -20,13 +22,13 @@ type=game
 description=Rally racing on dirt, snow and tarmac: drive through the checkpoints against the clock.
 icon=gauge
 exec=/usr/games/trigger-rally
-keys=up=up,down=down,left=left,right=right,cross=up,square=down,circle=space,start=escape,select=escape
+keys=up=up,down=down,left=left,right=right,cross=up+return,square=down,circle=space,start=escape,select=escape
 nub=mouse
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_MOUSE_BUTTONS=left=r,right=none
 graphics=opengl
 control=left right: Steer
-control=up cross: Accelerate
+control=up cross: Accelerate; cross picks the car
 control=down square: Brake, reverse
 control=circle: Handbrake
 control=nub: The pointer in menus

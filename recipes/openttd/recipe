@@ -2,7 +2,9 @@
 # OpenMSX music), at the PSP's own 480x272. Mouse-driven, as Simutrans: the nub
 # is the mouse (cross and circle its buttons), the d-pad scrolls the map, L / R
 # zoom out / in (minus, equals), triangle closes the top window (Delete), START
-# is Escape, square closes news and errors (Space). Its first run's survey question answered (no) by first-run.
+# is Escape, square closes news and errors (Space). Its first run's survey question answered (no) by first-run,
+# and its hardware acceleration off (video_hw_accel): with none on the board its first start showed
+# a red "no compatible GPU found" box over the menu (the 2026-10-21 audit).
 
 [package]
 id=openttd
@@ -10,7 +12,7 @@ title=OpenTTD
 description=Build a transport empire in Transport Tycoon Deluxe's world: trains, road vehicles, ships and aircraft, with free graphics, sounds and music.
 category=game
 license=GPL-2.0 (OpenTTD, OpenGFX, OpenMSX); CC Sampling Plus 1.0 (OpenSFX)
-version=4
+version=5
 
 [debian]
 apt=openttd openttd-opengfx openttd-opensfx openttd-openmsx
@@ -24,7 +26,7 @@ exec=/usr/games/openttd -r 480x272
 keys=up=up,down=down,left=left,right=right,l=minus,r=equals,triangle=del,start=escape,select=none,square=space
 nub=mouse
 env=PSPEXP_NUB_SPEED=180
-first-run=.config/openttd/openttd.cfg:[network]\nparticipate_survey = no\n
+first-run=.config/openttd/openttd.cfg:[misc]\nvideo_hw_accel = false\n[network]\nparticipate_survey = no\n
 graphics=sdl
 control=nub: Move the pointer
 control=dpad: Scroll the map

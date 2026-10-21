@@ -12,6 +12,13 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
 - **Frozen Bubble and Kobo Deluxe start again**: since 1.1.0 they closed
   at once (the PSP keyboard's code asked SDL for something the older games'
   SDL does not have).
+- **Fixes from a check of every game on the PSP's screen**: Quake no
+  longer opens the PSP's keyboard over the game; Hurrican starts from the
+  launcher again; Trigger Rally's car choice takes cross (it was stuck
+  there); OpenTTD's first start shows no graphics-card error; Egoboo's
+  debug window is gone; Celeste 64 and Theia ask itch.io again when a
+  download comes back wrong; Simutrans's first start says on its controls
+  sheet that triangle closes the welcome window to play.
 - **X-Moto removed** from the packages: its text is too small to read on
   the PSP's screen, and its first start needs a mouse and a typed name.
   The PSP's keyboard keeps what it learned for it (a button can open it,

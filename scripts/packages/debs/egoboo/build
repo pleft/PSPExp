@@ -4,11 +4,12 @@
 # (_installer.sh). The launch script points the program at it (EGOBOO_DATA),
 # and before the first start copies the default settings with a 640x360
 # window (Egoboo's own default is 1920x1080: a quarter size on the PSP) and
-# the frame counter off. Usage: build OUTDIR
+# the frame counter off; its developer mode (on in its defaults: a debug window over the game)
+# off at every start. Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_installer.sh"
 C=3d2598fd2fb38e8ced9b9e6821e167d4640bf594
-ID=egoboo TITLE="Egoboo" VERSION=2.9.0+3d2598f-pspexp2
+ID=egoboo TITLE="Egoboo" VERSION=2.9.0+3d2598f-pspexp3
 URL="https://github.com/egoboo/egoboo-assets/archive/$C.tar.gz"
 SHA=771cfe63d7e496a8c5f1ecf237df36a5d62e40ca2342f16700a6850d37fde259 SIZE="167 MB" TOP="egoboo-assets-$C"
 RUN='U="${XDG_DATA_HOME:-$HOME/.local/share}/egoboo/egoboo"
@@ -16,6 +17,7 @@ if [ ! -f "$U/setup.txt" ]; then
 	mkdir -p "$U"
 	sed "s/graphic.resolution.horizontal : .*/graphic.resolution.horizontal : \"640\"/; s/graphic.resolution.vertical : .*/graphic.resolution.vertical : \"360\"/; s/hud.displayFramesPerSecond : .*/hud.displayFramesPerSecond : \"false\"/" "$G/setup.txt" > "$U/setup.txt"
 fi
+sed -i "s/debug.developerMode.enable : .*/debug.developerMode.enable : \"false\"/" "$U/setup.txt"
 EGOBOO_DATA="$G/" exec /usr/lib/pspexp/egoboo/egoboo "$@"'
 DEPENDS=pspexp-egoboo
 ABOUT=" A 3D dungeon crawler in the spirit of NetHack, its data from the

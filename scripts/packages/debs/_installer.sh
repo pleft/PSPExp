@@ -55,8 +55,10 @@ S
 	if [ -n "$ITCH" ]; then
 		_u=${ITCH%%/*}; _r=${ITCH#*/}; _g=${_r%%/*}; _id=${_r#*/}
 		_src="https://$_u.itch.io/$_g (upload $_id)"
-		_fetch="u=\$(curl -fsSL -X POST 'https://$_u.itch.io/$_g/file/$_id?source=view_game&as_props=1&after_download_lightbox=true' | grep -o '\"url\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4 | sed 's#\\\\/#/#g')
-[ -n \"\$u\" ] || { echo \"itch.io gave no download link\" >&2; exit 1; }"
+		# a fresh link at each try: itch.io's last a minute, and now and then the link gave a small
+		# web page instead of the game (twice in the 2026-10-21 audit, Theia and Celeste 64)
+		_fetch="itchlink() { curl -fsSL -X POST 'https://$_u.itch.io/$_g/file/$_id?source=view_game&as_props=1&after_download_lightbox=true' | grep -o '\"url\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4 | sed 's#\\\\/#/#g'; }
+u=itch"
 	else
 		_src="$URL"
 		_fetch="u='$URL'"
@@ -68,8 +70,18 @@ got=
 if [ -f '/opt/pspexp/downloads/$FILE' ] && cp '/opt/pspexp/downloads/$FILE' \"\$C/game.part\" && ok; then
 	echo \"Using /opt/pspexp/downloads/$FILE\"; got=1
 fi
+if [ -z \"\$got\" ] && [ \"\$u\" = itch ]; then
+	for n in 1 2 3; do
+		v=\$(itchlink)
+		[ -n \"\$v\" ] || { echo \"  itch.io gave no download link\"; sleep 5; continue; }
+		echo \"Downloading $TITLE ($SIZE) from itch.io...\"
+		if curl -fL --retry 2 --connect-timeout 20 -o \"\$C/game.part\" \"\$v\" && ok; then got=1; break; fi
+		echo \"  not the expected file: asking itch.io again\"; sleep 5
+	done
+	u=
+fi
 if [ -z \"\$got\" ]; then
-	for v in \"\$u\" $MIRRORS \$(awk -v id='$ID' '/^\\[/ { s = \$0; next } s == \"[mirrors]\" { i = index(\$0, \"=\"); k = substr(\$0, 1, i - 1); gsub(/[ \\t]/, \"\", k); if (i && k == id) { v = substr(\$0, i + 1); gsub(/^[ \\t]+|[ \\t]+\$/, \"\", v); print v } }' /usr/share/pspexp/catalogue/recipes/*/recipe 2>/dev/null); do
+	for v in \${u:+\"\$u\"} $MIRRORS \$(awk -v id='$ID' '/^\\[/ { s = \$0; next } s == \"[mirrors]\" { i = index(\$0, \"=\"); k = substr(\$0, 1, i - 1); gsub(/[ \\t]/, \"\", k); if (i && k == id) { v = substr(\$0, i + 1); gsub(/^[ \\t]+|[ \\t]+\$/, \"\", v); print v } }' /usr/share/pspexp/catalogue/recipes/*/recipe 2>/dev/null); do
 		echo \"Downloading $TITLE ($SIZE) from \$(echo \"\$v\" | cut -d/ -f3)...\"
 		if curl -fL --retry 2 --connect-timeout 20 -o \"\$C/game.part\" \"\$v\" && ok; then got=1; break; fi
 		echo \"  not there, or not the expected file: the next source\"

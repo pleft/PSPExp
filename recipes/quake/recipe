@@ -12,7 +12,7 @@ title=Quake (shareware)
 description=id Software's 1996 first-person shooter, its shareware episode on Quakespasm: the full 3D world drawn by the PSP.
 category=game
 license=GPL-2.0 (Quakespasm); shareware (Quake, id Software, 1996)
-version=6
+version=7
 
 [debian]
 apt=quake-shareware-data
@@ -28,6 +28,9 @@ nub=mouse
 env=PSPEXP_MOUSE_BUTTONS=left=none,right=none
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_GL_UNITS=3
+# Quakespasm turns SDL's text input on for its console as it starts: the PSP's keyboard opened
+# over the game (since the keyboard came, 2026-10-18). Nothing to type in Quake: off.
+env=PSPEXP_TEXT=0
 graphics=opengl-shaders
 control=nub: Aim
 control=triangle cross: Walk forward, back; move in menus
