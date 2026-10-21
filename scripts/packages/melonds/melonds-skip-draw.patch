@@ -1,0 +1,27 @@
+--- a/src/GPU.h	2026-10-21 17:25:55
++++ b/src/GPU.h	2026-10-21 17:25:55
+@@ -634,6 +634,7 @@
+ 
+     u32 CaptureCnt;
+     bool CaptureEnable;
++    bool SkipDraw = false;   // PSPExp: the frontend will not show this frame: no 2D drawing (unless captured)
+ 
+     alignas(u64) u8 Palette[2*1024] {};
+     alignas(u64) u8 OAM[2*1024] {};
+--- a/src/GPU.cpp	2026-10-21 17:25:55
++++ b/src/GPU.cpp	2026-10-21 17:25:55
+@@ -1153,9 +1153,12 @@
+     {
+         // draw
+         // note: this should start 48 cycles after the scanline start
+-        if (line < 192)
++        // PSPExp: a frame the frontend will not show is not drawn, unless display capture is on
++        // (it writes VRAM that later frames show)
++        bool draw = !SkipDraw || CaptureEnable || (CaptureCnt & (1<<31));
++        if (line < 192 && draw)
+             Rend->DrawScanline(line);
+-        if (line < 191)
++        if (line < 191 && draw)
+             Rend->DrawSprites(line+1);
+ 
+         NDS.CheckDMAs(0, 0x02);

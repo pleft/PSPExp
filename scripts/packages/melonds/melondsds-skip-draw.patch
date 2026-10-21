@@ -1,0 +1,22 @@
+--- a/src/libretro/core/core.cpp	2026-10-21 17:25:55
++++ b/src/libretro/core/core.cpp	2026-10-21 17:25:55
+@@ -36,6 +36,7 @@
+ #include "../microphone.hpp"
+ #include "../message/error.hpp"
+ #include "../render/render.hpp"
++#include "../environment.hpp"
+ #include "../retro/task_queue.hpp"
+ #include "render/software.hpp"
+ 
+@@ -255,6 +256,11 @@
+             // which is then drawn to the screen by _renderState.Render
+             {
+                 ZoneScopedN("NDS::RunFrame");
++                // PSPExp: a frame the frontend will not show (GET_AUDIO_VIDEO_ENABLE, bit 0 off) is
++                // emulated without its 2D drawing
++                int av = 3;
++                if (!retro::environment(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av)) av = 3;
++                nds.GPU.SkipDraw = !(av & 1);
+                 nds.RunFrame();
+             }
+ 

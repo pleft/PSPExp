@@ -348,12 +348,13 @@ static bool environment(unsigned cmd, void *data)
     }
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *(bool *)data = false; return true;
     case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: *(unsigned *)data = 0; return true;   /* cores fall back to SET_VARIABLES */
-    case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
+    case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS & ~RETRO_ENVIRONMENT_EXPERIMENTAL: return true;
     case RETRO_ENVIRONMENT_GET_LANGUAGE: *(unsigned *)data = RETRO_LANGUAGE_ENGLISH; return true;
-    case RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE:   /* bit 0 video, bit 1 audio: skipped frames need no picture */
+    case RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE & ~RETRO_ENVIRONMENT_EXPERIMENTAL:   /* bit 0 video, bit 1 audio: skipped frames need no picture
+        (the switch drops the EXPERIMENTAL bit, which this one carries: until 2026-10-21 it never matched, and cores drew every frame) */
         if (data) *(int *)data = P.skip_video ? 2 : 3;
         return true;
-    case RETRO_ENVIRONMENT_GET_FASTFORWARDING: if (data) *(bool *)data = false; return true;
+    case RETRO_ENVIRONMENT_GET_FASTFORWARDING & ~RETRO_ENVIRONMENT_EXPERIMENTAL: if (data) *(bool *)data = false; return true;
     case RETRO_ENVIRONMENT_SET_GEOMETRY: set_geometry((const struct retro_game_geometry *)data); return true;
     case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO:
         P.av = *(const struct retro_system_av_info *)data;
@@ -368,8 +369,8 @@ static bool environment(unsigned cmd, void *data)
     case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
     case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
     case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
-    case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
-    case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS:
+    case RETRO_ENVIRONMENT_SET_MEMORY_MAPS & ~RETRO_ENVIRONMENT_EXPERIMENTAL:
+    case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS & ~RETRO_ENVIRONMENT_EXPERIMENTAL:
     case RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL:
     case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS:
     case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
@@ -879,7 +880,7 @@ int main(int argc, char **argv)
         SDL_Event e;
         double backlog;
         Uint64 frame = (Uint64)((double)freq / P.fps), t;
-        int k = 1, front;
+        int k = 1, front, maxk = 4;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) P.running = 0;
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) P.running = 0;
@@ -892,13 +893,19 @@ int main(int argc, char **argv)
         P.st_core += SDL_GetPerformanceCounter() - t;
         if (P.geom_pending > 0) { P.geom_pending = 0; set_geometry(&P.geom); }
         front = P.back; P.back ^= 1;
+        { static int mk; if (!mk) mk = getenv("PSPEXP_RETRO_CATCHUP") && atoi(getenv("PSPEXP_RETRO_CATCHUP")) > 0 ? atoi(getenv("PSPEXP_RETRO_CATCHUP")) : 4; maxk = mk; }
         backlog = audio_backlog();
         audio_rate_control(backlog);
         if (SDL_GetTicks() - last_save > 10000) { srm_save(); last_save = SDL_GetTicks(); }   /* the worker is idle */
         /* the next job: behind the clock, or sound short, frames without a picture first */
         now = SDL_GetPerformanceCounter();
-        while (now > next + frame * (Uint64)k && k < 4 && !getenv("PSPEXP_RETRO_NOSKIP")) k++;
-        if (backlog < 0.5 && k < 4) k++;
+        /* PSPEXP_RETRO_CATCHUP=N: at most N frames a job (4 by default); a core that is only just too
+         * slow (the DS on a Pi 400, 56-58 of its 60) otherwise stayed at 4 for good, the debt never
+         * paid, a picture every 4th or 5th frame. Further behind than that, the debt is dropped: a
+         * moment of sound short instead of a picture that never recovers */
+        if (now > next + frame * (Uint64)(maxk + 2)) next = now - frame;
+        while (now > next + frame * (Uint64)k && k < maxk && !getenv("PSPEXP_RETRO_NOSKIP")) k++;
+        if (backlog < 0.5 && k < maxk) k++;
         k += P.video_div - 1;
         next += frame * (Uint64)k;
         P.st_run += (unsigned)k;
