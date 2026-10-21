@@ -21,7 +21,6 @@
 | `recipes/openmrac/cover.png` | a screenshot of openMrac on the PSP (a race), cropped and scaled | BSD-2-Clause (openMrac) |
 | `recipes/quake/cover.png` | a screenshot of Quake's shareware episode on the PSP (E1M1), cropped and scaled | id Software's (shareware) |
 | `recipes/openarena/cover.png` | Debian's openarena package, its 128x128 icon | GPL-2.0 (OpenArena) |
-| `recipes/xmoto/cover.png` | Debian's xmoto package, its 256x256 pixmap, scaled | GPL-2.0+ (X-Moto) |
 | `recipes/blobby/cover.png` | Debian's blobby package, its 128x128 icon | GPL-2.0+ (Blobby Volley 2) |
 | `recipes/heroes3/cover.png` | Debian's vcmi package, its 128x128 icon (VCMI's, not the game's) | GPL-2.0+ (VCMI) |
 | `recipes/heroes2/cover.png` | Debian's fheroes2 package, its 128x128 icon | GPL-2.0 (fheroes2) |

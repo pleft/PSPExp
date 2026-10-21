@@ -9,9 +9,10 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
   nub is the stylus with SELECT held to touch. Mario Kart DS and New Super
   Mario Bros. at full game speed, 30 pictures a second; a Pi 4 or 400 at
   2.0 GHz for the busiest moments. Install it from Packages.
-- **X-Moto's first start** no longer stays on its profile screen: the nub
-  points, square clicks New Profile, triangle opens the PSP's keyboard for
-  the name.
+- **X-Moto removed** from the packages: its text is too small to read on
+  the PSP's screen, and its first start needs a mouse and a typed name.
+  The PSP's keyboard keeps what it learned for it (a button can open it,
+  text arrives as typed).
 - **Commander Keen 4** has its own cover.
 - **Emulators a little lighter**: the player
   now tells the emulator which frames won't be shown.

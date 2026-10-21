@@ -887,7 +887,7 @@ The four from Debian are recipes (`recipes/supertux`, `chromium-bsu`, `openmrac`
 | OpenArena | 55.7 | one texture unit (its recipe) |
 | SuperTux | 52.5 | |
 | Teeworlds | 50.3 | |
-| X-Moto | 50 | |
+| X-Moto | 50 | removed 2026-10-21: its text too small to read at 480x272 |
 | openMrac | 49.5 | |
 | Trigger Rally | 47.8 | |
 | Quake (shareware) | 40.8 | the board's 22–25 ms a frame is the limit (the Pi's is a quarter of that) |
