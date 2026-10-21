@@ -2913,7 +2913,7 @@ static void text_ready(void)
     static int done;
     if (done || pspexp_stats(S.ctx)->frames_sent < 30 || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
     done = 1;
-    if (SDL_IsTextInputActive()) REAL(SDL_StopTextInput)();
+    if (REAL(SDL_IsTextInputActive)()) REAL(SDL_StopTextInput)();
     g_text_stopped = 1;
 }
 static void text_deliver(void)
@@ -2951,7 +2951,7 @@ HOOK(void, SDL_StopTextInput, (void))
 
 HOOK(void, SDL_StartTextInput, (void))
 {
-    int was_on = SDL_IsTextInputActive();
+    int was_on = REAL(SDL_IsTextInputActive)();
     REAL(SDL_StartTextInput)();
     if (was_on || !g_text_stopped || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
     if (g_text_answered && SDL_GetTicks() - g_text_answered < 1500) return;

@@ -9,6 +9,9 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
   nub is the stylus with SELECT held to touch. Mario Kart DS and New Super
   Mario Bros. at full game speed, 30 pictures a second; a Pi 4 or 400 at
   2.0 GHz for the busiest moments. Install it from Packages.
+- **Frozen Bubble and Kobo Deluxe start again**: since 1.1.0 they closed
+  at once (the PSP keyboard's code asked SDL for something the older games'
+  SDL does not have).
 - **X-Moto removed** from the packages: its text is too small to read on
   the PSP's screen, and its first start needs a mouse and a typed name.
   The PSP's keyboard keeps what it learned for it (a button can open it,
