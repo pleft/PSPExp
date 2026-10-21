@@ -525,7 +525,12 @@ text as SDL_TEXTINPUT and Enter. Only a turn from off to on opens it, never
 within 1.5 s of an answer: X-Moto's first start, asking for a profile name,
 called `SDL_StartTextInput` with text input already on and took Enter back to
 its field, and the keyboard opened 1094 times in a test run (2026-10-18; with
-the check, once). Tried: the PSP runtime under PPSSPP opened
+the check, once). X-Moto turns text input on at every event (`GameInit.cpp`), so it
+opened once, over its start-up note, and never for its name box; its box also takes
+one character a `SDL_TEXTINPUT` and dropped the answer sent whole. The answer now
+goes a character an event, and `PSPEXP_TEXT_BUTTON` opens the keyboard on a button:
+its recipe has triangle, the nub as the pointer and square its click (New Profile
+wants the mouse); a first start then makes its profile (2026-10-21). Tried: the PSP runtime under PPSSPP opened
 the keyboard for OpenMW's name field from the Pi; the answer's path through
 the stand-in (`PSPEXP_SERVER_TEXT`: a preset answer), the name taken and
 character creation going on. On the PSP-1000 from the GameShell (a test

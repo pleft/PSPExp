@@ -21,7 +21,7 @@ title=Commander Keen
 description=id Software's platform classics: Keen 1, Marooned on Mars, and Keen 4, Secret of the Oracle, their free episodes on Commander Genius.
 category=game
 license=GPL-2.0+ (Commander Genius); the episodes: id Software / Apogee shareware, freely distributed
-version=2
+version=3
 
 [debian]
 apt=commander-keen1 commander-keen4
@@ -49,6 +49,7 @@ control=start select: The menu
 [entry.keen4]
 id=keen4
 title=Commander Keen 4
+cover=keen4.png
 type=game
 description=Secret of the Oracle: rescue the Council of Elders in the Shadowlands. Cross jumps (hold for higher), circle pogos, square fires, triangle shows the status.
 icon=rocket

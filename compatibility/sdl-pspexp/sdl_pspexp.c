@@ -288,6 +288,7 @@ static struct {
     int mouse_left, mouse_right;   /* with the nub as the mouse: the buttons that click (B_*, -1 none) */
     int compose;                   /* PSPEXP_COMPOSE=1: the frame drawn on the board, sent whole (host_render, SDL_RenderPresent) */
     int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */
+    int text_btn;                  /* PSPEXP_TEXT_BUTTON: the button (B_*, -1 none) that opens the PSP's keyboard on demand */
     int magnify_pointer, magnify_was_shown;   /* PSPEXP_MAGNIFY=pointer: always magnified, round the pointer or (hidden) the frame's bottom */
     float drawn_px, drawn_py; Uint32 last_present; unsigned replays;   /* the pointer as last shown (replay_pointer) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
@@ -425,6 +426,11 @@ static void connect_once(void)
     }
     S.compose = getenv("PSPEXP_COMPOSE") && !strcmp(getenv("PSPEXP_COMPOSE"), "1");
     S.magnify_btn = -1;
+    S.text_btn = -1;
+    if (getenv("PSPEXP_TEXT_BUTTON")) {   /* "triangle": that button opens the PSP's keyboard, for a game whose text input stays on */
+        int b;
+        for (b = 0; b < B_COUNT; b++) if (!strcmp(getenv("PSPEXP_TEXT_BUTTON"), BUTTON_NAMES[b])) S.text_btn = b;
+    }
     if (getenv("PSPEXP_MAGNIFY")) {   /* "r": that button switches between the whole frame shrunk and its own pixels */
         int b;
         for (b = 0; b < B_COUNT; b++) if (!strcmp(getenv("PSPEXP_MAGNIFY"), BUTTON_NAMES[b])) S.magnify_btn = b;
@@ -2108,6 +2114,14 @@ static void feed_input(void)
         }
         pressed &= ~m; released &= ~m;
     }
+    if (S.text_btn >= 0) {   /* the keyboard's button is the layer's alone too: what is typed goes to the field in focus */
+        uint32_t m = BUTTON_BITS[S.text_btn];
+        if ((pressed & m) && pspexp_text_supported(S.ctx) && !pspexp_text_pending(S.ctx)) {
+            const char *title = S.win ? SDL_GetWindowTitle(S.win) : NULL;
+            if (pspexp_text_request(S.ctx, title && *title ? title : "Text", "", 64) == 0) logf_("keyboard: opened on the PSP (its button)");
+        }
+        pressed &= ~m; released &= ~m;
+    }
 
     setup_vjoy();
     if (S.vjoy_handle) {
@@ -2912,10 +2926,11 @@ static void text_deliver(void)
     if (status != PSPEXP_TEXT_OK) return;
     {
         size_t i = 0, n = strlen(t);
-        while (i < n) {   /* SDL_TEXTINPUT holds 31 bytes: whole UTF-8 characters per event */
+        while (i < n) {   /* one character an event, as a keyboard sends them: X-Moto's text box takes
+                           * only that, and dropped "Tester" sent whole (2026-10-21) */
             SDL_Event e;
-            size_t k = n - i < 31 ? n - i : 31;
-            while (k > 0 && i + k < n && ((unsigned char)t[i + k] & 0xC0) == 0x80) k--;
+            size_t k = 1;
+            while (i + k < n && ((unsigned char)t[i + k] & 0xC0) == 0x80) k++;
             if (!k) break;
             memset(&e, 0, sizeof(e));
             e.type = SDL_TEXTINPUT;

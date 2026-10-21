@@ -56,6 +56,7 @@
 | `recipes/hex-a-hop/cover.png` | Debian's hex-a-hop package, its 128x128 icon | GPL-2.0+ (Hex-a-hop) |
 | `recipes/morrowind/cover.png` | OpenMW's own icon (resources/openmw.png), scaled | GPL-3.0 (OpenMW) |
 | `recipes/commander-keen/cover.png` | Commander Genius' own logo (vfsroot/cglogo512.png), scaled | GPL-2.0+ (Commander Genius) |
+| `recipes/commander-keen/keen4.png` | Commander Keen 4's title screen (Keen in his helmet), from the shareware episode as Commander Genius shows it, cropped and scaled | the game's shareware licence (id Software / Apogee, freely distributable) |
 | `recipes/barrage/cover.png` | Debian's barrage package, its 48x48 icon, scaled | GPL-2.0+ (Barrage) |
 | `recipes/freeciv/cover.png` | Debian's freeciv package, its icon, scaled to 128x128 | GPL-2.0+ (Freeciv) |
 | `recipes/numptyphysics/cover.png` | Debian's numptyphysics package, its 256x256 icon, scaled | GPL-3.0 (Numpty Physics) |
