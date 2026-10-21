@@ -57,6 +57,14 @@ PACKAGES = {
     "pspexp-hurrican": dict(what="Hurrican's engine", comps=[("Hurrican", GH + "HurricanGame/Hurrican", "0d91d1f2d40f38d21e7f41afc01369ee55649fb6", None)],
                             submodules=True, licences={"Hurrican": ["README.txt"]},
                             ours=[P + "build-hurrican.sh"]),
+    "pspexp-yabasanshiro": dict(what="Yaba Sanshiro", comps=[
+        ("Yaba Sanshiro", GH + "libretro/yabause", "09ed8e5b2e97e7a848ea2514545c34c7b809e399", None),
+        ("libchdr (devmiyax's)", GH + "devmiyax/libchdr", "074ff1614f2a685f2b5a95b0e788bff6297d5680", None),
+        ("nlohmann/json", GH + "nlohmann/json", "v3.2.0", None),
+        ("zlib", GH + "madler/zlib", "50893291621658f355bc5b4d450a8d06a563053d", None),
+        ("libpng", GH + "pnggroup/libpng", "v1.6.37", None)],
+                                submodules=True,
+                                ours=[P + "build-yabasanshiro.sh", P + "yabasanshiro/pspexp.patch"]),
     "pspexp-luanti": dict(what="Luanti (Minetest)", comps=[("Luanti", GH + "luanti-org/luanti", "5.10.0", None)],
                           ours=[P + "build-luanti.sh"]),
     "pspexp-mupen64plus": dict(what="Mupen64Plus and GLideN64", comps=[

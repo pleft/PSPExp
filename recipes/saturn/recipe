@@ -1,0 +1,50 @@
+# The Sega Saturn: Yaba Sanshiro (package pspexp-yabasanshiro, built with its 64-bit ARM
+# recompiler and patched for the Pi's V3D), drawn by the board's own GPU (PSPEXP_HOSTGL, OpenGL ES
+# 3.1) in a window of the PSP's size, each frame sent to the PSP as a picture. Its own program, not
+# a libretro core (as the Dreamcast). The player's own discs (.chd, .cue, .iso) in ~/roms/saturn,
+# the Saturn's BIOS in ~/roms/saturn/bios (mpr-17933.bin, sega_101.bin for Japanese games; without
+# one Yaba Sanshiro's own HLE BIOS, which starts fewer games). The Saturn pad has six face buttons:
+# square A, cross B, circle C, triangle Y, and with SELECT held square X and circle Z
+# (PSPEXP_PAD_SHIFT); SELECT on its own opens Yaba Sanshiro's menu (Exit quits). No keyboard keys
+# (Escape would open the menu too). On a Pi 400 (2026-10-21, five games, measured in the stand-in):
+# Saturn Bomberman 52, Panzer Dragoon 58, NiGHTS 57, Guardian Heroes 55, Sega Rally's menus 47
+# frames a second, their text readable at 480x272 (the Saturn's 320x224 shown larger). The
+# GameShell's GPU (OpenGL ES 2) cannot: not offered there. No native PSP port plays Saturn games
+# (Yabause's PSP port of 2009 is far too slow).
+
+[package]
+id=saturn
+title=Sega Saturn
+description=Sega Saturn: Yaba Sanshiro, drawn by the board's GPU (Raspberry Pi 4, 400, 5); disc images in ~/roms/saturn, the BIOS in ~/roms/saturn/bios
+category=system
+license=GPL-2.0 (Yaba Sanshiro); pspexp-saturn is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-yabasanshiro
+
+[debian:gameshell]
+apt=
+
+[system]
+id=saturn
+name=Saturn
+short=SAT
+icon=gamepad
+ext=chd,cue,iso
+roms=~/roms/saturn
+thumbs=Sega - Saturn
+exec=/usr/games/pspexp-saturn %ROM%
+keys=cross=none,circle=none,square=none,triangle=none,l=none,r=none,start=none,select=none,up=none,down=none,left=none,right=none
+env=PSPEXP_HOSTGL=1
+env=PSPEXP_FRAME_DROP=2
+env=PSPEXP_PAD_SHIFT=select
+graphics=board-gpu
+control=dpad: D-pad
+control=square cross circle: A, B, C
+control=triangle: Y
+control=select square: X
+control=select circle: Z
+control=l r: L, R
+control=start: Start
+control=select: Menu (Exit quits)

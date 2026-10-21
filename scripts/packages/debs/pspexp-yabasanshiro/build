@@ -1,0 +1,81 @@
+#!/bin/sh
+# pspexp-yabasanshiro: Yaba Sanshiro (GPL-2.0), the Sega Saturn emulator, which Debian 13 does
+# not package, built by scripts/packages/build-yabasanshiro.sh ARCH. Installs
+# /usr/lib/pspexp/yabasanshiro/yabasanshiro, its button map for the PSP and
+# /usr/games/pspexp-saturn, which starts it on one disc image for the PSP. Usage: build OUTDIR ARCH
+set -e
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT="$1"; ARCH="$2"
+B="$ROOT/build/$ARCH/yabasanshiro"
+[ -x "$B/yabasanshiro" ] && [ -s "$B/depends.txt" ] || { echo "no $B/yabasanshiro: scripts/packages/build-yabasanshiro.sh $ARCH first" >&2; exit 1; }
+V=3.5.0+git20260823-pspexp2
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+L=/usr/lib/pspexp/yabasanshiro
+S=/usr/share/pspexp-yabasanshiro
+mkdir -p "$W/root$L" "$W/root$S" "$W/root/usr/games" "$W/root/usr/share/doc/pspexp-yabasanshiro"
+cp "$B/yabasanshiro" "$W/root$L/"
+# The PSP's controller as a Saturn pad, through the layer's virtual game controller (buttons 0-7:
+# cross circle square triangle L R START SELECT; 8-11 the four face buttons with SELECT held,
+# PSPEXP_PAD_SHIFT; the d-pad its hat): square A, cross B, circle C (the bottom
+# row), triangle Y, SELECT+square X, SELECT+circle Z (the top row), L and R the triggers, START
+# Start; SELECT on its own Yaba Sanshiro's menu. The standard Saturn pad (padmode 0): no analog
+# entries, which Yaba Sanshiro writes into a pad that has none (it crashed reading the map).
+cat > "$W/root$S/keymapv2.json" <<'J'
+{
+ "player1": { "DeviceID": 0, "deviceName": "Virtual Controller", "deviceGUID": "ff0013db5669727475616c2043007601", "padmode": 0 },
+ "0_Virtual Controller_ff0013db5669727475616c2043007601": {
+  "up": { "id": 0, "type": "hat", "value": 1 },
+  "right": { "id": 0, "type": "hat", "value": 2 },
+  "down": { "id": 0, "type": "hat", "value": 4 },
+  "left": { "id": 0, "type": "hat", "value": 8 },
+  "a": { "id": 2, "type": "button", "value": 1 },
+  "b": { "id": 0, "type": "button", "value": 1 },
+  "c": { "id": 1, "type": "button", "value": 1 },
+  "x": { "id": 10, "type": "button", "value": 1 },
+  "y": { "id": 3, "type": "button", "value": 1 },
+  "z": { "id": 9, "type": "button", "value": 1 },
+  "l": { "id": 4, "type": "button", "value": 1 },
+  "r": { "id": 5, "type": "button", "value": 1 },
+  "start": { "id": 6, "type": "button", "value": 1 },
+  "select": { "id": 7, "type": "button", "value": 1 }
+ }
+}
+J
+cat > "$W/root/usr/games/pspexp-saturn" <<S
+#!/bin/sh
+# Yaba Sanshiro on one disc image (.chd .cue .iso), for the PSP (package pspexp-yabasanshiro),
+# drawn by the board's GPU in a window of the PSP's size (YABASANSHIRO_WINDOW), the Saturn's own
+# resolution (-r 3) at its 4:3 (-a). Its button map for the PSP's controller is written to
+# ~/.yabasanshiro/keymapv2.json unless one for it is there (Yaba Sanshiro's own menu may change it).
+# The Saturn's BIOS: the player's own in ~/roms/saturn/bios, Japan's (sega_101.bin) for a game
+# named (Japan), the US/Europe one (mpr-17933.bin) for the rest, either when the other is missing;
+# none, Yaba Sanshiro's own HLE BIOS (fewer games start).
+K="\$HOME/.yabasanshiro"
+mkdir -p "\$K"
+grep -qs "Virtual Controller" "\$K/keymapv2.json" && ! grep -qs analogx "\$K/keymapv2.json" || cp $S/keymapv2.json "\$K/keymapv2.json"
+D="\$HOME/roms/saturn/bios"
+case "\$1" in *"(Japan)"*) TRY="sega_101.bin mpr-17933.bin saturn_bios.bin" ;; *) TRY="mpr-17933.bin saturn_bios.bin sega_101.bin" ;; esac
+BIOS=
+for f in \$TRY; do [ -f "\$D/\$f" ] && { BIOS="\$D/\$f"; break; }; done
+export YABASANSHIRO_WINDOW="\${YABASANSHIRO_WINDOW:-480x272}"
+if [ -n "\$BIOS" ]; then exec $L/yabasanshiro -r 3 -a -b "\$BIOS" -i "\$1"; fi
+exec $L/yabasanshiro -r 3 -a -i "\$1"
+S
+chmod 755 "$W/root/usr/games/pspexp-saturn"
+cp "$B/LICENSE" "$W/root/usr/share/doc/pspexp-yabasanshiro/COPYING"
+echo "Yaba Sanshiro (https://github.com/libretro/yabause, its yabasanshiro branch at 09ed8e5b, 2026-08-23), GPL-2.0, with the libraries its build fetches, built and patched by PSPExp (scripts/packages/yabasanshiro/pspexp.patch). No games and no BIOS: Saturn discs and the Saturn's BIOS are the user's own, in ~/roms/saturn and ~/roms/saturn/bios." > "$W/root/usr/share/doc/pspexp-yabasanshiro/README"
+cat > "$W/control" <<C
+Package: pspexp-yabasanshiro
+Version: $V
+Architecture: $ARCH
+Maintainer: PSPExp <info@pspexp.dev>
+Section: games
+Priority: optional
+Depends: $(cat "$B/depends.txt")
+Description: Yaba Sanshiro, the Sega Saturn emulator, for PSPExp
+ Yaba Sanshiro built for OpenGL ES 3.1 and Debian's SDL2, with its 64-bit
+ ARM recompiler, which Debian does not package, and a launch script for the
+ PSP (pspexp-saturn). Packaged by PSPExp.
+C
+python3 "$ROOT/scripts/packages/sources" copyright pspexp-yabasanshiro "$V" "$W/root/usr/share/doc/pspexp-yabasanshiro"   # licences, and where the complete source is (Package_Manager §6.2)
+python3 "$ROOT/scripts/packages/mkdeb.py" "$W/root" "$W/control" "$OUT/pspexp-yabasanshiro_${V}_$ARCH.deb"

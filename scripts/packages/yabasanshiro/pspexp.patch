@@ -1,0 +1,222 @@
+diff --git a/yabause/src/retro_arena/InputManager.cpp b/yabause/src/retro_arena/InputManager.cpp
+index 12ce1b14e..7ba2ecc60 100644
+--- a/yabause/src/retro_arena/InputManager.cpp
++++ b/yabause/src/retro_arena/InputManager.cpp
+@@ -626,6 +626,14 @@ void InputManager::init( const std::string & fname )
+     if( result.id == -1 ){
+       it->second->getInputByName("hotkeyenable", &result);
+     }
++    if( result.id == -1 ){
++      /* PSPExp: no EmulationStation input file, so the menu's button is the device's
++         "select" in keymapv2.json (otherwise only the Escape key opens the menu) */
++      std::string ng;
++      genJoyString( ng, it->second->getDeviceId(), it->second->getDeviceName(), it->second->getDeviceGUIDString() );
++      if( j.find(ng) != j.end() && j[ng].find("select") != j[ng].end() && j[ng]["select"]["type"] == "button" )
++        result.id = j[ng]["select"]["id"].get<int>();
++    }
+     tmp.select_device_ = it->second->getDeviceId();    
+     tmp.select_button_ = result.id;
+     printf("select_device_ = %d, select_button_ = %d\n", tmp.select_device_, tmp.select_button_ );
+diff --git a/yabause/src/retro_arena/main.cpp b/yabause/src/retro_arena/main.cpp
+index b37528b51..8153161e9 100644
+--- a/yabause/src/retro_arena/main.cpp
++++ b/yabause/src/retro_arena/main.cpp
+@@ -367,6 +367,10 @@ int main(int argc, char** argv)
+     printf("Fail to SDL_GetCurrentDisplayMode Bye! (%s)", SDL_GetError() );
+     return -1;
+   }
++  /* An OpenGL ES context: its shaders and formats are written for ES 3.1, and Mesa
++     otherwise gives a desktop context (the Pi 400's V3D: GL 3.1, where VDP1 sprites
++     with palette colours came out as one colour). */
++  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+   SDL_GL_SetSwapInterval(0);
+@@ -385,8 +389,13 @@ int main(int argc, char** argv)
+ #else
+   int width = dsp.w;
+   int height = dsp.h;
++  Uint32 wflags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN_DESKTOP;
++  /* YABASANSHIRO_WINDOW=WxH: a window of that size instead of the whole display
++     (PSPExp: the PSP shows 480x272, so a smaller picture to read back each frame). */
++  const char * ws = getenv("YABASANSHIRO_WINDOW");
++  if( ws != nullptr && sscanf(ws, "%dx%d", &width, &height) == 2 ) wflags &= ~SDL_WINDOW_FULLSCREEN_DESKTOP;
+   wnd = SDL_CreateWindow("Yaba Snashiro", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+-      width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN_DESKTOP);
++      width, height, wflags);
+   if(wnd == nullptr ) {
+     printf("Fail to SDL_CreateWindow Bye! (%s)", SDL_GetError() );
+     return -1;
+diff --git a/yabause/src/yglshaderes.c b/yabause/src/yglshaderes.c
+index 98eda6b5c..467cd7668 100644
+--- a/yabause/src/yglshaderes.c
++++ b/yabause/src/yglshaderes.c
+@@ -300,7 +300,7 @@ const GLchar Yglprg_normal_cram_f[] =
+ "{\n"
+ "  vec4 txindex = texelFetch( s_texture, ivec2(int(v_texcoord.x),int(v_texcoord.y)) ,0 );\n"
+ "  if(txindex.a == 0.0) { discard; }\n"
+-"  vec4 txcol = texelFetch( s_color,  ivec2( ( int(txindex.g*65280.0) | int(txindex.r*255.0)) ,0 )  , 0 );\n"
++"  vec4 txcol = texelFetch( s_color,  ivec2( ( (int(txindex.g*255.0+0.5)<<8) | int(txindex.r*255.0+0.5)) ,0 )  , 0 );\n"
+ "  fragColor = clamp(txcol+u_color_offset,vec4(0.0),vec4(1.0));\n"
+ "  fragColor.a = txindex.a;\n"
+ "}\n";
+@@ -322,7 +322,7 @@ const GLchar Yglprg_normal_cram_special_priority_f[] =
+ "{\n"
+ "  vec4 txindex = texelFetch( s_texture, ivec2(int(v_texcoord.x),int(v_texcoord.y)) ,0 );\n"
+ "  if(txindex.a == 0.0) { discard; }\n"
+-"  vec4 txcol = texelFetch( s_color,  ivec2( ( int(txindex.g*65280.0) | int(txindex.r*255.0)) ,0 )  , 0 );\n"
++"  vec4 txcol = texelFetch( s_color,  ivec2( ( (int(txindex.g*255.0+0.5)<<8) | int(txindex.r*255.0+0.5)) ,0 )  , 0 );\n"
+ "  fragColor = clamp(txcol+u_color_offset,vec4(0.0),vec4(1.0));\n"
+ "  fragColor.a = txindex.a;\n"
+ "  gl_FragDepth = ((txindex.b*255.0/10.0) +1.0)/2.0 ; \n"
+@@ -411,7 +411,7 @@ const GLchar Yglprg_normal_cram_special_priority_colf_f[] =
+ "{\n"
+ "  vec4 txindex = texelFetch( s_texture, ivec2(int(v_texcoord.x),int(v_texcoord.y)) ,0 );\n"
+ "  if(txindex.a == 0.0) { discard; }\n"
+-"  vec4 txcol = texelFetch( s_color,  ivec2( ( int(txindex.g*65280.0) | int(txindex.r*255.0)) ,0 )  , 0 );\n"
++"  vec4 txcol = texelFetch( s_color,  ivec2( ( (int(txindex.g*255.0+0.5)<<8) | int(txindex.r*255.0+0.5)) ,0 )  , 0 );\n"
+ "  vec4 color_offset = texelFetch( s_linetexture, ivec2( int(v_texcoord.q), 0), 0 ); \n"
+ "  fragColor.r = txcol.r + (color_offset.r-0.5)*2.0;\n"
+ "  fragColor.g = txcol.g + (color_offset.g-0.5)*2.0;\n"
+@@ -470,7 +470,7 @@ const GLchar Yglprg_normal_cram_addcol_f[] =
+ "{\n"
+ "  vec4 txindex = texelFetch( s_texture, ivec2(int(v_texcoord.x),int(v_texcoord.y)) ,0 );\n"
+ "  if(txindex.a == 0.0) { discard; }\n"
+-"  vec4 txcol = texelFetch( s_color,  ivec2( ( int(txindex.g*65280.0) | int(txindex.r*255.0)) ,0 )  , 0 );\n"
++"  vec4 txcol = texelFetch( s_color,  ivec2( ( (int(txindex.g*255.0+0.5)<<8) | int(txindex.r*255.0+0.5)) ,0 )  , 0 );\n"
+ "  fragColor = txcol+u_color_offset;\n"
+ "  if( txindex.a > 0.5) { fragColor.a = 1.0;} else {fragColor.a = 0.0;}\n"
+ "}\n";
+@@ -556,14 +556,14 @@ const GLchar Yglprg_rgb_cram_line_f[] =
+ "{\n"
+ "  vec4 txindex = texelFetch( s_texture, ivec2(int(v_texcoord.x),int(v_texcoord.y)) ,0 );         \n"
+ "  if(txindex.a > 0.0) {\n"
+-"    highp int highg = int(txindex.g*255.0);"
+-"    vec4 txcol = texelFetch( s_color, ivec2( ((highg&0x7F)<<8) | int(txindex.r*255.0) , 0 ) , 0 );\n"
++"    highp int highg = int(txindex.g*255.0+0.5);"
++"    vec4 txcol = texelFetch( s_color, ivec2( ((highg&0x7F)<<8) | int(txindex.r*255.0+0.5) , 0 ) , 0 );\n"
+ "    txcol.a = txindex.a; \n"
+ "    if( (highg & 0x80)  != 0) {\n"
+-"      int coef = int(txindex.b*255.0);\n"
++"      int coef = int(txindex.b*255.0+0.5);\n"
+ "      vec4 linecol;\n"
+ "      vec4 lineindex = texelFetch( s_line_texture,  ivec2( int(v_texcoord.z),int(v_texcoord.w))  ,0 );\n"
+-"      int lineparam = ((int(lineindex.g*255.0) & 0x7F)<<8) | int(lineindex.r*255.0); \n"
++"      int lineparam = ((int(lineindex.g*255.0+0.5) & 0x7F)<<8) | int(lineindex.r*255.0+0.5); \n"
+ "      if( (coef & 0x80) != 0 ){\n"
+ "        int caddr = (lineparam&0x780) | (coef&0x7F);\n "
+ "        linecol = texelFetch( s_color, ivec2( caddr,0  ) , 0 );\n"
+@@ -1330,7 +1330,7 @@ const GLchar Yglprg_vdp1_gouraudshading_hf_f[] =
+       "  vec4 spriteColor = texture(u_sprite,addr);                                               \n"
+       "  if( spriteColor.a == 0.0 ) discard;                                                          \n"
+       "  vec4 fboColor    = texture(u_fbo,faddr);                                                 \n"
+-      "  int additional = int(fboColor.a * 255.0);\n"
++      "  int additional = int(fboColor.a*255.0+0.5);\n"
+       "  spriteColor += vec4(v_vtxcolor.r,v_vtxcolor.g,v_vtxcolor.b,0.0);\n"
+       "  if( (additional & 0x40) == 0 ) \n"
+       "  { \n"
+@@ -1395,7 +1395,7 @@ const GLchar Yglprg_vdp1_halftrans_f[] =
+       "  vec4 spriteColor = texture(u_sprite,addr);                                               \n"
+       "  if( spriteColor.a == 0.0 ) discard;                                                          \n"
+       "  vec4 fboColor    = texture(u_fbo,faddr);                                                 \n"
+-      "  int additional = int(fboColor.a * 255.0);\n"
++      "  int additional = int(fboColor.a*255.0+0.5);\n"
+       "  if( (additional & 0x40) == 0 ) \n"
+       "  {                                                                                          \n"
+       "    fragColor = spriteColor*0.5 + fboColor*0.5;                                           \n"
+@@ -1498,7 +1498,7 @@ const GLchar Yglprg_vdp1_mesh_f[] =
+ "    fragColor.a = fboColor.a ;                         \n"
+ "  }else{                                               \n"
+ "    fragColor = spriteColor;                           \n"
+-"    int additional = int(spriteColor.a * 255.0);       \n"
++"    int additional = int(spriteColor.a*255.0+0.5);       \n"
+ "    highp float alpha = float((additional/8)*8)/255.0; \n"
+ "    fragColor.a = spriteColor.a-alpha + 0.5;           \n"
+ "  }                                                                                          \n"
+@@ -1608,7 +1608,7 @@ const GLchar Yglprg_vdp1_shadow_f[] =
+ "  vec4 spriteColor = texture(u_sprite,addr);\n"
+ "  if( spriteColor.a == 0.0 ){ discard; }\n"
+ "  vec4 fboColor = texture(u_fbo,faddr);\n"
+-"  int additional = int(fboColor.a * 255.0);\n"
++"  int additional = int(fboColor.a*255.0+0.5);\n"
+ "  if( ((additional & 0xC0)==0x80) ) { \n"
+ "    fragColor = vec4(fboColor.r*0.5,fboColor.g*0.5,fboColor.b*0.5,fboColor.a);\n"
+ "  }else{\n"
+@@ -1761,7 +1761,7 @@ const GLchar Yglprg_vdp2_drawfb_f[] =
+ "{\n"
+ "  vec2 addr = v_texcoord;\n"
+ "  highp vec4 fbColor = texture(s_vdp1FrameBuffer,addr);\n"
+-"  int additional = int(fbColor.a * 255.0);\n"
++"  int additional = int(fbColor.a*255.0+0.5);\n"
+ "  highp float alpha = float((additional/8)*8)/255.0;\n"
+ "  highp float depth = (float(additional&0x07)/10.0) + 0.05;\n"
+ "  if( depth < u_from || depth > u_to ){\n"
+@@ -1821,7 +1821,7 @@ const GLchar Yglprg_vdp2_drawfb_cram_f[] =
+ "{\n"
+ "  vec2 addr = v_texcoord;\n"
+ "  highp vec4 fbColor = texture(s_vdp1FrameBuffer,addr);\n"
+-"  int additional = int(fbColor.a * 255.0);\n"
++"  int additional = int(fbColor.a*255.0+0.5);\n"
+ "  if( (additional & 0x80) == 0 ){ discard; } // show? \n"
+ "  int prinumber = (additional&0x07); "
+ "  highp float depth = u_pri[ prinumber ];\n"
+@@ -1829,7 +1829,7 @@ const GLchar Yglprg_vdp2_drawfb_cram_f[] =
+ "  vec4 txcol=vec4(0.0,0.0,0.0,1.0);\n"
+ "  if( (additional & 0x40) != 0 ){  // index color? \n"
+ "    if( fbColor.b != 0.0 ) {discard;} // draw shadow last path \n"
+-"    int colindex = ( int(fbColor.g*65280.0) | int(fbColor.r*255.0)); \n"
++"    int colindex = ( (int(fbColor.g*255.0+0.5)<<8) | int(fbColor.r*255.0+0.5)); \n"
+ "    if( colindex == 0 ){ if( u_sprite_window != 0 || prinumber == 0) { discard;} } // hard/vdp1/hon/p02_11.htm 0 data is ignoerd \n"
+ "    colindex = colindex + u_color_ram_offset; \n"
+ "    txcol = texelFetch( s_color,  ivec2( colindex ,0 )  , 0 );\n"
+@@ -1947,7 +1947,7 @@ const GLchar Yglprg_vdp2_drawfb_hblank_f[] =
+ "  vec4 linetex = texelFetch( s_line, linepos,0 ); "
+ "  vec2 addr = v_texcoord;\n"
+ "  highp vec4 fbColor = texture(s_vdp1FrameBuffer,addr);\n"
+-"  int additional = int(fbColor.a * 255.0);\n"
++"  int additional = int(fbColor.a*255.0+0.5);\n"
+ "  if( (additional & 0x80) == 0 ){ discard; } // show? \n"
+ "  highp vec4 linepri = texelFetch( s_line, ivec2(linepos.x,1+(additional&0x07)) ,0 ); \n"
+ "  if( linepri.a == 0.0 ) discard; \n"
+@@ -1956,7 +1956,7 @@ const GLchar Yglprg_vdp2_drawfb_hblank_f[] =
+ "  vec4 txcol=vec4(0.0,0.0,0.0,1.0);\n"
+ "  if( (additional & 0x40) != 0 ){  // index color? \n"
+ "    if( fbColor.b != 0.0 ) {discard;} // draw shadow last path \n"
+-"    int colindex = ( int(fbColor.g*65280.0) | int(fbColor.r*255.0)); \n"
++"    int colindex = ( (int(fbColor.g*255.0+0.5)<<8) | int(fbColor.r*255.0+0.5)); \n"
+ "    if( colindex == 0 ){ if( u_sprite_window != 0 || (additional&0x07) == 0 ) { discard;} } // hard/vdp1/hon/p02_11.htm 0 data is ignoerd \n"
+ "    colindex = colindex + u_color_ram_offset; \n"
+ "    txcol = texelFetch( s_color,  ivec2( colindex ,0 )  , 0 );\n"
+@@ -2075,7 +2075,7 @@ const GLchar Yglprg_vdp2_drawfb_shadow_f[] =
+ "{\n"
+ "  vec2 addr = v_texcoord;\n"
+ "  highp vec4 fbColor = texture(s_vdp1FrameBuffer,addr);\n"
+-"  int additional = int(fbColor.a * 255.0);\n"
++"  int additional = int(fbColor.a*255.0+0.5);\n"
+ "  if( (additional & 0x80) == 0 ){ discard; } // show? \n"
+ "  highp float depth = u_pri[ (additional&0x07) ];\n"
+ "  if( (additional & 0x40) != 0 && fbColor.b != 0.0 ){  // index color and shadow? \n"
+@@ -2531,7 +2531,7 @@ const GLchar Yglprg_vdp2_drawfb_addcolor_shadow_f[] =
+ "{\n"
+ "  vec2 addr = v_texcoord;\n"
+ "  highp vec4 fbColor = texture(s_vdp1FrameBuffer,addr);\n"
+-"  highp int additional = int(fbColor.a * 255.0);\n"
++"  highp int additional = int(fbColor.a*255.0+0.5);\n"
+ "  highp float alpha = float((additional/8)*8)/255.0;\n"
+ "  highp float depth = ((float(additional&0x07))/10.0) + 0.05;\n"
+ "  if( depth < u_from || depth > u_to ){ discard;return;}\n"
+@@ -2637,12 +2637,12 @@ const GLchar Yglprg_linecol_destalpha_f[] =
+ "    fragColor.a =txcol.a;\n";
+ 
+ const GLchar Yglprg_linecol_main_cram_f[] =
+-"    vec4 txcolc = texelFetch( s_color,  ivec2( ( int(txcol.g*65280.0) | int(txcol.r*255.0)) ,0 )  , 0 );\n"
++"    vec4 txcolc = texelFetch( s_color,  ivec2( ( (int(txcol.g*255.0+0.5)<<8) | int(txcol.r*255.0+0.5)) ,0 )  , 0 );\n"
+ "    fragColor = txcolc+u_color_offset+lncol;\n"
+ "    fragColor.a = 1.0;\n";
+ 
+ const GLchar Yglprg_linecol_destalpha_cram_f[] =
+-"    vec4 txcolc = texelFetch( s_color,  ivec2( ( int(txcol.g*65280.0) | int(txcol.r*255.0)) ,0 )  , 0 );\n"
++"    vec4 txcolc = texelFetch( s_color,  ivec2( ( (int(txcol.g*255.0+0.5)<<8) | int(txcol.r*255.0+0.5)) ,0 )  , 0 );\n"
+ "    fragColor = (txcolc * (1.0-lncol.a))+(lncol*lncol.a)+u_color_offset;\n"
+ "    fragColor.a =txcol.a;\n";
+ 

@@ -9,6 +9,11 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
   nub is the stylus with SELECT held to touch. Mario Kart DS and New Super
   Mario Bros. at full game speed, 30 pictures a second; a Pi 4 or 400 at
   2.0 GHz for the busiest moments. Install it from Packages.
+- **The Sega Saturn** on a Pi 4, 400 or 5 (Yaba Sanshiro): your own discs
+  in `roms/saturn` and your console's BIOS in `roms/saturn/bios`. Panzer
+  Dragoon, NiGHTS, Guardian Heroes, Saturn Bomberman and Sega Rally play at
+  45-60 pictures a second from a Pi 400. Hold SELECT for the pad's X and Z;
+  SELECT alone opens the emulator's menu. Install it from Packages.
 - **Frozen Bubble and Kobo Deluxe start again**: since 1.1.0 they closed
   at once (the PSP keyboard's code asked SDL for something the older games'
   SDL does not have).

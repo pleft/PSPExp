@@ -289,6 +289,7 @@ static struct {
     int compose;                   /* PSPEXP_COMPOSE=1: the frame drawn on the board, sent whole (host_render, SDL_RenderPresent) */
     int magnify_btn, magnify;      /* PSPEXP_MAGNIFY: the button (B_*, -1 none) that shows the game's own pixels round the pointer */
     int text_btn;                  /* PSPEXP_TEXT_BUTTON: the button (B_*, -1 none) that opens the PSP's keyboard on demand */
+    int pad_shift, shift_down, shift_used, shift_tap;   /* PSPEXP_PAD_SHIFT: the button (B_*, -1 none) held for the controller's buttons 8-11 */
     int magnify_pointer, magnify_was_shown;   /* PSPEXP_MAGNIFY=pointer: always magnified, round the pointer or (hidden) the frame's bottom */
     float drawn_px, drawn_py; Uint32 last_present; unsigned replays;   /* the pointer as last shown (replay_pointer) */ uint32_t prev_buttons, nub_dirs; float px, py; Uint32 ptick;
     /* what injected input holds: SDL's own keyboard and mouse state never sees
@@ -430,6 +431,11 @@ static void connect_once(void)
     if (getenv("PSPEXP_TEXT_BUTTON")) {   /* "triangle": that button opens the PSP's keyboard, for a game whose text input stays on */
         int b;
         for (b = 0; b < B_COUNT; b++) if (!strcmp(getenv("PSPEXP_TEXT_BUTTON"), BUTTON_NAMES[b])) S.text_btn = b;
+    }
+    S.pad_shift = -1;
+    if (getenv("PSPEXP_PAD_SHIFT")) {   /* "select": held, cross circle square triangle are the virtual controller's buttons 8-11 */
+        int b;
+        for (b = 0; b < B_COUNT; b++) if (!strcmp(getenv("PSPEXP_PAD_SHIFT"), BUTTON_NAMES[b])) S.pad_shift = b;
     }
     if (getenv("PSPEXP_MAGNIFY")) {   /* "r": that button switches between the whole frame shrunk and its own pixels */
         int b;
@@ -2137,7 +2143,23 @@ static void feed_input(void)
         ax = nub_dead(ax); ay = nub_dead(ay);
         SDL_JoystickSetVirtualAxis(S.vjoy_handle, 0, (Sint16)ax);
         SDL_JoystickSetVirtualAxis(S.vjoy_handle, 1, (Sint16)ay);
-        for (i = 0; i < 8; i++) SDL_JoystickSetVirtualButton(S.vjoy_handle, i, (in->buttons & BUTTON_BITS[i]) ? 1 : 0);
+        Uint8 vb[12] = { 0 };
+        for (i = 0; i < 8; i++) vb[i] = (in->buttons & BUTTON_BITS[i]) ? 1 : 0;
+        if (S.pad_shift >= 0) {
+            /* a machine with more buttons than the PSP (the Saturn's six and L, R): the shift
+             * button held moves the four face buttons to the controller's 8-11; on its own it is
+             * reported as a tap when let go (Yaba Sanshiro's menu), held for two updates so the
+             * press is seen */
+            int held = (in->buttons & BUTTON_BITS[S.pad_shift]) != 0;
+            vb[S.pad_shift] = 0;
+            if (held && !S.shift_down) S.shift_used = 0;
+            if (held)
+                for (i = 0; i < 4; i++) if (vb[i]) { vb[8 + i] = 1; vb[i] = 0; S.shift_used = 1; }
+            if (!held && S.shift_down && !S.shift_used) S.shift_tap = 2;
+            S.shift_down = held;
+            if (S.shift_tap > 0) { vb[S.pad_shift] = 1; S.shift_tap--; }
+        }
+        for (i = 0; i < 12; i++) SDL_JoystickSetVirtualButton(S.vjoy_handle, i, vb[i]);
         if (pressed && getenv("PSPEXP_LOG_EVENTS"))
             logf_("input: buttons %#x pressed; joystick events %s, button 0 now %d", (unsigned)pressed,
                   SDL_JoystickEventState(SDL_QUERY) == SDL_ENABLE ? "on" : "OFF", SDL_JoystickGetButton(S.vjoy_handle, 0));
