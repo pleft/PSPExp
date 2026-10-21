@@ -51,6 +51,21 @@
  * lines in ~/.config/pspexp-retro/<core>.opt or $PSPEXP_RETRO_OPT
  * ("key=value;key=value"). Environment: PSPEXP_RETRO_ASPECT=pixel for square
  * pixels instead of the core's aspect.
+ *
+ * For machines with more buttons than the PSP (the Nintendo DS: its stylus, its screen layouts):
+ * PSPEXP_RETRO_NUB=right makes the nub the RetroPad's right analog stick instead of its d-pad
+ * (melonDS DS moves its touch cursor with it), and PSPEXP_RETRO_MAP renames buttons, a pair held
+ * together first: "select=r2,select+r=r3,select+l=select" (names: b a y x start select up down left
+ * right l r l2 r2 l3 r3, and "swap", below); a renamed button no longer counts as itself.
+ * PSPEXP_RETRO_DUAL=1: the core's frame is two screens stacked (the DS's 256x384, its plain
+ * top/bottom layout), and the PSP lays them out, scaled by its own GPU, in one of three layouts:
+ * both side by side at 240x180 (text readable on both), the main one at its own 256x192 pixel for
+ * pixel with the other at 224x168, or the main one large (360x270) with the other small (120x90).
+ * PSPEXP_RETRO_MAP's "layout" goes to the next of them, "swap" exchanges which screen is the main
+ * one; PSPEXP_RETRO_LAYOUT=0..2 is the first one shown.
+ * Letting the core build that layout itself (melonDS DS's hybrid) made a 1024x576 frame, upscaled
+ * in software on the board and shrunk again for the PSP: 261 KB a frame, a race in Mario Kart DS
+ * at 9 fps on the PSP-1000 from a Pi 400 (2026-10-21).
  */
 #include <SDL.h>
 #include "libretro.h"
@@ -188,6 +203,11 @@ static struct {
     SDL_GameController *pad;
     uint16_t buttons;                 /* RETRO_DEVICE_ID_JOYPAD_* bits */
     uint16_t keys;                    /* the same, from key events (see key_event) */
+    int nub_right;                    /* PSPEXP_RETRO_NUB=right: the nub is the right analog stick */
+    int16_t rx, ry;                   /* its position, -32768..32767 */
+    struct { uint16_t from; unsigned to; } map[16]; int nmap;   /* PSPEXP_RETRO_MAP, pairs first */
+    int dual, swap, swap_held;        /* PSPEXP_RETRO_DUAL: two stacked screens; which is the main one */
+    int layout, layout_held;          /* which of the dual layouts (present) */
     /* paths */
     char system_dir[PATH_MAX], save_dir[PATH_MAX], srm_path[PATH_MAX], core_name[64];
     /* options: key, default (first value), override */
@@ -299,7 +319,8 @@ static void set_geometry(const struct retro_game_geometry *g)
         return;
     }
     P.aspect = g->aspect_ratio > 0.0f ? g->aspect_ratio : (float)g->base_width / (float)g->base_height;
-    if (P.ren && g->base_width && g->base_height) {
+    if (P.ren && P.dual) SDL_RenderSetLogicalSize(P.ren, 480, 272);   /* the layout is the PSP's (present) */
+    else if (P.ren && g->base_width && g->base_height) {
         int lh = (int)g->base_height;
         int lw = P.square_pixels ? (int)g->base_width : (int)(lh * P.aspect + 0.5f);
         SDL_RenderSetLogicalSize(P.ren, lw, lh);
@@ -403,7 +424,14 @@ static void present(void)
     SDL_SetRenderDrawColor(P.ren, 0, 0, 0, 255);
     SDL_RenderClear(P.ren);
     SDL_RenderGetLogicalSize(P.ren, &lw, &lh);
-    if (P.fb_w && P.fb_h) {
+    if (P.fb_w && P.fb_h && P.dual) {   /* two stacked screens: one large, one small (PSPEXP_RETRO_DUAL) */
+        int h2 = P.fb_h / 2;
+        SDL_Rect top = { 0, 0, P.fb_w, h2 }, bot = { 0, h2, P.fb_w, h2 };
+        static const SDL_Rect main_r[3] = { { 0, 46, 240, 180 }, { 0, 40, 256, 192 }, { 0, 1, 360, 270 } };
+        static const SDL_Rect other_r[3] = { { 240, 46, 240, 180 }, { 256, 52, 224, 168 }, { 360, 0, 120, 90 } };
+        SDL_RenderCopy(P.ren, P.tex, P.swap ? &bot : &top, &main_r[P.layout]);
+        SDL_RenderCopy(P.ren, P.tex, P.swap ? &top : &bot, &other_r[P.layout]);
+    } else if (P.fb_w && P.fb_h) {
         SDL_Rect dst = { 0, 0, lw ? lw : P.fb_w, lh ? lh : P.fb_h };
         SDL_RenderCopy(P.ren, P.tex, &src, &dst);
     }
@@ -545,23 +573,85 @@ static void input_compute(void)
         int ay = SDL_GameControllerGetAxis(P.pad, SDL_CONTROLLER_AXIS_LEFTY);
         for (i = 0; i < sizeof(map) / sizeof(map[0]); i++)
             if (SDL_GameControllerGetButton(P.pad, map[i].sdl)) b |= 1u << map[i].id;
-        /* the nub is the d-pad (these machines have no analogue stick) */
-        if (ax < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_LEFT;
-        if (ax > 16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_RIGHT;
-        if (ay < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_UP;
-        if (ay > 16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_DOWN;
+        if (P.nub_right) { P.rx = (int16_t)ax; P.ry = (int16_t)ay; }
+        else {   /* the nub is the d-pad (these machines have no analogue stick) */
+            if (ax < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_LEFT;
+            if (ax > 16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_RIGHT;
+            if (ay < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_UP;
+            if (ay > 16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_DOWN;
+        }
+    }
+    int swap = 0, layout = 0;
+    if (P.nmap) {
+        uint16_t in = b, out = 0;
+        int i;
+        for (i = 0; i < P.nmap; i++)   /* pairs were put first: SELECT+R is R3, not SELECT's R2 and R */
+            if ((in & P.map[i].from) == P.map[i].from) {
+                in &= (uint16_t)~P.map[i].from;
+                if (P.map[i].to == 16) swap = 1;
+                else if (P.map[i].to == 17) layout = 1;
+                else out |= (uint16_t)(1u << P.map[i].to);
+            }
+        b = in | out;
     }
     P.buttons = b;
+    if (swap && !P.swap_held) P.swap = !P.swap;   /* on the press, not while held */
+    P.swap_held = swap;
+    if (layout && !P.layout_held) P.layout = (P.layout + 1) % 3;
+    P.layout_held = layout;
 }
 
 static void input_poll(void) { }
 
 static int16_t input_state(unsigned port, unsigned device, unsigned index, unsigned id)
 {
-    (void)index;
+    if (port == 0 && (device & RETRO_DEVICE_MASK) == RETRO_DEVICE_ANALOG && P.nub_right && index == RETRO_DEVICE_INDEX_ANALOG_RIGHT)
+        return id == RETRO_DEVICE_ID_ANALOG_X ? P.rx : id == RETRO_DEVICE_ID_ANALOG_Y ? P.ry : 0;
     if (port != 0 || (device & RETRO_DEVICE_MASK) != RETRO_DEVICE_JOYPAD) return 0;
     if (id == RETRO_DEVICE_ID_JOYPAD_MASK) return (int16_t)P.buttons;
     return id < 16 ? (int16_t)((P.buttons >> id) & 1u) : 0;
+}
+
+/* PSPEXP_RETRO_MAP: "select=r2,select+r=r3" -> P.map, the pairs first */
+static int button_id(const char *n, size_t len)
+{
+    static const char *const names[18] = { "b", "y", "select", "start", "up", "down", "left", "right",
+                                           "a", "x", "l", "r", "l2", "r2", "l3", "r3", "swap", "layout" };   /* RETRO_DEVICE_ID_JOYPAD_* order, then the player's own */
+    int i;
+    for (i = 0; i < 18; i++) if (strlen(names[i]) == len && !strncmp(names[i], n, len)) return i;
+    return -1;
+}
+static void map_load(void)
+{
+    const char *s = getenv("PSPEXP_RETRO_MAP");
+    int pass;
+    if (!s || !*s) return;
+    for (pass = 0; pass < 2; pass++) {   /* pass 0: pairs, pass 1: single buttons */
+        const char *p = s;
+        while (*p && P.nmap < (int)(sizeof(P.map) / sizeof(P.map[0]))) {
+            const char *end = strchr(p, ','), *eq = strchr(p, '='), *plus;
+            uint16_t from = 0;
+            int to, ok = 1;
+            if (!end) end = p + strlen(p);
+            if (!eq || eq > end) { p = *end ? end + 1 : end; continue; }
+            plus = memchr(p, '+', (size_t)(eq - p));
+            if ((plus != NULL) != (pass == 0)) { p = *end ? end + 1 : end; continue; }
+            {
+                const char *a = p;
+                while (a < eq) {
+                    const char *z = memchr(a, '+', (size_t)(eq - a));
+                    int id;
+                    if (!z) z = eq;
+                    if ((id = button_id(a, (size_t)(z - a))) < 0) ok = 0; else from |= (uint16_t)(1u << id);
+                    a = z < eq ? z + 1 : eq;
+                }
+            }
+            to = button_id(eq + 1, (size_t)(end - eq - 1));
+            if (ok && to >= 0 && from) { P.map[P.nmap].from = from; P.map[P.nmap].to = (unsigned)to; P.nmap++; }
+            else fprintf(stderr, "pspexp-retro: PSPEXP_RETRO_MAP: '%.*s' not understood\n", (int)(end - p), p);
+            p = *end ? end + 1 : end;
+        }
+    }
 }
 
 static void pad_open(void)
@@ -711,6 +801,10 @@ int main(int argc, char **argv)
     P.video_div = getenv("PSPEXP_RETRO_VIDEO_DIV") ? atoi(getenv("PSPEXP_RETRO_VIDEO_DIV")) : 1;
     if (P.video_div < 1 || P.video_div > 4) P.video_div = 1;
     P.pixfmt = RETRO_PIXEL_FORMAT_0RGB1555;   /* the libretro default */
+    P.nub_right = getenv("PSPEXP_RETRO_NUB") && !strcmp(getenv("PSPEXP_RETRO_NUB"), "right");
+    P.dual = getenv("PSPEXP_RETRO_DUAL") && atoi(getenv("PSPEXP_RETRO_DUAL"));
+    P.layout = getenv("PSPEXP_RETRO_LAYOUT") ? atoi(getenv("PSPEXP_RETRO_LAYOUT")) % 3 : 0;
+    map_load();
 
     opt_load_overrides();
     C.set_environment(environment);
@@ -752,8 +846,12 @@ int main(int argc, char **argv)
     if (!P.ren) die("renderer: %s", SDL_GetError());
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
     set_geometry(&P.av.geometry);
-    make_texture((int)(P.av.geometry.max_width ? P.av.geometry.max_width : (unsigned)w),
-                 (int)(P.av.geometry.max_height ? P.av.geometry.max_height : (unsigned)h));
+    /* the core's largest frame, so the texture is made once; with two stacked screens the frame's
+     * own size: melonDS DS declares 1024x576 (its largest layout), which the layer keeps at half
+     * size for the PSP, and the DS's 256x384 came out at 128x192 (2026-10-21) */
+    if (P.dual && P.av.geometry.base_width) make_texture((int)P.av.geometry.base_width, (int)P.av.geometry.base_height);
+    else make_texture((int)(P.av.geometry.max_width ? P.av.geometry.max_width : (unsigned)w),
+                      (int)(P.av.geometry.max_height ? P.av.geometry.max_height : (unsigned)h));
     audio_open(P.av.timing.sample_rate > 0 ? P.av.timing.sample_rate : 44100);
     pad_open();
     srm_load();
