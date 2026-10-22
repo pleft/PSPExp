@@ -12,6 +12,8 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
 - **Frozen Bubble and Kobo Deluxe start again**: since 1.1.0 they closed
   at once (the PSP keyboard's code asked SDL for something the older games'
   SDL does not have).
+- **The PSP's keyboard opens only for text**: Powermanga, TecnoballZ,
+  Frozen Bubble and LBreakoutHD no longer open it where nothing is typed.
 - **Fixes from a check of every game on the PSP's screen**: Quake no
   longer opens the PSP's keyboard over the game; Hurrican starts from the
   launcher again; Trigger Rally's car choice takes cross (it was stuck

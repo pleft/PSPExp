@@ -15,7 +15,7 @@ title=LBreakout HD
 description=Breakout with power-ups, bonuses and over a hundred levels: break every brick with the ball, catch the extras.
 category=game
 license=GPL-3.0+ (LBreakout HD)
-version=2
+version=3
 
 [debian]
 apt=lbreakouthd
@@ -31,6 +31,9 @@ keys=cross=space+return,square=v,circle=backspace,triangle=x,start=escape,select
 nub=keys
 env=PSPEXP_JOYSTICK=0
 env=PSPEXP_COMPOSE=1
+# LBreakoutHD turns SDL's text input on each time its main menu comes back (no field in focus):
+# the PSP's keyboard opened after every game (the 2026-10-21 sweep). Its player names keep their defaults.
+env=PSPEXP_TEXT=0
 graphics=sdl
 control=dpad nub: Move the paddle
 control=cross: Launch the ball, fire; confirm

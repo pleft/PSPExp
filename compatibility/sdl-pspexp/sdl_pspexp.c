@@ -2117,7 +2117,7 @@ static void feed_input(void)
     if (S.text_btn >= 0) {   /* the keyboard's button is the layer's alone too: what is typed goes to the field in focus */
         uint32_t m = BUTTON_BITS[S.text_btn];
         if ((pressed & m) && pspexp_text_supported(S.ctx) && !pspexp_text_pending(S.ctx)) {
-            const char *title = S.win ? SDL_GetWindowTitle(S.win) : NULL;
+            const char *title = S.win ? REAL(SDL_GetWindowTitle)(S.win) : NULL;
             if (pspexp_text_request(S.ctx, title && *title ? title : "Text", "", 64) == 0) logf_("keyboard: opened on the PSP (its button)");
         }
         pressed &= ~m; released &= ~m;
@@ -2907,12 +2907,14 @@ static void shot_trigger(void);
  * its field, and the keyboard opened 1094 times in a run (2026-10-18).
  * PSPEXP_TEXT=0: never. */
 static int g_text_stopped;   /* text input turned off since the game started drawing (the layer or the game) */
+static int g_text_armed;     /* the layer's own turn-off done: before it a game's stop and start count for nothing
+                              * (Powermanga, TecnoballZ and Frozen Bubble stop and restart text input as they
+                              * start, and the keyboard opened over their first frame, 2026-10-21) */
 static Uint32 g_text_answered;   /* when the PSP's keyboard last answered (SDL_GetTicks) */
 static void text_ready(void)
 {
-    static int done;
-    if (done || pspexp_stats(S.ctx)->frames_sent < 30 || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
-    done = 1;
+    if (g_text_armed || pspexp_stats(S.ctx)->frames_sent < 30 || (getenv("PSPEXP_TEXT") && !atoi(getenv("PSPEXP_TEXT")))) return;
+    g_text_armed = 1;
     if (REAL(SDL_IsTextInputActive)()) REAL(SDL_StopTextInput)();
     g_text_stopped = 1;
 }
@@ -2945,7 +2947,7 @@ static void text_deliver(void)
 
 HOOK(void, SDL_StopTextInput, (void))
 {
-    g_text_stopped = 1;
+    if (g_text_armed) g_text_stopped = 1;
     REAL(SDL_StopTextInput)();
 }
 
@@ -2958,7 +2960,7 @@ HOOK(void, SDL_StartTextInput, (void))
     if (!S.active || !link_up()) return;
     link_lock();
     if (pspexp_text_supported(S.ctx) && !pspexp_text_pending(S.ctx)) {
-        const char *title = S.win ? SDL_GetWindowTitle(S.win) : NULL;
+        const char *title = S.win ? REAL(SDL_GetWindowTitle)(S.win) : NULL;
         if (pspexp_text_request(S.ctx, title && *title ? title : "Text", "", 64) == 0) logf_("keyboard: opened on the PSP");
     }
     link_unlock();
