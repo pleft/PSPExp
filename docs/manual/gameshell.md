@@ -105,6 +105,7 @@ the PSP itself.
   disconnect the one in use first.
 - **Media**: MP3s are decoded by the PSP; Ogg, FLAC, Opus and M4A by the
   GameShell (ffmpeg comes with the image), at a few percent of its processor.
-  Films play too; how smoothly on the GameShell's slower processor is not
-  measured yet.
+  Films play too, but 720p is too much for the GameShell's processor: an
+  H.264 film at 1280x720 shows about 13 pictures a second and runs slow
+  (the Pi plays it at its full 30). Smaller films suit it better.
 - Packages live in `/opt/pspexp`.

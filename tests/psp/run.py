@@ -500,6 +500,9 @@ def play(r, category, title, min_fps, name):
     r.ctl("idle 2500")
     off = int(t.sh("wc -c < %s 2>/dev/null || echo 0" % LOG).strip() or 0)
     r.press("cross", idle=False)
+    time.sleep(0.5)
+    if r.state().get("launcher.mode") == "controls":   # its controls sheet first (since 2026-10-18): X starts it
+        r.press("cross", idle=False)
     end = time.time() + 10
     while time.time() < end and r.state()["running"] != title:
         time.sleep(0.3)
