@@ -40,8 +40,8 @@ Everything else happens on the PSP: **Apps > Packages** to install games.
 **Apps > Packages**: Freedoom, OpenTyrian, Cave Story, SuperTux, the
 Revolution adventures, the emulators and more. Each appears under
 **Games** (or as its system's tile) once installed. The card image comes
-with none, so you choose what takes space. Packages offers the GameShell 65
-of PSPExp's 83 packages: not the twelve drawn by a Raspberry Pi's graphics
+with none, so you choose what takes space. Packages offers the GameShell 64
+of PSPExp's 82 packages: not the twelve drawn by a Raspberry Pi's graphics
 chip (SuperTuxKart, Celeste 64, Nintendo 64, Dreamcast, Morrowind, Unreal Tournament,
 Luanti, Trackballs, Open Surge, OpenRA's Red Alert and Tiberian Dawn,
 Taisei: its own chip is too small for them),

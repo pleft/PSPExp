@@ -1,14 +1,14 @@
-# Installer packages for games EA released as freeware (Command & Conquer,
-# Red Alert): EA's own freeware release, as archived from its download page
+# Installer packages for games EA released as freeware (Red Alert; Command &
+# Conquer was dropped on 2026-10-22, part of its files being inside its disc's
+# InstallShield 3 installer and its menus too small): EA's own freeware release, as archived from its download page
 # (archive.org, "Command & Conquer Classics Original Freeware Releases
 # 2007-2010"), is downloaded at install, checked against a pinned SHA-256, the
 # disc image taken out of it when it is an archive, and the game's MIX files
 # out of the disc image (7z) into /usr/share/games/ID; postrm removes them.
 # Nothing of the games is hosted by PSPExp. Sourced by a game's build script,
 # which sets ID TITLE VERSION URL SHA SIZE PROGRAM (the Vanilla Conquer
-# program) INI (its settings file) ABOUT, optionally MARK (what marks the game
-# as installed: a new one makes a board fetch the disc again), then calls
-# build_discinstaller OUTDIR. The start script gives the settings a 640x400
+# program) INI (its settings file) ABOUT, then calls build_discinstaller
+# OUTDIR. The start script gives the settings a 640x400
 # window when they name none: the game then draws at its own size and the SDL
 # layer shrinks it to the PSP's, so its magnifier (PSPEXP_MAGNIFY) can show the
 # game's own pixels (full screen, the game had shrunk its picture itself to the
@@ -44,7 +44,7 @@ set -e
 [ "\$1" = configure ] || exit 0
 G=/usr/share/games/$ID
 C=/var/cache/$ID
-[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "${MARK:-$SHA}" ] && exit 0
+[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "$SHA" ] && exit 0
 rm -rf "\$C"; mkdir -p "\$C"
 echo "Downloading $TITLE ($SIZE), EA's freeware release..."
 curl -fL --retry 5 --retry-all-errors --retry-delay 15 --connect-timeout 20 -o "\$C/game.part" "$URL" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
@@ -56,17 +56,8 @@ case "$URL" in *.rar|*.zip) mkdir -p "\$C/x"; unar -q -D -o "\$C/x" "\$C/game.pa
 rm -rf "\$G.new"; mkdir -p "\$G.new"
 7z e -y -r -o"\$G.new" "\$I" '*.MIX' >/dev/null
 ls "\$G.new"/*.MIX >/dev/null 2>&1 || { rm -rf "\$G.new" "\$C"; echo "no game files on the disc" >&2; exit 1; }
-# a disc whose installer is an InstallShield 3 archive (C&C's INSTALL/SETUP.Z): its MIX files over
-# the disc's (UPDATE, UPDATEC, TRANSIT, SPEECH, the ICNH sets, the English CCLOCAL: without them
-# VanillaTD drew its title with a grid of gaps and its menu black, and the disc's flattened
-# folders left a German CCLOCAL)
-7z e -y -r -o"\$C/i" "\$I" 'SETUP.Z' >/dev/null 2>&1 || true
-if [ -f "\$C/i/SETUP.Z" ]; then
-	mkdir -p "\$C/s"; /usr/lib/pspexp/vanillaconquer/isextract x "\$C/i/SETUP.Z" "\$C/s" >/dev/null
-	for f in "\$C/s"/*.MIX; do [ -f "\$f" ] && cp "\$f" "\$G.new/"; done
-fi
 chmod -R u=rwX,go=rX "\$G.new"
-echo "${MARK:-$SHA}" > "\$G.new/.pspexp-sha256"
+echo "$SHA" > "\$G.new/.pspexp-sha256"
 rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
 P
 	cat > "$_w/ctl/postrm" <<R
@@ -82,7 +73,7 @@ Architecture: all
 Maintainer: PSPExp <info@pspexp.dev>
 Section: contrib/games
 Priority: optional
-Depends: curl, ca-certificates, unar, 7zip, pspexp-vanillaconquer (>= 2026.07+ce83b59-pspexp3)
+Depends: curl, ca-certificates, unar, 7zip, pspexp-vanillaconquer
 Description: $TITLE (installer)
 $ABOUT
  Installing this package downloads EA's freeware release and checks it;
