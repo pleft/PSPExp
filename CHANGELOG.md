@@ -1,5 +1,11 @@
 # Release notes
 
+## Since 1.2.0
+
+- **One command on a Raspberry Pi OS you already have**:
+  `curl -fsSL https://pspexp.dev/install.sh | sh` on the Pi sets it up as
+  the card image does, without writing a new card.
+
 ## 1.2.0 (2026-10-22)
 
 New card images for the Raspberry Pi and the GameShell with all of the below

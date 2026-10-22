@@ -41,29 +41,26 @@ SSH is off unless you turned it on in Imager.
 ## On a Raspberry Pi OS you already have
 
 For a Pi that already runs **Raspberry Pi OS (64-bit), the Debian 13
-"trixie" release** (Lite is enough), with a network connection and SSH on:
+"trixie" release** (Lite or with a desktop), with a network connection:
+one command, in a terminal on the Pi (or over SSH), as your own user:
 
-1. Write the card with Raspberry Pi Imager (64-bit Raspberry Pi OS, with
-   SSH, Wi-Fi and your user set in its settings), put it in the Pi and
-   power it on. Wait for it to appear on your network.
-2. Install PSPExp from this repository, on a Mac or Linux computer:
+```sh
+curl -fsSL https://pspexp.dev/install.sh | sh
+```
 
-   ```sh
-   HOST=<user>@<pi-address> scripts/pi/install.sh
-   ```
+It asks for your password once (sudo), then takes a few minutes. It
+does what the card image does and nothing more: it adds PSPExp's package
+repository (`https://pkg.pspexp.dev`), installs PSPExp and what the PSP's
+sound and films need, adds the PSP's USB rule, and sets the console up
+as a service that starts at boot. Your password, SSH, Wi-Fi and desktop
+stay as they are. Then plug the PSP into any of the Pi's USB ports and
+start PSPExp on it: the launcher appears, and from then on the Pi waits
+for the PSP at every boot. To remove it again: `sudo apt remove
+pspexp-core`, then `sudo systemctl disable pspexp-term`.
 
-   It sets the Pi up for PSPExp (the PSP's USB rule, the console as a
-   service that starts at boot, the settings it needs) and installs
-   PSPExp from PSPExp's package repository, `https://pkg.pspexp.dev`. The
-   games come from there too, through **Apps > Packages**. (To use a
-   repository of your own instead, put its address in `~/.pspexp/repo-url`
-   on the computer: [Developing](../Developing.md#your-own-package-repository).)
-   A one-command install on the Pi itself is planned.
-3. Plug the PSP into any of the Pi's USB ports and start PSPExp on it. The
-   launcher appears.
-
-From then on the Pi starts the console at every boot and waits for the PSP;
-you never need to log in to it again.
+From a Mac or Linux computer with this repository, `HOST=<user>@<pi-address>
+scripts/pi/install.sh` does the same over SSH (for developers: it can also
+install a build of your own, [Developing](../Developing.md)).
 
 ## Your first games
 

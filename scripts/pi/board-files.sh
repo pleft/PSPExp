@@ -17,6 +17,7 @@ chmod 0440 /etc/sudoers.d/pspexp
 # the user's PipeWire runs without a login (Bluetooth sound, pspexp-bt: the console is a
 # system service); as loginctl enable-linger does, which a chroot has no logind for
 install -d -m 0755 /var/lib/systemd/linger && touch "/var/lib/systemd/linger/$U"
+install -d -m 0755 /etc/udev/rules.d   # (a system without udev's own rules yet: a container, a trimmed install)
 echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01ca", MODE="0666"' > /etc/udev/rules.d/60-pspexp.rules
 cat > /etc/systemd/system/pspexp-term.service <<U
 [Unit]

@@ -421,6 +421,23 @@ def assets():
         shutil.copy(os.path.join(ROOT, "tools/pspexp-term/assets", f), os.path.join(OUT, "fonts", f))
 
 
+def install_script():
+    """install.sh: PSPExp on an existing Raspberry Pi OS in one command (curl -fsSL https://pspexp.dev/install.sh | sh),
+    made from site/install.sh with the repository's signing key (the armoured key's body, which is the binary
+    keyring apt and gpgv read: no gpg needed here) and the card image's own board-files.sh"""
+    asc = open(os.path.join(ROOT, "scripts/packages/pspexp-archive-key.asc"), encoding="ascii").read().splitlines()
+    body = [l for l in asc[asc.index("") + 1:] if l and not l.startswith("-----") and not l.startswith("=")]
+    import base64, textwrap
+    key = base64.b64decode("".join(body))   # (checked: it decodes; its CRC line is left out)
+    board = open(os.path.join(ROOT, "scripts/pi/board-files.sh"), encoding="utf-8").read().rstrip("\n")
+    for marker in ("KEY", "BOARD"):
+        assert marker not in board.splitlines(), "board-files.sh has a line that would end install.sh's here-document"
+    s = open(os.path.join(SITE, "install.sh"), encoding="utf-8").read()
+    s = s.replace("{{KEYRING_B64}}", "\n".join(textwrap.wrap(base64.b64encode(key).decode(), 76))).replace("{{BOARD_FILES}}", board)
+    open(os.path.join(OUT, "install.sh"), "w", encoding="utf-8").write(s)
+    print("install.sh: %d bytes, the key %d bytes" % (len(s), len(key)))
+
+
 def main():
     if os.path.exists(OUT):
         shutil.rmtree(OUT)
@@ -429,6 +446,7 @@ def main():
     front_page()
     games_page()
     download_page()
+    install_script()
     manual_pages()
     # by address (Cloudflare Pages matches a rule's https://host/ against the request): the pages.dev
     # copy stays out of search engines so they list pspexp.dev alone; previews are noindex already

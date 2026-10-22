@@ -55,7 +55,9 @@ What you get on the PSP:
 2. Set up the board: write its card image from the same page
    ([Raspberry Pi](docs/manual/raspberry-pi.md),
    [GameShell](docs/manual/gameshell.md)), or build it
-   ([Omega2+](docs/manual/omega2.md)).
+   ([Omega2+](docs/manual/omega2.md)). A Raspberry Pi that already runs
+   Raspberry Pi OS (64-bit) needs only one command on it:
+   `curl -fsSL https://pspexp.dev/install.sh | sh`.
 3. Start PSPExp on the PSP and plug the cable into the board. The launcher appears.
 4. In the launcher, open **Apps > Packages** and install a game.
 
