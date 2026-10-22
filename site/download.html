@@ -118,7 +118,7 @@
   var cached = null;
   try { cached = JSON.parse(sessionStorage.getItem("pspexp-releases") || "null"); } catch (e) {}
   if (cached && Date.now() - cached.at < 600000) { show(cached.data); return; }
-  fetch(API, { headers: { Accept: "application/vnd.github+json" } })
+  fetch(API, { headers: { Accept: "application/json" } })   // (application/vnd.github+json with per_page=100: an empty list, 2026-10-22)
     .then(function (r) { if (!r.ok) throw r.status; return r.json(); })
     .then(function (data) {
       try { sessionStorage.setItem("pspexp-releases", JSON.stringify({ at: Date.now(), data: data })); } catch (e) {}

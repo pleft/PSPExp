@@ -255,15 +255,19 @@ def download_page():
     for k in KINDS:
         v.update({k + "_URL": RELEASES, k + "_SIZE": "", k + "_NAME": "", k + "_COUNT": "–", k + "_UNIT": "downloads", k + "_SHA": ""})
     try:
-        hdr = {"Accept": "application/vnd.github+json", "User-Agent": "pspexp-site"}
+        hdr = {"Accept": "application/json", "User-Agent": "pspexp-site"}   # (application/vnd.github+json with per_page=100 got an empty list, 2026-10-22)
         if os.environ.get("GITHUB_TOKEN"):   # (Cloudflare's build machines share addresses: GitHub's 60 an hour ran out)
             hdr["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
         req = urllib.request.Request(REPO.replace("github.com", "api.github.com/repos") + "/releases?per_page=100", headers=hdr)
-        rels = [r for r in json.load(urllib.request.urlopen(req, timeout=20)) if not r["draft"] and not r["prerelease"]]
+        got = json.load(urllib.request.urlopen(req, timeout=20))
+        rels = [r for r in got if not r["draft"] and not r["prerelease"]]
+        print("download page: GitHub listed %d releases, %d published" % (len(got), len(rels)))
     except Exception as e:
-        print("download page: no release information from GitHub (%s): the version from CHANGELOG.md" % e)
+        print("download page: no release information from GitHub (%s)" % e)
         rels = []
+    if not rels:   # (whatever the reason: Cloudflare's build of 2026-10-22 still had no version with the fallback on failures only)
         m = re.search(r"^## (\d+\.\d+\.\d+) \((\d{4}-\d\d-\d\d)\)", open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8").read(), re.M)
+        print("download page: the version from CHANGELOG.md: %s" % (m.group(1) if m else "none"))
         if m:   # the files' own addresses, which need no API: their names follow the release's
             ver, d = m.group(1), datetime.date.fromisoformat(m.group(2))
             base = "%s/releases/download/v%s/" % (REPO, ver)
