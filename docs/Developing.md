@@ -80,17 +80,20 @@ skip). **Making a release** (as 1.1.0 and 1.2.0 were made):
    GameShell's with `scripts/gameshell/build.sh`) and `pspexp-runtime`
    (`scripts/packages/debs/pspexp-runtime/build build/debs`); then
    `apt-repo build build/debs`, `apt-repo push r2`, `apt-repo push`.
-5. A draft: `gh workflow run release.yml -f tag=vX.Y.Z -f publish=false`
-   (it makes the tag at that commit on GitHub; pushing the tag instead would
-   publish at once). About 20 minutes; `gh run watch` or `gh run list`.
-6. The draft checked: `gh release view vX.Y.Z --json isDraft,assets`; both
-   images' package lists (`*-packages.txt`) name the new `pspexp-core`; the
-   PSP zip's `VERSION` says `release=vX.Y.Z`. For a release with new images
-   worth trying on hardware, write both cards (`docs/manual` has the
-   commands) and start them once.
-7. Published: `gh release edit vX.Y.Z --draft=false`; then `git fetch
-   --tags`, and the site rebuilt by its next push (its download page reads the
-   latest release from GitHub's API).
+5. Optional dry run: `gh workflow run release.yml -f tag=vX.Y.Z -f
+   publish=false` makes a draft with both images (about 20 minutes; `gh run
+   watch`), to look at before anything is public: both images' package lists
+   (`*-packages.txt`) name the new `pspexp-core`. Its PSP zip lacks the
+   release's name, though: the tag is not on GitHub yet, and a draft makes its
+   tag only when published (1.2.0's first draft had no `release=` line).
+6. `git push origin vX.Y.Z`: the tag's run builds everything again (reusing
+   the draft and replacing its files), and publishes the Release.
+7. Checked: `gh release view vX.Y.Z --json isDraft,assets` (not a draft, nine
+   files); the PSP zip's `PSP/GAME/PSPExp/VERSION` has `release=vX.Y.Z`; the
+   package lists name the new `pspexp-core`. For new images worth trying on
+   hardware, write both cards (the manual has the commands) and start them.
+   The site's download page reads the latest release from GitHub's API at its
+   next build (and live in the browser).
 
 Nothing in CI signs: the boards' packages are built and signed on the
 maintainer's machine, and the key never leaves it. `PSPEXP_BUILD` (the
