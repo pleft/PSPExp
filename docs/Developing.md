@@ -106,8 +106,11 @@ the SDL layer's test run from CI's folder.
 and `site/build.py`, which writes `site/out/`: the front page in its frame, the
 download page (`site/download.html`: the latest release's PSP zip and card
 images, sizes, SHA-256 and download counts, written from GitHub's API at
-build time; its script asks the API again in the browser, live, and rolls the
-counters up), the user manual as pages from `docs/manual/*.md` (its own small Markdown
+build time, with `GITHUB_TOKEN` when the build has one; when the API does not
+answer, the version, its date and the files' own addresses from CHANGELOG.md's
+newest `## X.Y.Z (date)`, the counts left as dashes; its script asks the API
+again in the browser, live, and rolls the counters up from the built numbers,
+which stay if it gets no answer), the user manual as pages from `docs/manual/*.md` (its own small Markdown
 converter, Python's standard library only: the manual is written once, its
 links between pages follow, links out of it go to GitHub), the screenshots
 (`docs/images`) and the launcher's font (the pages ask for `style.<hash>.css` and `icon.<hash>.svg`, copies named by their

@@ -77,7 +77,7 @@
   function size(b) { return b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : b >= 1e6 ? Math.round(b / 1e6) + " MB" : Math.max(1, Math.round(b / 1e3)) + " KB"; }
   function unit(el, n) { var u = el.parentNode.querySelector("[data-unit]"); if (u) u.textContent = n === 1 ? "download" : "downloads"; }
   function roll(el, to) {
-    var from = 0, t0 = null;
+    var from = parseInt(el.textContent.replace(/[^0-9]/g, ""), 10) || 0, t0 = null;   // from what the build wrote
     unit(el, to);
     if (calm || to < 1) { el.textContent = to.toLocaleString("en"); return; }
     function step(t) {
@@ -113,8 +113,8 @@
     document.querySelector("[data-release]").href = latest.html_url;
   }
   // the counters start from 0 at once (no flash of the build's numbers), then roll up to GitHub's
-  if (!calm) [].forEach.call(document.querySelectorAll(".count"), function (el) { el.dataset.built = el.textContent; el.textContent = "0"; });
-  function keep() { [].forEach.call(document.querySelectorAll(".count"), function (el) { if (el.dataset.built) el.textContent = el.dataset.built; }); }
+  // the build's numbers stay until GitHub answers (a browser whose request never settles, a content
+  // blocker or a privacy relay, kept zeros and the release page's links when they were cleared first)
   var cached = null;
   try { cached = JSON.parse(sessionStorage.getItem("pspexp-releases") || "null"); } catch (e) {}
   if (cached && Date.now() - cached.at < 600000) { show(cached.data); return; }
@@ -124,6 +124,6 @@
       try { sessionStorage.setItem("pspexp-releases", JSON.stringify({ at: Date.now(), data: data })); } catch (e) {}
       show(data);
     })
-    .catch(keep);   // offline or rate-limited: the build's numbers back
+    .catch(function () {});   // offline or rate-limited: the build's numbers and links stay
 })();
 </script>

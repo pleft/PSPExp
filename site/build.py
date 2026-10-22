@@ -248,18 +248,29 @@ def size(b):
 
 
 def download_page():
-    """the latest release's three files; without the network (a build offline) the buttons lead to
-    the release on GitHub and the page's script fills in the rest"""
+    """the latest release's three files; when GitHub's API does not answer (a build offline, or its
+    limit spent) the version and the files' addresses from CHANGELOG.md's newest release, the counts
+    left to the page's script"""
     v = {"VERSION": "", "DATE": "", "TOTAL": "–", "TOTAL_UNIT": "downloads", "RELEASE_PAGE": RELEASES, "REPO": REPO}
     for k in KINDS:
         v.update({k + "_URL": RELEASES, k + "_SIZE": "", k + "_NAME": "", k + "_COUNT": "–", k + "_UNIT": "downloads", k + "_SHA": ""})
     try:
-        req = urllib.request.Request(REPO.replace("github.com", "api.github.com/repos") + "/releases?per_page=100",
-                                     headers={"Accept": "application/vnd.github+json", "User-Agent": "pspexp-site"})
+        hdr = {"Accept": "application/vnd.github+json", "User-Agent": "pspexp-site"}
+        if os.environ.get("GITHUB_TOKEN"):   # (Cloudflare's build machines share addresses: GitHub's 60 an hour ran out)
+            hdr["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
+        req = urllib.request.Request(REPO.replace("github.com", "api.github.com/repos") + "/releases?per_page=100", headers=hdr)
         rels = [r for r in json.load(urllib.request.urlopen(req, timeout=20)) if not r["draft"] and not r["prerelease"]]
     except Exception as e:
-        print("download page: no release information (%s): links to GitHub" % e)
+        print("download page: no release information from GitHub (%s): the version from CHANGELOG.md" % e)
         rels = []
+        m = re.search(r"^## (\d+\.\d+\.\d+) \((\d{4}-\d\d-\d\d)\)", open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8").read(), re.M)
+        if m:   # the files' own addresses, which need no API: their names follow the release's
+            ver, d = m.group(1), datetime.date.fromisoformat(m.group(2))
+            base = "%s/releases/download/v%s/" % (REPO, ver)
+            names = {"PSP": "PSPExp-psp-v%s.zip", "PI": "pspexp-pi-v%s.img.xz", "GS": "pspexp-gameshell-v%s.img.xz"}
+            v.update({"VERSION": ver, "DATE": "%d %s" % (d.day, d.strftime("%B %Y")), "RELEASE_PAGE": "%s/releases/tag/v%s" % (REPO, ver)})
+            for k, n in names.items():
+                v.update({k + "_URL": base + n % ver, k + "_NAME": n % ver})
     if rels:
         latest, total = rels[0], 0
         d = datetime.date.fromisoformat(latest["published_at"][:10])
