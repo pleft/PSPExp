@@ -6,7 +6,13 @@
 # out of the disc image (7z) into /usr/share/games/ID; postrm removes them.
 # Nothing of the games is hosted by PSPExp. Sourced by a game's build script,
 # which sets ID TITLE VERSION URL SHA SIZE PROGRAM (the Vanilla Conquer
-# program) ABOUT, then calls build_discinstaller OUTDIR.
+# program) INI (its settings file) ABOUT, optionally MARK (what marks the game
+# as installed: a new one makes a board fetch the disc again), then calls
+# build_discinstaller OUTDIR. The start script gives the settings a 640x400
+# window when they name none: the game then draws at its own size and the SDL
+# layer shrinks it to the PSP's, so its magnifier (PSPEXP_MAGNIFY) can show the
+# game's own pixels (full screen, the game had shrunk its picture itself to the
+# PSP's 480x272 and the layer had nothing to magnify).
 build_discinstaller() {
 	_out=$1
 	_root="$(cd "$(dirname "$0")/../../../.." && pwd)"
@@ -17,6 +23,9 @@ build_discinstaller() {
 # $TITLE (package $ID: EA's freeware, downloaded when it was installed), on Vanilla Conquer
 G=/usr/share/games/$ID
 [ -f "\$G/.pspexp-sha256" ] || { echo "the game is not there: install the package $ID again (it downloads it)" >&2; exit 1; }
+F="\${XDG_CONFIG_HOME:-\$HOME/.config}/vanilla-conquer/$PROGRAM/$INI"
+mkdir -p "\${F%/*}"
+grep -qs '^\[Video\]' "\$F" || printf '\n[Video]\nWindowed=yes\nWindowWidth=640\nWindowHeight=400\n' >> "\$F"
 cd "\$G" && exec /usr/lib/pspexp/vanillaconquer/$PROGRAM "\$@"
 S
 	chmod 755 "$_w/root/usr/games/$ID"
@@ -35,7 +44,7 @@ set -e
 [ "\$1" = configure ] || exit 0
 G=/usr/share/games/$ID
 C=/var/cache/$ID
-[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "$SHA 2" ] && exit 0   # (2: SETUP.Z's files too; before them the disc is fetched again)
+[ -f "\$G/.pspexp-sha256" ] && [ "\$(cat "\$G/.pspexp-sha256")" = "${MARK:-$SHA}" ] && exit 0
 rm -rf "\$C"; mkdir -p "\$C"
 echo "Downloading $TITLE ($SIZE), EA's freeware release..."
 curl -fL --retry 5 --retry-all-errors --retry-delay 15 --connect-timeout 20 -o "\$C/game.part" "$URL" || { rm -rf "\$C"; echo "the download failed: install it again" >&2; exit 1; }
@@ -57,7 +66,7 @@ if [ -f "\$C/i/SETUP.Z" ]; then
 	for f in "\$C/s"/*.MIX; do [ -f "\$f" ] && cp "\$f" "\$G.new/"; done
 fi
 chmod -R u=rwX,go=rX "\$G.new"
-echo "$SHA 2" > "\$G.new/.pspexp-sha256"
+echo "${MARK:-$SHA}" > "\$G.new/.pspexp-sha256"
 rm -rf "\$G"; mv "\$G.new" "\$G"; rm -rf "\$C"
 P
 	cat > "$_w/ctl/postrm" <<R

@@ -4,7 +4,7 @@
 # (_discinstaller.sh), played by Vanilla Conquer's VanillaRA. Usage: build OUTDIR
 set -e
 . "$(dirname "$0")/../_discinstaller.sh"
-ID=redalert-freeware TITLE="Command & Conquer: Red Alert" VERSION=1.0-pspexp1 PROGRAM=vanillara
+ID=redalert-freeware TITLE="Command & Conquer: Red Alert" VERSION=1.0-pspexp2 PROGRAM=vanillara INI=redalert.ini
 URL=https://archive.org/download/official-cn-ctiberian-sun_202510/RedAlert1_AlliedDisc.rar
 SHA=6ca7c7c18bce37fc4c60b0aeeb5aea104160ac5aa1e305bde4f5bfbfb32b41c6 SIZE="524 MB"
 ABOUT=" Westwood's 1996 real-time strategy game, Allies against Soviets in an

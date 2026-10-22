@@ -26,6 +26,9 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
   disc's installer archive and were never unpacked. They are now (its
   English text too), so its films, menu and missions play. A board that
   has it downloads the disc once more when it updates.
+- **Red Alert and Command & Conquer have a magnifier**: R shows their
+  small menus and messages at full size round the pointer; R again, the
+  whole screen.
 - **X-Moto removed** from the packages: its text is too small to read on
   the PSP's screen, and its first start needs a mouse and a typed name.
   The PSP's keyboard keeps what it learned for it (a button can open it,
