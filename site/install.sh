@@ -3,7 +3,7 @@
 #   curl -fsSL https://pspexp.dev/install.sh | sh
 # For Raspberry Pi OS (64-bit) on Debian 13 "trixie", Lite or with a desktop; Pi 3, 4, 400 or 5.
 # It does what PSPExp's card image does, and nothing more: PSPExp's package repository
-# (https://pkg.pspexp.dev, its signing key carried in this script), the pspexp-core package and what
+# (https://pkg.pspexp.dev, the public half of its signing key carried in this script), the pspexp-core package and what
 # the PSP's sound and films need (PipeWire, ffmpeg), the PSP's USB rule, the console as a service
 # that starts at boot, the sudo rules for its System page and Packages app only. It sets no
 # password, no SSH and no Wi-Fi: those stay yours. Written by site/build.py from site/install.sh,

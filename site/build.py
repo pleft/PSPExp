@@ -423,7 +423,7 @@ def assets():
 
 def install_script():
     """install.sh: PSPExp on an existing Raspberry Pi OS in one command (curl -fsSL https://pspexp.dev/install.sh | sh),
-    made from site/install.sh with the repository's signing key (the armoured key's body, which is the binary
+    made from site/install.sh with the public half of the repository's signing key (the armoured key's body, which is the binary
     keyring apt and gpgv read: no gpg needed here) and the card image's own board-files.sh"""
     asc = open(os.path.join(ROOT, "scripts/packages/pspexp-archive-key.asc"), encoding="ascii").read().splitlines()
     body = [l for l in asc[asc.index("") + 1:] if l and not l.startswith("-----") and not l.startswith("=")]

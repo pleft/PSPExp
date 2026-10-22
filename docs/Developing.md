@@ -103,7 +103,8 @@ the SDL layer's test run from CI's folder.
 ## The web page (pspexp.dev)
 
 `site/build.py` also writes `install.sh` (`curl -fsSL https://pspexp.dev/install.sh | sh`: PSPExp on an existing
-Raspberry Pi OS) from `site/install.sh`, with the repository's signing key decoded from
+Raspberry Pi OS) from `site/install.sh`, with the public half of the repository's signing key (the private
+key stays on the maintainer's machine) decoded from
 `scripts/packages/pspexp-archive-key.asc` and the card image's own `scripts/pi/board-files.sh` written into it, so
 the two set a Pi up alike. Tried in a clean Debian 13 arm64 container as a user with sudo (every step but
 starting the service, which needs systemd) and on a Pi.
