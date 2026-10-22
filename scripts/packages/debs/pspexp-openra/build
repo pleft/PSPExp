@@ -3,7 +3,8 @@
 # scripts/packages/build-openra.sh (self-contained .NET 6, so no .NET on the
 # board), its SDL2.so a wrapper that puts PSPExp's board-GPU layer before
 # Debian's SDL2. Installs /usr/lib/pspexp/openra/ and the launch scripts
-# /usr/games/openra-ra and /usr/games/openra-cnc. The original games' content
+# /usr/games/openra-ra and /usr/games/openra-cnc (Tiberian Dawn's recipe was dropped on
+# 2026-10-22, its text too small on the PSP; its script stays in the package). The original games' content
 # comes through OpenRA's own content installer (Quick Install downloads it from
 # OpenRA's mirrors). Usage: build OUTDIR ARCH (arm64)
 set -e

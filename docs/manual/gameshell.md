@@ -41,9 +41,9 @@ Everything else happens on the PSP: **Apps > Packages** to install games.
 Revolution adventures, the emulators and more. Each appears under
 **Games** (or as its system's tile) once installed. The card image comes
 with none, so you choose what takes space. Packages offers the GameShell 64
-of PSPExp's 82 packages: not the twelve drawn by a Raspberry Pi's graphics
+of PSPExp's 81 packages: not the eleven drawn by a Raspberry Pi's graphics
 chip (SuperTuxKart, Celeste 64, Nintendo 64, Dreamcast, Morrowind, Unreal Tournament,
-Luanti, Trackballs, Open Surge, OpenRA's Red Alert and Tiberian Dawn,
+Luanti, Trackballs, Open Surge, OpenRA's Red Alert,
 Taisei: its own chip is too small for them),
 nor Diablo and Wolfenstein: Enemy Territory, nor Heroes II, LinCity-NG,
 C-Dogs and the Nintendo DS: too slow on it.

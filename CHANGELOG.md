@@ -23,7 +23,8 @@ Package updates: a board gets them through Packages (Apps > PSPExp).
   sheet that triangle closes the welcome window to play.
 - **Command & Conquer removed** from the packages: part of its game files
   hid inside its disc's installer and its menus are too small for the
-  PSP's screen. Red Alert stays.
+  PSP's screen; so is Tiberian Dawn on OpenRA, the same game. Red Alert
+  stays.
 - **Red Alert has a magnifier**: R shows its small menus and messages
   at full size round the pointer; R again, the whole screen.
 - **X-Moto removed** from the packages: its text is too small to read on

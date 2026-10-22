@@ -25,7 +25,6 @@
 | `recipes/heroes3/cover.png` | Debian's vcmi package, its 128x128 icon (VCMI's, not the game's) | GPL-2.0+ (VCMI) |
 | `recipes/heroes2/cover.png` | Debian's fheroes2 package, its 128x128 icon | GPL-2.0 (fheroes2) |
 | `recipes/redalert/cover.png` | Vanilla Conquer's `resources/vanillara_icon.svg`, rendered at 128x128 | GPL-3.0 (Vanilla Conquer) |
-| `recipes/openra-cnc/cover.png` | OpenRA's `mods/cnc/icon-3x.png`, scaled | GPL-3.0 (OpenRA) |
 | `recipes/openra-ra/cover.png` | OpenRA's `mods/ra/icon-3x.png`, scaled | GPL-3.0 (OpenRA) |
 | `recipes/devilutionx/cover.png` | DevilutionX's `Packaging/resources/icon.png`, scaled | DevilutionX's (its project's icon) |
 | `recipes/etlegacy/cover.png` | ET: Legacy's `misc/etl.svg`, rendered at 128x128 | GPL-3.0 (ET: Legacy) |
