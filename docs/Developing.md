@@ -64,12 +64,33 @@ would sort below them and stop every update); a build from a release's tag
 shows its name besides: the launcher's About `1.0.0, 2026.10.11 (7ba9a2f)`
 (`cmake/pspexp_version.cmake`), the PSP's status page `PSPExp 1.0.0 (slot a)`
 (a `release=` line in the slot's VERSION, which the loader and the board
-skip). **Making a release:**
-1. `git tag vX.Y.Z` on the commit (not pushed yet);
-2. build and publish the packages from it (`pspexp-core` for both boards,
-   `pspexp-runtime`, `apt-repo build` and `push`): they then show the release;
-3. `git push origin vX.Y.Z`: `release.yml` builds the PSP's zip and the card
-   images, which take those packages, and publishes the Release with them.
+skip). **Making a release** (as 1.1.0 and 1.2.0 were made):
+1. Everything for it published as packages already, and played on the PSP.
+2. The notes: CHANGELOG.md's "Since X" section named `## X.Y.Z (date)`, with
+   a short introduction (what is new, that a set-up board gets it through
+   Packages); the site's front page `site/index.html` gets its "New in X.Y.Z"
+   section (four cards, a link to CHANGELOG.md), replacing the previous one;
+   `python3 site/build.py`, the page looked at (Chromium in a Debian
+   container: `chromium --headless=new --screenshot`, 1280 and 390 wide).
+   Committed and pushed: the site goes live with it.
+3. `git tag vX.Y.Z` on that commit, not pushed: a build of a clean tree on a
+   tag shows the release's name.
+4. From it, the packages that carry the name: `pspexp-core` for both boards
+   (the arm64 build in the `pspexp-arm64-dev` container's `/tmp/b`, the
+   GameShell's with `scripts/gameshell/build.sh`) and `pspexp-runtime`
+   (`scripts/packages/debs/pspexp-runtime/build build/debs`); then
+   `apt-repo build build/debs`, `apt-repo push r2`, `apt-repo push`.
+5. A draft: `gh workflow run release.yml -f tag=vX.Y.Z -f publish=false`
+   (it makes the tag at that commit on GitHub; pushing the tag instead would
+   publish at once). About 20 minutes; `gh run watch` or `gh run list`.
+6. The draft checked: `gh release view vX.Y.Z --json isDraft,assets`; both
+   images' package lists (`*-packages.txt`) name the new `pspexp-core`; the
+   PSP zip's `VERSION` says `release=vX.Y.Z`. For a release with new images
+   worth trying on hardware, write both cards (`docs/manual` has the
+   commands) and start them once.
+7. Published: `gh release edit vX.Y.Z --draft=false`; then `git fetch
+   --tags`, and the site rebuilt by its next push (its download page reads the
+   latest release from GitHub's API).
 
 Nothing in CI signs: the boards' packages are built and signed on the
 maintainer's machine, and the key never leaves it. `PSPEXP_BUILD` (the

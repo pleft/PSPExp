@@ -1,8 +1,12 @@
 # Release notes
 
-## Since 1.1.0
+## 1.2.0 (2026-10-22)
 
-Package updates: a board gets them through Packages (Apps > PSPExp).
+New card images for the Raspberry Pi and the GameShell with all of the below
+in, headed by two new systems on a Raspberry Pi 4, 400 or 5: the Nintendo DS
+and the Sega Saturn. Every game's screens were also checked as the PSP shows
+them, which brought the fixes and the three removals below. A board already set
+up gets the same through Packages (Apps > PSPExp).
 
 - **The Nintendo DS** on a Pi 4, 400 or 5 (melonDS): your own games in
   `roms/nds`; the PSP shows both screens (three layouts, SELECT + R), the
