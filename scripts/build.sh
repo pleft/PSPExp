@@ -20,6 +20,7 @@ if command -v psp-gcc >/dev/null 2>&1; then
 	make -C "$ROOT/psp/transport-usb" -j"$JOBS"
 	make -C "$ROOT/psp/runtime" -j"$JOBS"
 	make -C "$ROOT/psp/boot" -j"$JOBS"
+	make -C "$ROOT/psp/capture" -j"$JOBS"   # PSPExp Capture, a game.txt plugin: built, not yet in the zip
 	DIST="$ROOT/dist/PSPExp"
 	mkdir -p "$DIST"
 	cp "$ROOT/psp/boot/EBOOT.PBP" "$ROOT/psp/transport-usb/pspexp_usb.prx" "$ROOT/psp/runtime/pspexp_runtime.prx" "$DIST/"

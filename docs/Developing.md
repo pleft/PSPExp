@@ -27,6 +27,7 @@ Every document and what it is for: [docs/README.md](README.md).
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (branch `pspexp` of Stratagus in the WarCraft project; no longer in PSPExp) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
 | host-rendered OpenGL (`libsdl-pspexp-hostgl`): a game too heavy for the GE drawn by the board's own GPU, each frame sent to the PSP as a picture | OpenMW from a Mac at 60 fps on the PSP (2026-10-02); on the Pi 400's GPU, headless: SuperTuxKart, Trackballs, Open Surge packaged (2026-10-03; ~30 fps in PPSSPP, not yet measured on the PSP) |
+| `psp/capture` PSPExp Capture `pspexp_capture.prx` (a CFW game.txt plugin: a native PSP game's picture over USB) + `tools/pspexp-capture` (the receiver: an MP4) | **stage 1 runs on the PSP-1000 2026-10-23** (Burnout Legends: menus 28–30 frames/s, races 14–23; saves load; exits cleanly); no sound yet; not shipped (architecture §12b) |
 | **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
 
 ## Build
@@ -154,6 +155,19 @@ The tool prints host→PSP and PSP→host throughput for several block sizes,
 round-trip latency for 16 B, 4 KiB and 40 KB messages, and a 300-frame loop
 with 500 sprites paced on PRESENT_DONE. `pspexp-bench --null` runs the same
 against the in-process Null executor as a CPU baseline.
+
+## Recording a native PSP game: PSPExp Capture (stage 1)
+
+Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspexp_capture.prx`.
+
+1. Copy it to `ms0:/seplugins/` and add the line `ms0:/seplugins/pspexp_capture.prx 1` to
+   `ms0:/seplugins/game.txt` (`0` switches it off).
+2. Plug the PSP into the computer and run `build/host/pspexp-capture -o clip.mp4 -d frames -t 90`.
+3. Start a game from the XMB: the receiver connects, prints the frames received and the game's
+   frame rate every 5 s, and stops after 90 s (or Ctrl-C). The clip plays at the game's speed.
+
+The plugin's log is `ms0:/seplugins/pspexp_capture.log`. Exit games with HOME as usual: the plugin
+stops itself first. Design and measurements: the architecture's §12b.
 
 ## Without a PSP: the runtime under PPSSPP
 
@@ -397,7 +411,8 @@ host/                the host side: libpspexp (application API), executor-null
                      transport-usb (libusb), transport-tcp (Wi-Fi)
 psp/                 the PSP side: runtime (pspexp_runtime.prx), executor-ge (the GE),
                      transport-usb (kernel USB driver pspexp_usb.prx), transport-tcp,
-                     boot (EBOOT loader)
+                     boot (EBOOT loader), capture (PSPExp Capture, a plugin
+                     for native games, with the USB driver built in)
 compatibility/       existing programs on the PSP: sdl-pspexp (the SDL layer: any
                      SDL2 program), war1gus and wargus (the Warcraft packages'
                      patches)
@@ -408,7 +423,8 @@ tools/               pspexp-term (the PSP as a console, with the launcher and a
                      keyboard request with TEXT, as if typed; PSPEXP_SDL_SHOT=FILE.bmp
                      saves every 30th frame, with a %d in the name every frame,
                      numbered, or every PSPEXP_SDL_SHOT_EVERY-th), pspexp-ms (the memory stick from a
-                     shell), usb-bench (pspexp-bench)
+                     shell), usb-bench (pspexp-bench), pspexp-capture (PSPExp
+                     Capture's receiver)
 examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)
 scripts/             building, installing and packaging, one folder per board

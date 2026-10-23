@@ -935,6 +935,60 @@ Emilia Pinball's 7,800 draws a frame took the board 226 ms (4.2 fps). Sampled wi
 
 ---
 
+## 12b. PSPExp Capture: recording native PSP games (stage 1, 2026-10-23)
+
+A Share button for the PSP: a native game's picture (and, from stage 2, its sound) sent over the
+USB cable to a PSPExp receiver, which makes a finished clip. It lives beside PSPExp and is shipped
+as part of it. Prior art, honestly: RemoteJoy / RemoteJoyLite (2008, Windows, picture on screen),
+psp-usb-capture (pspcap, Windows, no file), xerpi's USB Video Class plugin (a webcam to the
+computer, tearing, no sound). None makes a finished video and sound file.
+
+**The pieces.** `psp/capture` builds `pspexp_capture.prx`, a kernel plugin for custom firmware
+(PRO / ARK: `ms0:/seplugins/game.txt`). PSPExp's USB driver is built into it
+(`psp/transport-usb/main.c` with `PSPEXP_USB_EMBEDDED`, same IDs and sync as the runtime), so
+nothing else of PSPExp is loaded while a game runs. `tools/pspexp-capture` is the receiver
+(`build/host/pspexp-capture [-o clip.mp4] [-d frames-folder] [-t seconds]`): it waits for the
+plugin, pipes the frames into ffmpeg (H.264) and saves a picture every 5 s.
+
+**On the link.** Per frame a 32-byte header, `"PXCF"`, u16 width, height, format (0 565, 1 5551,
+2 4444, 3 8888), u16 reserved, u32 sequence, u32 the game's frame changes so far, u32 the time
+the frame was shown (µs), u32 payload bytes, two reserved; then 480x272 pixels, 16-bit (a 32-bit
+game's frame as 565), the stride removed. The receiver places each frame at its time in a steady
+30 a second (a late one held), so a clip plays at the game's own speed.
+
+**How it works.** A watcher thread (priority 0x18, above most games' threads) looks at the shown
+frame once per refresh (`sceDisplayGetFrameBuf`); a new one is counted (the game's frame rate)
+and, when the sender is free, copied at once: the DMA engine brings it in bands of 16 KB into
+kernel memory, the VFPU packs 8888 to 565 (`vt5650.q`, four pixels an instruction). A sender
+thread (0x1A) writes it to the link; frames that come while it is busy are skipped. Its log:
+`ms0:/seplugins/pspexp_capture.log` (every 5 s: the game's fps, frames sent and skipped, the copy's
+time, USB timeouts; power events; the shutdown).
+
+**What was tried, on a PSP-1000 (6.60 PRO-C) with Burnout Legends from the memory stick:**
+
+| version | change | result |
+|---|---|---|
+| v1 | rows copied from the shown frame while sending | torn and half-drawn frames (a black band on a menu, half the car missing): sending took longer than a frame and the game drew into it meanwhile; 10–15 frames/s |
+| v2 | whole frame snapshotted by DMA (544 KB) | clean pictures; 15.8 frames/s received of the game's 26 (the link 6–14 MB/s, 32-bit frames) |
+| v4 | sent as 565 | 28–29 frames/s in menus (all of them); the game hung loading a saved profile: the snapshot sat in the game's memory (partition 2), where the PSP's save screen takes its own |
+| v5 | snapshot in the volatile area (partition 5, 4 MB) | the game froze on its splash screen (it takes that area as it starts) |
+| v6 | 16-bit frame in kernel memory, made band by band; the driver's receive buffers 192 KB → 1.5 KB (the plugin only receives a 16-byte hello) | the profile loads; 271 KB of the kernel's ~590 KB free |
+| v8 | the game's exit caught | every version before switched the PSP off on HOME > Exit ("Please wait..."): a game's exit restarts the system without stopping plugins (`module_stop` never runs), with the USB link and threads still going. Now `sceKernelExitGame` / `...WithStatus` (LoadExecForUser) are redirected through the plugin (PRO's `sctrlHENFindFunction` + `sctrlHENPatchSyscall`), which stops everything first: back to the XMB |
+| v9 | the VFPU packs; the sender from 0x60 up to 0x1A | menus 28–30 frames/s (all), races 14–23 of the game's 25–29; the game runs at 25–30 while captured, 30 alone |
+
+**Measured limits.** The copy takes 13–28 ms per frame (wall time), of which the DMA alone
+5–15 ms, rising as a race gets busier: the copy, the GE and the USB share the memory bus. The
+link carries 3.6–7.8 MB/s of its ~25 MB/s, so the PSP's side, not the cable, is the limit in a race.
+
+**Next** (stage 2 onwards):
+- the sound: the game's `sceAudio` outputs caught the same way, sent with the frames, muxed into the clip;
+- the ♪ button: hold for a clip of the last 30 s, ♪+START to start/stop recording (the receiver keeps a ring);
+- the receiver as the board's console in a capture mode (clips kept by PSPExp), plus the Mac/Linux tool for people without a board;
+- the shutdown's last log line ("stopped") never appears though the exit works: find which step does not return in time;
+- more games (one game tried so far); 60 fps games (the copy is close to a whole frame at 60);
+- shipping: the plugin in PSPExp's zip, a page in the manual, a section on the site;
+- later: live streaming; Share for PSPExp's own games (the board already has their frames and sound).
+
 ## 13. Host Independence
 
 No protocol message may depend on the Onion Omega2+, Raspberry Pi, GameShell, or macOS.

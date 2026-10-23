@@ -13,8 +13,10 @@
 #include "../../protocol/pspexp_usb_link.h"
 #include "pspexp_usb_driver.h"
 
+#ifndef PSPEXP_USB_EMBEDDED   /* (built into another kernel module: psp/capture, PSPExp Capture) */
 PSP_MODULE_INFO("PSPExpUSB", PSP_MODULE_KERNEL, 1, 0);
 PSP_NO_CREATE_MAIN_THREAD();
+#endif
 
 enum {
     EV_ATTACH  = 1,
@@ -76,7 +78,12 @@ static struct UsbdDeviceReq g_rx_req;
 static struct UsbdDeviceReq g_tx_req;
 static struct UsbdDeviceReq g_sync_req;
 
-static unsigned char g_rx_buf[RX_BUFFERS][PSPEXP_USB_CHUNK] __attribute__((aligned(64)));
+/* each receive: a whole chunk; a host that only says hello (PSPExp Capture, built in) asks for
+ * less, its buffers being kernel memory a game's capture needs */
+#ifndef PSPEXP_USB_RX_SIZE
+#define PSPEXP_USB_RX_SIZE PSPEXP_USB_CHUNK
+#endif
+static unsigned char g_rx_buf[RX_BUFFERS][PSPEXP_USB_RX_SIZE] __attribute__((aligned(64)));
 static volatile int g_rx_len[RX_BUFFERS];    /* RX_FREE, RX_PENDING or byte count */
 static volatile int g_rx_head;               /* next buffer the consumer reads */
 static volatile int g_rx_tail;               /* next buffer to submit */
@@ -149,11 +156,11 @@ static void rx_submit_next(void)
     idx = g_rx_tail;
     if (g_rx_len[idx] != RX_FREE) return;     /* consumer is behind: bus NAKs until it catches up */
     g_rx_len[idx] = RX_PENDING;
-    sceKernelDcacheInvalidateRange(g_rx_buf[idx], PSPEXP_USB_CHUNK);
+    sceKernelDcacheInvalidateRange(g_rx_buf[idx], PSPEXP_USB_RX_SIZE);
     memset(&g_rx_req, 0, sizeof(g_rx_req));
     g_rx_req.endp = EP_OUT_BLOCK;
     g_rx_req.data = g_rx_buf[idx];
-    g_rx_req.size = PSPEXP_USB_CHUNK;
+    g_rx_req.size = PSPEXP_USB_RX_SIZE;
     g_rx_req.func = rx_done;
     if (sceUsbbdReqRecv(&g_rx_req) < 0) {
         g_rx_len[idx] = RX_FREE;
@@ -576,6 +583,7 @@ int pspexpUsbGetZone(int *tz_minutes, int *dst)
     return r;
 }
 
+#ifndef PSPEXP_USB_EMBEDDED
 int module_start(SceSize args, void *argp)
 {
     memset(&g_stats, 0, sizeof(g_stats));
@@ -587,3 +595,4 @@ int module_stop(SceSize args, void *argp)
     sceUsbbdUnregister(&g_driver);
     return 0;
 }
+#endif
