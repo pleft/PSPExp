@@ -11,6 +11,14 @@
  *   put FILE [NAME]   (into ms0:/seplugins/, e.g. a new pspexp_capture.prx)
  *   log | restart (the game again, from its ISO: a new plugin loads) | stop | quit
  *   pause | resume   (no frames copied meanwhile: the game's own frame rate, for comparing)
+ *   vram   (the game's GE buffer addresses, a fingerprint of each 32 KB of VRAM)
+ *   gestat on | off   (the PSP's log adds what the game hands the GE a frame: commands, vertices, textures)
+ *   exp N   (0 normal, 1 the copy alone, 2 the sending alone: what costs the game its speed)
+ *   copyprio N   (the copier thread's priority)
+ *   band KB   (32, 64 or 128: the ring's band, each one USB write) | tx KB SPLIT (the largest transfer; 1 split short ones)
+ *   idle on | off   (the PSP's log adds the processor time the game leaves free)
+ *   ge on | off | 1 | 2   (the GE makes each frame 16-bit through the game's depth buffer, half the
+ *     bytes; 1 only its drawing, 2 only its copy out: for finding faults)
  * -k: after the link goes (a restart), wait for the game again: clip.mp4, clip-2.mp4, ...
  * The link is PSPExp's own USB transport (host/transport-usb).
  */
@@ -179,6 +187,12 @@ static void control_line(char *line)
         fprintf(stderr, "control: sent %s (%zu bytes) as %s\n", b, len, name);
     } else if (!strcmp(a, "log")) send_cmd(3, NULL, 0, NULL, 0);
     else if (!strcmp(a, "restart")) send_cmd(4, NULL, 0, NULL, 0);
+    else if (!strcmp(a, "vram")) send_cmd(7, NULL, 0, NULL, 0);
+    else if (!strcmp(a, "band") || !strcmp(a, "idle")) { uint8_t p[4]; put32le(p, !strcmp(a, "idle") ? (uint32_t)(strcmp(b, "off") != 0) : (uint32_t)strtoul(b, NULL, 0) * 1024); send_cmd(!strcmp(a, "band") ? 12 : 14, p, 4, NULL, 0); }
+    else if (!strcmp(a, "tx")) { uint8_t p[8]; put32le(p, (uint32_t)strtoul(b, NULL, 0) * 1024); put32le(p + 4, (uint32_t)(n >= 3 ? atoi(c) : 1)); send_cmd(13, p, 8, NULL, 0); }
+    else if (!strcmp(a, "exp") || !strcmp(a, "copyprio")) { uint8_t p[4]; put32le(p, (uint32_t)strtoul(b, NULL, 0)); send_cmd(!strcmp(a, "exp") ? 10 : 11, p, 4, NULL, 0); }
+    else if (!strcmp(a, "gestat")) { uint8_t p[4]; put32le(p, strcmp(b, "off") != 0); send_cmd(9, p, 4, NULL, 0); }
+    else if (!strcmp(a, "ge")) { uint8_t p[4]; put32le(p, !strcmp(b, "on") ? 3 : (uint32_t)atoi(b)); send_cmd(8, p, 4, NULL, 0); }
     else if (!strcmp(a, "pause") || !strcmp(a, "resume")) { uint8_t p[4]; put32le(p, !strcmp(a, "pause")); send_cmd(5, p, 4, NULL, 0); }
     else if (!strcmp(a, "stop")) g_stop = 1;
     else if (!strcmp(a, "quit")) { g_quit = 1; g_stop = 1; }
@@ -240,6 +254,12 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
                 fprintf(stderr, "control: the PSP's log (%d bytes, its end below)\n", (int)get32(hdr + 8));
                 if (dir) { char p[512]; snprintf(p, sizeof(p), "%s/psp-log.txt", dir); FILE *f = fopen(p, "wb"); if (f) { fwrite(reply, 1, len, f); fclose(f); } }
                 fwrite(reply, 1, len, stderr);
+            } else if (get32(hdr + 4) == 7 && len >= 8 * 4 + 128 * 4) {   /* vram */
+                fprintf(stderr, "control: vram: FBP %08x FBW %08x ZBP %08x ZBW %08x TBP0 %08x TBW0 %08x PSM %08x shown %08x\n",
+                        get32(reply), get32(reply + 4), get32(reply + 8), get32(reply + 12), get32(reply + 16),
+                        get32(reply + 20), get32(reply + 24), get32(reply + 28));
+                for (int b = 0; b < 64; b++)
+                    fprintf(stderr, "control: vram %06x sum %08x nonzero %u\n", b * 32768, get32(reply + 32 + b * 8), get32(reply + 36 + b * 8));
             } else fprintf(stderr, "control: command %u: %d\n", get32(hdr + 4), (int)get32(hdr + 8));
             continue;
         }
@@ -355,7 +375,7 @@ int main(int argc, char **argv)
             int stem = dot ? (int)(dot - out) : (int)strlen(out);
             snprintf(name, sizeof(name), "%.*s-%d%s", stem, out, run, dot ? dot : "");
         } else if (out) snprintf(name, sizeof(name), "%s", out);
-        g_stop = 0;
+        g_stop = g_quit;   /* (a Ctrl-C while waiting ends this one too) */
         session(t, out ? name : NULL, dir, limit);
         pthread_mutex_lock(&g_link_lock); g_link = NULL; pthread_mutex_unlock(&g_link_lock);
         t->close(t);

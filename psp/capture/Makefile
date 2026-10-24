@@ -10,7 +10,7 @@ CFLAGS = -O2 -mno-gpopt -Wall -fno-builtin-printf -MMD -MP
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
 LIBDIR =
-LIBS = -lpspusbbus_driver -lpspusb_driver -lpspctrl_driver -lpsprtc_driver -lpspreg_driver -lpspdisplay_driver -lpspdmac -lpsppower_driver
+LIBS = -lpspusbbus_driver -lpspusb_driver -lpspctrl_driver -lpsprtc_driver -lpspreg_driver -lpspdisplay_driver -lpspdmac -lpsppower_driver -lpspge_driver
 
 PSPSDK = $(shell psp-config --pspsdk-path)
 include $(PSPSDK)/lib/build_prx.mak

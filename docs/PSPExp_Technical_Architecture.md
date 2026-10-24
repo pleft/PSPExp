@@ -977,7 +977,7 @@ plugin, from its start, before the game reserves its channels), copied with its 
 and time into a 96 KB ring and sent between frames. The receiver places each channel's blocks end
 to end (a channel quiet for over 0.25 s starts again at its block's time) and mixes them.
 
-**Control from the receiver** (for testing without hands on the PSP): `"PXCC"`, u32 command, u32
+**Control from the receiver** (for testing without hands on the PSP; also `exp`, `copyprio`, `band`, `tx`, `idle`, `vram`, `gestat`, `ge`: the measurements below): `"PXCC"`, u32 command, u32
 payload bytes. Buttons pressed for the game (its four `sceCtrl` buffer reads redirected; the
 PSP's own save screen takes them too), a file written into `ms0:/seplugins/` (a new plugin, over
 the cable: no USB mode), the log, pause/resume (the game's own frame rate, for comparing), and a
@@ -1003,11 +1003,33 @@ last run's log as `pspexp_capture.log.old`.
 | v11 | watcher and sender above the game's threads | no more frames, the game slower (20–25): back |
 | v12 | copy and send overlapped | the per-frame times showed it: sending 10.5 ms (the link's full speed), copying 22–27 ms in a race; one after the other just over a frame, so every other frame was missed. Overlapped: every frame sent, but the game at 20 fps captured against 30 paused, in the same race: the copy (CPU packing at high priority) cost a third of its speed |
 | v13 | the USB engine reading the frame from VRAM itself | the first frame failed and the link never recovered: it reads main memory only (other capture tools copy out of VRAM first too) |
-| v14 | the DMA ring, 32-bit as drawn, no CPU on the pixels | the title and menus: every frame, 29.4–29.9 a second at 16.7 MB/s in full colour; a race not measured yet |
+| v14 | the DMA ring, 32-bit as drawn, no CPU on the pixels | the title and menus: every frame, 29.4–29.9 a second at 16.7 MB/s in full colour |
+
+**2026-10-24: what costs a race its speed.** Measured in the same race, 20 s each (`exp`, `pause`, per-thread processor time from `sceKernelReferThreadRunStatus`):
+
+| | the game | sent |
+|---|---|---|
+| paused | 30 fps | – |
+| every frame copied out of VRAM, nothing sent (`exp 1`) | 29.9 | – (copier 1.4 ms of CPU a frame) |
+| sending, nothing copied (`exp 2`) | 24.1–24.5 | all |
+| both, 32 KB transfers | 22.7–23.1 | all |
+| both, 64 KB transfers | 23.5–24.7 | all |
+| both, 128 KB transfers (now the default: 2 bands of 128 KB, no short-ending splits) | 24.3–25.1 | all |
+
+The copy is free; the PSP's USB driver spends processor time on every byte it sends (≈7 ms of a frame for 557 KB, only ≈3 ms of it in the plugin's threads: the rest in its interrupts), and Burnout uses all the processor (the idle meter, a thread below everything, got almost nothing). Fewer bytes without processor work would help; what was tried:
+- **the GE redrawing the frame as 16-bit**: no free VRAM in a race (`vram`: two 32-bit frames, depth, textures, one 32 KB block unused); the depth buffer between frames (exactly a 16-bit frame's size) with the GE's transfer engine copying it out was built, but **any list of ours in the game's GE queue froze or switched off the PSP**, even an empty one without a context (`ge 6`). Along the way: Burnout flips from an interrupt (896 of 897 flips), where lists cannot be queued nor threads woken (the flip leaves a note the watcher takes); `sceGeListEnQueueHead` is refused while a list draws and each refusal loses one of the GE's 64 list slots for good (uOFW `ge.c`), until every enqueue fails with 0x80000022;
+- **drawing commands instead of pixels** (`gestat`, the game's lists walked as it queues them): 4,300–5,900 draws, 81–127 KB of commands and 326–420 KB of vertices a frame: about as much as the picture, and walking them slowed the game;
+- **the USB engine reading VRAM** (v13): it cannot;
+- a USB driver of our own (in case the hardware can move data itself): not tried, weeks of reverse engineering.
+
+**System screens.** The PSP's save, load, keyboard and message screens need memory the plugin otherwise holds: Castlevania: The Dracula X Chronicles stopped answering at its name entry (its save could not open). The plugin now gives back its rings (≈350 KB of the kernel's) when one opens (16 `sceUtility` calls caught) and takes them back 1.5 s after it closes: the name entry and its save then went through.
+
+**Open: Castlevania's HOME > Exit switches the PSP off** with the plugin on (cleanly without it), although the plugin's log shows it stopped ("stopped"); Burnout's exits worked. Tried without success: restoring every redirected syscall at the stop (`unredirect_all`), a near-instant stop (no waits: "stopped (the game exits) in 17177 us", and still off). Next guess, untested: the USB stopped while a transfer is in flight (the receiver is always connected now; in the Burnout exits that worked it had usually finished): finish or cancel it before `pspexpUsbStop`. A test that needs no install: stop the receiver before exiting.
 
 **Next:**
-- a race with v14: the game's fps captured against paused, frames sent, late frames; the
-  half-rate stretch seen once on the title (14.9 of 29.6 received) explained;
+- Castlevania's exit (above); until then the plugin stays off on the user's PSP;
+- more games: Castlevania holds 30 of 30 recorded (it runs at 30); Ace Combat X, Bomberman, Crisis Core, Gran Turismo, Jeanne d'Arc, Lunar, Phantasy Star Portable 2 to go, with clips;
+- an adaptive mode: every frame while the game keeps its pace, every other one while it slows (Burnout's races);
 - the ♪ button: hold for a clip of the last 30 s, ♪+START to start/stop recording (the receiver keeps a ring);
 - the receiver as the board's console in a capture mode (clips kept by PSPExp), plus the Mac/Linux tool for people without a board;
 - the shutdown's last log line ("stopped") never appears though the exit works: find which step does not return in time;

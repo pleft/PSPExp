@@ -461,6 +461,14 @@ static int tx_one(const unsigned char *data, int len)
     return len;
 }
 
+/* The size of each transfer, and whether one that ends on a packet boundary is split so both
+ * parts end short (what the runtime's host reads need). PSPExp Capture, built in, sets its own:
+ * a stream the receiver reads without pause, where fewer, larger transfers may cost the PSP less. */
+static int g_tx_chunk = PSPEXP_USB_CHUNK, g_tx_split = 1;
+#ifdef PSPEXP_USB_EMBEDDED
+static void pspexpUsbSetTx(int chunk, int split) { g_tx_chunk = chunk; g_tx_split = split; }
+#endif
+
 int pspexpUsbWrite(const void *data, int len)
 {
     int k1 = pspSdkSetK1(0);
@@ -470,9 +478,10 @@ int pspexpUsbWrite(const void *data, int len)
     if (!g_connected || g_tx_sema < 0) { pspSdkSetK1(k1); return -1; }
     if (sceKernelWaitSema(g_tx_sema, 1, NULL) < 0) { pspSdkSetK1(k1); return -1; }
     while (remaining > 0) {
-        int n = remaining > (int)PSPEXP_USB_CHUNK ? (int)PSPEXP_USB_CHUNK : remaining;
+        int n = remaining > g_tx_chunk ? g_tx_chunk : remaining;
         int r;
-        if (n < (int)PSPEXP_USB_CHUNK && (n % g_packet) == 0) {
+        if (((u32)p & 63) && n > (int)PSPEXP_USB_CHUNK) n = PSPEXP_USB_CHUNK;   /* (copied through g_tx_buf) */
+        if (g_tx_split && n < g_tx_chunk && (n % g_packet) == 0) {
             /* Ends on a packet boundary: split so both transfers end short. */
             r = tx_one(p, n - PSPEXP_USB_SPLIT);
             if (r >= 0) r = tx_one(p + n - PSPEXP_USB_SPLIT, PSPEXP_USB_SPLIT);
