@@ -56,6 +56,8 @@ install -m 755 "$ROOT/scripts/board/pspexp-apt-setup" "$R/usr/share/pspexp/pspex
 for f in Inter-Regular.ttf Inter-SemiBold.ttf lucide.ttf Inter-LICENSE.txt lucide-LICENSE.txt; do
 	install -m 644 "$ROOT/tools/pspexp-term/assets/$f" "$R/usr/share/pspexp/launcher/$f"
 done
+mkdir -p "$R/opt/pspexp/systems"   # the PSP's own games (no emulator: the PSP runs them; architecture §12c)
+install -m 644 "$ROOT/tools/pspexp-term/assets/psp.system" "$R/opt/pspexp/systems/psp.system"
 mkdir -p "$R/usr/share/pspexp/launcher/systems"   # the systems' icons (CC BY 4.0, their LICENSE.txt)
 cp "$ROOT/tools/pspexp-term/assets/systems/"* "$R/usr/share/pspexp/launcher/systems/" && chmod 644 "$R/usr/share/pspexp/launcher/systems/"*
 echo "PSPExp: the PSP as the screen, sound and controller of this board (docs in the PSPExp repository)." > "$R/usr/share/doc/pspexp-core/README"

@@ -38,6 +38,9 @@ int launcher_take_console(void);
 /* 1 once when the user opened Apps > Files: show the file manager, on launcher_files_path when not
  * NULL (Settings > Recording > Videos; cleared as it is read) */
 int launcher_take_files(void);
+/* 1 once with the disc (ISO, CSO, zip on the board) of a PSP game chosen on the PSP shelf: the
+ * console starts it on the PSP, natively */
+int launcher_take_native(char *path, size_t n);
 const char *launcher_files_path(void);
 /* 1 once with the id of a built-in app the user opened (appview.h: "monitor", "store") */
 int launcher_take_app(char *id, size_t n);

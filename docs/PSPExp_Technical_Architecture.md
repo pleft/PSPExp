@@ -1148,9 +1148,14 @@ bound; (3) a plugin device serving the ISO from the stick (the path and the timi
 (4) the same with the USB up early, only connecting; (5) reads over the USB; (6) a long game
 and HOME > Exit.
 
+**The shelf (2026-10-25).** `psp.system` (pspexp-core): the games in `~/roms/psp` on a
+"PSP" shelf, covers from their own icons (read in the background for the game selected; box
+art only without one), "Runs on the PSP"; choosing one hands it to the console
+(`launcher_take_native`), for now a "Not yet" notice (Launcher_and_Boards §6.2). Seen in
+PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are not; PS1
+games in the same folder listed (their covers generated).
+
 **Next:**
-- the launcher's shelf: the PSP system, the board's games with their icons (box art when
-  there is: libretro's "Sony - PlayStation Portable"), checked at 1:1;
 - (A) and (B) above, with the PSP;
 - PS1 games (the PSP's own player, POPS: an EBOOT.PBP made from BIN/CUE), later.
 

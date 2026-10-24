@@ -3645,6 +3645,11 @@ int main(int argc, char **argv)
             }
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
             if (launcher_take_files()) { files_show(launcher_files_path(), 1); swallow(); }
+            {   /* the PSP shelf: its own game, started on the PSP (architecture §12c: being built) */
+                char disc[700];
+                if (launcher_take_native(disc, sizeof(disc)))
+                    notify(NOTE_ATTN, "gamepad", "Not yet: PSP games from the board", "Starting them on the PSP is being built", NULL, "psp-native");
+            }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }
         if (g_app && g_app->take_exit()) {

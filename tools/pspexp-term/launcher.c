@@ -40,6 +40,7 @@
 #include <sys/sysmacros.h>
 #endif
 #include <sys/stat.h>
+#include "../../host/libpspexp/pspexp_disc.h"
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -360,6 +361,7 @@ static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024]
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
 static char g_files_path[512];   /* the folder Files opens on (Settings > Recording > Videos), else its own */
+static char g_native_path[700];  /* a PSP game chosen on the shelf, for the console to start on the PSP */
 static int g_spin_x, g_spin_y, g_spin_drawn;   /* the "Starting" frame's spinner square (draw_running) */
 static LEntry g_running_e;
 /* the controls sheet: shown when a game with control= lines is chosen, X starts it, O goes back */
@@ -397,6 +399,28 @@ static void art_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m
     /* ".nomatch": a miss of the title matching (older ".miss" files were
      * exact-name misses and are ignored, so those ROMs get another try) */
     if (miss) snprintf(miss, m, "%s/.cache/pspexp-launcher/boxart/%s/%s.nomatch", home, L.sys[e->sys].id, stem);
+}
+
+/* a PSP game's own icon (ICON0.PNG, read from its disc on the board), its shelf cover where
+ * there is no box art; ".noicon": none could be read (a PS1 game in the folder, a damaged file) */
+static int is_psp_rom(const LEntry *e) { return e->type == LT_ROM && e->sys >= 0 && !strcmp(L.sys[e->sys].id, "psp"); }
+static void icon_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m)
+{
+    char art[700], *slash;
+    art_paths(e, art, sizeof(art), NULL, 0);
+    slash = strrchr(art, '/');
+    snprintf(png, n, "%.*s/icon0/%s", (int)(slash - art), art, slash + 1);
+    if (miss) snprintf(miss, m, "%.*s.noicon", (int)(strlen(png) - 4), png);
+}
+
+/* the picture for a ROM's cover: its box art; a PSP game's own icon first (the XMB's picture of
+ * it, wide as the disc's window, on the disc itself: box art only for one without); NULL none yet */
+static const char *rom_art(const LEntry *e, char *png, size_t n)
+{
+    struct stat st;
+    if (is_psp_rom(e)) { icon_paths(e, png, n, NULL, 0); if (stat(png, &st) == 0) return png; }
+    art_paths(e, png, n, NULL, 0);
+    return stat(png, &st) == 0 ? png : NULL;
 }
 
 /* The thumbnails' names per system: its directory listing, fetched once into
@@ -521,8 +545,34 @@ static void fetch_poll(uint64_t now)
         }
         return;
     }
-    if (g_nofetch || g_running || !(e = cur_entry()) || e->type != LT_ROM || e->sys < 0 || !L.sys[e->sys].thumbs[0]) return;
+    if (g_running || !(e = cur_entry()) || e->type != LT_ROM || e->sys < 0) return;
     if (now - g_sel_since < 500000u) return;   /* only once the selection rests */
+    if (is_psp_rom(e)) {   /* its own icon first, from its disc (offline, 1 s; a zip's deep one up to 45 s), in a child */
+        char png[700], miss[700];
+        struct stat st;
+        icon_paths(e, png, sizeof(png), miss, sizeof(miss));
+        if (stat(png, &st) == 0) return;   /* (its icon: no box art fetched) */
+        if (stat(miss, &st) != 0) {
+            pid_t pid;
+            char dir[700], *slash;
+            snprintf(dir, sizeof(dir), "%s", png);
+            if ((slash = strrchr(dir, '/'))) {   /* (every level: a fresh home has no ~/.cache/pspexp-launcher yet) */
+                char *q;
+                *slash = 0;
+                for (q = dir + 1; *q; q++) if (*q == '/') { *q = 0; mkdir(dir, 0755); *q = '/'; }
+                mkdir(dir, 0755);
+            }
+            pid = fork();
+            if (pid == 0) {
+                PspExpDiscInfo in;
+                if (pspexp_disc_info(e->exec, &in, png, NULL, 0) < 0 || stat(png, &st) != 0) { FILE *f = fopen(miss, "w"); if (f) fclose(f); }
+                _exit(0);
+            }
+            if (pid > 0) { g_fetch_pid = pid; snprintf(g_fetch_id, sizeof(g_fetch_id), "%s", e->id); }
+            return;
+        }
+    }
+    if (g_nofetch || !L.sys[e->sys].thumbs[0]) return;
     {
         char png[700], miss[700];
         struct stat st;
@@ -567,7 +617,7 @@ static void draw_cover(const LEntry *e, int x, int y, int alpha)
         cs.grad = !strcmp(e->id, "a:files") ? GRAD_FILES : !strcmp(e->id, "a:monitor") ? GRAD_MONITOR : !strcmp(e->id, "a:store") ? GRAD_STORE : !strcmp(e->id, "a:music") ? GRAD_MUSIC : GRAD_TERMINAL;
     }
     if (e->art[0]) cs.art = e->art;
-    else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
+    else if (e->type == LT_ROM && e->sys >= 0) cs.art = rom_art(e, png, sizeof(png));
     gfx_cover(&cs, x, y, alpha);
 }
 
@@ -821,6 +871,12 @@ static void launch(LEntry *e, uint64_t now)
 static void start_entry(LEntry *e, uint64_t now)
 {
     (void)now;
+    if (e->type == LT_ROM && e->sys >= 0 && !strncmp(L.sys[e->sys].exec, "@psp-boot", 9)) {   /* a PSP game: the PSP runs it, not the board */
+        snprintf(g_native_path, sizeof(g_native_path), "%s", e->exec);
+        lib_recent_push(&L, e->id);
+        g_dirty = 1;
+        return;
+    }
     lib_command(&L, e, g_launch_cmd, sizeof(g_launch_cmd));
     snprintf(g_launch_cwd, sizeof(g_launch_cwd), "%s", e->dir[0] ? e->dir : "/");
     g_launch_aware = e->pspexp || strstr(g_launch_cmd, "pspexp-") != NULL;
@@ -852,6 +908,13 @@ void launcher_status(uint64_t now, int *bat, int *chg, int *online)
 
 int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
 int launcher_take_files(void) { int r = g_files_req; g_files_req = 0; return r; }
+int launcher_take_native(char *path, size_t n)
+{
+    if (!g_native_path[0]) return 0;
+    snprintf(path, n, "%s", g_native_path);
+    g_native_path[0] = 0;
+    return 1;
+}
 const char *launcher_files_path(void)
 {
     static char p[512];
@@ -981,6 +1044,7 @@ static const char *graphics_label(const char *g)
     if (!strcmp(g, "opengl")) return "OpenGL, PSP renderer";
     if (!strcmp(g, "opengl-shaders")) return "OpenGL with shaders, PSP renderer";
     if (!strcmp(g, "board-gpu")) return "OpenGL 3, Board GPU renderer";
+    if (!strcmp(g, "native")) return "the PSP's own game, run by the PSP";
     return "";
 }
 
@@ -2118,7 +2182,7 @@ static void human_size(long long b, char *out, size_t n)
 static const char *renderer(const LEntry *e)
 {
     const char *g = e->type == LT_ROM && e->sys >= 0 ? L.sys[e->sys].graphics : e->graphics;
-    return !strcmp(g, "board-gpu") ? "Board GPU renderer" : "PSP renderer";
+    return !strcmp(g, "board-gpu") ? "Board GPU renderer" : !strcmp(g, "native") ? "Runs on the PSP" : "PSP renderer";
 }
 
 static void detail_line(const LEntry *e, char *s, size_t n)
@@ -2166,7 +2230,7 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
         cs.round = 1;
         if (e->art[0]) cs.art = e->art;
-        else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
+        else if (e->type == LT_ROM && e->sys >= 0) cs.art = rom_art(e, png, sizeof(png));
         /* the small disc fades into the large one, which is lifted */
         if (lift < 0.98f) gfx_disc(&cs, cx, cy, 0, (int)((1 - lift) * alpha));
         if (lift > 0.02f) gfx_disc(&cs, cx, cy - (int)lroundf(lift * 4), 1, (int)(lift * alpha));
@@ -2509,7 +2573,7 @@ static void draw_details(float dt)
         memset(&cs, 0, sizeof(cs));
         cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e); cs.round = 1;
         if (e->art[0]) cs.art = e->art;
-        else if (e->type == LT_ROM && e->sys >= 0) { struct stat st; art_paths(e, png, sizeof(png), NULL, 0); if (stat(png, &st) == 0) cs.art = png; }
+        else if (e->type == LT_ROM && e->sys >= 0) cs.art = rom_art(e, png, sizeof(png));
         gfx_disc(&cs, cx + 16 + COVER_SIZE / 2, cy + 16 + COVER_SIZE / 2, 1, a);
     } else draw_cover(e, cx + 16, cy + 16, a);
     tx = cx + 16 + COVER_SIZE + 18; ty = cy + 16; tw = cx + cw - 16 - tx;

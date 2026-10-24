@@ -881,6 +881,20 @@ PSPExp program (`pspexp=1`) it now lets go of the PSP itself and takes it
 back when the program ends, so a program started without `pspexp-exec`
 does not wait for a PSP the launcher holds.
 
+**The PSP's own games (2026-10-25, being built: the architecture's §12c).**
+pspexp-core installs `/opt/pspexp/systems/psp.system`: the board's PSP games
+in `~/roms/psp` (ISO, CSO, or a zip holding an ISO, as collections keep them)
+on a "PSP" shelf under Emulators, with no emulator: `exec=@psp-boot` asks
+the console to have the PSP start the game itself (for now a "Not yet"
+notice), and the line under the shelf says "Runs on the PSP". Their covers
+are their own icons, PSP_GAME/ICON0.PNG read from the disc on the board
+(`pspexp_disc.c`) in the background for the game selected, as box art is
+fetched, into `~/.cache/pspexp-launcher/boxart/psp/icon0/` (`.noicon`: none,
+a PS1 game in the folder); box art (libretro's "Sony - PlayStation
+Portable") only for a game without one. Walked in PPSSPP with six games of
+the Pi 400's collection: the icons on the discs at 1:1, the PS1 one left
+with its generated cover.
+
 ### 6.3 Packages and builds
 
 | Board | Player and core | Built by |

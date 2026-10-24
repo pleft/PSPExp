@@ -1,0 +1,8 @@
+name=PSP
+short=PSP
+icon=gamepad
+roms=~/roms/psp
+ext=iso,cso,zip
+exec=@psp-boot %ROM%
+thumbs=Sony - PlayStation Portable
+graphics=native
