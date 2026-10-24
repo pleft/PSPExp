@@ -179,6 +179,23 @@ static volatile u32 g_changes, g_sent, g_skipped, g_copy_us, g_dma_us, g_send_us
 static volatile int g_dead_gen = -1;     /* the link the receiver stopped reading (its generation) */
 static volatile int g_paused;            /* pause: no frames copied (for comparing) */
 static int g_frames_on = 1;              /* the frames part (F, see read_parts) */
+static u32 g_last_hand;                  /* when the watcher last handed a frame on */
+static volatile u32 g_static;            /* frames not sent: the same as the last one sent */
+
+/* The frame the same as the last one looked at? 1,024 words sampled across it (≈0.2 ms): a game's
+ * loading screen swaps identical frames, and sending them all took the processor time its loading
+ * needed (Gran Turismo: black for minutes at 60 frames a second, normal without the plugin,
+ * 2026-10-24). Such frames are not sent, but for one a second; the receiver holds the last one. */
+static int frame_unchanged(const void *top, int bw, int fmt)
+{
+    static u32 last_a, last_b;
+    const u32 *v = (const u32 *)(((u32)top & 0x1FFFFFFF) | 0x40000000);   /* (uncached: what the GE wrote) */
+    u32 words = (u32)bw * CAP_H * (fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2) / 4, step = words / 1024, i, a = 0, b = 0;
+    for (i = 0; i < words; i += step) { u32 w = v[i]; a += w; b = (b << 1 | b >> 31) ^ w; }
+    if (a == last_a && b == last_b) return 1;
+    last_a = a; last_b = b;
+    return 0;
+}
 static int g_link_on = 1;                /* the USB link part (L) */
 static volatile int g_util_active, g_util_closing;   /* a system screen open (the plugin's memory given back) */
 /* Experiments (exp, from the receiver), to tell what costs the game its speed: 1 the copy alone
@@ -802,7 +819,7 @@ static int send_thread(SceSize args, void *argp)
  * game exiting through its own menu, without HOME, is not covered (few PSP games have one). */
 static int (*g_impose_status)(void);
 static volatile int g_home_paused;
-static u32 g_home_closed_at, g_home_status = 0xFFFFFFFF;
+static u32 g_home_closed_at, g_home_pressed_at, g_home_status = 0xFFFFFFFF;
 
 /* frames and sound stopped, the frame under way finished, the USB driver stopped (the watcher's
  * or the command thread's, never inside a game's exit) */
@@ -820,14 +837,19 @@ static void usb_quiesce(const char *why)
     cap_log("USB stopped (%s) in %u us, frame done %d", why, now_us() - t0, !g_busy);
 }
 
+/* the USB again after the HOME menu: each step on its own, the bus already running not counted as
+ * a failure (as psp-cast found: the system may have left it on). In Gran Turismo every restart
+ * failed with 80243001 when it was all one call, and the receiver never came back (2026-10-24). */
 static void usb_resume(void)
 {
-    int r = sceUsbbdRegister(&g_driver);
-    if (r >= 0) r = pspexpUsbStart();
-    if (r >= 0) { g_usb_up = 1; pspexpUsbSetTx(128 * 1024, 0); }
+    int k1 = pspSdkSetK1(0);
+    int reg = sceUsbbdRegister(&g_driver), bus = sceUsbStart(PSP_USBBUS_DRIVERNAME, 0, 0);
+    int drv = sceUsbStart(PSPEXP_USB_DRIVER_NAME, 0, 0), act = drv >= 0 ? sceUsbActivate(PSPEXP_USB_PID) : -1;
+    pspSdkSetK1(k1);
+    if (drv >= 0 && act >= 0) { g_usb_up = 1; pspexpUsbSetTx(128 * 1024, 0); }
     g_home_paused = 0;
     g_log_hold = 0;
-    cap_log("USB started again: %x", (u32)r);
+    cap_log("USB started again: register %x, bus %x, driver %x, activate %x", (u32)reg, (u32)bus, (u32)drv, (u32)act);
 }
 
 static void home_check(void)
@@ -839,7 +861,10 @@ static void home_check(void)
      * and its top bit did not follow the menu (a crash test, 2026-10-24) */
     if (sceCtrlPeekBufferPositive(&pad, 1) > 0 && (pad.Buttons & PSP_CTRL_HOME)) home = 1;
     if (st != g_home_status) { cap_log("HOME menu status %x", st); g_home_status = st; }
-    if ((st & 0x80000000u) || home) {   /* (the HOME menu open, or opening) */
+    if (home) g_home_pressed_at = now_us() | 1;
+    if ((st & 0x80000000u) || home || (g_home_pressed_at && now_us() - g_home_pressed_at < 5000000)) {
+        /* (the HOME menu open, or HOME pressed in the last 5 s: in Gran Turismo the status' top bit
+         * did not show the menu, 2026-10-24) */
         g_home_closed_at = 0;
         if (!g_home_paused) usb_quiesce(home ? "HOME pressed" : "the HOME menu opened");
     } else if (g_home_paused && !g_util_active) {
@@ -917,7 +942,10 @@ static int capture_thread(SceSize args, void *argp)
                     BAND_BYTES = g_band_req; NBANDS = nb;
                     cap_log("bands of %u KB, %d of them", BAND_BYTES / 1024, NBANDS);
                 }
+                else if (now_us() - g_last_hand < 30000) ;
+                else if (frame_unchanged(top, bw, fmt) && now_us() - g_last_hand < 1000000) g_static++;   /* (30 a second at most: clips are 30 fps, and every frame sent costs the game processor time; Gran Turismo's black loading screens at 60 starved its loading, 2026-10-24) */
                 else if (!g_busy) {   /* to the copier and the sender */
+                    g_last_hand = now_us();
                     g_frame_src = (const unsigned char *)((u32)top & ~0x40000000u);
                     g_frame_bw = bw; g_frame_fmt = fmt;
                     g_frame_seq = seq++; g_frame_changes = g_changes; g_frame_time = now_us();
@@ -933,6 +961,7 @@ static int capture_thread(SceSize args, void *argp)
             u32 g10 = (g_changes - c0) * 10000 / ms, s10 = (g_sent - s0) * 10000 / ms;
             u32 copies = seq - q0, copy_us = copies ? (g_copy_us - u0) / copies : 0;   /* the game's cost, per frame copied */
             u32 dma_us = copies ? (g_dma_us - d0) / copies : 0, sends = g_sent - s0, send_us = sends ? (g_send_us - se0) / sends : 0;
+            cap_log("unchanged frames not sent: %u", g_static);
             cap_log("game %u.%u fps, sent %u.%u fps, skipped %u, late %u, copy %u us (DMA %u), send %u us, USB timeouts %u, format %d, width %d, %s",
                     g10 / 10, g10 % 10, s10 / 10, s10 % 10, g_skipped - k0, g_late - l0, copy_us, dma_us, send_us, g_stats.tx_timeouts - o0, fmt, bw,
                     was_connected ? "connected" : "no receiver");
@@ -957,7 +986,10 @@ static int capture_thread(SceSize args, void *argp)
  * frames (their ring and copy), L the USB link (and its commands and the HOME menu's pause); Z
  * nothing at all, the plugin only loaded; no file, all of them but Z. (Castlevania: The Dracula X Chronicles' exit switched the PSP off with
  * the USB already stopped and every thread at rest, 2026-10-24: one of these, then.) */
-static char g_parts[16] = "SBUXFL";
+#ifndef PSPEXP_CAPTURE_PARTS
+#define PSPEXP_CAPTURE_PARTS "SBUXFL"   /* (a developer build can leave some out: make DEV=1 PARTS=...) */
+#endif
+static char g_parts[16] = PSPEXP_CAPTURE_PARTS;
 static int part_on(char c) { int i; for (i = 0; g_parts[i]; i++) if (g_parts[i] == c) return 1; return 0; }
 
 int module_start(SceSize args, void *argp)

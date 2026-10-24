@@ -15,6 +15,9 @@ LIBS = -lpspusbbus_driver -lpspusb_driver -lpspctrl_driver -lpsprtc_driver -lpsp
 # make DEV=1: a developer build (the log also on the memory stick, new plugins and restarts over the cable)
 ifeq ($(DEV),1)
 CFLAGS += -DPSPEXP_CAPTURE_DEV
+ifneq ($(PARTS),)
+CFLAGS += -DPSPEXP_CAPTURE_PARTS='"$(PARTS)"'
+endif
 endif
 
 PSPSDK = $(shell psp-config --pspsdk-path)

@@ -1033,7 +1033,8 @@ The copy is free; the PSP's USB driver spends processor time on every byte it se
 
 **Next:**
 - the other games, with clips (Castlevania holds 30 of 30 and now exits cleanly);
-- more games: Ace Combat X, Bomberman, Crisis Core, Gran Turismo, Jeanne d'Arc, Lunar, Phantasy Star Portable 2;
+- more games: Ace Combat X holds 30 of 30 (16-bit, 8.4 MB/s); **Gran Turismo stays on black screens with the plugin on** (normal without it): not the frames (still black at one frame a second, the unchanged ones skipped), but twice it went on the moment the plugin's USB link was stopped (HOME, the restart command), and with the link not up at all it reached its first logo, slowly: the link itself, perhaps the Sony vendor and product ID it borrows from PSPExp's runtime (psp-cast, with its own, records GT); also, after HOME the link did not start again (80243001) when its steps were one call: now one by one. Bomberman, Crisis Core, Jeanne d'Arc, Lunar, Phantasy Star Portable 2 untried;
+- 60 fps games (Gran Turismo) make 30 fps clips: the receiver's clip rate to follow the game's, the plugin's cap of 30 frames a second with it;
 - an adaptive mode: every frame while the game keeps its pace, every other one while it slows (Burnout's races);
 - the ♪ button: hold for a clip of the last 30 s, ♪+START to start/stop recording (the receiver keeps a ring);
 - the receiver as the board's console in a capture mode (clips kept by PSPExp), plus the Mac/Linux tool for people without a board;
