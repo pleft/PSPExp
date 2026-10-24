@@ -45,7 +45,13 @@
 #include <string.h>
 #include <stdarg.h>
 
-PSP_MODULE_INFO("PSPExpCapture", PSP_MODULE_KERNEL, 1, 0);
+/* Never stopped or unloaded by the system: a game's exit stops and unloads the modules it can,
+ * and anything still pointing into this one then jumps into freed memory (the PSP switched
+ * itself off on exits: v1-v7 with the threads still running, Castlevania: The Dracula X
+ * Chronicles later with its exit calls still redirected here, 2026-10-24). The system's
+ * restart wipes it instead, as it does psp-cast, a plugin of the same kind (Lucaspcaldeira/
+ * psp-cast: PSP_MODULE_INFO attribute 0x1007). */
+PSP_MODULE_INFO("PSPExpCapture", PSP_MODULE_KERNEL | PSP_MODULE_NO_STOP | PSP_MODULE_SINGLE_LOAD | PSP_MODULE_SINGLE_START, 1, 0);
 PSP_NO_CREATE_MAIN_THREAD();
 
 #define CAP_W 480
@@ -112,13 +118,13 @@ static u32 get32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 
  * every frame); the USB engine reading VRAM itself hung the plugin at the first frame. */
 #define RING_BYTES (256 * 1024)      /* of the kernel's ~450 KB free while a game runs */
 #define MAX_BANDS 8
-static int BAND_BYTES = 128 * 1024, NBANDS = 2;   /* (fewer, larger USB transfers cost the PSP less: 128 KB, 25 fps in a race against 23 at 32 KB) */   /* (the band size can be changed between frames: band) */
+static int BAND_BYTES = 128 * 1024, NBANDS = 2;   /* (fewer, larger USB transfers cost the PSP less: 128 KB, 25 fps in a race against 23 at 32 KB) */
 static volatile int g_band_req;      /* a new band size asked for */
 static unsigned char *g_bands;       /* 64-byte aligned */
 static volatile u32 g_band_len[MAX_BANDS];
 static SceUID g_band_free = -1, g_band_full = -1, g_copy_go = -1;
 static SceUID g_block = -1;
-static volatile int g_busy;            /* a frame on its way: 1 copied by the copier, 2 made by the GE */
+static volatile int g_busy;            /* a frame on its way (copied by the copier, sent by the sender) */
 static const unsigned char *g_frame_src;
 static int g_frame_bw, g_frame_fmt;
 static u32 g_frame_seq, g_frame_changes, g_frame_time;
@@ -131,29 +137,15 @@ static volatile int g_quit;   /* the game is ending */
 static void catch_exit(void);
 static void audio_drop_all(void);
 static int audio_send(void);
-static SceUID g_cap_th = -1, g_send_th = -1, g_copy_th = -1, g_power_th = -1, g_power_cb = -1;
-static int g_power_slot = -1;
+static SceUID g_cap_th = -1, g_send_th = -1, g_copy_th = -1;
 static int g_usb_up;
 static volatile u32 g_changes, g_sent, g_skipped, g_copy_us, g_dma_us, g_send_us, g_late;
 static volatile int g_dead_gen = -1;     /* the link the receiver stopped reading (its generation) */
+static volatile int g_paused;            /* pause: no frames copied (for comparing) */
 static volatile int g_util_active, g_util_closing;   /* a system screen open (the plugin's memory given back) */
 /* Experiments (exp, from the receiver), to tell what costs the game its speed: 1 the copy alone
  * (nothing sent), 2 the sending alone (nothing copied: the ring's stale bytes go out). */
 static volatile int g_exp;
-
-/* the idle meter: a thread below everything, busy while switched on; its processor time is the
- * time nobody else wanted (how much the game leaves free) */
-static volatile int g_idle_on;
-static SceUID g_idle_th = -1;
-static int idle_thread(SceSize args, void *argp)
-{
-    volatile u32 spin;
-    while (!g_quit) {
-        if (!g_idle_on) { sceKernelDelayThread(100000); continue; }
-        for (spin = 0; spin < 10000; spin++) ;
-    }
-    return 0;
-}
 
 /* a thread's processor time so far (us; the PSP counts it per thread) */
 static u32 cpu_us(SceUID th)
@@ -195,158 +187,6 @@ static int take(SceUID sema)
         if (sceKernelWaitSema(sema, 1, &t) >= 0) return 0;
     }
     return -1;
-}
-
-/* ---- the GE makes the frame 16-bit (ge on) ----
- * What costs a game its speed is the sending: the PSP's USB driver spends processor time on every
- * byte (a race: 30 fps alone; copying every frame out of VRAM, nothing sent, 29.9; sending,
- * nothing copied, 24.5; both, 22-23; larger transfers, 25: 2026-10-24). So fewer bytes, with no
- * processor work: when the game flips, two short GE lists are queued, each with
- * a context of its own (the GE's state saved when it starts and restored when it ends, as the
- * PSP's own dialogs draw over a game; PPSSPP GPUCommon does the same): the first redraws the
- * frame as 565 into the game's depth buffer, the second has the GE's transfer engine copy it out,
- * 480 wide, into kernel memory. Between two frames the depth buffer holds nothing (the next frame
- * clears it before drawing), and it is exactly a 16-bit frame's size (VRAM is otherwise full in a
- * race: frames, depth, textures). The GE takes about 2 ms; the USB sends 255 KB, not 557. */
-static volatile int g_gemode;
-static PspGeContext g_ge_ctx_r __attribute__((aligned(16))), g_ge_ctx_t __attribute__((aligned(16)));
-static u32 g_ge_list_r[64] __attribute__((aligned(16))), g_ge_list_t[16] __attribute__((aligned(16)));
-static struct { u16 u, v; s16 x, y, z; } __attribute__((packed)) g_ge_vtx[16] __attribute__((aligned(16)));
-static volatile int g_ge_qid = -1, g_frame_ge;
-static volatile u32 g_ge_frames, g_ge_skipped, g_ge_fail, g_fb_calls, g_fb_intr, g_ge_step, g_ge_wakes;
-static volatile int g_ge_err;
-static volatile u32 g_ge_trace;   /* the first frames after "ge" step by step in the log (a crash shows where) */
-#define GE16_BYTES (CAP_W * CAP_H * 2)
-
-#define GE(c, a) (((u32)(c) << 24) | ((u32)(a) & 0xFFFFFF))
-
-/* the lists for the frame at top (its stride, its format) via the depth buffer at VRAM + z into
- * g_bands; the transfer's queue id, or <0 */
-static int ge_queue(const void *top, int bw, int fmt, u32 z)
-{
-    u32 src = (u32)top & 0x1FFFFFFF, vtx = (u32)g_ge_vtx & 0x1FFFFFFF, zb = 0x04000000 + z;
-    u32 dst = (u32)g_bands & 0x1FFFFFFF, *l = g_ge_list_r;
-    int i, n = 0, qt, qr;
-    PspGeListArgs args;
-    for (i = 0; i < CAP_W; i += 64, n += 2) {   /* strips 64 wide (the texture cache's liking) */
-        int x1 = i + 64 < CAP_W ? i + 64 : CAP_W;
-        g_ge_vtx[n].u = i; g_ge_vtx[n].v = 0; g_ge_vtx[n].x = i; g_ge_vtx[n].y = 0; g_ge_vtx[n].z = 0;
-        g_ge_vtx[n + 1].u = x1; g_ge_vtx[n + 1].v = CAP_H; g_ge_vtx[n + 1].x = x1; g_ge_vtx[n + 1].y = CAP_H; g_ge_vtx[n + 1].z = 0;
-    }
-    *l++ = GE(0x10, (vtx >> 8) & 0x0F0000);            /* BASE */
-    *l++ = GE(0x12, 2 | (2 << 7) | (1 << 23));         /* VERTEXTYPE: 16-bit UV and XYZ, through */
-    *l++ = GE(0x9C, z);                                /* FRAMEBUFPTR: the depth buffer */
-    *l++ = GE(0x9D, 512);                              /* FRAMEBUFWIDTH */
-    *l++ = GE(0xD2, 0);                                /* FRAMEBUFPIXFORMAT: 565 */
-    *l++ = GE(0x15, 0); *l++ = GE(0x16, (CAP_W - 1) | ((CAP_H - 1) << 10));   /* REGION */
-    *l++ = GE(0xD4, 0); *l++ = GE(0xD5, (CAP_W - 1) | ((CAP_H - 1) << 10));   /* SCISSOR */
-    *l++ = GE(0x4C, 0); *l++ = GE(0x4D, 0);            /* OFFSETX, OFFSETY */
-    *l++ = GE(0x17, 0); *l++ = GE(0x1D, 0); *l++ = GE(0x1F, 0); *l++ = GE(0x20, 0);   /* no lighting, cull, fog, dither */
-    *l++ = GE(0x21, 0); *l++ = GE(0x22, 0); *l++ = GE(0x23, 0); *l++ = GE(0x24, 0);   /* no blend, alpha, depth, stencil tests */
-    *l++ = GE(0x25, 0); *l++ = GE(0x27, 0); *l++ = GE(0x28, 0); *l++ = GE(0xD3, 0);   /* no antialias, colour test, logic op, clear mode */
-    *l++ = GE(0xE7, 1); *l++ = GE(0xE8, 0); *l++ = GE(0xE9, 0);                       /* no depth writes; all colour bits */
-    *l++ = GE(0x1E, 1);                                /* TEXTUREMAPENABLE */
-    *l++ = GE(0xC0, 0); *l++ = GE(0xC2, 0); *l++ = GE(0xC3, fmt);   /* UV mapping; plain, one level; the frame's format */
-    *l++ = GE(0xA0, src); *l++ = GE(0xA8, bw | ((src >> 8) & 0x0F0000));   /* TEXADDR0, TEXBUFWIDTH0 */
-    *l++ = GE(0xB8, 9 | (9 << 8));                     /* TEXSIZE0: 512x512 (the frame inside) */
-    *l++ = GE(0xC6, 0); *l++ = GE(0xC7, 1 | (1 << 8)); *l++ = GE(0xC8, 0);   /* nearest, clamped, level 0 */
-    *l++ = GE(0xC9, 3);                                /* TEXFUNC: replace */
-    *l++ = GE(0xCB, 0);                                /* TEXFLUSH */
-    *l++ = GE(0x01, vtx);                              /* VADDR */
-    *l++ = GE(0x04, (6 << 16) | n);                    /* PRIM: sprites */
-    *l++ = GE(0x0F, 0); *l++ = GE(0x0C, 0);            /* FINISH, END */
-    l = g_ge_list_t;                                   /* the copy out, 480 wide, into the ring's memory */
-    *l++ = GE(0xB2, zb); *l++ = GE(0xB3, 512 | ((zb >> 8) & 0x0F0000));    /* TRXSBP, TRXSBW */
-    *l++ = GE(0xB4, dst); *l++ = GE(0xB5, CAP_W | ((dst >> 8) & 0x0F0000));  /* TRXDBP, TRXDBW */
-    *l++ = GE(0xEB, 0); *l++ = GE(0xEC, 0);            /* TRXSPOS, TRXDPOS */
-    *l++ = GE(0xEE, (CAP_W - 1) | ((CAP_H - 1) << 10));   /* TRXSIZE */
-    *l++ = GE(0xEA, 0);                                /* TRXKICK: 16-bit */
-    *l++ = GE(0x0F, 0); *l++ = GE(0x0C, 0);
-    sceKernelDcacheWritebackRange(g_ge_list_r, sizeof(g_ge_list_r));
-    sceKernelDcacheWritebackRange(g_ge_list_t, sizeof(g_ge_list_t));
-    sceKernelDcacheWritebackRange(g_ge_vtx, sizeof(g_ge_vtx));
-    sceKernelDcacheWritebackInvalidateRange(g_bands, GE16_BYTES);   /* (nothing of ours cached over what the GE writes) */
-    /* queued at the back, the drawing then the copy: they run as soon as the game's list now
-     * drawing ends, which leaves the depth buffer free, and before the game's list for the frame
-     * after next (queued behind them), which draws into this frame's buffer again. (At the front,
-     * sceGeListEnQueueHead, is refused while a list draws, and each refusal loses one of the GE's
-     * 64 list slots for good, as uOFW's ge.c shows: after 64 every enqueue failed, 2026-10-24.) */
-    qr = qt = 0;
-    if (g_gemode >= 4) {   /* fault finding: 4 an empty list with a context, 5 the drawing without one, 6 an empty one without */
-        static u32 empty[4] __attribute__((aligned(16)));
-        empty[0] = GE(0x0F, 0); empty[1] = GE(0x0C, 0);
-        sceKernelDcacheWritebackRange(empty, sizeof(empty));
-        memset(&args, 0, sizeof(args)); args.size = sizeof(args); args.context = &g_ge_ctx_r;
-        g_ge_step = 3;
-        qr = sceGeListEnQueue(g_gemode == 5 ? (void *)g_ge_list_r : (void *)empty, NULL, -1, g_gemode == 4 ? &args : NULL);
-        g_ge_step = 4; g_ge_err = qr;
-        if (g_ge_trace) cap_log("GE frame %u: test %d queued: %x", g_ge_frames, g_gemode, (u32)qr);
-        return qr;
-    }
-    if (g_gemode & 1) {   /* (ge 1: only the drawing, ge 2: only the copy, ge 3: both; the steps found a crash) */
-        memset(&args, 0, sizeof(args)); args.size = sizeof(args); args.context = &g_ge_ctx_r;
-        g_ge_step = 3;
-        qr = sceGeListEnQueue(g_ge_list_r, NULL, -1, &args);
-        g_ge_step = 4; g_ge_err = qr;
-        if (g_ge_trace) cap_log("GE frame %u: drawing queued: %x (top %x, z %x)", g_ge_frames, (u32)qr, (u32)top, z);
-        if (qr < 0) return qr;
-        qt = qr;
-    }
-    if (g_gemode & 2) {
-        memset(&args, 0, sizeof(args)); args.size = sizeof(args); args.context = &g_ge_ctx_t;
-        g_ge_step = 5;
-        qt = sceGeListEnQueue(g_ge_list_t, NULL, -1, &args);
-        g_ge_step = 6; if (qt < 0) g_ge_err = qt;
-        if (g_ge_trace) cap_log("GE frame %u: copy queued: %x", g_ge_frames, (u32)qt);
-        if (qt < 0) { if (qr > 0) sceGeListSync(qr, 0); return qt; }
-    }
-    return qt;
-}
-
-/* the game's flip: the frame it just finished is handed to the GE (ge on). Burnout Legends flips
- * from an interrupt (896 of 897 flips, 2026-10-24), where lists cannot be queued and no thread can
- * be woken (an event flag set there never woke one: the plugin stalled): the flip only leaves a
- * note, and the watcher, awake at every refresh, queues the lists (ge_take). Either way they run
- * before the game draws into that frame again: it is shown until the next flip, and the game's
- * list for the frame after next is queued behind them. */
-static volatile int g_paused, g_ge_pending;
-static const void *volatile g_ge_top;
-static volatile int g_ge_bw, g_ge_fmt;
-static int (*o_setfb)(void *, int, int, int);
-static int h_setfb(void *top, int bw, int fmt, int sync)
-{
-    int r = o_setfb(top, bw, fmt, sync);
-    g_fb_calls++;
-    if (sceKernelIsIntrContext()) g_fb_intr++;
-    if (r >= 0 && g_gemode && top && !g_paused && !g_util_active && pspexpUsbConnected() && (int)g_generation != g_dead_gen) {
-        if (g_busy) g_ge_skipped++;
-        else {
-            g_ge_top = top; g_ge_bw = bw; g_ge_fmt = fmt;
-            g_frame_time = now_us(); g_frame_changes = g_changes;
-            g_busy = 2;   /* (2: the GE's; 1: the copier's, a frame the sender takes band by band) */
-            g_ge_pending = 1;
-        }
-    }
-    return r;
-}
-
-/* the noted frame's lists queued (the watcher's, at a refresh) */
-static void ge_take(void)
-{
-    const unsigned char *top = g_ge_top;
-    u32 z, tb, te;
-    int q;
-    g_ge_pending = 0; g_ge_wakes++; g_ge_step = 1;
-    z = sceGeGetCmd(0x9E) & 0xFFFFF0;
-    g_ge_step = 2;
-    tb = (u32)top & 0x1FFFFF; te = tb + (u32)g_ge_bw * CAP_H * (g_ge_fmt == 3 ? 4 : 2);
-    if (z + 512 * CAP_H * 2 > 0x200000 || (z < te && z + 512 * CAP_H * 2 > tb)) { g_ge_fail++; g_busy = 0; return; }   /* (no depth buffer of its own) */
-    q = ge_queue(top, g_ge_bw, g_ge_fmt, z);
-    if (q < 0) { g_ge_fail++; g_busy = 0; return; }
-    g_ge_qid = q; g_frame_ge = 1;
-    g_frame_bw = CAP_W; g_frame_fmt = PSP_DISPLAY_PIXEL_FORMAT_565;
-    g_frame_seq = g_ge_frames++;
-    sceKernelSetEventFlag(g_send_ev, SEND_FRAME);
 }
 
 /* VRAM as the game uses it: its GE addresses, and a fingerprint of every 32 KB of the 2 MB
@@ -516,30 +356,15 @@ static int h_src_out(int vol, void *buf)
 u32 sctrlHENFindFunction(char *modname, char *libname, u32 nid);
 void sctrlHENPatchSyscall(void *addr, void *newaddr);
 
-/* a user syscall of the firmware's, through the plugin: its own address kept in *orig, and the
- * pair kept so the plugin can put every one back when it stops (unredirect_all) */
-static struct { void *orig, *hook; } g_redirects[64];
-static int g_nredirects;
+/* a user syscall of the firmware's, through the plugin: its own address kept in *orig */
 
 static int redirect(const char *mod, const char *lib, u32 nid, void *hook, void *orig)
 {
     void *f = (void *)sctrlHENFindFunction((char *)mod, (char *)lib, nid);
-    if (!f || g_nredirects >= 64) return 0;
+    if (!f) return 0;
     *(void **)orig = f;
     sctrlHENPatchSyscall(f, hook);
-    g_redirects[g_nredirects].orig = f; g_redirects[g_nredirects].hook = hook; g_nredirects++;
     return 1;
-}
-
-/* The firmware's own calls back in place: nothing of the plugin runs once it has stopped. A game
- * that opened a system screen on its way out (Castlevania: The Dracula X Chronicles) ran the
- * plugin's screen handling after the plugin had given back its memory, which then gave it back a
- * second time: the PSP switched off on HOME > Exit (2026-10-24). */
-static void unredirect_all(void)
-{
-    int i;
-    for (i = 0; i < g_nredirects; i++) sctrlHENPatchSyscall(g_redirects[i].hook, g_redirects[i].orig);
-    g_nredirects = 0;
 }
 
 static void catch_audio(void)
@@ -559,148 +384,6 @@ static void catch_audio(void)
     n += redirect("sceAudio_Driver", "sceAudio", 0x38553111, h_src_reserve, &o_src_reserve); /* sceAudioSRCChReserve */
     n += redirect("sceAudio_Driver", "sceAudio", 0xE0727056, h_src_out, &o_src_out);      /* ...SRCOutputBlocking */
     cap_log("sound: %d of 12 calls caught, a %u KB ring", n, AUDIO_RING / 1024);
-}
-
-/* ---- measuring the game's drawing commands (a feasibility test, 2026-10-24) ----
- * Instead of the finished picture, the game's GE commands could be recorded and drawn again on the
- * receiver (PPSSPP can replay a GE frame dump), at any resolution. Whether that is lighter than a
- * 557 KB frame depends on how much the game hands the GE each frame: this walks every command
- * list the game queues or extends (its calls caught as the sound ones) and adds up, per frame, the
- * command bytes, the vertex bytes behind each draw, the textures used for the first time (in main
- * memory: they would have to be sent once; in VRAM: drawn by the game itself) and the game's own
- * block transfers. On only while switched on (gestat); the walk's own time is counted too. */
-static volatile int g_gestat;
-static volatile u32 g_gs_lists, g_gs_cmds, g_gs_prims, g_gs_vtx, g_gs_idx, g_gs_tex_ram, g_gs_tex_vram, g_gs_trx, g_gs_clut, g_gs_us, g_gs_bad;
-static struct { int qid; u32 pos, base, offset, vtype, tme, tbp, tbw, tsize, tpsm, cbp, trx_src, trx_size, trx_bw; } g_gl[8];
-#define TEXSEEN 2048
-static u32 g_texseen[TEXSEEN];
-
-static int addr_ok(u32 a) { a &= 0x1FFFFFFF; return (a >= 0x08000000 && a < 0x0A000000) || (a >= 0x04000000 && a < 0x04200000); }
-static u32 rd(u32 a) { return *(volatile u32 *)((a & 0x1FFFFFFF) | 0x80000000); }   /* (cached, as the game wrote it) */
-
-static u32 vtx_size(u32 vt)
-{
-    static const u8 tcs[4] = {0, 1, 2, 4}, cs[8] = {0, 0, 0, 0, 2, 2, 2, 4}, ns[4] = {0, 1, 2, 4};
-    u32 size = 0, big = 1, c, wc = ((vt >> 14) & 7) + 1;
-#define ADD(n, each) do { c = (each); if (c) { size = (size + c - 1) & ~(c - 1); size += (n) * c; if (c > big) big = c; } } while (0)
-    ADD(wc, tcs[(vt >> 9) & 3]);    /* weights */
-    ADD(2, tcs[vt & 3]);            /* texture coordinates */
-    ADD(1, cs[(vt >> 2) & 7]);      /* colour */
-    ADD(3, ns[(vt >> 5) & 3]);      /* normal */
-    ADD(3, ns[(vt >> 7) & 3]);      /* position */
-#undef ADD
-    return (size + big - 1) & ~(big - 1);
-}
-
-static void tex_used(u32 tbp, u32 tbw, u32 tsize, u32 tpsm)
-{
-    u32 addr = (tbp & 0xFFFFF0) | ((tbw << 8) & 0x0F000000), key = addr ^ (tsize << 4) ^ tpsm, h = (key * 2654435761u) >> 21, i;
-    u32 w = 1u << (tsize & 15), hh = 1u << ((tsize >> 8) & 15);
-    static const u8 bits[11] = {16, 16, 16, 32, 4, 8, 16, 32, 4, 8, 8};
-    for (i = 0; i < 16; i++, h = (h + 1) % TEXSEEN) {
-        if (g_texseen[h] == key) return;
-        if (!g_texseen[h]) break;
-    }
-    if (i == 16) return;
-    g_texseen[h] = key;
-    if ((addr & 0x1FFFFFFF) < 0x08000000) g_gs_tex_vram++;
-    else g_gs_tex_ram += w * hh * bits[tpsm < 11 ? tpsm : 3] / 8;
-}
-
-/* the commands of list slot k from its position up to `stop` (0: until END) */
-static void gs_walk(int k, u32 stop)
-{
-    u32 pc = g_gl[k].pos, stack[16], n = 0;
-    int sp = 0;
-    u32 t = now_us();
-    while (n++ < 200000) {
-        u32 op, cmd, arg, target;
-        if (stop && pc == stop && sp == 0) break;
-        if (!addr_ok(pc)) { g_gs_bad++; break; }
-        op = rd(pc); cmd = op >> 24; arg = op & 0xFFFFFF;
-        pc += 4; g_gs_cmds++;
-        target = (((g_gl[k].base << 8) & 0x0F000000) | arg) + g_gl[k].offset;
-        switch (cmd) {
-        case 0x10: g_gl[k].base = arg; break;                              /* BASE */
-        case 0x13: g_gl[k].offset = arg << 8; break;                       /* OFFSETADDR */
-        case 0x14: g_gl[k].offset = pc - 4; break;                         /* ORIGIN */
-        case 0x12: g_gl[k].vtype = arg; break;                             /* VERTEXTYPE */
-        case 0x1E: g_gl[k].tme = arg & 1; break;
-        case 0xA0: g_gl[k].tbp = arg; break;
-        case 0xA8: g_gl[k].tbw = arg; break;
-        case 0xB8: g_gl[k].tsize = arg; break;
-        case 0xC3: g_gl[k].tpsm = arg & 15; break;
-        case 0xC4: g_gs_clut += (arg & 0x3F) * 32; break;                  /* LOADCLUT: 32-byte blocks */
-        case 0xB2: g_gl[k].trx_src = arg; break;
-        case 0xB3: g_gl[k].trx_bw = arg; break;
-        case 0xEE: g_gl[k].trx_size = arg; break;
-        case 0xEA:                                                         /* TRANSFERSTART */
-            g_gs_trx += ((g_gl[k].trx_size & 0x3FF) + 1) * (((g_gl[k].trx_size >> 10) & 0x3FF) + 1) * (arg & 1 ? 4 : 2);
-            break;
-        case 0x04: case 0x05: case 0x06: {                                 /* PRIM, BEZIER, SPLINE */
-            u32 count = cmd == 0x04 ? arg & 0xFFFF : (arg & 0xFF) * ((arg >> 8) & 0xFF);
-            u32 vt = g_gl[k].vtype, morph = ((vt >> 18) & 7) + 1, ix = (vt >> 11) & 3;
-            g_gs_prims++;
-            g_gs_vtx += count * vtx_size(vt) * morph;   /* (indexed: every reference, an upper bound) */
-            if (ix) g_gs_idx += count * (ix == 1 ? 1 : 2);
-            if (g_gl[k].tme) tex_used(g_gl[k].tbp, g_gl[k].tbw, g_gl[k].tsize, g_gl[k].tpsm);
-            break;
-        }
-        case 0x08: pc = target; break;                                     /* JUMP */
-        case 0x0A: if (sp < 16) { stack[sp++] = pc; pc = target; } break;  /* CALL */
-        case 0x0B: if (sp > 0) pc = stack[--sp]; break;                    /* RET */
-        case 0x0C: if (sp == 0) goto done; break;                          /* END */
-        }
-    }
-done:
-    g_gl[k].pos = pc;
-    g_gs_us += now_us() - t;
-}
-
-static int gs_slot(int qid)
-{
-    int k;
-    for (k = 0; k < 8; k++) if (g_gl[k].qid == qid) return k;
-    return -1;
-}
-
-static int (*o_ge_enq)(const void *, void *, int, void *), (*o_ge_enqh)(const void *, void *, int, void *), (*o_ge_stall)(int, void *);
-static int gs_enqueued(int qid, const void *list, void *stall)
-{
-    static int next;
-    int k;
-    if (qid < 0 || !g_gestat) return qid;
-    k = next++ % 8;
-    memset(&g_gl[k], 0, sizeof(g_gl[k]));
-    g_gl[k].qid = qid; g_gl[k].pos = (u32)list;
-    g_gs_lists++;
-    {
-        int k1 = pspSdkSetK1(0);
-        gs_walk(k, stall ? (u32)stall : 0);
-        pspSdkSetK1(k1);
-    }
-    return qid;
-}
-static int h_ge_enq(const void *l, void *st, int cb, void *a) { return gs_enqueued(o_ge_enq(l, st, cb, a), l, st); }
-static int h_ge_enqh(const void *l, void *st, int cb, void *a) { return gs_enqueued(o_ge_enqh(l, st, cb, a), l, st); }
-static int h_ge_stall(int qid, void *stall)
-{
-    int r = o_ge_stall(qid, stall), k;
-    if (r >= 0 && g_gestat && (k = gs_slot(qid)) >= 0) {
-        int k1 = pspSdkSetK1(0);
-        gs_walk(k, (u32)stall);
-        pspSdkSetK1(k1);
-    }
-    return r;
-}
-
-static void catch_ge(void)
-{
-    int n = 0;
-    n += redirect("sceGE_Manager", "sceGe_user", 0xAB49E76A, h_ge_enq, &o_ge_enq);      /* sceGeListEnQueue */
-    n += redirect("sceGE_Manager", "sceGe_user", 0x1C0D95A6, h_ge_enqh, &o_ge_enqh);    /* ...EnQueueHead */
-    n += redirect("sceGE_Manager", "sceGe_user", 0xE0D68148, h_ge_stall, &o_ge_stall);  /* ...UpdateStallAddr */
-    cap_log("GE lists: %d of 3 calls caught", n);
 }
 
 /* ---- the PSP's own screens: the plugin gives its memory back meanwhile ----
@@ -798,13 +481,10 @@ static void catch_util(void)
 #define CMD_RESTART 4
 #define CMD_PAUSE 5      /* u32 1: no frames copied (the game's own frame rate, for comparing), 0: again */
 #define CMD_VRAM 7       /* reply: the GE's buffer addresses and VRAM's 32 KB fingerprints */
-#define CMD_GESTAT 9     /* u32 1: measure the game's GE commands (gestat), 0: not */
 #define CMD_EXP 10       /* u32 the experiment (g_exp) */
 #define CMD_COPYPRIO 11  /* u32 the copier's priority */
 #define CMD_BAND 12      /* u32 the band size (32, 64 or 128 KB) */
 #define CMD_TX 13        /* u32 the transfer size, u32 split (see pspexpUsbSetTx) */
-#define CMD_IDLE 14      /* u32 1: the idle meter on */
-#define CMD_GE 8         /* u32 1: the GE makes each frame 16-bit (g_gemode), 0: copied as drawn */
 static volatile u32 g_pad_buttons, g_pad_until, g_pad_reads;
 static SceUID g_cmd_th = -1;
 
@@ -915,6 +595,7 @@ void sctrlSESetUmdFile(char *file);
 int sctrlSEGetBootConfFileIndex(void);
 void sctrlSESetBootConfFileIndex(int index);
 static void cap_shutdown(const char *why);
+static void usb_quiesce(const char *why);
 
 /* the running game started again from its ISO, as PRO's own menu starts one (Vshctrl
  * virtual_pbp.c): the ISO and the driver mode stay as they are */
@@ -929,7 +610,7 @@ static int cmd_restart(void)
     strncpy(iso, f, sizeof(iso) - 1);
     cap_log("restarting %s (mode %d)", iso, mode);
     cmd_reply("PXCR", CMD_RESTART, 0, NULL, 0);
-    cap_shutdown("the game restarts");
+    usb_quiesce("the game restarts");   /* (as the restarts did all along: the USB stopped from the plugin's thread first) */
     sctrlSESetUmdFile(iso);
     sctrlSESetBootConfFileIndex(mode);
     memset(&param, 0, sizeof(param));
@@ -961,9 +642,6 @@ static int cmd_thread(SceSize args, void *argp)
         } else if (cmd == CMD_PAUSE && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
             g_paused = get32(g_cmd_buf) != 0;
             cap_log(g_paused ? "paused" : "capturing again");
-        } else if (cmd == CMD_GESTAT && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
-            g_gestat = get32(g_cmd_buf) != 0;
-            cap_log(g_gestat ? "measuring the GE commands" : "not measuring the GE commands");
         } else if (cmd == CMD_EXP && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
             g_exp = (int)get32(g_cmd_buf);
             cap_log("experiment %d (1 the copy alone, 2 the sending alone)", g_exp);
@@ -976,15 +654,9 @@ static int cmd_thread(SceSize args, void *argp)
         } else if (cmd == CMD_TX && len >= 8 && cmd_read(g_cmd_buf, 8) == 0) {
             u32 c = get32(g_cmd_buf);
             if (c >= 4096 && c <= 262144) { pspexpUsbSetTx((int)c, get32(g_cmd_buf + 4) != 0); cap_log("transfers of up to %u KB, split %u", c / 1024, get32(g_cmd_buf + 4)); }
-        } else if (cmd == CMD_IDLE && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
-            g_idle_on = get32(g_cmd_buf) != 0;
         } else if (cmd == CMD_VRAM) {
             vram_probe(g_top);
             cmd_reply("PXCR", CMD_VRAM, 0, g_vram_info, sizeof(g_vram_info));
-        } else if (cmd == CMD_GE && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
-            g_gemode = (int)(get32(g_cmd_buf) & 7);
-            g_ge_trace = 3;
-            cap_log("GE mode %d (1 the drawing only, 2 the copy only, 3 both; 0 frames copied as drawn)", g_gemode);
         } else if (cmd == CMD_RESTART) {
             cmd_reply("PXCR", CMD_RESTART, cmd_restart(), NULL, 0);
         }
@@ -1011,27 +683,7 @@ static int send_thread(SceSize args, void *argp)
         r = audio_send();
         sceKernelSignalSema(g_tx_lock, 1);
         if (r < 0) { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); g_busy = 0; continue; }
-        if (g_busy && g_frame_ge) {   /* the GE's 16-bit frame: once its copy out has run */
-            unsigned char *h = g_hdr;
-            u32 ts = now_us();
-            r = sceGeListSync(g_ge_qid, 0) >= 0;
-            if (g_ge_trace) { cap_log("GE frame %u: done (%d)", g_frame_seq, r); g_ge_trace--; }
-            if (!(g_gemode & 2) || g_gemode >= 4) {   /* (ge 1 and the tests: nothing to send) */
-                g_frame_ge = 0; g_busy = 0;
-                continue;
-            }
-            memset(h, 0, 32);
-            memcpy(h, "PXCF", 4);
-            put16(h + 4, CAP_W); put16(h + 6, CAP_H); put16(h + 8, PSP_DISPLAY_PIXEL_FORMAT_565);
-            put32(h + 12, g_frame_seq); put32(h + 16, g_frame_changes); put32(h + 20, g_frame_time); put32(h + 24, GE16_BYTES);
-            sceKernelWaitSema(g_tx_lock, 1, NULL);
-            if (r) r = pspexpUsbWrite(h, 32) >= 0 && pspexpUsbWrite(g_bands, GE16_BYTES) >= 0;
-            sceKernelSignalSema(g_tx_lock, 1);
-            if (r) { g_sent++; g_send_us += now_us() - ts; }
-            else { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); }
-            g_frame_ge = 0;
-            g_busy = 0;
-        } else if (g_busy == 1) {   /* the frame's header, then its bands as the copier fills them */
+        if (g_busy == 1) {   /* the frame's header, then its bands as the copier fills them */
             unsigned char *h = g_hdr;
             int bpp = g_frame_fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2;
             int rows = BAND_BYTES / (g_frame_bw * bpp), y, k = 0;
@@ -1058,28 +710,58 @@ static int send_thread(SceSize args, void *argp)
     return 0;
 }
 
-/* the PSP's power events in the log (a PSP found switched off after a capture, 2026-10-23: the log
- * stopped 30 s after the receiver did, nothing wrong before it; asleep, or switched off?) */
-static int power_cb(int unknown, int flags, void *arg)
+/* ---- the HOME menu: the USB stopped before a game can exit ----
+ * Every exit with frames still streaming switched the PSP off (Castlevania: The Dracula X
+ * Chronicles, six times, 2026-10-24), whether the plugin then stopped its USB at once, cancelled
+ * its transfers first, or left everything running; every exit with the receiver no longer reading
+ * went well (Burnout Legends). Stopping the USB from the plugin's own thread while a game simply
+ * runs has always gone well (the restart command, dozens of times, frames streaming). So the
+ * watcher looks at the HOME menu every refresh (sceImposeGetStatus, bit 0: the menu is open, as
+ * RemoteJoyLite and remotejoy-minus read it; PRO resolves the NID for 6.60) and, when it opens,
+ * lets the frame under way finish, then stops the USB; the receiver sees the PSP go. Back in the
+ * game (the menu closed for half a second), the USB starts again and the receiver reconnects. A
+ * game exiting through its own menu, without HOME, is not covered (few PSP games have one). */
+static int (*g_impose_status)(void);
+static volatile int g_home_paused;
+static u32 g_home_closed_at, g_home_status = 0xFFFFFFFF;
+
+/* frames and sound stopped, the frame under way finished, the USB driver stopped (the watcher's
+ * or the command thread's, never inside a game's exit) */
+static void usb_quiesce(const char *why)
 {
-    if (flags & PSP_POWER_CB_POWER_SWITCH) cap_log("power: the power switch");
-    if (flags & PSP_POWER_CB_HOLD_SWITCH) cap_log("power: the hold switch");
-    if (flags & PSP_POWER_CB_STANDBY) cap_log("power: standby (switching off)");
-    if (flags & PSP_POWER_CB_SUSPENDING) cap_log("power: going to sleep");
-    if (flags & PSP_POWER_CB_RESUME_COMPLETE) cap_log("power: woke up");
-    if (flags & PSP_POWER_CB_BATTERY_LOW) cap_log("power: battery low");
-    return 0;
+    u32 t0 = now_us();
+    int i, locked;
+    SceUInt t = 300000;
+    g_home_paused = 1;   /* (the watcher hands no more frames) */
+    for (i = 0; i < 60 && g_busy; i++) sceKernelDelayThread(5000);   /* (its last bands sent, not cancelled) */
+    locked = g_tx_lock >= 0 && sceKernelWaitSema(g_tx_lock, 1, &t) >= 0;
+    if (g_usb_up) { pspexpUsbStop(); sceUsbbdUnregister(&g_driver); g_usb_up = 0; }
+    if (locked) sceKernelSignalSema(g_tx_lock, 1);
+    cap_log("USB stopped (%s) in %u us, frame done %d", why, now_us() - t0, !g_busy);
 }
 
-static int power_thread(SceSize args, void *argp)
+static void usb_resume(void)
 {
-    int slot, r = -1;
-    g_power_cb = sceKernelCreateCallback("PSPExpCapturePower", power_cb, NULL);
-    for (slot = 15; slot >= 0 && r < 0; slot--)   /* (-1, any free slot, is refused in kernel mode: 80000004) */
-        if ((r = scePowerRegisterCallback(slot, g_power_cb)) >= 0) g_power_slot = slot;
-    cap_log("power callback: %x in slot %d", (u32)r, g_power_slot);
-    while (!g_quit) sceKernelDelayThreadCB(200000);
-    return 0;
+    int r = sceUsbbdRegister(&g_driver);
+    if (r >= 0) r = pspexpUsbStart();
+    if (r >= 0) { g_usb_up = 1; pspexpUsbSetTx(128 * 1024, 0); }
+    g_home_paused = 0;
+    cap_log("USB started again: %x", (u32)r);
+}
+
+static void home_check(void)
+{
+    u32 st;
+    if (!g_impose_status) return;
+    st = (u32)g_impose_status();
+    if (st != g_home_status) { cap_log("HOME menu status %x", st); g_home_status = st; }
+    if (st & 1) {
+        g_home_closed_at = 0;
+        if (!g_home_paused) usb_quiesce("the HOME menu opened");
+    } else if (g_home_paused && !g_util_active) {
+        if (!g_home_closed_at) g_home_closed_at = now_us() | 1;
+        else if (now_us() - g_home_closed_at > 500000) { g_home_closed_at = 0; usb_resume(); }
+    }
 }
 
 /* the watcher: every screen refresh, the frame shown; a new one counted (the game's frame rate)
@@ -1097,17 +779,11 @@ static int capture_thread(SceSize args, void *argp)
     if (part < 0) return 0;
     g_copy_th = sceKernelCreateThread("PSPExpCaptureCopy", copy_thread, 0x19, 0x2000, 0, NULL);
     if (g_copy_th >= 0) sceKernelStartThread(g_copy_th, 0, NULL);
-    g_idle_th = sceKernelCreateThread("PSPExpCaptureIdle", idle_thread, 0x7E, 0x800, 0, NULL);
-    if (g_idle_th >= 0) sceKernelStartThread(g_idle_th, 0, NULL);
     {   /* the sender just below the watcher (at 0x60, below the game's threads, a race got 14 frames
          * of 28 a second sent; 0x1A, 14-23; above the game's threads, 0x11 with the watcher at
          * 0x10, no more frames and the game itself slower, 20-25 fps: 2026-10-23) */
         g_send_th = sceKernelCreateThread("PSPExpCaptureSend", send_thread, 0x1A, 0x4000, 0, NULL);
         if (g_send_th >= 0) sceKernelStartThread(g_send_th, 0, NULL);
-    }
-    {
-        g_power_th = sceKernelCreateThread("PSPExpCapturePower", power_thread, 0x60, 0x1000, 0, NULL);
-        if (g_power_th >= 0) sceKernelStartThread(g_power_th, 0, NULL);
     }
     cap_log("battery %d%%", scePowerGetBatteryLifePercent());
     memset(&g_stats, 0, sizeof(g_stats));
@@ -1118,20 +794,22 @@ static int capture_thread(SceSize args, void *argp)
     if (r < 0) return 0;
     g_usb_up = 1;
     pspexpUsbSetTx(128 * 1024, 0);   /* (a stream read without pause: no short-ending splits) */
+    g_impose_status = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x1B6E3400);   /* sceImposeGetStatus */
+    cap_log("HOME menu watched: %x", (u32)g_impose_status);
     g_cmd_th = sceKernelCreateThread("PSPExpCaptureCmd", cmd_thread, 0x30, 0x2000, 0, NULL);
     if (g_cmd_th >= 0) sceKernelStartThread(g_cmd_th, 0, NULL);
 
     t0 = now_us();
     while (!g_quit) {
         sceDisplayWaitVblankStart();
-        if (g_ge_pending) ge_take();
         util_check();
+        home_check();
         if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) < 0 || !top) continue;
         if (top != last) {
             g_changes++; last = top; g_top = top;
             if (pspexpUsbConnected()) {
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
-                if (g_paused || g_gemode || g_util_active || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied; ge: the flip hands them) */
+                if (g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
                 else if (!g_busy && g_band_req && g_band_req != BAND_BYTES) {   /* a new band size, between frames */
                     int nb = RING_BYTES / g_band_req;
                     sceKernelDeleteSema(g_band_free);
@@ -1149,6 +827,7 @@ static int capture_thread(SceSize args, void *argp)
                 } else g_skipped++;
             } else if (was_connected) { cap_log("receiver gone"); was_connected = 0; }
         }
+        if (g_home_paused) t0 = now_us();   /* (no log while the HOME menu is open: an exit may follow) */
         if (now_us() - t0 >= 5000000) {   /* every 5 s: the game's frame rate, and what went out */
             u32 ms = (now_us() - t0) / 1000;   /* (32-bit: no 64-bit division in the kernel) */
             u32 g10 = (g_changes - c0) * 10000 / ms, s10 = (g_sent - s0) * 10000 / ms;
@@ -1158,21 +837,12 @@ static int capture_thread(SceSize args, void *argp)
                     g10 / 10, g10 % 10, s10 / 10, s10 % 10, g_skipped - k0, g_late - l0, copy_us, dma_us, send_us, g_stats.tx_timeouts - o0, fmt, bw,
                     was_connected ? "connected" : "no receiver");
             {   /* the processor time each of the plugin's threads really used (against their wall time) */
-                static u32 cc0, cs0, ci0, cw0;
-                u32 cc = cpu_us(g_copy_th), cs = cpu_us(g_send_th), ci = cpu_us(g_idle_th), cw = cpu_us(g_cap_th);
-                cap_log("CPU in 5 s: copier %u ms, sender %u ms, watcher %u ms, idle %u ms; exp %d, bands %u KB",
-                        (cc - cc0) / 1000, (cs - cs0) / 1000, (cw - cw0) / 1000, (ci - ci0) / 1000, g_exp, BAND_BYTES / 1024);
-                cc0 = cc; cs0 = cs; ci0 = ci; cw0 = cw;
+                static u32 cc0, cs0, cw0;
+                u32 cc = cpu_us(g_copy_th), cs = cpu_us(g_send_th), cw = cpu_us(g_cap_th);
+                cap_log("CPU in 5 s: copier %u ms, sender %u ms, watcher %u ms; exp %d, bands %u KB",
+                        (cc - cc0) / 1000, (cs - cs0) / 1000, (cw - cw0) / 1000, g_exp, BAND_BYTES / 1024);
+                cc0 = cc; cs0 = cs; cw0 = cw;
             }
-            if (g_gestat && g_changes - c0) {
-                u32 f = g_changes - c0;
-                cap_log("GE a frame: %u lists, %u commands (%u KB), %u draws, vertices %u KB, indices %u KB, new textures %u KB in RAM + %u in VRAM, transfers %u KB, CLUTs %u KB, walk %u us, bad %u",
-                        g_gs_lists / f, g_gs_cmds / f, g_gs_cmds * 4 / 1024 / f, g_gs_prims / f, g_gs_vtx / 1024 / f, g_gs_idx / 1024 / f,
-                        g_gs_tex_ram / 1024 / f, g_gs_tex_vram, g_gs_trx / 1024 / f, g_gs_clut / 1024 / f, g_gs_us / f, g_gs_bad);
-                g_gs_lists = g_gs_cmds = g_gs_prims = g_gs_vtx = g_gs_idx = g_gs_tex_ram = g_gs_tex_vram = g_gs_trx = g_gs_clut = g_gs_us = 0;
-            }
-            if (g_gemode) cap_log("GE frames: %u, skipped %u, not possible %u; flips %u (%u in interrupts); woken %u, step %u, result %x, busy %d",
-                                  g_ge_frames, g_ge_skipped, g_ge_fail, g_fb_calls, g_fb_intr, g_ge_wakes, g_ge_step, (u32)g_ge_err, g_busy);
             cap_log("sound: %u KB/s, dropped %u, unknown channel %u, kinds %x (1 channels, 2 output2, 4 SRC)",
                     (g_abytes - ab0) / ms, g_adropped - ad0, g_aunknown - au0, g_akinds);
             t0 = now_us(); c0 = g_changes; s0 = g_sent; k0 = g_skipped; o0 = g_stats.tx_timeouts; q0 = seq; u0 = g_copy_us; d0 = g_dma_us;
@@ -1192,10 +862,7 @@ int module_start(SceSize args, void *argp)
     catch_exit();
     catch_audio();   /* now, before the game reserves its channels */
     catch_pad();
-    catch_ge();
     catch_util();
-    if (redirect("sceDisplay_Service", "sceDisplay", 0x289D82FE, h_setfb, &o_setfb))   /* sceDisplaySetFrameBuf */
-        cap_log("the game's flip caught");
     /* the watcher above most of the game's threads, to copy a frame the moment it is shown; it does
      * little: one look per refresh, and the DMA engine copies while it waits */
     g_cap_th = sceKernelCreateThread("PSPExpCapture", capture_thread, 0x18, 0x4000, 0, NULL);
@@ -1208,43 +875,34 @@ int module_start(SceSize args, void *argp)
  * the plugin's USB link and threads still running then, the PSP switched itself off on "Please
  * wait..." every time (v1-v7, 2026-10-23). So the game's exit call is caught (below) and this
  * runs first. */
+/* A game ending (its exit, the restart command): the plugin leaves everything as it is for the
+ * system's restart, which wipes it (see exit_note). Only the log is told. */
 static void cap_shutdown(const char *why)
 {
-    static int done;
-    u32 t0 = now_us();
-    if (done) return;
-    done = 1;
-    g_quit = 1;
-    /* Quickly: a game's exit gives it a limited time, and a shutdown that waited for each thread
-     * (up to half a second each) let the PSP force the exit meanwhile, which switched it off
-     * (Castlevania: The Dracula X Chronicles, on every HOME > Exit; without the plugin it exits
-     * cleanly, 2026-10-24). What must happen before the system restarts: the firmware's calls back
-     * in place, the USB link stopped, the plugin's threads ended; the memory and the kernel
-     * objects go with the restart. */
-    unredirect_all();
-    if (g_usb_up) pspexpUsbStop();
-    sceUsbbdUnregister(&g_driver);
-    {
-        SceUID *th[] = { &g_cap_th, &g_send_th, &g_copy_th, &g_idle_th, &g_cmd_th, &g_power_th };
-        int i;
-        for (i = 0; i < 6; i++)
-            if (*th[i] >= 0 && *th[i] != sceKernelGetThreadId()) { sceKernelTerminateDeleteThread(*th[i]); *th[i] = -1; }
-    }
-    if (g_power_slot >= 0) scePowerUnregisterCallback(g_power_slot);
-    cap_log("stopped (%s) in %u us", why, now_us() - t0);
+    cap_log("the game ends (%s): left running for the system's restart", why);
 }
 
-/* the game's exit calls (LoadExecForUser: what a game calls from HOME's Exit), through the plugin */
+/* the game's exit calls (LoadExecForUser: what a game calls from HOME's Exit), through the plugin
+ * only to be logged, with their thread. The plugin does nothing else at a game's exit: its code
+ * stays loaded (PSP_MODULE_NO_STOP) and keeps running, the USB too, until the system's restart
+ * wipes it, as psp-cast does. Stopping the USB there while the receiver still read frames is what
+ * switched the PSP off on Castlevania: The Dracula X Chronicles' exits (six times, 2026-10-24:
+ * the driver stopped at once, or its transfers cancelled first, the log's last line before the
+ * PSP went off); every exit that went well (Burnout Legends) had the receiver no longer reading.
+ * The stop that v8 added (2026-10-23) was for a plugin the system could unload: its USB driver
+ * then called into freed memory. */
 static int (*g_exit_game)(void);
 static int (*g_exit_game_status)(int);
-static void exit_shutdown(void)   /* (in the game's own call: kernel rights for the files and USB) */
+static volatile u32 g_exit_calls;
+static void exit_note(void)
 {
     int k1 = pspSdkSetK1(0);
-    cap_shutdown("the game exits");
+    cap_log("exit call %u, thread %x, USB %s", ++g_exit_calls, (u32)sceKernelGetThreadId(), g_usb_up ? "running" : "stopped");
+    g_quit = 1;   /* (from here every thread of the plugin stops touching anything: no log, no copy, no USB) */
     pspSdkSetK1(k1);
 }
-static int exit_game(void) { exit_shutdown(); return g_exit_game(); }
-static int exit_game_status(int status) { exit_shutdown(); return g_exit_game_status(status); }
+static int exit_game(void) { exit_note(); return g_exit_game(); }
+static int exit_game_status(int status) { exit_note(); return g_exit_game_status(status); }
 
 static void catch_exit(void)
 {

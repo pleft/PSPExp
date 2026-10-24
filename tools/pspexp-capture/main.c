@@ -12,13 +12,9 @@
  *   log | restart (the game again, from its ISO: a new plugin loads) | stop | quit
  *   pause | resume   (no frames copied meanwhile: the game's own frame rate, for comparing)
  *   vram   (the game's GE buffer addresses, a fingerprint of each 32 KB of VRAM)
- *   gestat on | off   (the PSP's log adds what the game hands the GE a frame: commands, vertices, textures)
  *   exp N   (0 normal, 1 the copy alone, 2 the sending alone: what costs the game its speed)
  *   copyprio N   (the copier thread's priority)
  *   band KB   (32, 64 or 128: the ring's band, each one USB write) | tx KB SPLIT (the largest transfer; 1 split short ones)
- *   idle on | off   (the PSP's log adds the processor time the game leaves free)
- *   ge on | off | 1 | 2   (the GE makes each frame 16-bit through the game's depth buffer, half the
- *     bytes; 1 only its drawing, 2 only its copy out: for finding faults)
  * -k: after the link goes (a restart), wait for the game again: clip.mp4, clip-2.mp4, ...
  * The link is PSPExp's own USB transport (host/transport-usb).
  */
@@ -188,11 +184,9 @@ static void control_line(char *line)
     } else if (!strcmp(a, "log")) send_cmd(3, NULL, 0, NULL, 0);
     else if (!strcmp(a, "restart")) send_cmd(4, NULL, 0, NULL, 0);
     else if (!strcmp(a, "vram")) send_cmd(7, NULL, 0, NULL, 0);
-    else if (!strcmp(a, "band") || !strcmp(a, "idle")) { uint8_t p[4]; put32le(p, !strcmp(a, "idle") ? (uint32_t)(strcmp(b, "off") != 0) : (uint32_t)strtoul(b, NULL, 0) * 1024); send_cmd(!strcmp(a, "band") ? 12 : 14, p, 4, NULL, 0); }
+    else if (!strcmp(a, "band")) { uint8_t p[4]; put32le(p, (uint32_t)strtoul(b, NULL, 0) * 1024); send_cmd(12, p, 4, NULL, 0); }
     else if (!strcmp(a, "tx")) { uint8_t p[8]; put32le(p, (uint32_t)strtoul(b, NULL, 0) * 1024); put32le(p + 4, (uint32_t)(n >= 3 ? atoi(c) : 1)); send_cmd(13, p, 8, NULL, 0); }
     else if (!strcmp(a, "exp") || !strcmp(a, "copyprio")) { uint8_t p[4]; put32le(p, (uint32_t)strtoul(b, NULL, 0)); send_cmd(!strcmp(a, "exp") ? 10 : 11, p, 4, NULL, 0); }
-    else if (!strcmp(a, "gestat")) { uint8_t p[4]; put32le(p, strcmp(b, "off") != 0); send_cmd(9, p, 4, NULL, 0); }
-    else if (!strcmp(a, "ge")) { uint8_t p[4]; put32le(p, !strcmp(b, "on") ? 3 : (uint32_t)atoi(b)); send_cmd(8, p, 4, NULL, 0); }
     else if (!strcmp(a, "pause") || !strcmp(a, "resume")) { uint8_t p[4]; put32le(p, !strcmp(a, "pause")); send_cmd(5, p, 4, NULL, 0); }
     else if (!strcmp(a, "stop")) g_stop = 1;
     else if (!strcmp(a, "quit")) { g_quit = 1; g_stop = 1; }

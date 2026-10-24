@@ -941,7 +941,12 @@ A Share button for the PSP: a native game's picture and sound sent over the USB 
 PSPExp receiver, which makes a finished clip. It lives beside PSPExp and is shipped as part of it.
 Prior art, honestly: RemoteJoy / RemoteJoyLite (2008, Windows, picture on screen), psp-usb-capture
 (pspcap, Windows, no file), xerpi's USB Video Class plugin (a webcam to the computer, tearing, no
-sound). None makes a finished video and sound file.
+sound), and two recent ones with the game's sound: remotejoy-audio (macOS, into RetroArch, 2026)
+and psp-cast (Windows, October 2026: picture, sound and the PC's controls in a window, 30 or 60 fps
+with half frames, 16-bit when a game runs fast; a design close to this one, and the model for its
+handling of a game's exit). None makes the finished file itself (a window to record with OBS, or
+RetroArch's recorder); what is PSPExp's own: the ready MP4, recording on the board without a
+computer, the ♪ clip button (planned).
 
 **The pieces.** `psp/capture` builds `pspexp_capture.prx`, a kernel plugin for custom firmware
 (PRO / ARK: `ms0:/seplugins/game.txt`). PSPExp's USB driver is built into it
@@ -1024,10 +1029,14 @@ The copy is free; the PSP's USB driver spends processor time on every byte it se
 
 **System screens.** The PSP's save, load, keyboard and message screens need memory the plugin otherwise holds: Castlevania: The Dracula X Chronicles stopped answering at its name entry (its save could not open). The plugin now gives back its rings (≈350 KB of the kernel's) when one opens (16 `sceUtility` calls caught) and takes them back 1.5 s after it closes: the name entry and its save then went through.
 
-**Open: Castlevania's HOME > Exit switches the PSP off** with the plugin on (cleanly without it), although the plugin's log shows it stopped ("stopped"); Burnout's exits worked. Tried without success: restoring every redirected syscall at the stop (`unredirect_all`), a near-instant stop (no waits: "stopped (the game exits) in 17177 us", and still off). Next guess, untested: the USB stopped while a transfer is in flight (the receiver is always connected now; in the Burnout exits that worked it had usually finished): finish or cancel it before `pspexpUsbStop`. A test that needs no install: stop the receiver before exiting.
+**A game's exit (2026-10-24).** Castlevania's HOME > Exit switched the PSP off with the plugin on (cleanly without it), eight times, whatever the plugin did at the exit: its USB stopped at once, its transfers cancelled first (the log's last line before the PSP went off was "stopping"), or nothing at all; every exit that went well (Burnout Legends) had the receiver no longer reading. Stopping the USB from the plugin's own thread while a game simply runs has always gone well (the `restart` command, dozens of times, frames streaming). What changed:
+- the module is never stopped or unloaded by the system (`PSP_MODULE_NO_STOP | SINGLE_LOAD | SINGLE_START`, attribute 0x1007, as psp-cast): a game's exit unloads what it can, and anything still pointing into the plugin (its threads in v1–v7, its redirected exit calls later) then jumped into freed memory;
+- the HOME menu is watched (`sceImposeGetStatus` bit 0, as RemoteJoyLite and remotejoy-minus read it; PRO resolves the NID for 6.60): when it opens, the watcher lets the frame under way finish, then stops the USB; back in the game (the menu closed for 0.5 s) it starts again and the receiver reconnects; the `restart` command stops it the same way;
+- at the game's exit call the plugin only logs (with whether the USB still ran) and stops every thread's activity (no log, copy or USB from then on), leaving the rest to the system's restart.
+Not yet tried on the PSP. Not covered: a game that quits through its own menu without HOME (few have one).
 
 **Next:**
-- Castlevania's exit (above); until then the plugin stays off on the user's PSP;
+- the exit fix (above) on the PSP, once; until then the plugin stays off on the test PSP;
 - more games: Castlevania holds 30 of 30 recorded (it runs at 30); Ace Combat X, Bomberman, Crisis Core, Gran Turismo, Jeanne d'Arc, Lunar, Phantasy Star Portable 2 to go, with clips;
 - an adaptive mode: every frame while the game keeps its pace, every other one while it slows (Burnout's races);
 - the ♪ button: hold for a clip of the last 30 s, ♪+START to start/stop recording (the receiver keeps a ring);
