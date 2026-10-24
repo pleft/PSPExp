@@ -54,6 +54,10 @@ Raspberry Pi: `/home/pi/Videos/PSPExp`), named by the date and time:
 `clip-2026-10-24-16.26.43.mp4`, `recording-...mp4`. They are MP4 files, up
 to 30 pictures a second in full colour, with the game's sound.
 
+**Watching them on the PSP:** start PSPExp, open **Files**, go to
+`Videos/PSPExp` in your home folder and choose a video: it plays full screen
+in **Media**, like any film.
+
 ## Good to know
 
 - Games recorded so far: Castlevania: The Dracula X Chronicles, Crisis Core,

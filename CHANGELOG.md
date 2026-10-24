@@ -7,7 +7,8 @@
   sound down the cable to the board. **♪ + R** saves the last 30 seconds as a
   video, **♪ + L** starts and stops a recording, and a dot in the screen's
   corner says it heard you; the board keeps the videos in `~/Videos/PSPExp`,
-  up to 30 pictures a second in full colour. Switched on with one line in
+  up to 30 pictures a second in full colour, and PSPExp's Files and Media
+  play them on the PSP. Switched on with one line in
   `seplugins/game.txt` (the manual's Recording PSP games). Recorded so far:
   Castlevania: The Dracula X Chronicles, Crisis Core, Jeanne d'Arc, Gran
   Turismo, Ace Combat X, Burnout Legends, Bomberman, Lunar: Silver Star
