@@ -35,8 +35,10 @@ int launcher_take_launch(char *cmd, size_t cmd_len, char *cwd, size_t cwd_len, i
 void launcher_child_exited(int status, const char *message);
 /* 1 once when the user opened Apps > Terminal: show the terminal view */
 int launcher_take_console(void);
-/* 1 once when the user opened Apps > Files: show the file manager */
+/* 1 once when the user opened Apps > Files: show the file manager, on launcher_files_path when not
+ * NULL (Settings > Recording > Videos; cleared as it is read) */
 int launcher_take_files(void);
+const char *launcher_files_path(void);
 /* 1 once with the id of a built-in app the user opened (appview.h: "monitor", "store") */
 int launcher_take_app(char *id, size_t n);
 /* a file opened from the file manager: a ROM starts in its system's
@@ -72,7 +74,7 @@ void launcher_set_psp_update(int available);
 int  launcher_take_psp_update(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);
-/* Settings > Last 30 seconds: the recorder keeps them (♪ + R) and so records all the time (0, the
+/* Settings > Recording > Clips: the recorder keeps the last 30 seconds (♪ + R) and so records all the time (0, the
  * default: ♪ + L recordings only, nothing sent or encoded otherwise); 1 once when it changed */
 int  launcher_clips_keep(void);
 int  launcher_take_clips_change(void);

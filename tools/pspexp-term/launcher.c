@@ -235,7 +235,8 @@ static void cats_build(void)
     ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
-    ACTION("clips", "Last 30 seconds", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
+    ACTION("clips", "Clips", "history", "Note + R saves the last 30 seconds as a video: the board records all the time");   /* (the font has no ♪) */
+    ACTION("videos", "Videos", "film", "The recordings and clips, in Files");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
@@ -248,7 +249,7 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
             { "Sound", "headphones", { "a:sound", NULL } },
-            { "Recording", "film", { "a:clips", NULL } },
+            { "Recording", "film", { "a:clips", "a:videos", NULL } },
             { "Clock", "clock", { "a:tz", "a:pspclock", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
             { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
@@ -358,6 +359,7 @@ static uint64_t g_last_frame, g_sel_since;
 static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
+static char g_files_path[512];   /* the folder Files opens on (Settings > Recording > Videos), else its own */
 static int g_spin_x, g_spin_y, g_spin_drawn;   /* the "Starting" frame's spinner square (draw_running) */
 static LEntry g_running_e;
 /* the controls sheet: shown when a game with control= lines is chosen, X starts it, O goes back */
@@ -714,6 +716,19 @@ static void run_action(LEntry *e, uint64_t now)
         g_console_req = 1;
     } else if (!strcmp(a, "files")) {
         g_files_req = 1;
+    } else if (!strcmp(a, "videos")) {   /* where the recorder keeps them (the console's capture_tick), made if not there yet */
+        const char *h = getenv("HOME");
+#ifdef __APPLE__
+        snprintf(g_files_path, sizeof(g_files_path), "%s/Movies", h && *h ? h : "/tmp");
+        mkdir(g_files_path, 0755);
+        snprintf(g_files_path, sizeof(g_files_path), "%s/Movies/PSPExp", h && *h ? h : "/tmp");
+#else
+        snprintf(g_files_path, sizeof(g_files_path), "%s/Videos", h && *h ? h : "/tmp");
+        mkdir(g_files_path, 0755);
+        snprintf(g_files_path, sizeof(g_files_path), "%s/Videos/PSPExp", h && *h ? h : "/tmp");
+#endif
+        mkdir(g_files_path, 0755);
+        g_files_req = 1;
     } else if (!strcmp(a, "monitor") || !strcmp(a, "store") || !strcmp(a, "music")) {
         snprintf(g_app_req, sizeof(g_app_req), "%s", a);
     } else if (!strcmp(a, "psp-update")) {
@@ -729,7 +744,7 @@ static void run_action(LEntry *e, uint64_t now)
         g_clips_keep = !g_clips_keep;
         g_clips_change = 1;
         lib_setting_set(&L, "clips", g_clips_keep);
-        toast("history", g_clips_keep ? "♪ + R saves the last 30 seconds" : "♪ + L recordings only", now);
+        toast("history", g_clips_keep ? "Clips on: Note + R saves the last 30 seconds" : "Clips off: Note + L recordings only", now);
     } else if (!strcmp(a, "boxart")) {
         g_nofetch = !g_nofetch;
         lib_setting_set(&L, "boxart", !g_nofetch);
@@ -837,6 +852,14 @@ void launcher_status(uint64_t now, int *bat, int *chg, int *online)
 
 int launcher_take_console(void) { int r = g_console_req; g_console_req = 0; return r; }
 int launcher_take_files(void) { int r = g_files_req; g_files_req = 0; return r; }
+const char *launcher_files_path(void)
+{
+    static char p[512];
+    if (!g_files_path[0]) return NULL;
+    snprintf(p, sizeof(p), "%s", g_files_path);
+    g_files_path[0] = 0;
+    return p;
+}
 int launcher_take_app(char *id, size_t n) { if (!g_app_req[0]) return 0; snprintf(id, n, "%s", g_app_req); g_app_req[0] = 0; return 1; }
 
 int launcher_open_file(const char *path)
@@ -1636,12 +1659,16 @@ static void open_system(const LEntry *e, uint64_t now)
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SYSTEM && g_cat[i].sys == e->sys) { show_cat(i, 1, now); return; }
 }
 
-/* a Settings group: its settings; a group of one, that setting at once */
+/* settings switched on and off where they are (cross), their state on the right */
+static int is_switch(const LEntry *e) { return !strcmp(e->id, "a:clips") || !strcmp(e->id, "a:boxart") || !strcmp(e->id, "a:pspclock"); }
+
+/* a Settings group: its settings; a group of one, that setting at once when it opens a page of its
+ * own (Sound's list): a switch alone shows its group, else cross flipped it with only a toast */
 static void open_group(LEntry *e, uint64_t now)
 {
     int i;
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GROUP && !strcmp(g_cat[i].name, e->title)) {
-        if (g_cat[i].n == 1) launch(g_cat[i].it[0], now);
+        if (g_cat[i].n == 1 && !is_switch(g_cat[i].it[0])) launch(g_cat[i].it[0], now);
         else show_cat(i, 1, now);
         return;
     }
@@ -2119,8 +2146,8 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
         else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
-        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "♪ + R saves the last 30 seconds: the board records all the time"
-                                                                              : "Only ♪ + L recordings: nothing recorded otherwise");
+        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "Note + R saves the last 30 seconds: the board records all the time"
+                                                                              : "Turn on for Note + R: the last 30 seconds as a video");
         else snprintf(s, n, "%s", e->tags);
         break;
     default: snprintf(s, n, "Game  /  %s%s%s", renderer(e), e->tags[0] ? "  /  " : "", e->tags); break;

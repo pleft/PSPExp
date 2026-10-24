@@ -679,10 +679,13 @@ way finished first. `PSPEXP_CAPTURE=0` keeps it from starting. In the game,
 ♪+L starts and stops a recording and ♪+R saves the last 30 s; a dot in the
 PSP screen's corner confirms it (green for a clip, red while recording).
 Keeping the last 30 s means recording all the time, so it is a setting,
-off at first: Settings > Recording > Last 30 seconds (`clips` in the
+off at first: Settings > Recording > Clips (`clips` in the
 library's settings). Off, the receiver runs with `-b 0` (recordings only:
 the PSP sends nothing until ♪+L); on, with `-b 30`; a change starts it
-again.
+again. The Recording page also has Videos, which opens Files on that
+folder. (Its first version was a group of one, and a group of one acts at
+once: cross flipped the switch with only a toast. A switch alone now shows
+its group's page, its state on the right.)
 The console's log keeps the receiver's lines (`-q`: the connections, the
 clips and what went wrong).
 

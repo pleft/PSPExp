@@ -3252,7 +3252,7 @@ static void ctl_step(uint64_t now, int connected)
  * clips (note+R the last 30 s, note+L a recording) in ~/Videos/PSPExp (~/Movies/PSPExp on a Mac).
  * Started with the launcher over USB when it and ffmpeg are on the PATH, again 10 s after it ends;
  * PSPEXP_CAPTURE=0: not at all. Its own process group; stopped with the console, its clips under
- * way finished first. Settings > Last 30 seconds (off by default) keeps them for note+R, the PSP
+ * way finished first. Settings > Recording > Clips (off by default) keeps the last 30 s for note+R, the PSP
  * then sending everything all the time; off, -b 0: note+L recordings only, nothing sent or encoded
  * otherwise. */
 static pid_t g_capture_pid;
@@ -3281,7 +3281,7 @@ static void capture_tick(uint64_t now)
     pid_t pid;
     if (off < 0) { const char *e = getenv("PSPEXP_CAPTURE"); off = (e && !strcmp(e, "0")) || !g_launcher_on || g_mode != MODE_USB; }
     if (off) return;
-    if (launcher_take_clips_change() && g_capture_pid > 0) {   /* Settings > Last 30 seconds: started again, keeping what it says */
+    if (launcher_take_clips_change() && g_capture_pid > 0) {   /* Settings > Recording > Clips: started again, keeping what it says */
         capture_stop();
         g_capture_next = 0;
     }
@@ -3644,7 +3644,7 @@ int main(int argc, char **argv)
                 launch_child(pend_cmd, pend_cwd, pend_aware);
             }
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
-            if (launcher_take_files()) { files_show(NULL, 1); swallow(); }
+            if (launcher_take_files()) { files_show(launcher_files_path(), 1); swallow(); }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }
         if (g_app && g_app->take_exit()) {
