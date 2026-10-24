@@ -161,7 +161,7 @@ against the in-process Null executor as a CPU baseline.
 Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspexp_capture.prx`.
 
 1. Copy it to `ms0:/seplugins/` and add the line `ms0:/seplugins/pspexp_capture.prx 1` to
-   `ms0:/seplugins/game.txt` (`0` switches it off).
+   `ms0:/seplugins/game.txt` (`0` switches it off). It can stay on: it keeps out of PSPExp itself.
 2. Plug the PSP into the computer and run `build/host/pspexp-capture -o clip.mp4 -d frames -t 90`
    (the whole game as one clip), or `build/host/pspexp-capture -k -s ~/Movies/clips` for the
    note button: on the PSP, ♪+R saves the last 30 s (`-b` changes it) and ♪+L starts and stops a

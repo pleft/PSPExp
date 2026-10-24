@@ -1282,6 +1282,17 @@ static int capture_thread(SceSize args, void *argp)
 
     sceKernelDelayThread(2000000);   /* the game first: its modules, its first frames */
     if (g_quit) return 0;
+    {   /* PSPExp itself (game.txt's plugins load for homebrew too): its own USB driver has the
+         * plugin's name and its board waits for it. Started inside PSPExp, the plugin took the USB
+         * and PSPExp could not reach its board (2026-10-24): it keeps out entirely, nothing started
+         * (its catches stay idle: they act only while it holds buffers or the note button is down). */
+        void *(*find)(const char *) = (void *)sctrlHENFindFunction("sceLoaderCore", "LoadCoreForKernel", 0xCF8A41B1);   /* sceKernelFindModuleByName */
+        if (find && (find("PSPExpBoot") || find("PSPExpRuntime") || find("PSPExpUSB"))) {
+            g_log_ready = 1;
+            cap_log("PSPExp itself: the plugin keeps out of it");
+            return 0;
+        }
+    }
 #ifdef PSPEXP_CAPTURE_DEV
     sceIoRemove(LOG_PATH ".old");   /* the last run's log kept beside (after a hang, what it did last) */
     sceIoRename(LOG_PATH, LOG_PATH ".old");
