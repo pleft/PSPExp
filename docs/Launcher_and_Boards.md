@@ -1228,7 +1228,9 @@ the Mac.
   `launcher.systems`), is started from the launcher. Each must draw frames
   with no link errors, quit (`stop`) and hand the PSP back to the launcher.
   Its frame rates come from the SDL layer's lines in
-  `/tmp/pspexp-launcher.log`; they differ widely between boards, so they
+  `/tmp/pspexp-launcher.log`, or in a system's own log written since it
+  started (`~/.cache/pspexp-*.log`: the Dreamcast's); a game left running
+  by a failed check is stopped, so the next one finds the PSP; they differ widely between boards, so they
   are recorded, not judged. `--min-fps N` adds a floor for one board. The
   best rate counts: an intro that waits on a logo (OpenTyrian's) draws
   little on purpose.

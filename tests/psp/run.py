@@ -489,16 +489,31 @@ def suite_relink(r):
 
 
 LOG = "/tmp/pspexp-launcher.log"   # where the console writes the programs it starts
+# a system's start script may keep its program's output in a log of its own, written anew each run
+# (pspexp-dreamcast: ~/.cache/pspexp-dreamcast.log); those written since the start are read too
+OWN_LOGS = "find ~/.cache -maxdepth 1 -name 'pspexp-*.log' -newer /tmp/pspexp-it-start -exec grep -ah 'fps  ' {} + 2>/dev/null || true"
 
 
 def play(r, category, title, min_fps, name):
     """start title from the launcher, read its frame rates for a while, stop it, check the launcher is back"""
+    try:
+        play_one(r, category, title, min_fps, name)
+    finally:   # a check that failed with the program still running: it is stopped, so the next one finds the PSP
+        try:
+            if r.state().get("running"):
+                r.ctl("stop", timeout=40)
+        except Exception:
+            pass
+
+
+def play_one(r, category, title, min_fps, name):
     t = r.t
     r.ctl("open launcher")
     r.to_category(category)
     r.ctl("select " + title)
     r.ctl("idle 2500")
     off = int(t.sh("wc -c < %s 2>/dev/null || echo 0" % LOG).strip() or 0)
+    t.sh("touch /tmp/pspexp-it-start")
     r.press("cross", idle=False)
     time.sleep(0.5)
     if r.state().get("launcher.mode") == "controls":   # its controls sheet first (since 2026-10-18): X starts it
@@ -510,7 +525,7 @@ def play(r, category, title, min_fps, name):
     fps, errors, underruns, end = [], [], [], time.time() + 75
     while time.time() < end:   # the SDL layer's line every few seconds: a starting phase, then three to judge by
         time.sleep(2)
-        lines = t.sh("tail -c +%d %s 2>/dev/null | grep -a 'fps  ' || true" % (off + 1, LOG)).splitlines()
+        lines = t.sh("tail -c +%d %s 2>/dev/null | grep -a 'fps  ' || true; %s" % (off + 1, LOG, OWN_LOGS)).splitlines()
         if len(lines) >= 4:
             break
     r.expect(lines, "%s wrote no frame rates in 75 s (log: %s)" % (title, t.sh("tail -c +%d %s | tail -3" % (off + 1, LOG)).strip()))
