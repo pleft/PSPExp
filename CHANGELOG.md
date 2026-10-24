@@ -2,6 +2,19 @@
 
 ## Since 1.2.0
 
+- **Record your own PSP games** (PSPExp Capture): a plugin for PRO custom
+  firmware, in the PSP's download, sends a UMD or ISO game's picture and
+  sound down the cable to the board. **♪ + R** saves the last 30 seconds as a
+  video, **♪ + L** starts and stops a recording, and a dot in the screen's
+  corner says it heard you; the board keeps the videos in `~/Videos/PSPExp`,
+  up to 30 pictures a second in full colour. Switched on with one line in
+  `seplugins/game.txt` (the manual's Recording PSP games). Recorded so far:
+  Castlevania: The Dracula X Chronicles, Crisis Core, Jeanne d'Arc, Gran
+  Turismo, Ace Combat X, Burnout Legends, Bomberman, Lunar: Silver Star
+  Harmony, Phantasy Star Portable 2.
+- **The PSP's download carries the licences** of the code and libraries
+  inside PSPExp's PSP programs (PSPLINK, PSPSDK, newlib): `THIRD_PARTY.txt`
+  and `licenses/`.
 - **One command on a Raspberry Pi OS you already have**:
   `curl -fsSL https://pspexp.dev/install.sh | sh` on the Pi sets it up as
   the card image does, without writing a new card.

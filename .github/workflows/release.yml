@@ -56,13 +56,14 @@ jobs:
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          make -C psp/transport-usb -j"$(nproc)" && make -C psp/runtime -j"$(nproc)" && make -C psp/boot -j"$(nproc)"
+          make -C psp/transport-usb -j"$(nproc)" && make -C psp/runtime -j"$(nproc)" && make -C psp/boot -j"$(nproc)" && make -C psp/capture -j"$(nproc)"
           mkdir -p dist/PSPExp
           cp psp/boot/EBOOT.PBP psp/transport-usb/pspexp_usb.prx psp/runtime/pspexp_runtime.prx dist/PSPExp/
           python3 scripts/packages/runtime-slot --install stick/PSP/GAME/PSPExp
           cp LICENSE stick/PSP/GAME/PSPExp/LICENSE.txt
           cp THIRD_PARTY.md stick/PSP/GAME/PSPExp/THIRD_PARTY.txt   # (the code and libraries inside, under their own licences)
           mkdir -p stick/PSP/GAME/PSPExp/licenses && cp licenses/* stick/PSP/GAME/PSPExp/licenses/
+          mkdir -p stick/PSP/GAME/PSPExp/capture && cp psp/capture/pspexp_capture.prx stick/PSP/GAME/PSPExp/capture/   # PSPExp Capture's plugin: game.txt names it there (not in seplugins/, which a Mac's Finder would replace whole)
           (cd stick && zip -qr "../PSPExp-psp-$TAG.zip" PSP)
           sha256sum "PSPExp-psp-$TAG.zip" > "PSPExp-psp-$TAG.zip.sha256"
       - uses: actions/upload-artifact@v4

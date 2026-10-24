@@ -4,7 +4,7 @@
  * tells the game's frame rate and what arrives, saves a frame as a picture every few seconds,
  * and with -o makes an MP4: the picture through ffmpeg as it comes, the sound mixed here and
  * added at the end.
- *   pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d folder-for-frames] [-t seconds] [-c control-fifo] [-k]
+ *   pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d folder-for-frames] [-t seconds] [-c control-fifo] [-k] [-q]
  * -s: the note button's clips (psp/capture: note+R on the PSP saves the last -b seconds, 30 by
  * default, as clip-DATE.mp4; note+L starts and stops recording-DATE.mp4). The picture is kept
  * as it comes in 1 s pieces, the sound mixed in memory, both only as far back as a clip or a
@@ -22,6 +22,7 @@
  *   band KB   (32, 64 or 128: the ring's band, each one USB write) | tx KB SPLIT (the largest transfer; 1 split short ones)
  *   clip | record   (with -s: as note+R and note+L on the PSP)
  * -k: after the link goes (a restart), wait for the game again: clip.mp4, clip-2.mp4, ...
+ * -q: only the connections, the clips and what went wrong (a board's console runs it so: its log)
  * The link is PSPExp's own USB transport (host/transport-usb), under the plugin's own product ID
  * (PSPEXP_CAPTURE_USB_PID), so it runs beside a board's console.
  */
@@ -44,6 +45,13 @@
 #define RATE 44100      /* the clip's sound: the PSP's own rate, stereo */
 
 static volatile int g_stop, g_quit;   /* the session ends; the program ends */
+static int g_quiet;                   /* -q */
+/* the encoder's speed: a 32-bit ARM board (the GameShell's four Cortex-A7) the fastest */
+#if defined(__arm__) && !defined(__aarch64__)
+#define X264_PRESET "ultrafast"
+#else
+#define X264_PRESET "veryfast"
+#endif
 static void on_signal(int s) { (void)s; g_stop = 1; g_quit = 1; }
 
 static double now(void)
@@ -353,7 +361,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         mkdir(g_segdir, 0700);
         g_rec_first = -1; g_frames_out = 0; g_seg_closed = 0; g_seg_final = -1; g_seg_dropped = 0;
         snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-                 "-c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
+                 "-c:v libx264 -preset " X264_PRESET " -crf 18 -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
                  "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
         ff = popen(cmd, "w");
         if (!ff) { perror("ffmpeg"); return -1; }
@@ -364,7 +372,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
          * is held, so a clip plays at the game's own speed */
         snprintf(video, sizeof(video), "%s.picture.mp4", out);
         snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-                 "-c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p '%s'", W, H, video);
+                 "-c:v libx264 -preset " X264_PRESET " -crf 18 -pix_fmt yuv420p '%s'", W, H, video);
         ff = popen(cmd, "w");
         if (!ff) { perror("ffmpeg"); return -1; }
     }
@@ -390,7 +398,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (msg) {   /* the plugin's log, sent as it goes (it never writes to the memory stick) */
             if (len > sizeof(reply) || need(t, reply, len) < 0) break;
             if (dir) { char p[512]; snprintf(p, sizeof(p), "%s/psp.log", dir); FILE *f = fopen(p, "ab"); if (f) { fwrite(reply, 1, len, f); fclose(f); } }
-            for (uint32_t i = 0, b0 = 0; i < len; i++)
+            for (uint32_t i = 0, b0 = 0; i < len && !g_quiet; i++)
                 if (reply[i] == '\n') { fprintf(stderr, "PSP: %.*s\n", (int)(i - b0), (char *)reply + b0); b0 = i + 1; }
             continue;
         }
@@ -455,7 +463,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             last_shot = n;
         }
         if (n - tl >= 5) {
-            fprintf(stderr, "received %.1f frames/s, %.1f MB/s, sound %.0f KB/s; the game %.1f fps; format %u\n",
+            if (!g_quiet) fprintf(stderr, "received %.1f frames/s, %.1f MB/s, sound %.0f KB/s; the game %.1f fps; format %u\n",
                     (frames - f_last) / (n - tl), (bytes - b_last) / (n - tl) / 1e6,
                     (g_audio_bytes - a_last) / (n - tl) / 1e3, (changes - ch_at) / (n - tl), fmt);
             tl = n; f_last = frames; b_last = bytes; ch_at = changes; a_last = g_audio_bytes;
@@ -504,7 +512,7 @@ int main(int argc, char **argv)
     const char *out = NULL, *dir = NULL, *fifo = NULL;
     double limit = 0;
     int c, keep = 0;
-    while ((c = getopt(argc, argv, "o:s:b:d:t:c:k")) != -1) {
+    while ((c = getopt(argc, argv, "o:s:b:d:t:c:kq")) != -1) {
         if (c == 'o') out = optarg;
         else if (c == 's') g_clips = optarg;
         else if (c == 'b') g_clip_len = atoi(optarg) > 0 ? atoi(optarg) : 30;
@@ -512,7 +520,8 @@ int main(int argc, char **argv)
         else if (c == 't') limit = atof(optarg);
         else if (c == 'c') fifo = optarg;
         else if (c == 'k') keep = 1;
-        else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k]\n"); return 2; }
+        else if (c == 'q') g_quiet = 1;
+        else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k] [-q]\n"); return 2; }
     }
     if (out && g_clips) { fprintf(stderr, "pspexp-capture: -o or -s, not both\n"); return 2; }
     if (g_clips) {   /* the clips' folder, made if missing (a board's ~/Videos/PSPExp) */
@@ -522,6 +531,7 @@ int main(int argc, char **argv)
         mkdir(p, 0755);
     }
     signal(SIGINT, on_signal);
+    signal(SIGTERM, on_signal);   /* (the console stopping it: the clips under way still made) */
     signal(SIGPIPE, SIG_IGN);
     {   /* one receiver at a time: a second one, idle, read the FIFO's commands meant for the one
          * holding the link (button presses lost, 2026-10-23) */
@@ -542,7 +552,7 @@ int main(int argc, char **argv)
         char err[256], name[1100];
         pspexp_usb_options_default(&o);
         o.pid = PSPEXP_CAPTURE_USB_PID;   /* (the plugin's own product: PSPExp's console waits for PSPExp's) */
-        fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable...\n");
+        if (!g_quiet || run == 1) fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable...\n");
         PspExpTransport *t = NULL;
         while (!t && !g_quit) t = pspexp_usb_wait(&o, 1000, err, sizeof(err));   /* (in steps: Ctrl-C ends a wait) */
         if (!t) break;

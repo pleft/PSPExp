@@ -204,6 +204,131 @@ static int g_frames_on = 1;              /* the frames part (F, see read_parts) 
 static u32 g_last_hand;                  /* when the watcher last handed a frame on */
 static volatile u32 g_static;            /* frames not sent: the same as the last one sent */
 
+/* ---- on the PSP's screen: a red dot while recording, a green one for a second for a clip ----
+ * Drawn into the frame the game shows, in its bottom-right corner, once that frame has been
+ * copied: the PSP's screen is drawn top to bottom over ≈16 ms and the copy takes a few, so the dot
+ * shows from the frame's first showing and is never in the recording (the frame checks below
+ * skip its corner). The pixels under it are kept: a buffer the game shows again without drawing
+ * it anew has them back before it is looked at or copied, and so when the dot goes. Replaces the
+ * beeps and the WLAN light of the first version (2026-10-24). */
+#define OV_X 456
+#define OV_Y 248
+#define OV_N 16
+#define OV_RED 0xE02020
+#define OV_GREEN 0x30C040
+static volatile int g_recording;         /* note+L: a recording under way */
+static volatile u32 g_clip_dot_until;    /* note+R: the green dot until then (0: none) */
+static volatile u32 g_ov_copying;        /* a frame handed to the copier: its dot drawn once copied */
+static volatile u32 g_ov_shown;          /* the frame shown now */
+static unsigned char g_ov_mask[OV_N * OV_N];   /* 0 nothing, 1 the dark ring, 2 the colour */
+static struct { u32 top, color; int bw, fmt; u32 saved[OV_N * OV_N]; } g_ov[3];
+
+static void ov_init(void)
+{
+    int x, y;
+    for (y = 0; y < OV_N; y++)
+        for (x = 0; x < OV_N; x++) {
+            int cx = 2 * x + 1 - OV_N, cy = 2 * y + 1 - OV_N, d = cx * cx + cy * cy;   /* (half pixels: the dot centred) */
+            g_ov_mask[y * OV_N + x] = d <= 144 ? 2 : d <= 196 ? 1 : 0;   /* a 12-pixel dot in a 14-pixel ring */
+        }
+}
+
+static u32 ov_pixel(int fmt, u32 rgb)
+{
+    u32 r = rgb >> 16 & 255, g = rgb >> 8 & 255, b = rgb & 255;
+    if (fmt == PSP_DISPLAY_PIXEL_FORMAT_565) return r >> 3 | (g >> 2) << 5 | (b >> 3) << 11;
+    if (fmt == PSP_DISPLAY_PIXEL_FORMAT_5551) return r >> 3 | (g >> 3) << 5 | (b >> 3) << 10 | 0x8000;
+    if (fmt == PSP_DISPLAY_PIXEL_FORMAT_4444) return r >> 4 | (g >> 4) << 4 | (b >> 4) << 8 | 0xF000;
+    return 0xFF000000 | b << 16 | g << 8 | r;
+}
+
+static u32 ov_addr(u32 top, int bw, int fmt, int k)   /* (uncached: VRAM as the screen reads it) */
+{
+    return ((top & 0x1FFFFFFF) | 0x40000000) + ((u32)(OV_Y + k / OV_N) * (u32)bw + OV_X + k % OV_N) * (fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2);
+}
+static u32 ov_get(u32 top, int bw, int fmt, int k)
+{
+    u32 a = ov_addr(top, bw, fmt, k);
+    return fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? *(volatile u32 *)a : *(volatile u16 *)a;
+}
+static void ov_set(u32 top, int bw, int fmt, int k, u32 v)
+{
+    u32 a = ov_addr(top, bw, fmt, k);
+    if (fmt == PSP_DISPLAY_PIXEL_FORMAT_8888) *(volatile u32 *)a = v; else *(volatile u16 *)a = (u16)v;
+}
+
+static int ov_in(u32 x, u32 y) { return y >= OV_Y && y < OV_Y + OV_N && x + 1 >= OV_X && x < OV_X + OV_N; }   /* (x+1: a word's two 16-bit pixels) */
+
+static u32 ov_wanted(void)
+{
+    if (g_clip_dot_until && (int)(now_us() - g_clip_dot_until) < 0) return OV_GREEN;
+    return g_recording ? OV_RED : 0;
+}
+
+static int ov_find(u32 key) { int i; for (i = 0; i < 3; i++) if (g_ov[i].top == key) return i; return -1; }
+
+/* the dot still there as drawn (the game has not drawn over it since) */
+static int ov_still(int i)
+{
+    return ov_get(g_ov[i].top, g_ov[i].bw, g_ov[i].fmt, (OV_N / 2) * OV_N + OV_N / 2) == ov_pixel(g_ov[i].fmt, g_ov[i].color)
+        && ov_get(g_ov[i].top, g_ov[i].bw, g_ov[i].fmt, (OV_N / 2) * OV_N + 1) == ov_pixel(g_ov[i].fmt, 0);
+}
+
+/* the pixels under the dot back, if it is still there; the record dropped */
+static void ov_restore(int i)
+{
+    u32 intr = pspSdkDisableInterrupts();
+    int k;
+    if (g_ov[i].top && ov_still(i))
+        for (k = 0; k < OV_N * OV_N; k++) if (g_ov_mask[k]) ov_set(g_ov[i].top, g_ov[i].bw, g_ov[i].fmt, k, g_ov[i].saved[k]);
+    g_ov[i].top = 0;
+    pspSdkEnableInterrupts(intr);
+}
+
+static void ov_draw(u32 key, int bw, int fmt, u32 color)
+{
+    u32 intr, fill = ov_pixel(fmt, color), ring = ov_pixel(fmt, 0);
+    int i = ov_find(key), k;
+    if (i >= 0) ov_restore(i);
+    for (i = 0; i < 3 && g_ov[i].top; i++) ;
+    if (i == 3) { static int next; i = next++ % 3; }   /* (an older buffer's record dropped: the game draws it anew) */
+    intr = pspSdkDisableInterrupts();
+    g_ov[i].top = key; g_ov[i].bw = bw; g_ov[i].fmt = fmt; g_ov[i].color = color;
+    for (k = 0; k < OV_N * OV_N; k++)
+        if (g_ov_mask[k]) { g_ov[i].saved[k] = ov_get(key, bw, fmt, k); ov_set(key, bw, fmt, k, g_ov_mask[k] == 2 ? fill : ring); }
+    pspSdkEnableInterrupts(intr);
+}
+
+/* a frame shown anew (the watcher): a dot from an earlier showing taken off before the frame is
+ * looked at or copied */
+static void ov_new_frame(u32 key)
+{
+    int i = ov_find(key);
+    g_ov_shown = key;
+    if (i >= 0) ov_restore(i);
+}
+
+/* every refresh (the watcher): the dot on the frame shown as it should be, but on one the copier
+ * has yet to copy */
+static void ov_tick(int bw, int fmt)
+{
+    u32 key = g_ov_shown, want = ov_wanted();
+    int i;
+    if (g_clip_dot_until && (int)(now_us() - g_clip_dot_until) >= 0) g_clip_dot_until = 0;
+    if (!key || key == g_ov_copying || bw < OV_X + OV_N) return;
+    i = ov_find(key);
+    if (!want) { if (i >= 0) ov_restore(i); return; }
+    if (i < 0 || g_ov[i].color != want || !ov_still(i)) ov_draw(key, bw, fmt, want);
+}
+
+/* the copier, its frame copied: the dot on it, if it is still the one shown */
+static void ov_after_copy(u32 key, int bw, int fmt)
+{
+    u32 want = ov_wanted();
+    if (want && key == g_ov_shown && bw >= OV_X + OV_N) ov_draw(key, bw, fmt, want);
+    g_ov_copying = 0;
+}
+
 /* The frame the same as the last one looked at? 1,024 words sampled across it (≈0.2 ms): a game's
  * loading screen swaps identical frames, and sending them all took the processor time its loading
  * needed (Gran Turismo: black for minutes at 60 frames a second, normal without the plugin,
@@ -212,8 +337,12 @@ static int frame_unchanged(const void *top, int bw, int fmt)
 {
     static u32 last_a, last_b;
     const u32 *v = (const u32 *)(((u32)top & 0x1FFFFFFF) | 0x40000000);   /* (uncached: what the GE wrote) */
-    u32 words = (u32)bw * CAP_H * (fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2) / 4, step = words / 1024, i, a = 0, b = 0;
-    for (i = 0; i < words; i += step) { u32 w = v[i]; a += w; b = (b << 1 | b >> 31) ^ w; }
+    u32 bpp = fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2, words = (u32)bw * CAP_H * bpp / 4, step = words / 1024, i, a = 0, b = 0;
+    for (i = 0; i < words; i += step) {
+        u32 w, px = i * 4 / bpp;
+        if (ov_in(px % (u32)bw, px / (u32)bw)) continue;   /* (the dot's corner) */
+        w = v[i]; a += w; b = (b << 1 | b >> 31) ^ w;
+    }
     if (a == last_a && b == last_b) return 1;
     last_a = a; last_b = b;
     return 0;
@@ -299,7 +428,8 @@ static int copy_matches(int banded, u32 stride, u32 rows, u32 first)
     u32 bytes = stride * CAP_H, step = bytes / 4 / 1024 * 4, o;
     const u32 *v = (const u32 *)(((u32)g_frame_src & 0x1FFFFFFF) | 0x40000000);
     for (o = first * rows * stride; o < bytes; o += step) {   /* (from band first on: in its slot still) */
-        u32 b = banded ? o / (rows * stride) % (u32)g_nband * BAND + o % (rows * stride) : o;
+        u32 b = banded ? o / (rows * stride) % (u32)g_nband * BAND + o % (rows * stride) : o, px = o / (stride / (u32)g_frame_bw);
+        if (ov_in(px % (u32)g_frame_bw, px / (u32)g_frame_bw)) continue;   /* (the dot's corner) */
         if (v[o / 4] != *(const volatile u32 *)((((u32)g_fbuf + b) & 0x1FFFFFFF) | 0xA0000000)) return 0;
     }
     return 1;
@@ -344,6 +474,7 @@ static int copy_thread(SceSize args, void *argp)
         g_dma_us += now_us() - t0;
         g_copy_us += now_us() - t0;
         if (g_changes != changes) g_late++;   /* the game flipped before the copy ended: maybe torn */
+        ov_after_copy((u32)g_frame_src & 0x1FFFFFFF, g_frame_bw, g_frame_fmt);   /* (the dot, now that the frame is copied) */
         if (!banded) sceKernelSignalSema(g_copied, 1);
     }
     return 0;
@@ -803,7 +934,6 @@ static int h_rbn(SceCtrlData *p, int n) { int r = o_rbn(p, n); pad_apply(p, r, 1
 static int h_pbn(SceCtrlData *p, int n) { int r = o_pbn(p, n); pad_apply(p, r, 1); return r; }
 
 static int g_pad_on;   /* the buttons part (B): the game's reads caught, the note button with them */
-static int (*g_led)(u32 led, u32 on);   /* sceSysconCtrlLED (1: the WLAN light; see note_check) */
 static void catch_pad(void)
 {
     int n = 0;
@@ -811,8 +941,7 @@ static void catch_pad(void)
     n += redirect("sceController_Service", "sceCtrl", 0x3A622550, h_pbp, &o_pbp);   /* ...PeekBufferPositive */
     n += redirect("sceController_Service", "sceCtrl", 0x60B81F86, h_rbn, &o_rbn);   /* ...ReadBufferNegative */
     n += redirect("sceController_Service", "sceCtrl", 0xC152080A, h_pbn, &o_pbn);   /* ...PeekBufferNegative */
-    g_led = (void *)sctrlHENFindFunction("sceSYSCON_Driver", "sceSyscon_driver", 0x18BFBE65);   /* sceSysconCtrlLED (6.60's NID) */
-    cap_log("buttons: %d of 4 calls caught; the WLAN light %s", n, g_led ? "found" : "not found");
+    cap_log("buttons: %d of 4 calls caught", n);
 }
 
 static unsigned char g_cmd_buf[4096] __attribute__((aligned(64)));
@@ -1002,15 +1131,13 @@ static int log_send(void)
  * Note+R: the receiver saves the last 30 s as a clip. Note+L: a recording starts, or stops.
  * Pairs pressed briefly, as the note button held alone for over a second mutes the PSP's sound.
  * While it is down the game sees none of its buttons (nor those held with it, until let go). The
- * receiver keeps the clips; the WLAN light says the press was heard: two blinks for a clip, lit
- * while recording. Only with a receiver reading, and not over the HOME menu or a system screen. */
+ * receiver keeps the clips; a dot on the screen says the press was heard: green for a second for
+ * a clip, red while recording (ov_tick). Only with a receiver reading, and not over the HOME menu
+ * or a system screen. */
 #define EV_CLIP 1
 #define EV_REC_START 2
 #define EV_REC_STOP 3
 static volatile u32 g_ev_type[4], g_ev_time[4], g_ev_head, g_ev_sent;   /* (the watcher's, sent by the sender) */
-static volatile int g_recording;
-static u32 g_blink_at;
-static int g_led_on;
 
 static void event_put(u32 type)
 {
@@ -1161,66 +1288,12 @@ static void home_check(void)
     }
 }
 
-/* The press heard: a short beep on a sound channel of the plugin's own, taken for the beep only
- * (the game's original calls, so it is not in the clips, which hold the game's own sound): two
- * short ones for a clip, rising for a recording that starts, falling for one that stops. And the
- * WLAN light (two blinks, lit while recording), told so and answering 0, yet dark on the
- * PSP-1000 tried (2026-10-24): the beep is the confirmation. */
-#define BEEP_RATE 44100
-static SceUID g_beep_ev = -1;
-static volatile u32 g_beep_kind;
-static int (*o_release)(int);
-static short g_beep_buf[2][1024 * 2] __attribute__((aligned(64)));
-static const short g_beep_tunes[3][4][2] = {   /* (hz, blocks of 1024 samples, ≈23 ms), 0 hz silence */
-    { { 1568, 2 }, { 0, 2 }, { 1568, 2 }, { 0, 1 } },      /* a clip */
-    { { 1047, 3 }, { 1568, 4 }, { 0, 1 }, { 0, 0 } },      /* a recording starts */
-    { { 1568, 3 }, { 1047, 4 }, { 0, 1 }, { 0, 0 } } };    /* it stops */
-
-static int beep_thread(SceSize args, void *argp)
-{
-    static int warned;
-    u32 bits;
-    while (!g_quit && sceKernelWaitEventFlag(g_beep_ev, 1, PSP_EVENT_WAITOR | PSP_EVENT_WAITCLEAR, &bits, NULL) >= 0) {
-        u32 kind = g_beep_kind, ph = 16384, step;
-        int ch = o_reserve(-1, 1024, 0), seg, blk, i, k = 0, tries;   /* (any free channel, stereo) */
-        if (kind < 1 || kind > 3 || g_quit) continue;
-        if (ch < 0) { if (!warned++) cap_log("no free sound channel for the beep (%x)", (u32)ch); continue; }
-        for (seg = 0; seg < 4; seg++) {
-            int hz = g_beep_tunes[kind - 1][seg][0], n = g_beep_tunes[kind - 1][seg][1] * 1024;
-            step = (u32)hz * 65536 / BEEP_RATE;
-            for (blk = 0; blk < n; blk += 1024, k++) {
-                short *b = g_beep_buf[k & 1];
-                for (i = 0; i < 1024; i++) {
-                    int at = blk + i, v = 0;
-                    if (hz) {   /* a soft triangle, faded in and out over 128 samples */
-                        int tri = ph < 32768 ? (int)ph * 2 - 32768 : (65535 - (int)ph) * 2 - 32768;
-                        int fade = at < 128 ? at : n - at < 128 ? n - at : 128;
-                        v = tri / 6 * fade / 128;
-                        ph = (ph + step) & 0xFFFF;
-                    }
-                    b[i * 2] = b[i * 2 + 1] = (short)v;
-                }
-                sceKernelDcacheWritebackRange(b, sizeof(g_beep_buf[0]));
-                o_out_b(ch, 0x6000, b);
-            }
-        }
-        for (tries = 0; tries < 40 && o_release && o_release(ch) < 0; tries++) sceKernelDelayThread(5000);   /* (busy until its last block has played) */
-    }
-    return 0;
-}
-
-static void beep(u32 kind)
-{
-    if (g_beep_ev < 0) return;
-    g_beep_kind = kind;
-    sceKernelSetEventFlag(g_beep_ev, 1);
-}
 
 /* the note button, each screen refresh (see event_put): the pairs, the buttons hidden from the
- * game, the mute put back, the WLAN light. The note button pressed mutes the PSP's sound (the
- * HOME menu's driver sees the buttons before any mask); used for a pair, the mute is put back as
- * it was, at once, and for half a second after the button is let go (in case it toggles on the
- * release); pressed alone it mutes as it always does, when let go. */
+ * game, the mute put back (the dot on the screen: ov_tick). The note button pressed mutes the
+ * PSP's sound (the HOME menu's driver sees the buttons before any mask); used for a pair, the mute
+ * is put back as it was, at once, and for half a second after the button is let go (in case it
+ * toggles on the release); pressed alone it mutes as it always does, when let go. */
 #define GAME_BUTTONS 0xF3F9   /* select, start, the pad, L, R, the four shapes */
 #define IMPOSE_MUTE 0x8
 static int (*g_impose_get)(int), (*g_impose_set)(int, int);
@@ -1229,8 +1302,8 @@ static void note_check(int reading)
     static u32 was, keep_until;
     static int before = -1, wanted = -1, pair;
     SceCtrlData pad;
-    u32 b, t;
-    int on, mute;
+    u32 b;
+    int mute;
     if (sceCtrlPeekBufferPositive(&pad, 1) <= 0) return;
     b = pad.Buttons;
     mute = g_impose_get && g_impose_set ? g_impose_get(IMPOSE_MUTE) : -1;
@@ -1240,12 +1313,11 @@ static void note_check(int reading)
         if (!(was & PSP_CTRL_NOTE)) { pair = 0; wanted = -1; }
         if (mute >= 0 && before >= 0 && mute != before) { wanted = mute; g_impose_set(IMPOSE_MUTE, before); }   /* (the system's toggle, kept for a press alone) */
         if (reading && !g_home_paused && !g_util_active) {
-            if (pressed & PSP_CTRL_RTRIGGER) { pair = 1; event_put(EV_CLIP); beep(1); g_blink_at = now_us() | 1; cap_log("note+R: a clip"); }
+            if (pressed & PSP_CTRL_RTRIGGER) { pair = 1; event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip"); }
             if (pressed & PSP_CTRL_LTRIGGER) {
                 pair = 1;
                 g_recording = !g_recording;
                 event_put(g_recording ? EV_REC_START : EV_REC_STOP);
-                beep(g_recording ? 2 : 3);
                 cap_log("note+L: the recording %s", g_recording ? "starts" : "stops");
             }
         }
@@ -1261,18 +1333,6 @@ static void note_check(int reading)
     }
     was = b;
     if (!reading) g_recording = 0;
-    on = g_recording;
-    if (g_blink_at) {   /* two blinks: 150 ms on, 150 off, 150 on */
-        t = now_us() - g_blink_at;
-        if (t < 450000) on = t < 150000 || t >= 300000;
-        else g_blink_at = 0;
-    }
-    if (g_led && on != g_led_on) {
-        static int told;
-        int r = g_led(1, (u32)on);
-        if (!told++) cap_log("the WLAN light: %x", (u32)r);
-        g_led_on = on;
-    }
 }
 
 /* the watcher: every screen refresh, the frame shown; a new one counted (the game's frame rate)
@@ -1338,14 +1398,8 @@ static int capture_thread(SceSize args, void *argp)
     g_impose_status = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x1B6E3400);   /* sceImposeGetStatus */
     g_impose_get = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x531C9778);      /* sceImposeGetParam */
     g_impose_set = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x810FB7FB);      /* sceImposeSetParam */
-    o_release = (void *)sctrlHENFindFunction("sceAudio_Driver", "sceAudio", 0x6FC46853);                  /* sceAudioChRelease */
-    if (g_pad_on && o_reserve && o_out_b && o_release) {
-        SceUID th;
-        g_beep_ev = sceKernelCreateEventFlag("PSPExpCaptureBeep", 0, 0, NULL);
-        th = sceKernelCreateThread("PSPExpCaptureBeep", beep_thread, 0x20, 0x1000, 0, NULL);
-        if (th >= 0) sceKernelStartThread(th, 0, NULL);
-    }
-    cap_log("the note button: mute setting %s, beep %s", g_impose_get && g_impose_set ? "found" : "not found", g_beep_ev >= 0 ? "ready" : "off");
+    ov_init();
+    cap_log("the note button: mute setting %s", g_impose_get && g_impose_set ? "found" : "not found");
     cap_log("HOME menu watched: %x", (u32)g_impose_status);
     g_cmd_th = sceKernelCreateThread("PSPExpCaptureCmd", cmd_thread, 0x30, 0x2000, 0, NULL);
     if (g_cmd_th >= 0) sceKernelStartThread(g_cmd_th, 0, NULL);
@@ -1365,6 +1419,7 @@ static int capture_thread(SceSize args, void *argp)
         if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) < 0 || !top) continue;
         if (top != last) {
             g_changes++; last = top; g_top = top;
+            ov_new_frame((u32)top & 0x1FFFFFFF);   /* (a dot from an earlier showing off it first) */
             if (pspexpUsbConnected()) {
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
                 if (!g_frames_on || !g_mem_held || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
@@ -1376,12 +1431,14 @@ static int capture_thread(SceSize args, void *argp)
                     g_frame_bw = bw; g_frame_fmt = fmt;
                     g_frame_seq = seq++; g_frame_changes = g_changes; g_frame_time = now_us();
                     g_frame_mode = g_mem_held;
+                    g_ov_copying = (u32)top & 0x1FFFFFFF;
                     g_busy = 1;
                     sceKernelSignalSema(g_copy_go, 1);
                     sceKernelSetEventFlag(g_send_ev, SEND_FRAME);
                 } else g_skipped++;
             } else if (was_connected) { cap_log("receiver gone"); was_connected = 0; }
         }
+        if (g_pad_on) ov_tick(bw, fmt);   /* the dot on the frame shown */
         if (g_home_paused) t0 = now_us();   /* (no log while the HOME menu is open: an exit may follow) */
         if (now_us() - t0 >= 5000000) {   /* every 5 s: the game's frame rate, and what went out */
             u32 ms = (now_us() - t0) / 1000;   /* (32-bit: no 64-bit division in the kernel) */

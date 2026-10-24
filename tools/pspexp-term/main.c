@@ -3242,6 +3242,76 @@ static void ctl_step(uint64_t now, int connected)
     } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., ping, end");
 }
 
+/* ---- PSPExp Capture's receiver (tools/pspexp-capture) beside the console ----
+ * A native PSP game with the Capture plugin on (psp/capture) reaches the board under the plugin's
+ * own USB product, which the console's link leaves alone; the receiver keeps the note button's
+ * clips (note+R the last 30 s, note+L a recording) in ~/Videos/PSPExp (~/Movies/PSPExp on a Mac).
+ * Started with the launcher over USB when it and ffmpeg are on the PATH, again 10 s after it ends;
+ * PSPEXP_CAPTURE=0: not at all. Its own process group; stopped with the console, its clips under
+ * way finished first. */
+static pid_t g_capture_pid;
+static uint64_t g_capture_next;
+
+static int in_path(const char *name)
+{
+    const char *p = getenv("PATH");
+    char dir[1024];
+    while (p && *p) {
+        size_t n = strcspn(p, ":");
+        if (n && n < sizeof(dir) - 64) {
+            snprintf(dir, sizeof(dir), "%.*s/%s", (int)n, p, name);
+            if (access(dir, X_OK) == 0) return 1;
+        }
+        p += n + (p[n] == ':');
+    }
+    return 0;
+}
+
+static void capture_tick(uint64_t now)
+{
+    static int off = -1;
+    pid_t pid;
+    if (off < 0) { const char *e = getenv("PSPEXP_CAPTURE"); off = (e && !strcmp(e, "0")) || !g_launcher_on || g_mode != MODE_USB; }
+    if (off) return;
+    if (g_capture_pid > 0) {
+        int st;
+        if (waitpid(g_capture_pid, &st, WNOHANG) != g_capture_pid) return;
+        fprintf(stderr, "[pspexp-term] capture: the receiver ended (%d)\n", st);
+        g_capture_pid = 0;
+        g_capture_next = now + 10000000u;
+    }
+    if (now < g_capture_next) return;
+    g_capture_next = now + 60000000u;   /* (missing: looked for again in a minute) */
+    if (!in_path("pspexp-capture") || !in_path("ffmpeg")) return;
+    pid = fork();
+    if (pid == 0) {
+        char dir[1024];
+        const char *h = getenv("HOME");
+        int fd;
+#ifdef __APPLE__
+        snprintf(dir, sizeof(dir), "%s/Movies/PSPExp", h && *h ? h : "/tmp");
+#else
+        snprintf(dir, sizeof(dir), "%s/Videos/PSPExp", h && *h ? h : "/tmp");
+#endif
+        setsid();
+        for (fd = 3; fd < 1024; fd++) close(fd);   /* (none of the console's: the PSP's link, the shells' terminals) */
+        fd = open("/dev/null", O_RDONLY);
+        if (fd >= 0) dup2(fd, 0);
+        execlp("pspexp-capture", "pspexp-capture", "-k", "-q", "-s", dir, (char *)NULL);
+        _exit(127);
+    }
+    if (pid > 0) { g_capture_pid = pid; fprintf(stderr, "[pspexp-term] capture: the receiver started (pid %d)\n", (int)pid); }
+}
+
+static void capture_stop(void)
+{
+    int i;
+    if (g_capture_pid <= 0) return;
+    kill(g_capture_pid, SIGTERM);
+    for (i = 0; i < 50 && waitpid(g_capture_pid, NULL, WNOHANG) != g_capture_pid; i++) usleep(100000);   /* (5 s: a clip being made) */
+    g_capture_pid = 0;
+}
+
 int main(int argc, char **argv)
 {
     const char *fifo_path = "/tmp/pspexp-audio", *pidfile = "/tmp/pspexp-term.pid";
@@ -3502,6 +3572,7 @@ int main(int argc, char **argv)
 
         now = pspexp_time_us();
         watchdog_ping(now);
+        capture_tick(now);
         connected = pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED;
         host_input_poll(connected);
         if (!connected && !g_released && (g_mode == MODE_USB || g_mode == MODE_TCP) && now - last_try > 1000000u) {
@@ -3686,6 +3757,7 @@ int main(int argc, char **argv)
     }
 
     if (g_ctl_on) ctl_close();
+    capture_stop();
     { int k; for (k = 0; k < NSESS; k++) if (g_sess[k].used && g_sess[k].child > 0) kill(-g_sess[k].child, SIGHUP); }
     if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
         pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_DISCONNECT, NULL, 0);

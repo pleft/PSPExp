@@ -29,7 +29,8 @@ SOON = ["pspexp.dev"]                            # "do not index" until launch d
 
 MANUAL = [("README.md", "index.html", "The manual"), ("psp.md", "psp.html", "The PSP"),
           ("raspberry-pi.md", "raspberry-pi.html", "Raspberry Pi"), ("gameshell.md", "gameshell.html", "GameShell"),
-          ("omega2.md", "omega2.html", "Omega2+"), ("using-pspexp.md", "using-pspexp.html", "Using PSPExp")]
+          ("omega2.md", "omega2.html", "Omega2+"), ("using-pspexp.md", "using-pspexp.html", "Using PSPExp"),
+          ("recording.md", "recording.html", "Recording PSP games")]
 
 
 # ---- Markdown, as the manual writes it --------------------------------------------------------

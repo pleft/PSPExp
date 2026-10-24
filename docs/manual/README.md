@@ -20,6 +20,9 @@ What you get on the PSP:
 - **A file manager** that reaches both the board and the PSP's memory stick.
 - **A real terminal**: the board's Linux shell on the PSP, typed on an
   on-screen keyboard.
+- **Recording your own PSP games**: with PSPExp Capture, ♪ + R saves the
+  last 30 seconds of a UMD or ISO game as a video on the board
+  ([Recording PSP games](recording.md)).
 
 It runs on the original PSP-1000 (tested) and needs custom firmware, since
 it uses a small kernel driver for the USB link.
@@ -45,6 +48,8 @@ the setup and the list of packages differ.
 3. Start PSPExp on the PSP, plug in the USB cable, and the launcher appears.
 4. [Using PSPExp](using-pspexp.md): the launcher, packages, emulators,
    files, music, Bluetooth and the terminal.
+5. Optional: [Recording PSP games](recording.md), your own PSP games as
+   videos, with the note button.
 
 > **The downloads** (the PSP's files and the card images) are on the
 > [download page](https://pspexp.dev/download) (each release's files also on GitHub's

@@ -666,6 +666,21 @@ Packages, square, START twice, the history after a restart (a repeated key
 counted x2), and a program running: nothing shown, then "3 notifications
 while you played".
 
+### 3.8 PSPExp Capture's receiver (2026-10-24)
+
+A native PSP game with the Capture plugin on (psp/capture, the
+architecture's §12b) reaches the board under the plugin's own USB product,
+0x01CB, which the console's link (0x01CA) leaves alone. The console runs
+PSPExp Capture's receiver beside itself: started with the launcher over USB
+when `pspexp-capture` and ffmpeg are on the PATH (both are on the card
+images), as `pspexp-capture -k -q -s ~/Videos/PSPExp` (`~/Movies/PSPExp` on
+a Mac), again 10 s after it ends, and stopped with the console, a clip under
+way finished first. `PSPEXP_CAPTURE=0` keeps it from starting. In the game,
+♪+R saves the last 30 s and ♪+L starts and stops a recording; a dot in the
+PSP screen's corner confirms it (green for a clip, red while recording).
+The console's log keeps the receiver's lines (`-q`: the connections, the
+clips and what went wrong).
+
 ## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
 
 The goal is a card image: the PSPExp launcher with preinstalled games,

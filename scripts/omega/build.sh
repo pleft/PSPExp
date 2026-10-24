@@ -16,7 +16,8 @@
 #   scp build/omega/bin/* root@omega:/tmp/    (or the SD card)
 #   Doom: put freedoom1.wad in /mnt/mmcblk0p1/doom/ and run doom.sh on the Omega
 #
-# Builds libusb 1.0 from source, then pspexp-bench, pspexp-sprite-demo, pspexp-term and pspexp-ms.
+# Builds libusb 1.0 from source, then pspexp-bench, pspexp-sprite-demo, pspexp-term, pspexp-ms and
+# pspexp-capture (PSPExp Capture's receiver, which the console runs beside itself).
 # "doom" adds a headless static SDL2, SDL2_mixer (WAV only) and SDL2_net,
 # and Chocolate Doom linked with the SDL layer: OpenWrt has no usable
 # LD_PRELOAD route for a static program and Zig's linker has no --wrap, so
@@ -79,8 +80,8 @@ T
 PKG_CONFIG_LIBDIR="$OUT/prefix/lib/pkgconfig" PKG_CONFIG_SYSROOT_DIR= \
 cmake -S "$ROOT" -B "$OUT/cmake" -DCMAKE_TOOLCHAIN_FILE="$OUT/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
 	-DPSPEXP_BUILD_TESTS=OFF -DPSPEXP_BUILD_SDL=OFF >/dev/null
-PKG_CONFIG_LIBDIR="$OUT/prefix/lib/pkgconfig" cmake --build "$OUT/cmake" -j8 --target pspexp-bench pspexp-sprite-demo pspexp-term pspexp-ms
-cp "$OUT/cmake/pspexp-bench" "$OUT/cmake/pspexp-sprite-demo" "$OUT/cmake/pspexp-term" "$OUT/cmake/pspexp-ms" "$OUT/bin/"
+PKG_CONFIG_LIBDIR="$OUT/prefix/lib/pkgconfig" cmake --build "$OUT/cmake" -j8 --target pspexp-bench pspexp-sprite-demo pspexp-term pspexp-ms pspexp-capture
+cp "$OUT/cmake/pspexp-bench" "$OUT/cmake/pspexp-sprite-demo" "$OUT/cmake/pspexp-term" "$OUT/cmake/pspexp-ms" "$OUT/cmake/pspexp-capture" "$OUT/bin/"
 cp "$ROOT/scripts/board/pspexp-exec" "$ROOT/scripts/omega/pspexp-term.init" "$OUT/bin/"
 "$OUT/zcc" --version >/dev/null 2>&1 || true
 

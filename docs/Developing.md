@@ -27,7 +27,7 @@ Every document and what it is for: [docs/README.md](README.md).
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (branch `pspexp` of Stratagus in the WarCraft project; no longer in PSPExp) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
 | host-rendered OpenGL (`libsdl-pspexp-hostgl`): a game too heavy for the GE drawn by the board's own GPU, each frame sent to the PSP as a picture | OpenMW from a Mac at 60 fps on the PSP (2026-10-02); on the Pi 400's GPU, headless: SuperTuxKart, Trackballs, Open Surge packaged (2026-10-03; ~30 fps in PPSSPP, not yet measured on the PSP) |
-| `psp/capture` PSPExp Capture `pspexp_capture.prx` (a CFW game.txt plugin: a native PSP game's picture and sound over USB) + `tools/pspexp-capture` (the receiver: an MP4) | **runs on the PSP-1000 2026-10-23** (Burnout Legends: picture and sound in sync over 4½ minutes; menus every frame at 30 in full colour; saves load; exits cleanly; driven from the Mac for tests); a race: every frame, the game 25 fps instead of 30 (the USB driver's processor time); Castlevania 30 of 30; Castlevania's HOME > Exit switched the PSP off with the plugin on: fixed (no memory-stick access while a game starts), exits cleanly while streaming; Jeanne d'Arc, Crisis Core, Phantasy Star Portable 2 recorded through a fallback in the kernel's memory (2026-10-24); the note button: ♪+R saves the last 30 s, ♪+L records, the PSP beeps (2026-10-24); on the Pi 400 beside the console, the clips kept on the board (2026-10-24); not shipped (architecture §12b) |
+| `psp/capture` PSPExp Capture `pspexp_capture.prx` (a CFW game.txt plugin: a native PSP game's picture and sound over USB) + `tools/pspexp-capture` (the receiver: an MP4) | **runs on the PSP-1000 2026-10-23** (Burnout Legends: picture and sound in sync over 4½ minutes; menus every frame at 30 in full colour; saves load; exits cleanly; driven from the Mac for tests); a race: every frame, the game 25 fps instead of 30 (the USB driver's processor time); Castlevania 30 of 30; Castlevania's HOME > Exit switched the PSP off with the plugin on: fixed (no memory-stick access while a game starts), exits cleanly while streaming; Jeanne d'Arc, Crisis Core, Phantasy Star Portable 2 recorded through a fallback in the kernel's memory (2026-10-24); the note button: ♪+R saves the last 30 s, ♪+L records, a dot on the screen confirms (2026-10-24); on the Pi 400 beside the console, the clips kept on the board (2026-10-24); not shipped (architecture §12b) |
 | **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
 
 ## Build
@@ -168,9 +168,10 @@ Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspex
 2. Plug the PSP into the computer and run `build/host/pspexp-capture -o clip.mp4 -d frames -t 90`
    (the whole game as one clip), or `build/host/pspexp-capture -k -s ~/Movies/clips` for the
    note button: on the PSP, ♪+R saves the last 30 s (`-b` changes it) and ♪+L starts and stops a
-   recording; the PSP beeps to confirm. On a board the receiver runs beside the console as a
-   service (`scripts/pi/pspexp-capture.service`; the clips in `~/Videos/PSPExp`): the plugin has a
-   USB product of its own (0x01CB), which the console leaves alone.
+   recording; a dot in the screen's corner confirms (green for a clip, red while recording). On a board the console runs the receiver beside itself
+   (`pspexp-capture -k -q -s ~/Videos/PSPExp`, when it and ffmpeg are installed;
+   `PSPEXP_CAPTURE=0` turns it off): the plugin has a USB product of its own (0x01CB), which the
+   console's link leaves alone.
 3. Start a game from the XMB: the receiver connects, prints the frames and sound received and the
    game's frame rate every 5 s, and stops after 90 s, when the game exits, or on Ctrl-C. The clip
    has the game's picture and sound and plays at its speed.
