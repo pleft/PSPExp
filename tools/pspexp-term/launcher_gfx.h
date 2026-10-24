@@ -91,6 +91,8 @@ void gfx_image_free(void);
 void gfx_video_upload(const uint16_t *px, int w, int h);
 void gfx_video_draw(int x, int y);
 void gfx_video_free(void);
+/* the picture shown is gone from the PSP (a new link: not kept for replay); upload it again */
+int gfx_video_lost(void);
 
 uint32_t gfx_hash(const char *s);
 

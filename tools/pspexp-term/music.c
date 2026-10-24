@@ -806,7 +806,7 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_rect(0, 0, UI_SCREEN_W, UI_SCREEN_H, 0x000000, 255);
     if (player_video(&px, &w, &h, &serial)) {
-        if (serial != g_vid_serial) { gfx_video_upload(px, w, h); g_vid_serial = serial; g_vid_shown++; g_vid_loaded = 1; }
+        if (serial != g_vid_serial || gfx_video_lost()) { gfx_video_upload(px, w, h); g_vid_serial = serial; g_vid_shown++; g_vid_loaded = 1; }   /* (lost: a film paused over a game's hand-over came back black) */
         gfx_video_draw((UI_SCREEN_W - w) / 2, (UI_SCREEN_H - h) / 2);
     } else gfx_text(FONT_SMALL, 16, UI_SCREEN_H / 2 - 8, "Starting the film...", UI_SUB, 255, 0);
     if (pi.paused || pi.ended || now < g_hud_until || g_msg[0]) {

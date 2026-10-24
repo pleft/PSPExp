@@ -863,9 +863,11 @@ void gfx_video_upload(const uint16_t *px, int w, int h)
             d.priority = PSPEXP_PRIORITY_LOW;   /* changes every picture: main RAM, not VRAM (the GE reads it fine) */
             f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw > 64 ? 64 : tw); f.h = (uint16_t)th;
             patch = (g_vid_tiles[set] & (1 << t)) && pspexp_patch_supported(G);
-            if (patch) dst = (uint16_t *)pspexp_patch_texture_begin(G, id, 0, (uint32_t)(d.width * d.height * 2));
-            else {
-                if (g_vid_tiles[set] & (1 << t)) pspexp_release(G, id);
+            dst = patch ? (uint16_t *)pspexp_patch_texture_begin(G, id, 0, (uint32_t)(d.width * d.height * 2)) : NULL;
+            if (!dst) {   /* refused too when the PSP no longer has it: a new link (a game's hand-over, the film
+                           * paused meanwhile) loses what was not kept for replay; skipped, the film stayed black */
+                patch = 0;
+                if ((g_vid_tiles[set] & (1 << t)) && pspexp_resource_state(G, id, NULL) != PSPEXP_RES_NONE) pspexp_release(G, id);
                 g_vid_tiles[set] &= ~(1 << t);
                 /* (the whole texture goes: the runtime wants every byte of it) */
                 dst = (uint16_t *)pspexp_upload_texture_begin(G, id, &d, (uint32_t)(d.width * d.height * 2), &f, 1);
@@ -895,6 +897,14 @@ void gfx_video_draw(int x, int y)
         q.u1 = (uint16_t)q.w; q.v1 = (uint16_t)q.h; q.color = 0xFFFF;
         pspexp_draw_quad_ex_batch(G, (uint16_t)(ID_VIDEO + g_vid_set * 4 + t), &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
     }
+}
+
+int gfx_video_lost(void)
+{
+    int t;
+    for (t = 0; t < 4; t++)
+        if ((g_vid_tiles[g_vid_set] & (1 << t)) && pspexp_resource_state(G, (uint16_t)(ID_VIDEO + g_vid_set * 4 + t), NULL) == PSPEXP_RES_NONE) return 1;
+    return 0;
 }
 
 void gfx_video_free(void)

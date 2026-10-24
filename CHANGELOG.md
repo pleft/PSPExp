@@ -18,6 +18,8 @@
 - **The PSP's download carries the licences** of the code and libraries
   inside PSPExp's PSP programs (PSPLINK, PSPSDK, newlib): `THIRD_PARTY.txt`
   and `licenses/`.
+- **A film paused in Media while a game ran** came back with sound and a
+  black picture: its picture is sent again now.
 - **One command on a Raspberry Pi OS you already have**:
   `curl -fsSL https://pspexp.dev/install.sh | sh` on the Pi sets it up as
   the card image does, without writing a new card.
