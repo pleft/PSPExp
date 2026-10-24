@@ -25,7 +25,7 @@
 #       compiled on the Pi into build/pi/bin/, for the nes package
 # Needs on the Pi: sudo without a password prompt. Building there, it first
 # installs what the build needs (build-essential, cmake, pkg-config,
-# libusb-1.0-0-dev, libsdl2-dev). Without a repository Apps > Packages has no
+# libusb-1.0-0-dev, libsdl2-dev, zlib1g-dev). Without a repository Apps > Packages has no
 # catalogue: games come only through one (docs/Package_Manager.md §6).
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -82,7 +82,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 	[ -n "$V" ] && echo "$V" | ssh "$PI" 'cat > ~/pspexp/src/.pspexp-version'
 	# what the build needs (a fresh Raspberry Pi OS has none of it)
 	ssh "$PI" 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends build-essential cmake pkg-config \
-		libusb-1.0-0-dev libsdl2-dev >/dev/null'
+		libusb-1.0-0-dev libsdl2-dev zlib1g-dev >/dev/null'
 	ssh "$PI" 'set -e; cd ~/pspexp/src
 		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
 		cmake --build build -j4 --target pspexp-term pspexp-ms pspexp-capture sdl-pspexp sdl-pspexp-hostgl sdl-pspexp-sdl12 pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true

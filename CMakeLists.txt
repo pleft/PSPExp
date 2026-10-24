@@ -48,8 +48,14 @@ add_library(pspexp STATIC
   host/libpspexp/pspexp_time.c
   host/libpspexp/pspexp_local_audio.c
   host/libpspexp/pspexp_slots.c
+  host/libpspexp/pspexp_disc.c
   protocol/pspexp_sha256.c)
 target_link_libraries(pspexp PUBLIC pspexp_protocol)
+find_package(ZLIB QUIET)   # (PSP game discs: CSO blocks and zipped ISOs are deflate; without it, ISOs only)
+if(ZLIB_FOUND)
+  target_link_libraries(pspexp PUBLIC ZLIB::ZLIB)
+  target_compile_definitions(pspexp PRIVATE PSPEXP_HAVE_ZLIB=1)
+endif()
 
 add_library(pspexp_null STATIC host/executor-null/pspexp_null.c)
 target_link_libraries(pspexp_null PUBLIC pspexp pspexp_runtime)
@@ -266,6 +272,11 @@ if(PSPEXP_BUILD_TESTS)
   add_executable(test_runtime tests/test_runtime.c)
   target_link_libraries(test_runtime PRIVATE pspexp pspexp_null)
   add_test(NAME runtime COMMAND test_runtime)
+  if(ZLIB_FOUND)
+    add_executable(test_disc tests/test_disc.c)
+    target_link_libraries(test_disc PRIVATE pspexp)
+    add_test(NAME disc COMMAND test_disc)
+  endif()
   add_executable(test_note tests/test_note.c)
   target_link_libraries(test_note PRIVATE pspexp_runtime)
   add_test(NAME note COMMAND test_note)

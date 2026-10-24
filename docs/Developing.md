@@ -11,7 +11,7 @@ Every document and what it is for: [docs/README.md](README.md).
 |---|---|
 | `protocol/` framing, opcodes, batch records + expansion, texture rules | done, unit-tested |
 | `runtime/` command processor + two-tier cache (shared by every executor) | done, unit-tested |
-| `host/libpspexp` application API, frame builder, pacing, reconnect replay | done, unit-tested |
+| `host/libpspexp` application API, frame builder, pacing, reconnect replay; PSP game discs (`pspexp_disc.c`: ISO, CSO, zipped ISO; title, disc ID, icon) | done, unit-tested |
 | `host/executor-null` | done |
 | `host/transport-usb` (libusb, reader thread) | **runs on hardware**: 25 MB/s, 0.25 ms round trip (v01-usb-bringup.md) |
 | `psp/transport-usb` kernel driver `pspexp_usb.prx` | **runs on hardware** |

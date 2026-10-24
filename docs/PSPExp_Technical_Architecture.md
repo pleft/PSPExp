@@ -1096,6 +1096,64 @@ The plugin sends the press as an event ("PXCE": its type, its time on the PSP's 
 - shipping: the plugin in PSPExp's zip, with THIRD_PARTY.txt and licenses/ beside it as the PSP's zip has (it carries the USB driver's PSPLINK parts and PSPSDK), a page in the manual, a section on the site;
 - later: live streaming.
 
+## 12c. The PSP games shelf: native PSP games from the board (started 2026-10-25)
+
+The PSP's own games in PSPExp's launcher, kept on the board: a shelf of them with their covers, a
+game started from it running natively on the PSP (at its own speed, recorded with PSPExp Capture
+and ♪ as any native game), and, later, its disc read from the board over the cable (a virtual
+disc), so the memory stick keeps only the saves. Proposed 2026-10-23 with capture as stage 1;
+the earlier USB ISO loaders (Custom Firmware Extender's usbhost redirection, HostCore, 2008–2009:
+Windows-only, no source found, called buggy in their own changelogs) had no library and no launcher.
+
+**The board's library (2026-10-25).** `host/libpspexp/pspexp_disc.c` reads a PSP game from an
+ISO, a CSO (version 1: deflate blocks and their index) or a zip holding an ISO (front to back,
+inflating as it goes; a sector behind starts it again): sectors of 2048 bytes, a file found
+through ISO 9660, PARAM.SFO's TITLE and DISC_ID, and the game's own icon, PSP_GAME/ICON0.PNG
+(144x80), for a cover where there is no box art. zlib is optional (without it: ISOs only; the
+GameShell's cross-build has none). `tests/test_disc.c` makes a small disc and reads it as all
+four. On the Pi 400, over the collection on its disk (104 zips): 99 PSP games read, title, disc ID
+and icon (the other 5 are PS1 games, BIN/CUE or a converted EBOOT, rightly refused); the
+metadata sits 40–50 MB in (after the firmware update folder), at most 335 MB: 1–2 s a game, up to
+45 s for three, 5 min 48 s for all (once, then kept).
+
+**Booting a game, from PRO's source** (procfw at PRO-C's commit, ARK-4, uOFW; read, not yet tried):
+- the XMB's own way (`Vshctrl/virtual_pbp.c`, `vpbp_loadexec`): `sctrlSESetUmdFile(iso)`,
+  `sctrlSESetBootConfFileIndex(3)` (Inferno; 1 March33, 2 NP9660), `sctrlSESetDiscType(0x10)`,
+  then `sctrlKernelLoadExecVSHWithApitype(0x120, "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN")` with the
+  key "umdemu" (0x123 only on the PSP Go). All in SystemCtrlForUser too, so PSPExp's runtime or its
+  kernel module can call them. The capture plugin's developer `restart` does the same but leaves
+  the disc type out (it inherits it; a start from PSPExp must set it). The ISO mode stays for the
+  next start until the XMB clears it: going back to PSPExp sets mode 0 and an empty ISO first;
+- back to PSPExp when the game exits: as ARK-4 (`exitgame.c`): the plugin's catch of
+  `sceKernelExitGame` (it has one) clears the ISO and the mode and starts
+  `ms0:/PSP/GAME/PSPExp/EBOOT.PBP` (apitype 0x141, key "game") from a thread of its own,
+  instead of the XMB;
+- Inferno, PRO's ISO driver, opens the ISO in a thread that retries for ever (after the memory
+  stick is ready), with `sceIoOpen` on whatever path was set: no check of its device. The
+  plugins of game.txt load before the game's EBOOT (in SystemControl's start-module catch, when
+  sceMediaSync loads), after Inferno has started. So a plugin can add a device of its own
+  (`sceIoAddDrv`, "pxd0:") and Inferno reads the game from it once it is there: the virtual
+  disc. Reads come synchronously, whole sectors, any length, no cache on a PSP-1000 (every read
+  of the game's reaches the device). NP9660 opens in its own start without retrying: unusable.
+
+**Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
+back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
+it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's
+sectors (the receiver, already on the other end of the plugin's link, serving from the ISO, a
+CSO, or a zip unpacked once into a cache). Its risks: the USB that early in a game's start, read
+latency (one round trip a read, no cache), games using the USB port themselves, the cable pulled
+mid-game (the disc gone). The smallest test on the PSP (about 6 starts): (1) a stick ISO booted
+from a test command, its mode and disc type logged; (2) its exit back to PSPExp, no disc left
+bound; (3) a plugin device serving the ISO from the stick (the path and the timing, no USB);
+(4) the same with the USB up early, only connecting; (5) reads over the USB; (6) a long game
+and HOME > Exit.
+
+**Next:**
+- the launcher's shelf: the PSP system, the board's games with their icons (box art when
+  there is: libretro's "Sony - PlayStation Portable"), checked at 1:1;
+- (A) and (B) above, with the PSP;
+- PS1 games (the PSP's own player, POPS: an EBOOT.PBP made from BIN/CUE), later.
+
 ## 13. Host Independence
 
 No protocol message may depend on the Onion Omega2+, Raspberry Pi, GameShell, or macOS.
