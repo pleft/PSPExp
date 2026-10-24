@@ -85,8 +85,8 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 		libusb-1.0-0-dev libsdl2-dev >/dev/null'
 	ssh "$PI" 'set -e; cd ~/pspexp/src
 		cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null
-		cmake --build build -j4 --target pspexp-term pspexp-ms sdl-pspexp sdl-pspexp-hostgl sdl-pspexp-sdl12 pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
-		[ -x build/pspexp-term ] && [ -f build/libsdl-pspexp.so ]'
+		cmake --build build -j4 --target pspexp-term pspexp-ms pspexp-capture sdl-pspexp sdl-pspexp-hostgl sdl-pspexp-sdl12 pspexp-bench pspexp-sprite-demo 2>&1 | grep -E "error|warning:" || true
+		[ -x build/pspexp-term ] && [ -x build/pspexp-capture ] && [ -f build/libsdl-pspexp.so ]'
 	if [ "$PSPEXP_CORE" = build ]; then
 		echo "built on $PI (~/pspexp/src/build): package it with scripts/packages/debs/pspexp-core/build OUTDIR arm64 $PI"
 		exit 0
@@ -94,7 +94,7 @@ if [ "${PSPEXP_CORE:-apt}" != apt ]; then
 	[ -n "$REPO_URL" ] || echo "no package repository address (\$PSPEXP_REPO_URL or ~/.pspexp/repo-url): PSPExp from this build, into /usr/local; Apps > Packages has no catalogue to offer without one (docs/Package_Manager.md §6)"
 	ssh "$PI" 'set -e; S=~/pspexp/src
 		sudo install -d -m 0755 /usr/local/bin /usr/local/lib /usr/local/share/pspexp/launcher
-		for f in pspexp-term pspexp-bench pspexp-sprite-demo; do sudo install -m 0755 $S/build/$f /usr/local/bin/$f.new && sudo mv /usr/local/bin/$f.new /usr/local/bin/$f; done
+		for f in pspexp-term pspexp-capture pspexp-bench pspexp-sprite-demo; do sudo install -m 0755 $S/build/$f /usr/local/bin/$f.new && sudo mv /usr/local/bin/$f.new /usr/local/bin/$f; done
 		sudo install -m 0755 $S/scripts/board/pspexp-exec /usr/local/bin/pspexp-exec
 		sudo install -m 0755 $S/scripts/board/pspexp-run /usr/local/bin/pspexp-run
 		sudo install -m 0755 $S/scripts/board/pspexp-pkg /usr/local/bin/pspexp-pkg
@@ -117,7 +117,7 @@ else
 		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends pspexp-core >/dev/null
 		rm -f /tmp/keyring.gpg /tmp/pspexp-apt-setup /tmp/pspexp-pkg-apt
 		# copies from the older way would come first in PATH and shadow the package's
-		for f in pspexp-term pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
+		for f in pspexp-term pspexp-capture pspexp-bench pspexp-sprite-demo pspexp-exec pspexp-run pspexp-pkg pspexp-bt pspexp-ms; do sudo rm -f /usr/local/bin/\$f; done
 		sudo rm -rf /usr/local/lib/libsdl-pspexp.so /usr/local/lib/libsdl-pspexp-hostgl.so /usr/local/lib/libsdl-pspexp-sdl12.so /usr/local/share/pspexp/launcher
 		dpkg-query -W pspexp-core pspexp-runtime"
 	CONSOLE=/usr/bin/pspexp-term

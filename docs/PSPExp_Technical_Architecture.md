@@ -1084,7 +1084,7 @@ The plugin sends the press as an event ("PXCE": its type, its time on the PSP's 
 - the `restart` command from a game holding the fallback's bands (switched the PSP off once);
 - 60 fps games (Gran Turismo) make 30 fps clips: the receiver's clip rate to follow the game's, the plugin's cap of 30 frames a second with it;
 - an adaptive mode: every frame while the game keeps its pace, every other one while it slows (Burnout's races);
-- shipping the board's side: done in the repository (2026-10-24): the console runs the receiver, pspexp-core and the GameShell's build carry it, with its own USB rule; the GameShell to be tried; the clips play on the PSP in PSPExp's own Files and Media (tried on the Pi 400);
+- shipping the board's side: done in the repository (2026-10-24): the console runs the receiver, pspexp-core and the GameShell's build carry it, with its own USB rule (the Pi's build, `scripts/pi/install.sh build`, the release's route, left the receiver's target out until the evening of 2026-10-24, and the package took it silently when missing: a test upgrade removed the Pi's receiver; now built, and the package is not made without it); the GameShell to be tried; the clips play on the PSP in PSPExp's own Files and Media (tried on the Pi 400);
 - a steady dot: drawn the moment a frame shows (the copy then cleaned of it with the kept pixels) and the frame looked for every 2 ms, not once a refresh (it flickers slightly now: drawn after the copy, and a swap in mid-refresh found only at the next);
 - the receiver as the board's console in a capture mode (clips kept by PSPExp), plus the Mac/Linux tool for people without a board;
 - the shutdown's last log line ("stopped") never appears though the exit works: find which step does not return in time;

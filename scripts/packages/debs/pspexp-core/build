@@ -18,12 +18,12 @@ arm64)
 	if [ -d "$SRC_HOST" ]; then   # a build made elsewhere (a Debian 13 arm64 container: the same libraries as Raspberry Pi OS)
 		cp "$SRC_HOST/pspexp-term" "$SRC_HOST/libsdl-pspexp.so" "$W/b/"
 		cp "$SRC_HOST/pspexp-ms" "$SRC_HOST/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true
-		cp "$SRC_HOST/pspexp-capture" "$W/b/" 2>/dev/null || true   # PSPExp Capture's receiver (the console runs it)
+		cp "$SRC_HOST/pspexp-capture" "$W/b/"   # PSPExp Capture's receiver (the console runs it)
 		cp "$SRC_HOST/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true   # SDL 1.2 programs (pspexp-run)
 	else
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-term" "$SRC_HOST:pspexp/src/build/libsdl-pspexp.so" "$W/b/"
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-ms" "$W/b/" 2>/dev/null || true
-	scp -q "$SRC_HOST:pspexp/src/build/pspexp-capture" "$W/b/" 2>/dev/null || true   # PSPExp Capture's receiver (the console runs it)
+	scp -q "$SRC_HOST:pspexp/src/build/pspexp-capture" "$W/b/"   # PSPExp Capture's receiver (the console runs it)
 	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true   # the board's GPU draws (pspexp-run PSPEXP_HOSTGL)
 	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true   # SDL 1.2 programs (pspexp-run)
 	fi ;;
@@ -31,7 +31,7 @@ armhf)
 	cp "$ROOT/build/gameshell/bin/pspexp-term" "$W/b/"
 	cp "$ROOT/build/gameshell/lib/libsdl-pspexp.so" "$ROOT/build/gameshell/lib/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true
 	cp "$ROOT/build/gameshell/bin/pspexp-ms" "$W/b/" 2>/dev/null || true
-	cp "$ROOT/build/gameshell/bin/pspexp-capture" "$W/b/" 2>/dev/null || true ;;
+	cp "$ROOT/build/gameshell/bin/pspexp-capture" "$W/b/" ;;
 *) echo "arch: arm64 | armhf" >&2; exit 2 ;;
 esac
 V="$(date -u +%Y.%m.%d.%H%M%S)+g$(git -C "$ROOT" rev-parse --short HEAD)"
@@ -39,7 +39,8 @@ R="$W/root"
 mkdir -p "$R/usr/bin" "$R/usr/sbin" "$R/usr/lib/pspexp" "$R/usr/share/pspexp/launcher" "$R/usr/share/doc/pspexp-core"
 install -m 755 "$W/b/pspexp-term" "$R/usr/bin/pspexp-term"
 [ -f "$W/b/pspexp-ms" ] && install -m 755 "$W/b/pspexp-ms" "$R/usr/bin/pspexp-ms"
-[ -f "$W/b/pspexp-capture" ] && install -m 755 "$W/b/pspexp-capture" "$R/usr/bin/pspexp-capture"   # (ffmpeg, which it needs, is on the card images)
+install -m 755 "$W/b/pspexp-capture" "$R/usr/bin/pspexp-capture"   # (ffmpeg, which it needs, is on the card images; a build without it fails here:
+# an upgrade would take the receiver away, as a test package of 2026-10-24 did, its Pi build lacking the target)
 # the board's user may open PSPExp Capture's USB product (0x01CB): the card images' own rule, written
 # when they were made, names only PSPExp's (0x01CA); a game starting the plugin plugs it in anew
 mkdir -p "$R/usr/lib/udev/rules.d"
