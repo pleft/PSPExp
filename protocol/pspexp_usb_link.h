@@ -28,6 +28,11 @@
 #define PSPEXP_USB_VID          0x054Cu   /* Sony; the PSP bus driver supplies it */
 #define PSPEXP_USB_PID          0x01CAu   /* distinct from mass storage 0x1C8 and PSPLink 0x1C9 */
 #define PSPEXP_USB_DRIVER_NAME  "PSPExpUSBDriver"
+/* PSPExp Capture's plugin (psp/capture) presents the same link under a product of its own, so a
+ * board's console, waiting for PSPExp, never takes a native game's capture, and the receiver
+ * (tools/pspexp-capture) runs beside it */
+#define PSPEXP_CAPTURE_USB_PID  0x01CBu
+#define PSPEXP_CAPTURE_USB_DRIVER_NAME "PSPExpCapture"
 #define PSPEXP_USB_EP_IN        0x81u     /* PSP -> host */
 #define PSPEXP_USB_EP_OUT       0x02u     /* host -> PSP */
 #define PSPEXP_USB_PACKET_HS    512u

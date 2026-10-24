@@ -22,9 +22,11 @@
  *   band KB   (32, 64 or 128: the ring's band, each one USB write) | tx KB SPLIT (the largest transfer; 1 split short ones)
  *   clip | record   (with -s: as note+R and note+L on the PSP)
  * -k: after the link goes (a restart), wait for the game again: clip.mp4, clip-2.mp4, ...
- * The link is PSPExp's own USB transport (host/transport-usb).
+ * The link is PSPExp's own USB transport (host/transport-usb), under the plugin's own product ID
+ * (PSPEXP_CAPTURE_USB_PID), so it runs beside a board's console.
  */
 #include "../../host/transport-usb/pspexp_usb.h"
+#include "../../protocol/pspexp_usb_link.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -513,6 +515,12 @@ int main(int argc, char **argv)
         else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k]\n"); return 2; }
     }
     if (out && g_clips) { fprintf(stderr, "pspexp-capture: -o or -s, not both\n"); return 2; }
+    if (g_clips) {   /* the clips' folder, made if missing (a board's ~/Videos/PSPExp) */
+        char p[1100];
+        snprintf(p, sizeof(p), "%s", g_clips);
+        for (char *q = p + 1; *q; q++) if (*q == '/') { *q = 0; mkdir(p, 0755); *q = '/'; }
+        mkdir(p, 0755);
+    }
     signal(SIGINT, on_signal);
     signal(SIGPIPE, SIG_IGN);
     {   /* one receiver at a time: a second one, idle, read the FIFO's commands meant for the one
@@ -533,6 +541,7 @@ int main(int argc, char **argv)
         PspExpUsbOptions o;
         char err[256], name[1100];
         pspexp_usb_options_default(&o);
+        o.pid = PSPEXP_CAPTURE_USB_PID;   /* (the plugin's own product: PSPExp's console waits for PSPExp's) */
         fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable...\n");
         PspExpTransport *t = NULL;
         while (!t && !g_quit) t = pspexp_usb_wait(&o, 1000, err, sizeof(err));   /* (in steps: Ctrl-C ends a wait) */

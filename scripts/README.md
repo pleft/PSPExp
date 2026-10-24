@@ -102,6 +102,7 @@ pi/                Raspberry Pi (Debian, arm64)
                      emulator player on the Pi
   build.sh           on the Pi: a development build (host tools, Doom from apt)
   install-console.sh, pspexp-term.service   on the Pi: only the console, as a service
+  pspexp-capture.service   PSPExp Capture's receiver beside the console (clips in ~/Videos/PSPExp)
 ```
 
 Build output goes to `build/<board>/` (binaries in `bin/`, packages in

@@ -29,7 +29,7 @@ cmake --build "$ROOT/build/host" -j"$JOBS"
 
 # libusb needs access to the PSP without root: one udev rule for Sony VID / PSPExp PID
 if [ -d /etc/udev/rules.d ] && [ ! -f /etc/udev/rules.d/60-pspexp.rules ]; then
-	echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01ca", MODE="0666"' | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
+	echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01c[ab]", MODE="0666"' | sudo tee /etc/udev/rules.d/60-pspexp.rules >/dev/null
 	sudo udevadm control --reload-rules || true
 fi
 

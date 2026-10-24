@@ -100,7 +100,7 @@ U
 
 	# USB access to the PSP, the virtual keypad, the audio FIFO, ALSA into it
 	{
-		echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01ca", MODE="0666"'
+		echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01c[ab]", MODE="0666"'
 		echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"'
 	} > "$S/60-pspexp.rules"
 	gs_copy "$S/60-pspexp.rules" 0644 0 0 /etc/udev/rules.d/60-pspexp.rules

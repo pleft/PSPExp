@@ -37,6 +37,12 @@ enum { EVS_DONE = 1 };   /* sync reply flag */
 #define RX_PENDING  (-2)
 #define TX_TIMEOUT_US 3000000
 
+/* the product and driver name the link presents: PSPExp's, or a module embedding it its own */
+#ifndef PSPEXP_USB_DEVICE_PID
+#define PSPEXP_USB_DEVICE_PID PSPEXP_USB_PID
+#define PSPEXP_USB_DEVICE_NAME PSPEXP_USB_DRIVER_NAME
+#endif
+
 /* ---- descriptors ------------------------------------------------------- */
 
 static struct DeviceDescriptor devdesc_hi = {
@@ -343,7 +349,7 @@ static int stop_func(int size, void *p)
 }
 
 static struct UsbDriver g_driver = {
-    PSPEXP_USB_DRIVER_NAME,
+    PSPEXP_USB_DEVICE_NAME,
     3,
     endp,
     &intp,
@@ -365,9 +371,9 @@ int pspexpUsbStart(void)
     do {
         ret = sceUsbStart(PSP_USBBUS_DRIVERNAME, 0, 0);
         if (ret < 0) break;
-        ret = sceUsbStart(PSPEXP_USB_DRIVER_NAME, 0, 0);
+        ret = sceUsbStart(PSPEXP_USB_DEVICE_NAME, 0, 0);
         if (ret < 0) break;
-        ret = sceUsbActivate(PSPEXP_USB_PID);
+        ret = sceUsbActivate(PSPEXP_USB_DEVICE_PID);
     } while (0);
     pspSdkSetK1(k1);
     return ret;
@@ -376,8 +382,8 @@ int pspexpUsbStart(void)
 int pspexpUsbStop(void)
 {
     int k1 = pspSdkSetK1(0);
-    sceUsbDeactivate(PSPEXP_USB_PID);
-    sceUsbStop(PSPEXP_USB_DRIVER_NAME, 0, 0);
+    sceUsbDeactivate(PSPEXP_USB_DEVICE_PID);
+    sceUsbStop(PSPEXP_USB_DEVICE_NAME, 0, 0);
     sceUsbStop(PSP_USBBUS_DRIVERNAME, 0, 0);
     pspSdkSetK1(k1);
     return 0;

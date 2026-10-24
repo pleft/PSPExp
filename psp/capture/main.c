@@ -29,6 +29,9 @@
 #define PSPEXP_USB_EMBEDDED
 #define PSPEXP_USB_RX_SIZE 4096   /* it receives only the receiver's hello and short commands */
 #define PSPEXP_USB_TXBUF 16384    /* (its unaligned writes, the sound ring's, go in pieces this size) */
+#include "pspexp_usb_link.h"
+#define PSPEXP_USB_DEVICE_PID PSPEXP_CAPTURE_USB_PID          /* (its own product: a board's console, waiting */
+#define PSPEXP_USB_DEVICE_NAME PSPEXP_CAPTURE_USB_DRIVER_NAME /* for PSPExp, leaves it to the receiver) */
 #include "../transport-usb/main.c"
 
 #include <pspdisplay.h>
@@ -1126,7 +1129,7 @@ static void usb_resume(void)
 {
     int k1 = pspSdkSetK1(0);
     int reg = sceUsbbdRegister(&g_driver), bus = sceUsbStart(PSP_USBBUS_DRIVERNAME, 0, 0);
-    int drv = sceUsbStart(PSPEXP_USB_DRIVER_NAME, 0, 0), act = drv >= 0 ? sceUsbActivate(PSPEXP_USB_PID) : -1;
+    int drv = sceUsbStart(PSPEXP_USB_DEVICE_NAME, 0, 0), act = drv >= 0 ? sceUsbActivate(PSPEXP_USB_DEVICE_PID) : -1;
     pspSdkSetK1(k1);
     if (drv >= 0 && act >= 0) { g_usb_up = 1; pspexpUsbSetTx(128 * 1024, 0); }
     g_home_paused = 0;
