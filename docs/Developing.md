@@ -167,8 +167,10 @@ Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspex
    game's frame rate every 5 s, and stops after 90 s, when the game exits, or on Ctrl-C. The clip
    has the game's picture and sound and plays at its speed.
 
-The plugin's log is `ms0:/seplugins/pspexp_capture.log` (the last run's: `.log.old`). Exit games
-with HOME as usual: the plugin stops itself first.
+The plugin never touches the memory stick: its log goes over the cable, printed by the receiver
+with `PSP:` and kept in `psp.log` beside the clip. A developer build (`make -C psp/capture DEV=1`)
+also writes it to `ms0:/seplugins/pspexp_capture.log` (the last run's: `.log.old`) and takes new
+plugins and restarts over the cable (`put`, `restart`). Exit games with HOME as usual.
 
 Testing without hands on the PSP, once the game runs: `pspexp-capture -k -c ctl -d dir -o clip.mp4`
 and commands written into the FIFO `ctl`: `echo "press cross 150" > ctl` (buttons for the game;

@@ -5,11 +5,12 @@
  * and with -o makes an MP4: the picture through ffmpeg as it comes, the sound mixed here and
  * added at the end.
  *   pspexp-capture [-o clip.mp4] [-d folder-for-frames] [-t seconds] [-c control-fifo] [-k]
- * -d also keeps latest.ppm there, the screen as it is now (twice a second), and psp-log.txt.
+ * -d also keeps latest.ppm there, the screen as it is now (twice a second), and psp.log (the
+ * plugin's log, sent over the cable as it goes; also printed with "PSP: ").
  * -c: a FIFO (mkfifo) taking commands for the PSP, one a line, for testing without hands on it:
  *   press BUTTONS MS | hold BUTTONS | release   (BUTTONS: cross+up, ...: the game sees them)
- *   put FILE [NAME]   (into ms0:/seplugins/, e.g. a new pspexp_capture.prx)
- *   log [old] | restart (the game again, from its ISO: a new plugin loads) | stop | quit
+ *   put FILE [NAME]   (into ms0:/seplugins/, e.g. a new pspexp_capture.prx; developer builds, make DEV=1)
+ *   log [old] | restart (the game again, from its ISO: a new plugin loads; developer builds) | stop | quit
  *   pause | resume   (no frames copied meanwhile: the game's own frame rate, for comparing)
  *   vram   (the game's GE buffer addresses, a fingerprint of each 32 KB of VRAM)
  *   exp N   (0 normal, 1 the copy alone, 2 the sending alone: what costs the game its speed)
@@ -236,12 +237,20 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     while (!g_stop) {
         if (need(t, hdr, 4) < 0) break;
         int sound = memcmp(hdr, "PXCA", 4) == 0, rep = !memcmp(hdr, "PXCR", 4) || !memcmp(hdr, "PXCL", 4);
-        if (!sound && !rep && memcmp(hdr, "PXCF", 4) != 0) {   /* out of step: slide one byte at a time to the next header */
+        int msg = memcmp(hdr, "PXCM", 4) == 0;
+        if (!sound && !rep && !msg && memcmp(hdr, "PXCF", 4) != 0) {   /* out of step: slide one byte at a time to the next header */
             memmove(hdr, hdr + 1, 3);
             continue;
         }
         if (need(t, hdr + 4, 28) < 0) break;
         uint32_t when = get32(hdr + 20), len = get32(hdr + 24);
+        if (msg) {   /* the plugin's log, sent as it goes (it never writes to the memory stick) */
+            if (len > sizeof(reply) || need(t, reply, len) < 0) break;
+            if (dir) { char p[512]; snprintf(p, sizeof(p), "%s/psp.log", dir); FILE *f = fopen(p, "ab"); if (f) { fwrite(reply, 1, len, f); fclose(f); } }
+            for (uint32_t i = 0, b0 = 0; i < len; i++)
+                if (reply[i] == '\n') { fprintf(stderr, "PSP: %.*s\n", (int)(i - b0), (char *)reply + b0); b0 = i + 1; }
+            continue;
+        }
         if (rep) {   /* the plugin's answer to a command */
             if (len > sizeof(reply) || need(t, reply, len) < 0) break;
             if (hdr[3] == 'L') {

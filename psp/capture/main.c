@@ -70,15 +70,22 @@ static int fmt_num(char *p, u32 v, int base, int width)
     return n;
 }
 
-/* The memory stick is touched only between 2 s after the game's start and the HOME menu or the
- * game's exit; before and after, the lines wait in memory. psp-cast found an sceIoOpen on ms0
+/* The log: in memory (the newest 8 KB), sent to the receiver between frames ("PXCM"), which keeps
+ * it: the plugin never touches the memory stick. A developer build (make DEV=1) also writes it to
+ * ms0:/seplugins/pspexp_capture.log, and then only between 2 s after the game's start and the HOME
+ * menu or the game's exit; before and after, the lines wait in memory. psp-cast found an sceIoOpen on ms0
  * during the start (module_start or right after) "hung the PSP, always, after exiting a game";
  * this plugin opened and renamed its log in module_start from v10 on, and every exit of
  * Castlevania: The Dracula X Chronicles switched the PSP off afterwards, with the USB stopped or
  * not used at all (2026-10-24); the exits that went well (Burnout Legends, v8-v9) were from before. */
 static volatile int g_log_ready, g_log_hold;
+#define MLOG 8192
+static char g_mlog[MLOG];
+static volatile u32 g_mlog_head, g_mlog_sent;   /* bytes logged and sent so far (the ring: their difference) */
+#ifdef PSPEXP_CAPTURE_DEV
 static char g_log_pend[2048];
 static int g_log_pend_n;
+#endif
 
 static void cap_log(const char *fmt, ...)
 {
@@ -100,6 +107,14 @@ static void cap_log(const char *fmt, ...)
     }
     va_end(ap);
     line[n++] = '\n';
+    {   /* into the ring for the receiver (the oldest dropped when it is full) */
+        u32 intr = pspSdkDisableInterrupts(), i;
+        for (i = 0; i < (u32)n; i++) g_mlog[(g_mlog_head + i) % MLOG] = line[i];
+        g_mlog_head += n;
+        if (g_mlog_head - g_mlog_sent > MLOG) g_mlog_sent = g_mlog_head - MLOG;
+        pspSdkEnableInterrupts(intr);
+    }
+#ifdef PSPEXP_CAPTURE_DEV
     if (!g_log_ready || g_log_hold) {   /* (kept in memory: see above) */
         if (g_log_pend_n + n <= (int)sizeof(g_log_pend)) { memcpy(g_log_pend + g_log_pend_n, line, n); g_log_pend_n += n; }
         return;
@@ -110,6 +125,9 @@ static void cap_log(const char *fmt, ...)
         sceIoWrite(fd, line, n);
         sceIoClose(fd);
     }
+#else
+    (void)fd;
+#endif
 }
 
 static u32 now_us(void)
@@ -565,6 +583,7 @@ static void cmd_reply(const char *magic, u32 cmd, int result, const void *data, 
     sceKernelSignalSema(g_tx_lock, 1);
 }
 
+#ifdef PSPEXP_CAPTURE_DEV
 /* a file into ms0:/seplugins/: written beside, then put in place */
 static int cmd_put(u32 len)
 {
@@ -594,9 +613,18 @@ static int cmd_put(u32 len)
     cap_log("written: %s (%u bytes): %x", path, len - 32, (u32)r);
     return r;
 }
+#endif
 
-static void cmd_log(int old)   /* (old: the last run's, kept beside: after a crash, what it did last) */
+static void cmd_log(int old)   /* (the newest lines in memory; a developer build: the file, or the last run's) */
 {
+#ifndef PSPEXP_CAPTURE_DEV
+    static char buf[4096];
+    u32 intr = pspSdkDisableInterrupts(), head = g_mlog_head, m = head < sizeof(buf) ? head : sizeof(buf), i;
+    for (i = 0; i < m; i++) buf[i] = g_mlog[(head - m + i) % MLOG];
+    pspSdkEnableInterrupts(intr);
+    (void)old;
+    cmd_reply("PXCL", CMD_LOG, (int)head, buf, m);
+#else
     const char *path = old ? LOG_PATH ".old" : LOG_PATH;
     SceUID fd = sceIoOpen(path, PSP_O_RDONLY, 0);
     int n = fd >= 0 ? sceIoRead(fd, g_cmd_buf, sizeof(g_cmd_buf)) : 0;
@@ -608,6 +636,7 @@ static void cmd_log(int old)   /* (old: the last run's, kept beside: after a cra
         if (fd >= 0) { sceIoLseek32(fd, size - (int)sizeof(g_cmd_buf), PSP_SEEK_SET); n = sceIoRead(fd, g_cmd_buf, sizeof(g_cmd_buf)); sceIoClose(fd); }
     }
     cmd_reply("PXCL", CMD_LOG, size, g_cmd_buf, n > 0 ? (u32)n : 0);
+#endif
 }
 
 u32 sctrlKernelLoadExecVSHWithApitype(int apitype, const char *file, struct SceKernelLoadExecVSHParam *param);
@@ -618,6 +647,7 @@ void sctrlSESetBootConfFileIndex(int index);
 static void cap_shutdown(const char *why);
 static void usb_quiesce(const char *why);
 
+#ifdef PSPEXP_CAPTURE_DEV
 /* the running game started again from its ISO, as PRO's own menu starts one (Vshctrl
  * virtual_pbp.c): the ISO and the driver mode stay as they are */
 static int cmd_restart(void)
@@ -641,6 +671,7 @@ static int cmd_restart(void)
     param.key = mode == 1 ? "game" : "umdemu";   /* (1: March33) */
     return (int)sctrlKernelLoadExecVSHWithApitype(0x120, boot, &param);
 }
+#endif
 
 static int cmd_thread(SceSize args, void *argp)
 {
@@ -656,8 +687,10 @@ static int cmd_thread(SceSize args, void *argp)
             u32 ms = get32(g_cmd_buf + 4);
             g_pad_until = ms ? now_us() + ms * 1000 : 0;
             g_pad_buttons = get32(g_cmd_buf);
-        } else if (cmd == CMD_PUT) {
+#ifdef PSPEXP_CAPTURE_DEV
+        } else if (cmd == CMD_PUT) {   /* (developer builds: a new plugin over the cable) */
             cmd_reply("PXCR", CMD_PUT, cmd_put(len), NULL, 0);
+#endif
         } else if (cmd == CMD_LOG) {
             int old = 0;
             if (len >= 4 && cmd_read(g_cmd_buf, 4) == 0) old = get32(g_cmd_buf) != 0;
@@ -680,10 +713,30 @@ static int cmd_thread(SceSize args, void *argp)
         } else if (cmd == CMD_VRAM) {
             vram_probe(g_top);
             cmd_reply("PXCR", CMD_VRAM, 0, g_vram_info, sizeof(g_vram_info));
+#ifdef PSPEXP_CAPTURE_DEV
         } else if (cmd == CMD_RESTART) {
             cmd_reply("PXCR", CMD_RESTART, cmd_restart(), NULL, 0);
+#endif
         }
     }
+    return 0;
+}
+
+/* the log's new lines to the receiver ("PXCM", the frames' 32-byte header; the sender's, under
+ * g_tx_lock); <0: the receiver is not reading */
+static int log_send(void)
+{
+    static unsigned char h[32] __attribute__((aligned(64)));
+    static char chunk[MLOG] __attribute__((aligned(64)));
+    u32 intr = pspSdkDisableInterrupts(), head = g_mlog_head, from = g_mlog_sent, n = head - from, i;
+    for (i = 0; i < n; i++) chunk[i] = g_mlog[(from + i) % MLOG];
+    pspSdkEnableInterrupts(intr);
+    if (!n) return 0;
+    memset(h, 0, 32);
+    memcpy(h, "PXCM", 4);
+    put32(h + 20, now_us()); put32(h + 24, n);
+    if (pspexpUsbWrite(h, 32) < 0 || pspexpUsbWrite(chunk, n) < 0) return -1;
+    g_mlog_sent = head;
     return 0;
 }
 
@@ -704,6 +757,7 @@ static int send_thread(SceSize args, void *argp)
         if (!pspexpUsbConnected() || gen == g_dead_gen) { audio_drop_all(); g_busy = 0; continue; }
         sceKernelWaitSema(g_tx_lock, 1, NULL);
         r = audio_send();
+        if (r >= 0) r = log_send();
         sceKernelSignalSema(g_tx_lock, 1);
         if (r < 0) { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); g_busy = 0; continue; }
         if (g_busy == 1) {   /* the frame's header, then its bands as the copier fills them */
@@ -804,8 +858,10 @@ static int capture_thread(SceSize args, void *argp)
 
     sceKernelDelayThread(2000000);   /* the game first: its modules, its first frames */
     if (g_quit) return 0;
+#ifdef PSPEXP_CAPTURE_DEV
     sceIoRemove(LOG_PATH ".old");   /* the last run's log kept beside (after a hang, what it did last) */
     sceIoRename(LOG_PATH, LOG_PATH ".old");
+#endif
     g_log_ready = 1;
     if (g_frames_on) {
         part = snap_alloc();
