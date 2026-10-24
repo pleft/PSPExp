@@ -27,7 +27,7 @@ Every document and what it is for: [docs/README.md](README.md).
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (branch `pspexp` of Stratagus in the WarCraft project; no longer in PSPExp) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
 | host-rendered OpenGL (`libsdl-pspexp-hostgl`): a game too heavy for the GE drawn by the board's own GPU, each frame sent to the PSP as a picture | OpenMW from a Mac at 60 fps on the PSP (2026-10-02); on the Pi 400's GPU, headless: SuperTuxKart, Trackballs, Open Surge packaged (2026-10-03; ~30 fps in PPSSPP, not yet measured on the PSP) |
-| `psp/capture` PSPExp Capture `pspexp_capture.prx` (a CFW game.txt plugin: a native PSP game's picture and sound over USB) + `tools/pspexp-capture` (the receiver: an MP4) | **runs on the PSP-1000 2026-10-23** (Burnout Legends: picture and sound in sync over 4½ minutes; menus every frame at 30 in full colour; saves load; exits cleanly; driven from the Mac for tests); a race: every frame, the game 25 fps instead of 30 (the USB driver's processor time); Castlevania 30 of 30; Castlevania's HOME > Exit switched the PSP off with the plugin on: fixed (no memory-stick access while a game starts), exits cleanly while streaming; not shipped (architecture §12b) |
+| `psp/capture` PSPExp Capture `pspexp_capture.prx` (a CFW game.txt plugin: a native PSP game's picture and sound over USB) + `tools/pspexp-capture` (the receiver: an MP4) | **runs on the PSP-1000 2026-10-23** (Burnout Legends: picture and sound in sync over 4½ minutes; menus every frame at 30 in full colour; saves load; exits cleanly; driven from the Mac for tests); a race: every frame, the game 25 fps instead of 30 (the USB driver's processor time); Castlevania 30 of 30; Castlevania's HOME > Exit switched the PSP off with the plugin on: fixed (no memory-stick access while a game starts), exits cleanly while streaming; Jeanne d'Arc, Crisis Core, Phantasy Star Portable 2 recorded through a fallback in the kernel's memory (2026-10-24); not shipped (architecture §12b) |
 | **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
 
 ## Build
@@ -176,7 +176,8 @@ Testing without hands on the PSP, once the game runs: `pspexp-capture -k -c ctl 
 and commands written into the FIFO `ctl`: `echo "press cross 150" > ctl` (buttons for the game;
 `hold`, `release`), `put psp/capture/pspexp_capture.prx` (a new plugin written over the cable),
 `restart` (the game again from its ISO, the new plugin with it; `-k` waits for it and starts the
-next clip), `log`, `pause` / `resume`. `dir/latest.ppm` is the screen now. Only one receiver runs at
+next clip; it once switched the PSP off from a game recorded through the fallback: there, exit with
+HOME and start the game again instead), `log`, `pause` / `resume`. `dir/latest.ppm` is the screen now. Only one receiver runs at
 a time. Design and measurements: the architecture's §12b.
 
 ## Without a PSP: the runtime under PPSSPP

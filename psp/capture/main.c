@@ -160,7 +160,24 @@ static u32 get32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 
 static unsigned char *g_fbuf;          /* 64-byte aligned */
 static SceUID g_fblock = -1, g_copy_go = -1, g_copied = -1;
 static volatile u32 g_frame_bytes;
-static volatile int g_mem_held;        /* the buffers taken (frame and sound) */
+static volatile int g_frame_mode;      /* the frame under way: 1 whole, 2 in bands (g_mem_held when handed) */
+static volatile int g_mem_held;        /* the buffers taken (frame and sound): 1 the game's memory, 2 the fallback */
+/* The fallback, for games that leave too little of their memory free (Jeanne d'Arc 497 KB, Crisis
+ * Core 15-40 KB, Phantasy Star Portable 2 1.4 MB, 2026-10-24): bands of 32 KB, as many as the
+ * frame needs (9 for a 16-bit one) and fit with KMARGIN of the kernel's memory left free (≈500 KB
+ * is free in Jeanne d'Arc), and the sound's 16 KB; the DMA copies the frame band by band, while
+ * the sender sends the bands before. A band copied after the swap's first moments can catch the
+ * game drawing that buffer again: with 5 bands (KMARGIN 300 KB), the last 4 of Jeanne d'Arc's
+ * frames, copied 1.5-6 ms after the swap as the sending freed bands, came black or half drawn
+ * in some scenes; with 2, the copy followed the sending, ≈27 ms a frame. The margin: Bomberman's
+ * exit hung with 43 KB left (2026-10-24); the bands are given back for the HOME menu (an exit
+ * may follow) and every system screen. */
+#define BAND 32768
+#define MAXBAND 17   /* (a 32-bit frame) */
+#define KMARGIN (192 * 1024)
+static SceUID g_band_free = -1, g_band_full = -1;
+static volatile u32 g_band_len[MAXBAND];
+static int g_nband;                    /* the bands held */
 static volatile u32 g_mem_releases;
 static volatile int g_busy;            /* a frame on its way (copied by the copier, sent by the sender) */
 static const unsigned char *g_frame_src;
@@ -245,18 +262,80 @@ static void vram_probe(const void *top)
 }
 static void *volatile g_top;   /* the frame shown now (the watcher's) */
 
-/* the copier: each frame the watcher hands it, whole into the buffer in one DMA copy */
+/* A copy out of VRAM by the DMA engine, never on top of one of the game's own: the engine copies
+ * one thing at a time (≈225 MB/s), and games copy with it too (films' frames into VRAM...).
+ * Jeanne d'Arc switched the PSP off the moment its frames were copied band by band with
+ * sceDmacMemcpy, nine copies spread over each frame; copied by the processor instead, it played
+ * on (2026-10-24). So sceDmacTryMemcpy, which refuses while the engine is busy: tried again
+ * every 50 us; still busy after 3 ms (or another error), the processor copies, reading VRAM
+ * through its cache (psp-cast's way: the lines dropped first, as the GE writes VRAM behind the
+ * cache; written back, so nothing the game wrote there itself is lost). */
+#define DMAC_BUSY 0x80000021
+static volatile u32 g_dma_busy, g_cpu_copies;
+static void vram_copy(void *dst, const void *src, u32 n)
+{
+    u32 t0 = now_us();
+    int r;
+    while ((r = sceDmacTryMemcpy(dst, src, n)) == (int)DMAC_BUSY && now_us() - t0 < 3000) {
+        if (!g_dma_busy++) cap_log("the DMA engine was busy (a copy of the game's): waited for it");
+        sceKernelDelayThread(50);
+    }
+    if (r >= 0) return;
+    if (!g_cpu_copies++) cap_log("a copy by the processor (the DMA engine: %x)", (u32)r);
+    sceKernelDcacheWritebackInvalidateRange((void *)src, n);
+    memcpy(dst, src, n);
+    sceKernelDcacheWritebackInvalidateRange(dst, n);   /* (only the engines touch it otherwise) */
+}
+
+/* The copy against the frame in VRAM now, 1,024 words across it (≈0.3 ms, both read uncached):
+ * 0 when the game drew into the frame while it was copied. Some games draw into the frame shown:
+ * Jeanne d'Arc's illustrated scenes, cleared and drawn again within ≈5 ms of its swap, came with
+ * a black staircase below the rows drawn so far in ≈1 frame of 20 (2026-10-24). */
+static int copy_matches(int banded, u32 stride, u32 rows)
+{
+    u32 bytes = stride * CAP_H, step = bytes / 4 / 1024 * 4, o;
+    const u32 *v = (const u32 *)(((u32)g_frame_src & 0x1FFFFFFF) | 0x40000000);
+    for (o = 0; o < bytes; o += step) {
+        u32 b = banded ? o / (rows * stride) * BAND + o % (rows * stride) : o;
+        if (v[o / 4] != *(const volatile u32 *)((((u32)g_fbuf + b) & 0x1FFFFFFF) | 0xA0000000)) return 0;
+    }
+    return 1;
+}
+
+/* the copier: each frame the watcher hands it, whole into the buffer in one DMA copy (or band by
+ * band, the fallback); a frame held whole before any of it goes is checked against VRAM and,
+ * the game having drawn into it meanwhile, copied again 3 ms later (twice at most, and not once
+ * the game has swapped frames) */
+static volatile u32 g_redrawn, g_torn;
 static int copy_thread(SceSize args, void *argp)
 {
     while (take(g_copy_go) == 0) {
-        int bpp = g_frame_fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2;
+        int bpp = g_frame_fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2, tries = 0;
         u32 bytes = (u32)g_frame_bw * CAP_H * bpp, t0 = now_us(), changes = g_changes;
-        if (g_exp != 2 && g_fbuf && bytes <= FRAME_MAX) sceDmacMemcpy(g_fbuf, g_frame_src, bytes);
+        u32 stride = (u32)g_frame_bw * bpp, rows = BAND / stride, nbands = (CAP_H + rows - 1) / rows, y, k;
+        int banded = g_frame_mode == 2, whole = !banded || (int)nbands <= g_nband;
+        for (;;) {
+            if (banded) {   /* the fallback: band by band, as the sender frees them */
+                for (y = 0, k = 0; y < CAP_H; y += rows, k++) {
+                    u32 n = CAP_H - y < rows ? CAP_H - y : rows, slot = k % g_nband;
+                    if (!tries && take(g_band_free) < 0) return 0;
+                    if (g_exp != 2) vram_copy(g_fbuf + slot * BAND, g_frame_src + y * stride, n * stride);
+                    g_band_len[slot] = n * stride;
+                    if (!whole) sceKernelSignalSema(g_band_full, 1);
+                }
+            } else if (g_exp != 2 && g_fbuf && bytes <= FRAME_MAX) vram_copy(g_fbuf, g_frame_src, bytes);
+            if (!whole || g_exp == 2 || !g_fbuf || copy_matches(banded, stride, rows)) break;
+            if (!tries) g_redrawn++;
+            if (++tries > 2) { g_torn++; break; }
+            sceKernelDelayThread(3000);
+            if (g_changes != changes) { g_torn++; break; }   /* (swapped meanwhile: what it has) */
+        }
+        if (banded && whole) sceKernelSignalSema(g_band_full, (int)nbands);
         g_frame_bytes = bytes;
         g_dma_us += now_us() - t0;
         g_copy_us += now_us() - t0;
         if (g_changes != changes) g_late++;   /* the game flipped before the copy ended: maybe torn */
-        sceKernelSignalSema(g_copied, 1);
+        if (!banded) sceKernelSignalSema(g_copied, 1);
     }
     return 0;
 }
@@ -269,6 +348,8 @@ static int copy_thread(SceSize args, void *argp)
  * gap in the clip, counted in the log). Caught from the plugin's start, before the game reserves
  * its channels (their sizes and formats are learnt there). */
 #define AUDIO_RING (64 * 1024)   /* (in the game's memory with the frame's: see mem_acquire) */
+#define AUDIO_RING_K (16 * 1024) /* (the fallback's, in the kernel's memory) */
+static u32 g_aring_size = AUDIO_RING;
 static unsigned char *g_aring;
 static volatile u32 g_ahead, g_atail;  /* bytes written and sent so far (the ring: their difference) */
 static volatile u32 g_aseq, g_ablocks, g_abytes, g_adropped, g_aunknown, g_akinds;
@@ -281,7 +362,7 @@ static SceUID g_ablock = -1;
 
 static void ring_put(const void *p, u32 n)
 {
-    u32 at = g_ahead % AUDIO_RING, first = AUDIO_RING - at < n ? AUDIO_RING - at : n;
+    u32 at = g_ahead % g_aring_size, first = g_aring_size - at < n ? g_aring_size - at : n;
     memcpy(g_aring + at, p, first);
     if (n > first) memcpy(g_aring, (const unsigned char *)p + first, n - first);
     g_ahead += n;
@@ -302,7 +383,7 @@ static void audio_put(int kind, int ch, int chans, u32 rate, int lvol, int rvol,
     put32(h + 24, n);
     intr = pspSdkDisableInterrupts();   /* (several game threads put sound out) */
     if (!g_aring) {   /* (given back meanwhile: a system screen) */
-    } else if (AUDIO_RING - (g_ahead - g_atail) < 32 + n) {
+    } else if (g_aring_size - (g_ahead - g_atail) < 32 + n) {
         g_adropped++;
     } else {
         put32(h + 28, g_aseq++);
@@ -320,8 +401,8 @@ static int audio_send(void)
 {
     u32 head = g_ahead, tail = g_atail, n = head - tail, at, first;
     if (!n || !g_aring) return 0;
-    at = tail % AUDIO_RING;
-    first = AUDIO_RING - at < n ? AUDIO_RING - at : n;
+    at = tail % g_aring_size;
+    first = g_aring_size - at < n ? g_aring_size - at : n;
     if (pspexpUsbWrite(g_aring + at, first) < 0) return -1;
     if (n > first && pspexpUsbWrite(g_aring, n - first) < 0) return -1;
     g_atail = head;
@@ -402,7 +483,7 @@ static void catch_audio(void)
     n += redirect("sceAudio_Driver", "sceAudio", 0x2D53F36E, h_o2_out, &o_o2_out);        /* ...OutputBlocking */
     n += redirect("sceAudio_Driver", "sceAudio", 0x38553111, h_src_reserve, &o_src_reserve); /* sceAudioSRCChReserve */
     n += redirect("sceAudio_Driver", "sceAudio", 0xE0727056, h_src_out, &o_src_out);      /* ...SRCOutputBlocking */
-    cap_log("sound: %d of 12 calls caught, a %u KB ring", n, AUDIO_RING / 1024);
+    cap_log("sound: %d of 12 calls caught", n);
 }
 
 /* ---- the plugin's memory: taken from the game's spare memory, given back on demand ---- */
@@ -414,11 +495,44 @@ static int mem_acquire(void)
     u32 need = FRAME_MAX + 64 + AUDIO_RING + 64, freem = sceKernelPartitionTotalFreeMemSize(2);
     SceUID f, a;
     if (g_mem_held) return 1;
-    if (freem < need + UMARGIN || sceKernelPartitionMaxFreeMemSize(2) < FRAME_MAX + 64) return 0;
+    if (g_busy) return 0;   /* (a frame still finishing in buffers given back) */
+    if (g_fblock >= 0) { sceKernelFreePartitionMemory(g_fblock); g_fblock = -1; g_fbuf = NULL; }   /* (kept by a release that came mid-frame) */
+    if (freem < need + UMARGIN || sceKernelPartitionMaxFreeMemSize(2) < FRAME_MAX + 64) {   /* the fallback */
+        u32 kfree = sceKernelPartitionTotalFreeMemSize(1), kmax = sceKernelPartitionMaxFreeMemSize(1);
+        int nb = kfree > KMARGIN + AUDIO_RING_K + 128 ? (int)((kfree - KMARGIN - AUDIO_RING_K - 128) / BAND) : 0, want = MAXBAND, bw = 0, fmt = 0;
+        void *top = NULL;
+        if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) >= 0 && bw > 0) {   /* (no more than the frame shown needs) */
+            u32 rows = BAND / ((u32)bw * (fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2));
+            if (rows) want = (CAP_H + rows - 1) / rows;
+        }
+        if (nb > want) nb = want;
+        if (nb > MAXBAND) nb = MAXBAND;
+        while (nb >= 2 && (u32)nb * BAND + 64 > kmax) nb--;
+        if (nb < 2) return 0;
+        f = sceKernelAllocPartitionMemory(1, "PSPExpCaptureBands", PSP_SMEM_High, nb * BAND + 64, NULL);
+        if (f < 0) return 0;
+        a = sceKernelAllocPartitionMemory(1, "PSPExpCaptureSound", PSP_SMEM_High, AUDIO_RING_K + 64, NULL);
+        if (a < 0) { sceKernelFreePartitionMemory(f); return 0; }
+        g_fblock = f; g_ablock = a;
+        g_fbuf = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(f) + 63) & ~63u);
+        sceKernelDcacheWritebackInvalidateRange(g_fbuf, nb * BAND);
+        g_nband = nb;   /* (every band free: no frame is on its way) */
+        while (sceKernelPollSema(g_band_free, 1) >= 0) ;
+        while (sceKernelPollSema(g_band_full, 1) >= 0) ;
+        sceKernelSignalSema(g_band_free, nb);
+        g_aring_size = AUDIO_RING_K;
+        g_atail = g_ahead;
+        g_aring = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(a) + 63) & ~63u);
+        g_mem_held = 2;
+        cap_log("buffers taken from the kernel's memory (the game has %u KB free): %d bands of 32 KB and the sound's 16 KB (%u KB were free)",
+                freem / 1024, nb, kfree / 1024);
+        return 1;
+    }
     f = sceKernelAllocPartitionMemory(2, "PSPExpCaptureFrame", PSP_SMEM_High, FRAME_MAX + 64, NULL);
     if (f < 0) return 0;
     a = sceKernelAllocPartitionMemory(2, "PSPExpCaptureSound", PSP_SMEM_High, AUDIO_RING + 64, NULL);
     if (a < 0) { sceKernelFreePartitionMemory(f); return 0; }
+    g_aring_size = AUDIO_RING;
     g_fblock = f; g_ablock = a;
     g_fbuf = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(f) + 63) & ~63u);
     sceKernelDcacheWritebackInvalidateRange(g_fbuf, FRAME_MAX);   /* (only the DMA engines touch it) */
@@ -833,15 +947,25 @@ static int send_thread(SceSize args, void *argp)
         if (g_busy == 1) {   /* the frame, once the copier has it: its header, then the whole of it */
             unsigned char *h = g_hdr;
             u32 ts = now_us(), bytes;
-            if (take(g_copied) < 0) break;
-            bytes = g_frame_bytes;
+            int bpp = g_frame_fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2;
+            if (g_frame_mode != 2 && take(g_copied) < 0) break;
+            bytes = (u32)g_frame_bw * CAP_H * bpp;
             memset(h, 0, 32);
             memcpy(h, "PXCF", 4);
             put16(h + 4, g_frame_bw); put16(h + 6, CAP_H); put16(h + 8, g_frame_fmt);   /* (width: the stride) */
             put32(h + 12, g_frame_seq); put32(h + 16, g_frame_changes); put32(h + 20, g_frame_time);
             put32(h + 24, bytes);
             sceKernelWaitSema(g_tx_lock, 1, NULL);   /* (a command's reply never inside a frame) */
-            r = g_exp == 1 || !g_fbuf || (pspexpUsbWrite(h, 32) >= 0 && pspexpUsbWrite(g_fbuf, bytes) >= 0);
+            if (g_frame_mode == 2) {   /* the fallback: each band as the copier fills it, then its slot freed */
+                u32 rows = BAND / ((u32)g_frame_bw * bpp), y, k = 0;
+                r = g_exp == 1 || pspexpUsbWrite(h, 32) >= 0;
+                for (y = 0; y < CAP_H; y += rows, k++) {   /* (every band taken, sent or not, so the copier goes on) */
+                    u32 slot = k % g_nband;
+                    if (take(g_band_full) < 0) break;
+                    if (r && g_exp != 1) r = pspexpUsbWrite(g_fbuf + slot * BAND, g_band_len[slot]) >= 0;
+                    sceKernelSignalSema(g_band_free, 1);
+                }
+            } else r = g_exp == 1 || !g_fbuf || (pspexpUsbWrite(h, 32) >= 0 && pspexpUsbWrite(g_fbuf, bytes) >= 0);
             sceKernelSignalSema(g_tx_lock, 1);
             if (r) { g_sent++; g_send_us += now_us() - ts; }
             else { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); }
@@ -913,7 +1037,10 @@ static void home_check(void)
         /* (the HOME menu open, or HOME pressed in the last 5 s: in Gran Turismo the status' top bit
          * did not show the menu, 2026-10-24) */
         g_home_closed_at = 0;
-        if (!g_home_paused) usb_quiesce(home ? "HOME pressed" : "the HOME menu opened");
+        if (!g_home_paused) {
+            usb_quiesce(home ? "HOME pressed" : "the HOME menu opened");
+            mem_release("the HOME menu");   /* (an exit may follow: the kernel's memory all its own) */
+        }
     } else if (g_home_paused && !g_util_active) {
         if (!g_home_closed_at) g_home_closed_at = now_us() | 1;
         else if (now_us() - g_home_closed_at > 500000) { g_home_closed_at = 0; usb_resume(); }
@@ -939,6 +1066,8 @@ static int capture_thread(SceSize args, void *argp)
             (u32)sceKernelPartitionTotalFreeMemSize(2) / 1024);
     g_copy_go = sceKernelCreateSema("PSPExpCaptureCopy", 0, 0, 1, NULL);
     g_copied = sceKernelCreateSema("PSPExpCaptureCopied", 0, 0, 1, NULL);
+    g_band_free = sceKernelCreateSema("PSPExpCaptureFree", 0, 0, MAXBAND, NULL);   /* (filled when the bands are taken) */
+    g_band_full = sceKernelCreateSema("PSPExpCaptureFull", 0, 0, MAXBAND, NULL);
     if (g_frames_on) {
         g_copy_th = sceKernelCreateThread("PSPExpCaptureCopy", copy_thread, 0x19, 0x2000, 0, NULL);
         if (g_copy_th >= 0) sceKernelStartThread(g_copy_th, 0, NULL);
@@ -996,6 +1125,7 @@ static int capture_thread(SceSize args, void *argp)
                     g_frame_src = (const unsigned char *)((u32)top & ~0x40000000u);
                     g_frame_bw = bw; g_frame_fmt = fmt;
                     g_frame_seq = seq++; g_frame_changes = g_changes; g_frame_time = now_us();
+                    g_frame_mode = g_mem_held;
                     g_busy = 1;
                     sceKernelSignalSema(g_copy_go, 1);
                     sceKernelSetEventFlag(g_send_ev, SEND_FRAME);
@@ -1018,8 +1148,9 @@ static int capture_thread(SceSize args, void *argp)
             {   /* the processor time each of the plugin's threads really used (against their wall time) */
                 static u32 cc0, cs0, cw0;
                 u32 cc = cpu_us(g_copy_th), cs = cpu_us(g_send_th), cw = cpu_us(g_cap_th);
-                cap_log("CPU in 5 s: copier %u ms, sender %u ms, watcher %u ms; exp %d; buffers %s, given back %u times",
-                        (cc - cc0) / 1000, (cs - cs0) / 1000, (cw - cw0) / 1000, g_exp, g_mem_held ? "held" : "not held", g_mem_releases);
+                cap_log("CPU in 5 s: copier %u ms, sender %u ms, watcher %u ms; exp %d; buffers %s, given back %u times; DMA engine busy %u times, copies by the processor %u; frames drawn into while copied %u (copied again; %u sent as they were)",
+                        (cc - cc0) / 1000, (cs - cs0) / 1000, (cw - cw0) / 1000, g_exp, g_mem_held ? "held" : "not held", g_mem_releases,
+                        g_dma_busy, g_cpu_copies, g_redrawn, g_torn);
                 cc0 = cc; cs0 = cs; cw0 = cw;
             }
             cap_log("sound: %u KB/s, dropped %u, unknown channel %u, kinds %x (1 channels, 2 output2, 4 SRC)",
