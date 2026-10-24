@@ -16,7 +16,7 @@
 #   scp build/omega/bin/* root@omega:/tmp/    (or the SD card)
 #   Doom: put freedoom1.wad in /mnt/mmcblk0p1/doom/ and run doom.sh on the Omega
 #
-# Builds libusb 1.0 from source, then pspexp-bench, pspexp-sprite-demo, pspexp-term, pspexp-ms and
+# Builds libusb 1.0 and zlib from source, then pspexp-bench, pspexp-sprite-demo, pspexp-term, pspexp-ms and
 # pspexp-capture (PSPExp Capture's receiver, which the console runs beside itself).
 # "doom" adds a headless static SDL2, SDL2_mixer (WAV only) and SDL2_net,
 # and Chocolate Doom linked with the SDL layer: OpenWrt has no usable
@@ -34,6 +34,7 @@ CROSS_HOST="${CROSS_HOST:-mipsel-linux-musl}"
 CROSS_PROC="${CROSS_PROC:-mipsel}"
 OUT="$ROOT/build/$CROSS_NAME"
 LIBUSB_VER="${LIBUSB_VER:-1.0.29}"
+ZLIB_VER="${ZLIB_VER:-1.3.1}"
 command -v zig >/dev/null || { echo "zig not found (brew install zig)" >&2; exit 1; }
 mkdir -p "$OUT/src" "$OUT/prefix" "$OUT/bin" "$ROOT/build/zig-cache"
 
@@ -61,6 +62,15 @@ if [ ! -f "$OUT/prefix/lib/libusb-1.0.a" ]; then
 	./configure --host="$CROSS_HOST" --prefix="$OUT/prefix" --disable-udev --enable-static --disable-shared \
 		CC="$OUT/zcc" AR="$OUT/zar" RANLIB="$OUT/zranlib" >"$OUT/libusb-configure.log" 2>&1
 	make -j8 install >"$OUT/libusb-make.log" 2>&1
+fi
+
+# zlib (static): PSP game discs, CSO and zipped ISOs (host/libpspexp/pspexp_disc.c), on the PSP shelf
+if [ ! -f "$OUT/prefix/lib/libz.a" ]; then
+	cd "$OUT/src"
+	[ -d "zlib-$ZLIB_VER" ] || curl -sL "https://github.com/madler/zlib/releases/download/v$ZLIB_VER/zlib-$ZLIB_VER.tar.gz" | tar xzf -
+	cd "zlib-$ZLIB_VER"
+	CHOST="$CROSS_HOST" CC="$OUT/zcc" AR="$OUT/zar" RANLIB="$OUT/zranlib" ./configure --static --prefix="$OUT/prefix" >"$OUT/zlib-configure.log" 2>&1   # (CHOST: else on a Mac it archives with Apple's libtool, which leaves the ARM objects out)
+	make -j8 install >"$OUT/zlib-make.log" 2>&1
 fi
 
 # PSPExp host tools
