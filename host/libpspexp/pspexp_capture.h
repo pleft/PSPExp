@@ -9,12 +9,26 @@
 #define PSPEXP_CAPTURE_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-/* the receiver's socket, one per user: /tmp/pspexp-capture-<uid>.sock */
+/* the receiver's socket, one per user: /tmp/pspexp-capture-<uid>.sock (PSPEXP_CAPTURE_SOCKET:
+ * another, for tests) */
 static inline void pspexp_capture_socket_path(char *out, size_t n)
 {
-    snprintf(out, n, "/tmp/pspexp-capture-%u.sock", (unsigned)getuid());
+    const char *e = getenv("PSPEXP_CAPTURE_SOCKET");
+    if (e && *e) snprintf(out, n, "%s", e);
+    else snprintf(out, n, "/tmp/pspexp-capture-%u.sock", (unsigned)getuid());
+}
+
+/* the PSP game the plugin's virtual disc reads (the PSP shelf: architecture §12c): the console
+ * writes its image's path (an ISO or CSO; a zip unpacked first) into this file before starting
+ * it, the receiver serves its sectors; PSPEXP_DISC_FILE names another file (tests) */
+static inline void pspexp_capture_disc_file(char *out, size_t n)
+{
+    const char *e = getenv("PSPEXP_DISC_FILE");
+    if (e && *e) snprintf(out, n, "%s", e);
+    else snprintf(out, n, "/tmp/pspexp-disc-%u", (unsigned)getuid());
 }
 
 #endif /* PSPEXP_CAPTURE_H */

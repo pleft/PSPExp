@@ -208,7 +208,7 @@ if(PSPEXP_HAVE_USB)
 endif()
 
 add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/player.c tools/pspexp-term/music.c tools/pspexp-term/upnp.c tools/pspexp-term/modplay.c tools/pspexp-term/notify.c tools/pspexp-term/btaudio.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/apps.c tools/pspexp-term/monitor.c tools/pspexp-term/sysinfo.c tools/pspexp-term/store.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
-  tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c)
+  tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c tools/pspexp-term/psp_native.c)
 target_compile_definitions(pspexp-term PRIVATE PSPEXP_LAUNCHER_ASSET_DIR="${CMAKE_SOURCE_DIR}/tools/pspexp-term/assets")
 # the console's version, for About: generated at every build (cmake/pspexp_version.cmake)
 add_custom_target(pspexp_version
@@ -272,6 +272,9 @@ if(PSPEXP_BUILD_TESTS)
   add_executable(test_runtime tests/test_runtime.c)
   target_link_libraries(test_runtime PRIVATE pspexp pspexp_null)
   add_test(NAME runtime COMMAND test_runtime)
+  if(ZLIB_FOUND AND PSPEXP_HAVE_USB)
+    add_test(NAME disc_serve COMMAND ${CMAKE_SOURCE_DIR}/tests/run_disc_serve.sh ${CMAKE_BINARY_DIR})
+  endif()
   if(ZLIB_FOUND)
     add_executable(test_disc tests/test_disc.c)
     target_link_libraries(test_disc PRIVATE pspexp)

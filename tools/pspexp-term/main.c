@@ -66,6 +66,7 @@
 #include "player.h"
 #include "music.h"
 #include "notify.h"
+#include "psp_native.h"
 #include "btaudio.h"
 #include "launcher_gfx.h"
 #include <sys/statvfs.h>
@@ -3587,6 +3588,7 @@ int main(int argc, char **argv)
         now = pspexp_time_us();
         watchdog_ping(now);
         capture_tick(now);
+        native_poll(ctx, now);
         connected = pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED;
         host_input_poll(connected);
         if (!connected && !g_released && (g_mode == MODE_USB || g_mode == MODE_TCP) && now - last_try > 1000000u) {
@@ -3647,10 +3649,9 @@ int main(int argc, char **argv)
             }
             if (launcher_take_console()) { g_view_launcher = 0; T.dirty = 1; swallow(); }
             if (launcher_take_files()) { files_show(launcher_files_path(), 1); swallow(); }
-            {   /* the PSP shelf: its own game, started on the PSP (architecture §12c: being built) */
+            {   /* the PSP shelf: its own game, started on the PSP (psp_native.c) */
                 char disc[700];
-                if (launcher_take_native(disc, sizeof(disc)))
-                    notify(NOTE_ATTN, "gamepad", "Not yet: PSP games from the board", "Starting them on the PSP is being built", NULL, "psp-native");
+                if (launcher_take_native(disc, sizeof(disc))) native_start(ctx, disc, now);
             }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }

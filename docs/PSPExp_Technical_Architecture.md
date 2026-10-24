@@ -1149,6 +1149,15 @@ game's exit then clears the ISO mode and starts that EBOOT (0x141, key "game", a
 priority 1), else the XMB as before. On the board: `pspexp_boot_disc`, the control port's
 `psp-boot PATH`; the shelf still says "Not yet" (its games are on the board: (B)).
 
+**(B), the board's side (2026-10-25).** The receiver serves the disc: a "PXDQ" packet from the
+plugin (u32 seq, u64 offset, u32 length; 0: the size only) is answered with command 15,
+CMD_DISC (seq, status, the disc's size, then at most 64 KB), from the image the console named
+(an ISO or CSO through `pspexp_disc.c`; a zipped game unpacked first by the console, as the
+shelf starts it). `tests/run_disc_serve.sh` drives it through a stand-in plugin over TCP
+(`-T PORT`): sizes and reads aligned, not, across sectors, at and past the end, of an ISO and a
+CSO, byte for byte (21 checks). The console's start, with its checks skipped (PPSSPP has no
+PRO), unpacked Chameleon's zip into the cache identical to the zip's ISO and named it.
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's

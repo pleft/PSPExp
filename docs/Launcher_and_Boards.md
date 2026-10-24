@@ -885,8 +885,13 @@ does not wait for a PSP the launcher holds.
 pspexp-core installs `/opt/pspexp/systems/psp.system`: the board's PSP games
 in `~/roms/psp` (ISO, CSO, or a zip holding an ISO, as collections keep them)
 on a "PSP" shelf under Emulators, with no emulator: `exec=@psp-boot` asks
-the console to have the PSP start the game itself (for now a "Not yet"
-notice), and the line under the shelf says "Runs on the PSP". Their covers
+the console to have the PSP start the game itself (`psp_native.c`: it checks
+the PSP's runtime offers BOOT_DISC and PSPExp Capture is on in
+`seplugins/game.txt`, without which the PSP would wait for its disc for
+ever; unpacks a zipped game once into `~/.cache/pspexp/discs`, the oldest
+others removed for room, a "Preparing" banner with its progress; names the
+image in `/tmp/pspexp-disc-<uid>` for the receiver, and sends BOOT_DISC with
+`pxd0:/disc.iso`), and the line under the shelf says "Runs on the PSP". Their covers
 are their own icons, PSP_GAME/ICON0.PNG read from the disc on the board
 (`pspexp_disc.c`) in the background for the game selected, as box art is
 fetched, into `~/.cache/pspexp-launcher/boxart/psp/icon0/` (`.noicon`: none,

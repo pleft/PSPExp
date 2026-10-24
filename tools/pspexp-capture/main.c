@@ -34,6 +34,7 @@
 #include "../../protocol/pspexp_usb_link.h"
 #include "../../host/libpspexp/pspexp_capture.h"
 #include "../../protocol/pspexp_protocol.h"
+#include "../../host/libpspexp/pspexp_disc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,8 @@
 #include <poll.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/un.h>
 
 #define W 480
@@ -281,6 +284,53 @@ static pthread_mutex_t g_link_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void put32le(uint8_t *p, uint32_t v) { p[0] = v; p[1] = v >> 8; p[2] = v >> 16; p[3] = v >> 24; }
 #define CMD_KEEP 14   /* u32 1: everything, all the time (the last seconds kept); 0: only during a note+L recording */
+#define CMD_DISC 15   /* the answer to a "PXDQ": u32 seq, u32 status (0 ok, 1 no disc, 2 unreadable), u64 the disc's size, then the bytes */
+
+/* ---- the virtual disc: a PSP game's sectors for the plugin (architecture §12c) ----
+ * The plugin asks ("PXDQ": u32 seq at 4, u64 offset at 8, u32 length at 16; 0 for the size only)
+ * for the game the console prepared (pspexp_capture_disc_file), opened at the first ask and again
+ * when that file names another. At most 64 KB an answer. */
+static int send_cmd(uint32_t cmd, const void *a, uint32_t alen, const void *b, uint32_t blen);
+static PspExpDisc *g_disc;
+static char g_disc_path[1024];
+static uint64_t g_disc_reads, g_disc_bytes;
+
+static void disc_serve(uint32_t seq, uint64_t off, uint32_t n)
+{
+    static uint8_t buf[64 * 1024 + 2 * PSPEXP_DISC_SECTOR];
+    uint8_t rep[16];
+    char f[600], path[1024] = "", err[200] = "";
+    uint32_t status = 0, got = 0;
+    uint64_t size = 0;
+    FILE *pf;
+    pspexp_capture_disc_file(f, sizeof(f));
+    if ((pf = fopen(f, "r"))) {
+        if (fgets(path, sizeof(path), pf)) path[strcspn(path, "\r\n")] = 0;
+        fclose(pf);
+    }
+    if (path[0] && strcmp(path, g_disc_path) != 0) {   /* another game: that one */
+        pspexp_disc_close(g_disc);
+        g_disc = pspexp_disc_open(path, err, sizeof(err));
+        snprintf(g_disc_path, sizeof(g_disc_path), "%s", path);
+        fprintf(stderr, "pspexp-capture: the disc %s%s%s\n", path, g_disc ? "" : ": ", g_disc ? "" : err);
+    }
+    if (!g_disc) status = 1;
+    else {
+        size = pspexp_disc_size(g_disc);
+        if (n > 64 * 1024) n = 64 * 1024;
+        if (off >= size) n = 0;
+        else if (n > size - off) n = (uint32_t)(size - off);
+        if (n) {   /* whole sectors read, the part asked for sent */
+            uint32_t first = (uint32_t)(off / PSPEXP_DISC_SECTOR), skip = (uint32_t)(off % PSPEXP_DISC_SECTOR);
+            uint32_t sectors = (skip + n + PSPEXP_DISC_SECTOR - 1) / PSPEXP_DISC_SECTOR;
+            if (pspexp_disc_read(g_disc, first, sectors, buf) < 0) status = 2;
+            else { memmove(buf, buf + skip, n); got = n; }
+        }
+    }
+    put32le(rep, seq); put32le(rep + 4, status); put32le(rep + 8, (uint32_t)size); put32le(rep + 12, (uint32_t)(size >> 32));
+    send_cmd(CMD_DISC, rep, 16, buf, got);
+    g_disc_reads++; g_disc_bytes += got;
+}
 
 static int send_cmd(uint32_t cmd, const void *a, uint32_t alen, const void *b, uint32_t blen)
 {
@@ -403,6 +453,39 @@ static long sock_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
 static int sock_send(PspExpTransport *t, const void *d, size_t n) { (void)t; (void)d; (void)n; return -1; }   /* (no commands into PSPExp) */
 static void sock_close(PspExpTransport *t) { SockSource *s = (SockSource *)t; if (s->fd >= 0) close(s->fd); s->fd = -1; }
 
+/* -T PORT (tests): a stand-in for the plugin over TCP on 127.0.0.1, instead of the USB cable
+ * (tests/run_disc_serve.sh drives the virtual disc through it) */
+static int g_tcp_listen = -1;
+typedef struct { PspExpTransport t; int fd; } TcpSource;
+static long tcp_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
+{
+    TcpSource *s = (TcpSource *)t;
+    struct pollfd p = { s->fd, POLLIN, 0 };
+    long n;
+    if (poll(&p, 1, timeout_ms) <= 0) return 0;
+    n = read(s->fd, buf, cap);
+    return n > 0 ? n : n < 0 && (errno == EINTR || errno == EAGAIN) ? 0 : -1;
+}
+static int tcp_send(PspExpTransport *t, const void *d, size_t n)
+{
+    TcpSource *s = (TcpSource *)t;
+    const uint8_t *p = (const uint8_t *)d;
+    while (n) { ssize_t w = write(s->fd, p, n); if (w <= 0) { if (w < 0 && errno == EINTR) continue; return -1; } p += w; n -= (size_t)w; }
+    return 0;
+}
+static void tcp_close(PspExpTransport *t) { TcpSource *s = (TcpSource *)t; if (s->fd >= 0) close(s->fd); s->fd = -1; }
+static int tcp_listen(int port)
+{
+    struct sockaddr_in a;
+    int one = 1;
+    memset(&a, 0, sizeof(a));
+    a.sin_family = AF_INET; a.sin_port = htons((uint16_t)port); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if ((g_tcp_listen = socket(AF_INET, SOCK_STREAM, 0)) < 0) return -1;
+    setsockopt(g_tcp_listen, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    if (bind(g_tcp_listen, (struct sockaddr *)&a, sizeof(a)) < 0 || listen(g_tcp_listen, 1) < 0) { close(g_tcp_listen); g_tcp_listen = -1; return -1; }
+    return 0;
+}
+
 static void sock_listen(void)
 {
     struct sockaddr_un a;
@@ -500,14 +583,18 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             if (ff && now() - last_jobs >= 0.5) { jobs_step(); last_jobs = now(); }
         }
         if (need(t, hdr, 4) < 0) break;
-        int sound = memcmp(hdr, "PXCA", 4) == 0, rep = !memcmp(hdr, "PXCR", 4) || !memcmp(hdr, "PXCL", 4);
+        int sound = memcmp(hdr, "PXCA", 4) == 0, rep = !memcmp(hdr, "PXCR", 4) || !memcmp(hdr, "PXCL", 4), dq = !memcmp(hdr, "PXDQ", 4);
         int msg = memcmp(hdr, "PXCM", 4) == 0, ev = memcmp(hdr, "PXCE", 4) == 0;
-        if (!sound && !rep && !msg && !ev && memcmp(hdr, "PXCF", 4) != 0) {   /* out of step: slide one byte at a time to the next header */
+        if (!sound && !rep && !msg && !ev && !dq && memcmp(hdr, "PXCF", 4) != 0) {   /* out of step: slide one byte at a time to the next header */
             memmove(hdr, hdr + 1, 3);
             continue;
         }
         if (need(t, hdr + 4, 28) < 0) break;
         uint32_t when = get32(hdr + 20), len = get32(hdr + 24);
+        if (dq) {   /* the virtual disc: the plugin's read, answered at once */
+            disc_serve(get32(hdr + 4), (uint64_t)get32(hdr + 8) | (uint64_t)get32(hdr + 12) << 32, get32(hdr + 16));
+            continue;
+        }
         if (msg) {   /* the plugin's log, sent as it goes (it never writes to the memory stick) */
             if (len > sizeof(reply) || need(t, reply, len) < 0) break;
             if (dir) { char p[512]; snprintf(p, sizeof(p), "%s/psp.log", dir); FILE *f = fopen(p, "ab"); if (f) { fwrite(reply, 1, len, f); fclose(f); } }
@@ -643,7 +730,8 @@ int main(int argc, char **argv)
     const char *out = NULL, *dir = NULL, *fifo = NULL;
     double limit = 0;
     int c, keep = 0;
-    while ((c = getopt(argc, argv, "o:s:b:d:t:c:kq")) != -1) {
+    int test_port = 0;
+    while ((c = getopt(argc, argv, "o:s:b:d:t:c:kqT:")) != -1) {
         if (c == 'o') out = optarg;
         else if (c == 's') g_clips = optarg;
         else if (c == 'b') g_clip_len = atoi(optarg) >= 0 ? atoi(optarg) : 30;   /* (0: recordings only) */
@@ -652,6 +740,7 @@ int main(int argc, char **argv)
         else if (c == 'c') fifo = optarg;
         else if (c == 'k') keep = 1;
         else if (c == 'q') g_quiet = 1;
+        else if (c == 'T') test_port = atoi(optarg);
         else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds, 0: recordings only]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k] [-q]\n"); return 2; }
     }
     if (out && g_clips) { fprintf(stderr, "pspexp-capture: -o or -s, not both\n"); return 2; }
@@ -672,6 +761,7 @@ int main(int argc, char **argv)
         if (fd < 0 || flock(fd, LOCK_EX | LOCK_NB) != 0) { fprintf(stderr, "pspexp-capture: another one is running (%s)\n", lock); return 1; }
     }
     sock_listen();
+    if (test_port && tcp_listen(test_port) < 0) { fprintf(stderr, "pspexp-capture: no TCP port %d\n", test_port); return 1; }
     if (fifo) {
         pthread_t th;
         struct stat st;
@@ -689,6 +779,16 @@ int main(int argc, char **argv)
         static SockSource ss;
         int from_psp_exp = 0;
         while (!t && !g_quit) {   /* (in steps: Ctrl-C ends a wait) a native game on the USB cable, or PSPExp's own on the socket */
+            static TcpSource ts;
+            if (g_tcp_listen >= 0) {   /* (tests: the plugin's stand-in) */
+                struct pollfd p = { g_tcp_listen, POLLIN, 0 };
+                if (poll(&p, 1, 200) > 0 && (ts.fd = accept(g_tcp_listen, NULL, NULL)) >= 0) {
+                    memset(&ts.t, 0, sizeof(ts.t));
+                    ts.t.name = "test"; ts.t.recv = tcp_recv; ts.t.send = tcp_send; ts.t.close = tcp_close;
+                    t = &ts.t;
+                    break;
+                }
+            }
             int fd = sock_accept(0);
             if (fd >= 0) {
                 sock_hello(fd);

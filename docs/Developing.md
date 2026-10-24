@@ -194,6 +194,10 @@ PSPExp's own games (2026-10-24): the same receiver records them, with the same โ
 (`runtime/pspexp_note.c`, `tests/test_note.c`) and dot. Its socket
 (`/tmp/pspexp-capture-<uid>.sock`) is found by whichever program holds PSPExp's link, which asks
 the PSP's runtime to capture (CAPTURE_SET) and passes what comes on (`PSPEXP_CAPTURE=0`: not).
+The PSP shelf's virtual disc (architecture ยง12c): the receiver answers the plugin's disc reads
+(`tests/run_disc_serve.sh`, a stand-in plugin over TCP: `pspexp-capture -T PORT`, with
+`PSPEXP_DISC_FILE` and `PSPEXP_CAPTURE_SOCKET` pointing at a test's own files).
+
 Without a PSP: `scripts/dev/run-ppsspp.sh`, then `build/host/pspexp-capture -k -s clips -c ctl`
 and `build/host/pspexp-term --tcp 127.0.0.1:3838 --launcher` (or a game with
 `PSPEXP=tcp:127.0.0.1:3838 scripts/dev/pspexp-run build/host/sdl-game`); `echo clip > ctl` saves the last 30 s.
