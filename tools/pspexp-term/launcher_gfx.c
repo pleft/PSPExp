@@ -135,14 +135,15 @@ static float cover_of(float d) { return clampf(0.5f - d, 0, 1); }
 
 /* ---- fonts ------------------------------------------------------------------------------ */
 
-/* the characters baked: ASCII in every font; for the fonts that show names
- * (file names, tags, titles) also Latin-1, Latin Extended-A, Greek and
- * Cyrillic. Text is UTF-8; anything else is drawn as '?'. */
+/* the characters baked: ASCII and ♪ (the PSP's note button, named in hints) in every font; for
+ * the fonts that show names (file names, tags, titles) also Latin-1, Latin Extended-A, Greek and
+ * Cyrillic. Text is UTF-8; anything else is drawn as '?' (♪ was, until 2026-10-24: Inter has it,
+ * it was never baked). */
 static const struct { uint16_t first, count; } G_RANGES[] = {
-    { 32, 95 }, { 0xA0, 96 }, { 0x100, 128 }, { 0x384, 75 }, { 0x400, 96 },
+    { 32, 95 }, { 0x266A, 1 }, { 0xA0, 96 }, { 0x100, 128 }, { 0x384, 75 }, { 0x400, 96 },
 };
-#define G_ASCII 95
-#define G_COUNT (95 + 96 + 128 + 75 + 96)
+#define G_ASCII 96   /* (every font's: ASCII and ♪) */
+#define G_COUNT (96 + 96 + 128 + 75 + 96)
 #define ATLAS_W 512
 #define ATLAS_H 512
 typedef struct Glyph { int16_t xoff, yoff, adv; uint16_t frame; } Glyph;

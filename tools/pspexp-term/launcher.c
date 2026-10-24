@@ -235,7 +235,7 @@ static void cats_build(void)
     ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
-    ACTION("clips", "Clips", "history", "Note + R saves the last 30 seconds as a video: the board records all the time");   /* (the font has no ♪) */
+    ACTION("clips", "Clips", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
     ACTION("videos", "Videos", "film", "The recordings and clips, in Files");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
@@ -744,7 +744,7 @@ static void run_action(LEntry *e, uint64_t now)
         g_clips_keep = !g_clips_keep;
         g_clips_change = 1;
         lib_setting_set(&L, "clips", g_clips_keep);
-        toast("history", g_clips_keep ? "Clips on: Note + R saves the last 30 seconds" : "Clips off: Note + L recordings only", now);
+        toast("history", g_clips_keep ? "Clips on: ♪ + R saves the last 30 seconds" : "Clips off: ♪ + L recordings only", now);
     } else if (!strcmp(a, "boxart")) {
         g_nofetch = !g_nofetch;
         lib_setting_set(&L, "boxart", !g_nofetch);
@@ -2146,8 +2146,8 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
         else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
-        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "Note + R saves the last 30 seconds: the board records all the time"
-                                                                              : "Turn on for Note + R: the last 30 seconds as a video");
+        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "♪ + R saves the last 30 seconds: the board records all the time"
+                                                                              : "Turn on for ♪ + R: the last 30 seconds as a video");
         else snprintf(s, n, "%s", e->tags);
         break;
     default: snprintf(s, n, "Game  /  %s%s%s", renderer(e), e->tags[0] ? "  /  " : "", e->tags); break;
