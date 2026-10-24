@@ -70,6 +70,16 @@ static int fmt_num(char *p, u32 v, int base, int width)
     return n;
 }
 
+/* The memory stick is touched only between 2 s after the game's start and the HOME menu or the
+ * game's exit; before and after, the lines wait in memory. psp-cast found an sceIoOpen on ms0
+ * during the start (module_start or right after) "hung the PSP, always, after exiting a game";
+ * this plugin opened and renamed its log in module_start from v10 on, and every exit of
+ * Castlevania: The Dracula X Chronicles switched the PSP off afterwards, with the USB stopped or
+ * not used at all (2026-10-24); the exits that went well (Burnout Legends, v8-v9) were from before. */
+static volatile int g_log_ready, g_log_hold;
+static char g_log_pend[2048];
+static int g_log_pend_n;
+
 static void cap_log(const char *fmt, ...)
 {
     char line[240];
@@ -90,8 +100,16 @@ static void cap_log(const char *fmt, ...)
     }
     va_end(ap);
     line[n++] = '\n';
+    if (!g_log_ready || g_log_hold) {   /* (kept in memory: see above) */
+        if (g_log_pend_n + n <= (int)sizeof(g_log_pend)) { memcpy(g_log_pend + g_log_pend_n, line, n); g_log_pend_n += n; }
+        return;
+    }
     fd = sceIoOpen(LOG_PATH, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0777);
-    if (fd >= 0) { sceIoWrite(fd, line, n); sceIoClose(fd); }
+    if (fd >= 0) {
+        if (g_log_pend_n) { sceIoWrite(fd, g_log_pend, g_log_pend_n); g_log_pend_n = 0; }
+        sceIoWrite(fd, line, n);
+        sceIoClose(fd);
+    }
 }
 
 static u32 now_us(void)
@@ -142,6 +160,8 @@ static int g_usb_up;
 static volatile u32 g_changes, g_sent, g_skipped, g_copy_us, g_dma_us, g_send_us, g_late;
 static volatile int g_dead_gen = -1;     /* the link the receiver stopped reading (its generation) */
 static volatile int g_paused;            /* pause: no frames copied (for comparing) */
+static int g_frames_on = 1;              /* the frames part (F, see read_parts) */
+static int g_link_on = 1;                /* the USB link part (L) */
 static volatile int g_util_active, g_util_closing;   /* a system screen open (the plugin's memory given back) */
 /* Experiments (exp, from the receiver), to tell what costs the game its speed: 1 the copy alone
  * (nothing sent), 2 the sending alone (nothing copied: the ring's stale bytes go out). */
@@ -575,15 +595,16 @@ static int cmd_put(u32 len)
     return r;
 }
 
-static void cmd_log(void)
+static void cmd_log(int old)   /* (old: the last run's, kept beside: after a crash, what it did last) */
 {
-    SceUID fd = sceIoOpen(LOG_PATH, PSP_O_RDONLY, 0);
+    const char *path = old ? LOG_PATH ".old" : LOG_PATH;
+    SceUID fd = sceIoOpen(path, PSP_O_RDONLY, 0);
     int n = fd >= 0 ? sceIoRead(fd, g_cmd_buf, sizeof(g_cmd_buf)) : 0;
     int size = fd >= 0 ? (int)sceIoLseek32(fd, 0, PSP_SEEK_END) : 0;
     if (fd >= 0) sceIoClose(fd);
     if (n < 0) n = 0;
     if (size > n) {   /* the log's end: the newest lines */
-        fd = sceIoOpen(LOG_PATH, PSP_O_RDONLY, 0);
+        fd = sceIoOpen(path, PSP_O_RDONLY, 0);
         if (fd >= 0) { sceIoLseek32(fd, size - (int)sizeof(g_cmd_buf), PSP_SEEK_SET); n = sceIoRead(fd, g_cmd_buf, sizeof(g_cmd_buf)); sceIoClose(fd); }
     }
     cmd_reply("PXCL", CMD_LOG, size, g_cmd_buf, n > 0 ? (u32)n : 0);
@@ -638,7 +659,9 @@ static int cmd_thread(SceSize args, void *argp)
         } else if (cmd == CMD_PUT) {
             cmd_reply("PXCR", CMD_PUT, cmd_put(len), NULL, 0);
         } else if (cmd == CMD_LOG) {
-            cmd_log();
+            int old = 0;
+            if (len >= 4 && cmd_read(g_cmd_buf, 4) == 0) old = get32(g_cmd_buf) != 0;
+            cmd_log(old);
         } else if (cmd == CMD_PAUSE && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
             g_paused = get32(g_cmd_buf) != 0;
             cap_log(g_paused ? "paused" : "capturing again");
@@ -716,8 +739,10 @@ static int send_thread(SceSize args, void *argp)
  * its transfers first, or left everything running; every exit with the receiver no longer reading
  * went well (Burnout Legends). Stopping the USB from the plugin's own thread while a game simply
  * runs has always gone well (the restart command, dozens of times, frames streaming). So the
- * watcher looks at the HOME menu every refresh (sceImposeGetStatus, bit 0: the menu is open, as
- * RemoteJoyLite and remotejoy-minus read it; PRO resolves the NID for 6.60) and, when it opens,
+ * watcher looks at the HOME menu every refresh (sceImposeGetStatus, its top bit; PRO resolves the
+ * NID for 6.60. Not bit 0, which RemoteJoyLite toggles the menu by: on 6.60 PRO-C the status was 1
+ * at a game's start, 0x00050102 while it ran and 0x80050102 with the HOME menu open, 2026-10-24)
+ * and, when it opens,
  * lets the frame under way finish, then stops the USB; the receiver sees the PSP go. Back in the
  * game (the menu closed for half a second), the USB starts again and the receiver reconnects. A
  * game exiting through its own menu, without HOME, is not covered (few PSP games have one). */
@@ -733,6 +758,7 @@ static void usb_quiesce(const char *why)
     int i, locked;
     SceUInt t = 300000;
     g_home_paused = 1;   /* (the watcher hands no more frames) */
+    g_log_hold = 1;      /* (and nothing goes to the memory stick: an exit may follow) */
     for (i = 0; i < 60 && g_busy; i++) sceKernelDelayThread(5000);   /* (its last bands sent, not cancelled) */
     locked = g_tx_lock >= 0 && sceKernelWaitSema(g_tx_lock, 1, &t) >= 0;
     if (g_usb_up) { pspexpUsbStop(); sceUsbbdUnregister(&g_driver); g_usb_up = 0; }
@@ -746,18 +772,22 @@ static void usb_resume(void)
     if (r >= 0) r = pspexpUsbStart();
     if (r >= 0) { g_usb_up = 1; pspexpUsbSetTx(128 * 1024, 0); }
     g_home_paused = 0;
+    g_log_hold = 0;
     cap_log("USB started again: %x", (u32)r);
 }
 
 static void home_check(void)
 {
-    u32 st;
-    if (!g_impose_status) return;
-    st = (u32)g_impose_status();
+    u32 st = g_impose_status ? (u32)g_impose_status() : 0;
+    SceCtrlData pad;
+    int home = 0;
+    /* the HOME button itself as well (kernel code sees it): early in a game the status stays at 1
+     * and its top bit did not follow the menu (a crash test, 2026-10-24) */
+    if (sceCtrlPeekBufferPositive(&pad, 1) > 0 && (pad.Buttons & PSP_CTRL_HOME)) home = 1;
     if (st != g_home_status) { cap_log("HOME menu status %x", st); g_home_status = st; }
-    if (st & 1) {
+    if ((st & 0x80000000u) || home) {   /* (the HOME menu open, or opening) */
         g_home_closed_at = 0;
-        if (!g_home_paused) usb_quiesce("the HOME menu opened");
+        if (!g_home_paused) usb_quiesce(home ? "HOME pressed" : "the HOME menu opened");
     } else if (g_home_paused && !g_util_active) {
         if (!g_home_closed_at) g_home_closed_at = now_us() | 1;
         else if (now_us() - g_home_closed_at > 500000) { g_home_closed_at = 0; usb_resume(); }
@@ -774,11 +804,16 @@ static int capture_thread(SceSize args, void *argp)
 
     sceKernelDelayThread(2000000);   /* the game first: its modules, its first frames */
     if (g_quit) return 0;
-    part = snap_alloc();
-    cap_log("frame ring: %d KB of kernel memory", part);
-    if (part < 0) return 0;
-    g_copy_th = sceKernelCreateThread("PSPExpCaptureCopy", copy_thread, 0x19, 0x2000, 0, NULL);
-    if (g_copy_th >= 0) sceKernelStartThread(g_copy_th, 0, NULL);
+    sceIoRemove(LOG_PATH ".old");   /* the last run's log kept beside (after a hang, what it did last) */
+    sceIoRename(LOG_PATH, LOG_PATH ".old");
+    g_log_ready = 1;
+    if (g_frames_on) {
+        part = snap_alloc();
+        cap_log("frame ring: %d KB of kernel memory", part);
+        if (part < 0) return 0;
+        g_copy_th = sceKernelCreateThread("PSPExpCaptureCopy", copy_thread, 0x19, 0x2000, 0, NULL);
+        if (g_copy_th >= 0) sceKernelStartThread(g_copy_th, 0, NULL);
+    }
     {   /* the sender just below the watcher (at 0x60, below the game's threads, a race got 14 frames
          * of 28 a second sent; 0x1A, 14-23; above the game's threads, 0x11 with the watcher at
          * 0x10, no more frames and the game itself slower, 20-25 fps: 2026-10-23) */
@@ -786,6 +821,15 @@ static int capture_thread(SceSize args, void *argp)
         if (g_send_th >= 0) sceKernelStartThread(g_send_th, 0, NULL);
     }
     cap_log("battery %d%%", scePowerGetBatteryLifePercent());
+    if (!g_link_on) {   /* (no USB: the watcher only counts the game's frames) */
+        t0 = now_us();
+        while (!g_quit) {
+            sceDisplayWaitVblankStart();
+            if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) >= 0 && top != last) { g_changes++; last = top; }
+            if (now_us() - t0 >= 5000000) { cap_log("game %u frames in 5 s (no link)", g_changes - c0); c0 = g_changes; t0 = now_us(); }
+        }
+        return 0;
+    }
     memset(&g_stats, 0, sizeof(g_stats));
     r = sceUsbbdRegister(&g_driver);
     cap_log("USB driver registered: %x", r);
@@ -809,7 +853,7 @@ static int capture_thread(SceSize args, void *argp)
             g_changes++; last = top; g_top = top;
             if (pspexpUsbConnected()) {
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
-                if (g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
+                if (!g_frames_on || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
                 else if (!g_busy && g_band_req && g_band_req != BAND_BYTES) {   /* a new band size, between frames */
                     int nb = RING_BYTES / g_band_req;
                     sceKernelDeleteSema(g_band_free);
@@ -852,17 +896,26 @@ static int capture_thread(SceSize args, void *argp)
     return 0;
 }
 
+/* Which parts run (for finding which one a fault comes from; the file it was read from at the
+ * start is gone: no memory-stick access while a game starts, see cap_log). Letters: S the sound's calls, B the buttons', U the system screens', X the exit's, F the
+ * frames (their ring and copy), L the USB link (and its commands and the HOME menu's pause); Z
+ * nothing at all, the plugin only loaded; no file, all of them but Z. (Castlevania: The Dracula X Chronicles' exit switched the PSP off with
+ * the USB already stopped and every thread at rest, 2026-10-24: one of these, then.) */
+static char g_parts[16] = "SBUXFL";
+static int part_on(char c) { int i; for (i = 0; g_parts[i]; i++) if (g_parts[i] == c) return 1; return 0; }
+
 int module_start(SceSize args, void *argp)
 {
-    sceIoRemove(LOG_PATH ".old");   /* the last run's log kept beside (after a hang, what it did last) */
-    sceIoRename(LOG_PATH, LOG_PATH ".old");
-    cap_log("PSPExp Capture: stage 2 (picture and sound; a DMA ring, 32-bit as the game draws; control from the receiver)");
+    cap_log("PSPExp Capture: stage 2 (picture and sound; a DMA ring, 32-bit as the game draws; control from the receiver); parts: %s", g_parts[0] ? g_parts : "none");
+    if (part_on('Z')) return 0;   /* (loaded, nothing else) */
     g_send_ev = sceKernelCreateEventFlag("PSPExpCaptureSend", 0, 0, NULL);
     g_tx_lock = sceKernelCreateSema("PSPExpCaptureTx", 0, 1, 1, NULL);
-    catch_exit();
-    catch_audio();   /* now, before the game reserves its channels */
-    catch_pad();
-    catch_util();
+    if (part_on('X')) catch_exit();
+    if (part_on('S')) catch_audio();   /* now, before the game reserves its channels */
+    if (part_on('B')) catch_pad();
+    if (part_on('U')) catch_util();
+    g_frames_on = part_on('F');
+    g_link_on = part_on('L');
     /* the watcher above most of the game's threads, to copy a frame the moment it is shown; it does
      * little: one look per refresh, and the DMA engine copies while it waits */
     g_cap_th = sceKernelCreateThread("PSPExpCapture", capture_thread, 0x18, 0x4000, 0, NULL);
@@ -897,8 +950,9 @@ static volatile u32 g_exit_calls;
 static void exit_note(void)
 {
     int k1 = pspSdkSetK1(0);
-    cap_log("exit call %u, thread %x, USB %s", ++g_exit_calls, (u32)sceKernelGetThreadId(), g_usb_up ? "running" : "stopped");
-    g_quit = 1;   /* (from here every thread of the plugin stops touching anything: no log, no copy, no USB) */
+    g_log_hold = 1;      /* (nothing to the memory stick from here on) */
+    g_quit = 1;
+    cap_log("exit call %u, thread %x, USB %s", ++g_exit_calls, (u32)sceKernelGetThreadId(), g_usb_up ? "running" : "stopped");   /* (from here every thread of the plugin stops touching anything: no log, no copy, no USB) */
     pspSdkSetK1(k1);
 }
 static int exit_game(void) { exit_note(); return g_exit_game(); }

@@ -9,7 +9,7 @@
  * -c: a FIFO (mkfifo) taking commands for the PSP, one a line, for testing without hands on it:
  *   press BUTTONS MS | hold BUTTONS | release   (BUTTONS: cross+up, ...: the game sees them)
  *   put FILE [NAME]   (into ms0:/seplugins/, e.g. a new pspexp_capture.prx)
- *   log | restart (the game again, from its ISO: a new plugin loads) | stop | quit
+ *   log [old] | restart (the game again, from its ISO: a new plugin loads) | stop | quit
  *   pause | resume   (no frames copied meanwhile: the game's own frame rate, for comparing)
  *   vram   (the game's GE buffer addresses, a fingerprint of each 32 KB of VRAM)
  *   exp N   (0 normal, 1 the copy alone, 2 the sending alone: what costs the game its speed)
