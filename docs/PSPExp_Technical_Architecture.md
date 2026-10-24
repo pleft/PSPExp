@@ -1158,6 +1158,15 @@ shelf starts it). `tests/run_disc_serve.sh` drives it through a stand-in plugin 
 CSO, byte for byte (21 checks). The console's start, with its checks skipped (PPSSPP has no
 PRO), unpacked Chameleon's zip into the cache identical to the zip's ISO and named it.
 
+**(B), the PSP's side, in code, not yet tried (2026-10-25).** The capture plugin, when the
+game's ISO is "pxd0:...", adds that device at module_start (`sceIoAddDrv`, "pxd") and starts its
+USB at once instead of 2 s in. Its open asks the board for the size (failing until the link is
+up: Inferno tries again every 20 ms); each read becomes PXDQ asks of at most 64 KB, one at a
+time, the command thread reading CMD_DISC's bytes straight into the reader's buffer (answers to
+an ask given up on, after 3 s, dropped by their seq); while the link is down (the HOME menu
+still stops the USB, for the exit's sake) a read waits and asks again: the game pauses, it is
+not told of an error. A 64-bit seek (SET, CUR, END), a getstat with the size; writes refused.
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's
