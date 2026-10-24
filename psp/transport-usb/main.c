@@ -89,7 +89,12 @@ static volatile int g_rx_head;               /* next buffer the consumer reads *
 static volatile int g_rx_tail;               /* next buffer to submit */
 static volatile int g_rx_off;                /* consumer offset within head */
 static volatile int g_rx_submitted = -1;
-static unsigned char g_tx_buf[PSPEXP_USB_CHUNK] __attribute__((aligned(64)));
+/* the copy of a write whose data is not 64-byte aligned (an embedded user can make it smaller:
+ * kernel memory is scarce while a game runs) */
+#ifndef PSPEXP_USB_TXBUF
+#define PSPEXP_USB_TXBUF PSPEXP_USB_CHUNK
+#endif
+static unsigned char g_tx_buf[PSPEXP_USB_TXBUF] __attribute__((aligned(64)));
 static unsigned char g_sync_buf[64] __attribute__((aligned(64)));
 static const unsigned char g_sync_pattern[PSPEXP_USB_SYNC_LEN] = PSPEXP_USB_SYNC_BYTES;
 
@@ -480,7 +485,7 @@ int pspexpUsbWrite(const void *data, int len)
     while (remaining > 0) {
         int n = remaining > g_tx_chunk ? g_tx_chunk : remaining;
         int r;
-        if (((u32)p & 63) && n > (int)PSPEXP_USB_CHUNK) n = PSPEXP_USB_CHUNK;   /* (copied through g_tx_buf) */
+        if (((u32)p & 63) && n > (int)PSPEXP_USB_TXBUF) n = PSPEXP_USB_TXBUF;   /* (copied through g_tx_buf) */
         if (g_tx_split && n < g_tx_chunk && (n % g_packet) == 0) {
             /* Ends on a packet boundary: split so both transfers end short. */
             r = tx_one(p, n - PSPEXP_USB_SPLIT);

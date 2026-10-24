@@ -28,6 +28,7 @@
  */
 #define PSPEXP_USB_EMBEDDED
 #define PSPEXP_USB_RX_SIZE 4096   /* it receives only the receiver's hello and short commands */
+#define PSPEXP_USB_TXBUF 16384    /* (its unaligned writes, the sound ring's, go in pieces this size) */
 #include "../transport-usb/main.c"
 
 #include <pspdisplay.h>
@@ -79,7 +80,7 @@ static int fmt_num(char *p, u32 v, int base, int width)
  * Castlevania: The Dracula X Chronicles switched the PSP off afterwards, with the USB stopped or
  * not used at all (2026-10-24); the exits that went well (Burnout Legends, v8-v9) were from before. */
 static volatile int g_log_ready, g_log_hold;
-#define MLOG 8192
+#define MLOG 4096
 static char g_mlog[MLOG];
 static volatile u32 g_mlog_head, g_mlog_sent;   /* bytes logged and sent so far (the ring: their difference) */
 #ifdef PSPEXP_CAPTURE_DEV
@@ -139,27 +140,28 @@ static void put16(unsigned char *p, u32 v) { p[0] = v & 0xFF; p[1] = (v >> 8) & 
 static void put32(unsigned char *p, u32 v) { put16(p, v); put16(p + 2, v >> 16); }
 static u32 get32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24; }
 
-/* The frame: right after the game puts up a new one, the DMA engine copies it out of VRAM in bands
- * of rows, as it is (the game's own format, rows of its stride), into a ring of small buffers in
- * kernel memory, and the sender writes each band to the link while the next is copied; the CPU
- * does nothing to the pixels (the receiver converts them). The copy must end before the game
- * flips again (it then draws into this buffer): the ring keeps it at the link's pace, ≈22 ms for
- * a 32-bit frame; a frame flipped before its copy ended is counted as late in the log.
+/* The frame: right after the game puts up a new one, the DMA engine copies it whole out of VRAM,
+ * as it is (the game's own format, rows of its stride), into a buffer in main memory (the USB
+ * engine reads nothing else), and the sender writes it to the link; the CPU does nothing to the
+ * pixels (the receiver converts them). The copy takes a few ms, long before the game draws into
+ * that buffer again (after its next flip); one flipped before its copy ended is counted as late.
  *
- * What came before (2026-10-23, Burnout Legends): rows copied while sending tore (v1); a whole
- * 32-bit snapshot (544 KB) fits nowhere that is free: in the game's memory it hung loading a saved
- * profile (the PSP's save screen takes its memory there), in the 4 MB volatile area it froze on
- * the splash screen; a 16-bit copy in kernel memory, packed by the VFPU and sent while copied,
- * took every frame but cost a race a third of its frame rate (30 fps alone, 20 captured: 27 ms of
- * every frame); the USB engine reading VRAM itself hung the plugin at the first frame. */
-#define RING_BYTES (256 * 1024)      /* of the kernel's ~450 KB free while a game runs */
-#define MAX_BANDS 8
-static int BAND_BYTES = 128 * 1024, NBANDS = 2;   /* (fewer, larger USB transfers cost the PSP less: 128 KB, 25 fps in a race against 23 at 32 KB) */
-static volatile int g_band_req;      /* a new band size asked for */
-static unsigned char *g_bands;       /* 64-byte aligned */
-static volatile u32 g_band_len[MAX_BANDS];
-static SceUID g_band_free = -1, g_band_full = -1, g_copy_go = -1;
-static SceUID g_block = -1;
+ * Where the buffers live (the frame's 544 KB, the sound's 64 KB): in the game's own memory
+ * (partition 2), where most games leave megabytes free, taken only with UMARGIN still free, and
+ * given back at once whenever the game or its system needs memory: a PSP system screen opening
+ * (save, keyboard, messages...), a system module loading, or the game's own memory request or
+ * module load failing (the plugin then releases its buffers and retries it for the game; see
+ * mem_release). Not in the kernel's memory: ≈450 KB free while a game runs, which the system's
+ * screens, modules and the game's exit need; holding ≈520 KB of it left Bomberman's exit waiting
+ * forever and Gran Turismo frozen (2026-10-24). A game's memory once hung Burnout Legends
+ * loading a profile (2026-10-23), from before the plugin gave it back for system screens. */
+#define FRAME_MAX (512 * CAP_H * 4)
+#define UMARGIN (4 * 1024 * 1024)
+static unsigned char *g_fbuf;          /* 64-byte aligned */
+static SceUID g_fblock = -1, g_copy_go = -1, g_copied = -1;
+static volatile u32 g_frame_bytes;
+static volatile int g_mem_held;        /* the buffers taken (frame and sound) */
+static volatile u32 g_mem_releases;
 static volatile int g_busy;            /* a frame on its way (copied by the copier, sent by the sender) */
 static const unsigned char *g_frame_src;
 static int g_frame_bw, g_frame_fmt;
@@ -213,27 +215,6 @@ static u32 cpu_us(SceUID th)
     return st.runClocks.low;
 }
 
-static int ring_alloc(void)
-{
-    SceUID b = sceKernelAllocPartitionMemory(1, "PSPExpCapture", PSP_SMEM_High, RING_BYTES + 64, NULL);
-    if (b < 0) return b;
-    g_block = b;
-    g_bands = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(b) + 63) & ~63u);
-    sceKernelDcacheInvalidateRange(g_bands, RING_BYTES);   /* (only the DMA engines touch it) */
-    return 0;
-}
-
-static int snap_alloc(void)
-{
-    cap_log("kernel memory: %u KB free, largest %u KB", (u32)sceKernelPartitionTotalFreeMemSize(1) / 1024,
-            (u32)sceKernelPartitionMaxFreeMemSize(1) / 1024);
-    if (ring_alloc() < 0) return -1;
-    g_band_free = sceKernelCreateSema("PSPExpCaptureFree", 0, NBANDS, MAX_BANDS, NULL);
-    g_band_full = sceKernelCreateSema("PSPExpCaptureFull", 0, 0, MAX_BANDS, NULL);
-    g_copy_go = sceKernelCreateSema("PSPExpCaptureCopy", 0, 0, 1, NULL);
-    return RING_BYTES / 1024;
-}
-
 /* a semaphore taken, waiting in steps so a game's end is noticed; <0 then */
 static int take(SceUID sema)
 {
@@ -264,25 +245,18 @@ static void vram_probe(const void *top)
 }
 static void *volatile g_top;   /* the frame shown now (the watcher's) */
 
-/* the copier: each frame the watcher hands it, band by band into the ring */
+/* the copier: each frame the watcher hands it, whole into the buffer in one DMA copy */
 static int copy_thread(SceSize args, void *argp)
 {
     while (take(g_copy_go) == 0) {
         int bpp = g_frame_fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2;
-        int stride = g_frame_bw * bpp, rows = BAND_BYTES / stride, y, k = 0;
-        u32 t0 = now_us(), changes = g_changes;
-        for (y = 0; y < CAP_H; y += rows, k++) {
-            int n = CAP_H - y < rows ? CAP_H - y : rows, slot = k % NBANDS;
-            u32 t;
-            if (take(g_band_free) < 0) return 0;
-            t = now_us();
-            if (g_exp != 2) sceDmacMemcpy(g_bands + slot * BAND_BYTES, g_frame_src + y * stride, n * stride);
-            g_dma_us += now_us() - t;
-            g_band_len[slot] = n * stride;
-            sceKernelSignalSema(g_band_full, 1);
-        }
+        u32 bytes = (u32)g_frame_bw * CAP_H * bpp, t0 = now_us(), changes = g_changes;
+        if (g_exp != 2 && g_fbuf && bytes <= FRAME_MAX) sceDmacMemcpy(g_fbuf, g_frame_src, bytes);
+        g_frame_bytes = bytes;
+        g_dma_us += now_us() - t0;
         g_copy_us += now_us() - t0;
         if (g_changes != changes) g_late++;   /* the game flipped before the copy ended: maybe torn */
+        sceKernelSignalSema(g_copied, 1);
     }
     return 0;
 }
@@ -294,7 +268,7 @@ static int copy_thread(SceSize args, void *argp)
  * PSP's hardware does. The ring is the kernel's memory; a block that does not fit is dropped (a
  * gap in the clip, counted in the log). Caught from the plugin's start, before the game reserves
  * its channels (their sizes and formats are learnt there). */
-#define AUDIO_RING (96 * 1024)
+#define AUDIO_RING (64 * 1024)   /* (in the game's memory with the frame's: see mem_acquire) */
 static unsigned char *g_aring;
 static volatile u32 g_ahead, g_atail;  /* bytes written and sent so far (the ring: their difference) */
 static volatile u32 g_aseq, g_ablocks, g_abytes, g_adropped, g_aunknown, g_akinds;
@@ -304,15 +278,6 @@ static u16 g_src_samples, g_src_chans;
 static u32 g_src_rate;
 
 static SceUID g_ablock = -1;
-static int aring_alloc(void)
-{
-    SceUID b = sceKernelAllocPartitionMemory(1, "PSPExpCaptureSound", PSP_SMEM_High, AUDIO_RING + 64, NULL);
-    if (b < 0) return b;
-    g_ablock = b;
-    g_atail = g_ahead;
-    g_aring = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(b) + 63) & ~63u);
-    return 0;
-}
 
 static void ring_put(const void *p, u32 n)
 {
@@ -425,7 +390,6 @@ static int redirect(const char *mod, const char *lib, u32 nid, void *hook, void 
 static void catch_audio(void)
 {
     int n = 0;
-    if (aring_alloc() < 0) { cap_log("sound: no memory for its ring"); return; }
     n += redirect("sceAudio_Driver", "sceAudio", 0x5EC81C55, h_reserve, &o_reserve);      /* sceAudioChReserve */
     n += redirect("sceAudio_Driver", "sceAudio", 0xCB2E439E, h_datalen, &o_datalen);      /* ...SetChannelDataLen */
     n += redirect("sceAudio_Driver", "sceAudio", 0x95FD0C2D, h_config, &o_config);        /* ...ChangeChannelConfig */
@@ -441,6 +405,95 @@ static void catch_audio(void)
     cap_log("sound: %d of 12 calls caught, a %u KB ring", n, AUDIO_RING / 1024);
 }
 
+/* ---- the plugin's memory: taken from the game's spare memory, given back on demand ---- */
+static u32 g_mem_released_at, g_mem_tried_at, g_started_at;
+
+/* the frame's and the sound's buffers, if the game keeps UMARGIN free besides; 1 when held */
+static int mem_acquire(void)
+{
+    u32 need = FRAME_MAX + 64 + AUDIO_RING + 64, freem = sceKernelPartitionTotalFreeMemSize(2);
+    SceUID f, a;
+    if (g_mem_held) return 1;
+    if (freem < need + UMARGIN || sceKernelPartitionMaxFreeMemSize(2) < FRAME_MAX + 64) return 0;
+    f = sceKernelAllocPartitionMemory(2, "PSPExpCaptureFrame", PSP_SMEM_High, FRAME_MAX + 64, NULL);
+    if (f < 0) return 0;
+    a = sceKernelAllocPartitionMemory(2, "PSPExpCaptureSound", PSP_SMEM_High, AUDIO_RING + 64, NULL);
+    if (a < 0) { sceKernelFreePartitionMemory(f); return 0; }
+    g_fblock = f; g_ablock = a;
+    g_fbuf = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(f) + 63) & ~63u);
+    sceKernelDcacheWritebackInvalidateRange(g_fbuf, FRAME_MAX);   /* (only the DMA engines touch it) */
+    g_atail = g_ahead;
+    g_aring = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(a) + 63) & ~63u);
+    g_mem_held = 1;
+    cap_log("buffers taken from the game's memory: %u KB (%u KB were free)", need / 1024, freem / 1024);
+    return 1;
+}
+
+/* the buffers given back (the frame under way finished first, the sound stopped): the game, or
+ * its system, needs the memory */
+static void mem_release(const char *why)
+{
+    int k1, i, locked;
+    u32 intr;
+    SceUInt t = 300000;
+    if (!g_mem_held) return;
+    k1 = pspSdkSetK1(0);
+    g_mem_held = 0;   /* (the watcher hands no more frames) */
+    for (i = 0; i < 60 && g_busy; i++) sceKernelDelayThread(5000);
+    locked = g_tx_lock >= 0 && sceKernelWaitSema(g_tx_lock, 1, &t) >= 0;
+    intr = pspSdkDisableInterrupts();
+    g_aring = NULL;
+    pspSdkEnableInterrupts(intr);
+    if (locked) sceKernelSignalSema(g_tx_lock, 1);
+    if (g_ablock >= 0) { sceKernelFreePartitionMemory(g_ablock); g_ablock = -1; }
+    if (!g_busy && g_fblock >= 0) { sceKernelFreePartitionMemory(g_fblock); g_fblock = -1; g_fbuf = NULL; }
+    g_mem_releases++;
+    g_mem_released_at = now_us();
+    cap_log("buffers given back (%s): %u KB free in the game's memory", why, (u32)sceKernelPartitionTotalFreeMemSize(2) / 1024);
+    pspSdkSetK1(k1);
+}
+
+/* the game's own memory requests and module loads: one that fails while the plugin holds memory
+ * is retried once the plugin has given its buffers back, so the game never sees a failure the
+ * plugin caused */
+static SceUID (*o_alloc)(SceUID, const char *, int, SceSize, void *);
+static SceUID (*o_loadmod)(const char *, int, void *);
+static SceUID h_alloc(SceUID part, const char *name, int type, SceSize size, void *addr)
+{
+    SceUID r = o_alloc(part, name, type, size, addr);
+    if (r < 0 && g_mem_held && !g_quit) { mem_release("the game asked for memory"); r = o_alloc(part, name, type, size, addr); }
+    return r;
+}
+static SceUID h_loadmod(const char *path, int flags, void *opt)
+{
+    SceUID r = o_loadmod(path, flags, opt);
+    if (r < 0 && g_mem_held && !g_quit) { mem_release("the game loaded a module"); r = o_loadmod(path, flags, opt); }
+    return r;
+}
+
+/* the other ways a game takes memory from its partition: pools, threads (their stacks), message
+ * pipes; Jeanne d'Arc and Crisis Core froze or crashed right after the plugin took its buffers,
+ * with no failed request of the two above (2026-10-24) */
+static int (*o_vpl)(const char *, int, int, unsigned int, void *), (*o_pipe)(const char *, int, int, unsigned int, void *);
+static int (*o_fpl)(const char *, int, int, unsigned int, unsigned int, void *);
+static int (*o_thread)(const char *, void *, int, int, int, void *);
+#define RETRY(call, why) do { r = call; if (r < 0 && g_mem_held && !g_quit) { mem_release(why); r = call; } } while (0)
+static int h_vpl(const char *n, int part, int attr, unsigned int size, void *o) { int r; RETRY(o_vpl(n, part, attr, size, o), "the game made a memory pool"); return r; }
+static int h_pipe(const char *n, int part, int attr, unsigned int size, void *o) { int r; RETRY(o_pipe(n, part, attr, size, o), "the game made a message pipe"); return r; }
+static int h_fpl(const char *n, int part, int attr, unsigned int bs, unsigned int nb, void *o) { int r; RETRY(o_fpl(n, part, attr, bs, nb, o), "the game made a memory pool"); return r; }
+static int h_thread(const char *n, void *e, int prio, int stack, int attr, void *o) { int r; RETRY(o_thread(n, e, prio, stack, attr, o), "the game made a thread"); return r; }
+
+static void catch_mem(void)
+{
+    int n = redirect("sceSystemMemoryManager", "SysMemUserForUser", 0x237DBD4F, h_alloc, &o_alloc)   /* sceKernelAllocPartitionMemory */
+          + redirect("sceModuleManager", "ModuleMgrForUser", 0x977DE386, h_loadmod, &o_loadmod)       /* sceKernelLoadModule */
+          + redirect("sceThreadManager", "ThreadManForUser", 0x56C039B5, h_vpl, &o_vpl)                /* sceKernelCreateVpl */
+          + redirect("sceThreadManager", "ThreadManForUser", 0xC07BB470, h_fpl, &o_fpl)                /* sceKernelCreateFpl */
+          + redirect("sceThreadManager", "ThreadManForUser", 0x446D8DE6, h_thread, &o_thread)          /* sceKernelCreateThread */
+          + redirect("sceThreadManager", "ThreadManForUser", 0x7C0DC2A0, h_pipe, &o_pipe);             /* sceKernelCreateMsgPipe */
+    cap_log("the game's memory requests: %d of 6 calls caught", n);
+}
+
 /* ---- the PSP's own screens: the plugin gives its memory back meanwhile ----
  * The save and load screens, the keyboard, messages and the like are the system's, loaded while a
  * game runs, and they need memory the plugin otherwise holds (its frame ring and sound ring,
@@ -451,29 +504,13 @@ static void catch_audio(void)
  * after it closes. */
 static volatile u32 g_util_end;
 
+static void mem_release(const char *why);
 static void util_open(void)
 {
-    int k1, i;
-    u32 intr;
     if (g_quit) return;
-    k1 = pspSdkSetK1(0);
     g_util_closing = 0;
-    if (!g_util_active) {
-        g_util_active = 1;   /* (the watcher hands no more frames) */
-        for (i = 0; i < 40 && g_busy; i++) sceKernelDelayThread(5000);
-        {
-            SceUInt t = 200000;
-            int locked = g_tx_lock >= 0 && sceKernelWaitSema(g_tx_lock, 1, &t) >= 0;
-            intr = pspSdkDisableInterrupts();
-            g_aring = NULL;
-            pspSdkEnableInterrupts(intr);
-            if (locked) sceKernelSignalSema(g_tx_lock, 1);
-        }
-        if (g_ablock >= 0) { sceKernelFreePartitionMemory(g_ablock); g_ablock = -1; }
-        if (!g_busy && g_block >= 0) { sceKernelFreePartitionMemory(g_block); g_block = -1; g_bands = NULL; }
-        cap_log("a system screen opens: memory given back (%u KB free)", (u32)sceKernelPartitionTotalFreeMemSize(1) / 1024);
-    }
-    pspSdkSetK1(k1);
+    g_util_active = 1;   /* (the watcher hands no more frames, nor takes the memory back) */
+    mem_release("a system screen opens");
 }
 
 static void util_closed(void)
@@ -483,15 +520,14 @@ static void util_closed(void)
     g_util_closing = 1;
 }
 
-/* the watcher's, at a refresh: the memory taken back once a screen has been closed for 1.5 s */
+/* the watcher's, at a refresh: a screen closed for 1.5 s is over (the memory is taken back by
+ * the watcher, when the game's margin allows) */
 static void util_check(void)
 {
     if (g_quit || !g_util_active || !g_util_closing || now_us() - g_util_end < 1500000) return;
     g_util_closing = 0;
-    if (g_block < 0 && ring_alloc() < 0) return;   /* (not yet: tried again at the next refresh) */
-    if (g_ablock < 0) aring_alloc();
     g_util_active = 0;
-    cap_log("the system screen closed: recording again");
+    cap_log("the system screen closed");
 }
 
 static int (*o_sd_in)(void *), (*o_msg_in)(void *), (*o_osk_in)(void *), (*o_net_in)(void *), (*o_gs_in)(void *),
@@ -502,6 +538,23 @@ static int (*o_sd_out)(void), (*o_msg_out)(void), (*o_osk_out)(void), (*o_net_ou
     static int h_##name##_in(void *p) { int r; util_open(); r = o_##name##_in(p); if (r < 0) util_closed(); return r; } \
     static int h_##name##_out(void) { int r = o_##name##_out(); util_closed(); return r; }
 UTIL_PAIR(sd) UTIL_PAIR(msg) UTIL_PAIR(osk) UTIL_PAIR(net) UTIL_PAIR(gs) UTIL_PAIR(html) UTIL_PAIR(shot) UTIL_PAIR(gdi)
+
+/* the game's system-module loads (sceUtilityLoad*Module: films, sound codecs, network, USB), each
+ * logged with its result and the kernel's free memory: they load into the memory the plugin
+ * holds (Gran Turismo stayed on black screens with the plugin on, 2026-10-24: to be seen) */
+static int (*o_lm)(int), (*o_lav)(int), (*o_lnet)(int), (*o_lusb)(int);
+static int mod_load(const char *what, int (*f)(int), int id)
+{
+    int r = f(id), k1 = pspSdkSetK1(0);
+    cap_log("%s module %x loaded: %x (%u KB free, largest %u KB)", what, (u32)id, (u32)r,
+            (u32)sceKernelPartitionTotalFreeMemSize(1) / 1024, (u32)sceKernelPartitionMaxFreeMemSize(1) / 1024);
+    pspSdkSetK1(k1);
+    return r;
+}
+static int h_lm(int id) { return mod_load("a", o_lm, id); }
+static int h_lav(int id) { return mod_load("an AV", o_lav, id); }
+static int h_lnet(int id) { return mod_load("a network", o_lnet, id); }
+static int h_lusb(int id) { return mod_load("a USB", o_lusb, id); }
 
 static void catch_util(void)
 {
@@ -520,7 +573,11 @@ static void catch_util(void)
         n += redirect("sceUtility_Driver", "sceUtility", u[i].in, u[i].hin, u[i].oin);
         n += redirect("sceUtility_Driver", "sceUtility", u[i].out, u[i].hout, u[i].oout);
     }
-    cap_log("system screens: %d of 16 calls caught", n);
+    n += redirect("sceUtility_Driver", "sceUtility", 0x2A2B3DE0, h_lm, &o_lm);       /* sceUtilityLoadModule */
+    n += redirect("sceUtility_Driver", "sceUtility", 0xC629AF26, h_lav, &o_lav);     /* ...LoadAvModule */
+    n += redirect("sceUtility_Driver", "sceUtility", 0x1579A159, h_lnet, &o_lnet);   /* ...LoadNetModule */
+    n += redirect("sceUtility_Driver", "sceUtility", 0x0D5BC6D2, h_lusb, &o_lusb);   /* ...LoadUsbModule */
+    cap_log("system screens and module loads: %d of 20 calls caught", n);
 }
 
 /* ---- control from the receiver: testing without hands on the PSP ----
@@ -538,7 +595,6 @@ static void catch_util(void)
 #define CMD_VRAM 7       /* reply: the GE's buffer addresses and VRAM's 32 KB fingerprints */
 #define CMD_EXP 10       /* u32 the experiment (g_exp) */
 #define CMD_COPYPRIO 11  /* u32 the copier's priority */
-#define CMD_BAND 12      /* u32 the band size (32, 64 or 128 KB) */
 #define CMD_TX 13        /* u32 the transfer size, u32 split (see pspexpUsbSetTx) */
 static volatile u32 g_pad_buttons, g_pad_until, g_pad_reads;
 static SceUID g_cmd_th = -1;
@@ -721,9 +777,6 @@ static int cmd_thread(SceSize args, void *argp)
         } else if (cmd == CMD_COPYPRIO && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
             int pr = (int)get32(g_cmd_buf);
             cap_log("copier priority %x: %x", pr, (u32)sceKernelChangeThreadPriority(g_copy_th, pr));
-        } else if (cmd == CMD_BAND && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
-            u32 b = get32(g_cmd_buf);
-            if (b == 32768 || b == 65536 || b == 131072) g_band_req = b;
         } else if (cmd == CMD_TX && len >= 8 && cmd_read(g_cmd_buf, 8) == 0) {
             u32 c = get32(g_cmd_buf);
             if (c >= 4096 && c <= 262144) { pspexpUsbSetTx((int)c, get32(g_cmd_buf + 4) != 0); cap_log("transfers of up to %u KB, split %u", c / 1024, get32(g_cmd_buf + 4)); }
@@ -777,24 +830,18 @@ static int send_thread(SceSize args, void *argp)
         if (r >= 0) r = log_send();
         sceKernelSignalSema(g_tx_lock, 1);
         if (r < 0) { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); g_busy = 0; continue; }
-        if (g_busy == 1) {   /* the frame's header, then its bands as the copier fills them */
+        if (g_busy == 1) {   /* the frame, once the copier has it: its header, then the whole of it */
             unsigned char *h = g_hdr;
-            int bpp = g_frame_fmt == PSP_DISPLAY_PIXEL_FORMAT_8888 ? 4 : 2;
-            int rows = BAND_BYTES / (g_frame_bw * bpp), y, k = 0;
-            u32 ts = now_us();
+            u32 ts = now_us(), bytes;
+            if (take(g_copied) < 0) break;
+            bytes = g_frame_bytes;
             memset(h, 0, 32);
             memcpy(h, "PXCF", 4);
             put16(h + 4, g_frame_bw); put16(h + 6, CAP_H); put16(h + 8, g_frame_fmt);   /* (width: the stride) */
             put32(h + 12, g_frame_seq); put32(h + 16, g_frame_changes); put32(h + 20, g_frame_time);
-            put32(h + 24, (u32)g_frame_bw * CAP_H * bpp);
+            put32(h + 24, bytes);
             sceKernelWaitSema(g_tx_lock, 1, NULL);   /* (a command's reply never inside a frame) */
-            r = g_exp == 1 || pspexpUsbWrite(h, 32) >= 0;
-            for (y = 0; y < CAP_H; y += rows, k++) {   /* every band taken, sent or not, so the copier goes on */
-                int slot = k % NBANDS;
-                if (take(g_band_full) < 0) break;
-                if (r && g_exp != 1) r = pspexpUsbWrite(g_bands + slot * BAND_BYTES, g_band_len[slot]) >= 0;
-                sceKernelSignalSema(g_band_free, 1);
-            }
+            r = g_exp == 1 || !g_fbuf || (pspexpUsbWrite(h, 32) >= 0 && pspexpUsbWrite(g_fbuf, bytes) >= 0);
             sceKernelSignalSema(g_tx_lock, 1);
             if (r) { g_sent++; g_send_us += now_us() - ts; }
             else { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); }
@@ -878,7 +925,7 @@ static void home_check(void)
 static int capture_thread(SceSize args, void *argp)
 {
     void *top = NULL, *last = NULL;
-    int bw = 0, fmt = 0, r, was_connected = 0, part;
+    int bw = 0, fmt = 0, r, was_connected = 0;
     u32 seq = 0, t0, c0 = 0, s0 = 0, k0 = 0, o0 = 0, q0 = 0, u0 = 0, d0 = 0, ab0 = 0, ad0 = 0, au0 = 0, se0 = 0, l0 = 0;
 
     sceKernelDelayThread(2000000);   /* the game first: its modules, its first frames */
@@ -888,10 +935,11 @@ static int capture_thread(SceSize args, void *argp)
     sceIoRename(LOG_PATH, LOG_PATH ".old");
 #endif
     g_log_ready = 1;
+    cap_log("kernel memory: %u KB free; the game's: %u KB free", (u32)sceKernelPartitionTotalFreeMemSize(1) / 1024,
+            (u32)sceKernelPartitionTotalFreeMemSize(2) / 1024);
+    g_copy_go = sceKernelCreateSema("PSPExpCaptureCopy", 0, 0, 1, NULL);
+    g_copied = sceKernelCreateSema("PSPExpCaptureCopied", 0, 0, 1, NULL);
     if (g_frames_on) {
-        part = snap_alloc();
-        cap_log("frame ring: %d KB of kernel memory", part);
-        if (part < 0) return 0;
         g_copy_th = sceKernelCreateThread("PSPExpCaptureCopy", copy_thread, 0x19, 0x2000, 0, NULL);
         if (g_copy_th >= 0) sceKernelStartThread(g_copy_th, 0, NULL);
     }
@@ -929,19 +977,18 @@ static int capture_thread(SceSize args, void *argp)
         sceDisplayWaitVblankStart();
         util_check();
         home_check();
+        if (!g_mem_held && !g_util_active && !g_home_paused && !g_quit && pspexpUsbConnected()
+            && now_us() - g_mem_released_at > 5000000 && now_us() - g_mem_tried_at > 1000000
+            && now_us() - g_started_at > 20000000) {   /* (the buffers, when the game's margin allows; never in its first 20 s, while it sets up its pools and threads) */
+            g_mem_tried_at = now_us();
+            mem_acquire();
+        }
         if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) < 0 || !top) continue;
         if (top != last) {
             g_changes++; last = top; g_top = top;
             if (pspexpUsbConnected()) {
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
-                if (!g_frames_on || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
-                else if (!g_busy && g_band_req && g_band_req != BAND_BYTES) {   /* a new band size, between frames */
-                    int nb = RING_BYTES / g_band_req;
-                    sceKernelDeleteSema(g_band_free);
-                    g_band_free = sceKernelCreateSema("PSPExpCaptureFree", 0, nb, MAX_BANDS, NULL);
-                    BAND_BYTES = g_band_req; NBANDS = nb;
-                    cap_log("bands of %u KB, %d of them", BAND_BYTES / 1024, NBANDS);
-                }
+                if (!g_frames_on || !g_mem_held || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
                 else if (now_us() - g_last_hand < 30000) ;
                 else if (frame_unchanged(top, bw, fmt) && now_us() - g_last_hand < 1000000) g_static++;   /* (30 a second at most: clips are 30 fps, and every frame sent costs the game processor time; Gran Turismo's black loading screens at 60 starved its loading, 2026-10-24) */
                 else if (!g_busy) {   /* to the copier and the sender */
@@ -961,15 +1008,18 @@ static int capture_thread(SceSize args, void *argp)
             u32 g10 = (g_changes - c0) * 10000 / ms, s10 = (g_sent - s0) * 10000 / ms;
             u32 copies = seq - q0, copy_us = copies ? (g_copy_us - u0) / copies : 0;   /* the game's cost, per frame copied */
             u32 dma_us = copies ? (g_dma_us - d0) / copies : 0, sends = g_sent - s0, send_us = sends ? (g_send_us - se0) / sends : 0;
-            cap_log("unchanged frames not sent: %u", g_static);
+            cap_log("unchanged frames not sent: %u; kernel memory %u KB free; the game's %u KB free, largest %u KB", g_static,
+                    (u32)sceKernelPartitionTotalFreeMemSize(1) / 1024, (u32)sceKernelPartitionTotalFreeMemSize(2) / 1024,
+                    (u32)sceKernelPartitionMaxFreeMemSize(2) / 1024);
+            sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);   /* (the log goes out even with no frame or sound to send) */
             cap_log("game %u.%u fps, sent %u.%u fps, skipped %u, late %u, copy %u us (DMA %u), send %u us, USB timeouts %u, format %d, width %d, %s",
                     g10 / 10, g10 % 10, s10 / 10, s10 % 10, g_skipped - k0, g_late - l0, copy_us, dma_us, send_us, g_stats.tx_timeouts - o0, fmt, bw,
                     was_connected ? "connected" : "no receiver");
             {   /* the processor time each of the plugin's threads really used (against their wall time) */
                 static u32 cc0, cs0, cw0;
                 u32 cc = cpu_us(g_copy_th), cs = cpu_us(g_send_th), cw = cpu_us(g_cap_th);
-                cap_log("CPU in 5 s: copier %u ms, sender %u ms, watcher %u ms; exp %d, bands %u KB",
-                        (cc - cc0) / 1000, (cs - cs0) / 1000, (cw - cw0) / 1000, g_exp, BAND_BYTES / 1024);
+                cap_log("CPU in 5 s: copier %u ms, sender %u ms, watcher %u ms; exp %d; buffers %s, given back %u times",
+                        (cc - cc0) / 1000, (cs - cs0) / 1000, (cw - cw0) / 1000, g_exp, g_mem_held ? "held" : "not held", g_mem_releases);
                 cc0 = cc; cs0 = cs; cw0 = cw;
             }
             cap_log("sound: %u KB/s, dropped %u, unknown channel %u, kinds %x (1 channels, 2 output2, 4 SRC)",
@@ -994,6 +1044,7 @@ static int part_on(char c) { int i; for (i = 0; g_parts[i]; i++) if (g_parts[i] 
 
 int module_start(SceSize args, void *argp)
 {
+    g_started_at = now_us();
     cap_log("PSPExp Capture: stage 2 (picture and sound; a DMA ring, 32-bit as the game draws; control from the receiver); parts: %s", g_parts[0] ? g_parts : "none");
     if (part_on('Z')) return 0;   /* (loaded, nothing else) */
     g_send_ev = sceKernelCreateEventFlag("PSPExpCaptureSend", 0, 0, NULL);
@@ -1002,6 +1053,7 @@ int module_start(SceSize args, void *argp)
     if (part_on('S')) catch_audio();   /* now, before the game reserves its channels */
     if (part_on('B')) catch_pad();
     if (part_on('U')) catch_util();
+    catch_mem();
     g_frames_on = part_on('F');
     g_link_on = part_on('L');
     /* the watcher above most of the game's threads, to copy a frame the moment it is shown; it does
