@@ -545,6 +545,29 @@ unsigned int pspexpUsbButtons(void)
     return b;
 }
 
+/* The system's mute (the HOME menu's driver toggles it as the note button is pressed, before any
+ * program sees the buttons), through the custom firmware's finder, which resolves the old NIDs, as
+ * PSPExp Capture's plugin does. The finder is imported weakly (systemctrl.S): called only once the
+ * loader has linked it, its stub then a jump (PPSSPP leaves "jr ra" there, an unlinked stub data). */
+u32 sctrlHENFindFunction(char *modname, char *libname, u32 nid);
+#define IMPOSE_MUTE 0x8
+int pspexpUsbMute(int set)
+{
+    static int (*get)(int), (*put)(int, int);
+    static int looked;
+    int k1 = pspSdkSetK1(0), r = -1;
+    if (!looked) {
+        looked = 1;
+        if ((*(volatile u32 *)(void *)sctrlHENFindFunction >> 26) == 2) {   /* (j) */
+            get = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x531C9778);   /* sceImposeGetParam */
+            put = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x810FB7FB);   /* sceImposeSetParam */
+        }
+    }
+    if (get && put) r = set < 0 ? get(IMPOSE_MUTE) : put(IMPOSE_MUTE, set);
+    pspSdkSetK1(k1);
+    return r;
+}
+
 /* The system clock (UTC), in microseconds since 0001-01-01: setting it is
  * kernel-only. For CLOCK_SET: a PSP whose clock battery ran flat starts years
  * behind, and the board it plays for knows the time. */

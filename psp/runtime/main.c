@@ -17,6 +17,7 @@
 #include "pspexp_audio_psp.h"
 #include "pspexp_fs_psp.h"
 #include "pspexp_capture_psp.h"
+#include "../../runtime/pspexp_note.h"
 #include "../transport-usb/pspexp_usb_driver.h"
 #include "../transport-tcp/pspexp_tcp_psp.h"
 #include "../../protocol/pspexp_usb_link.h"
@@ -410,10 +411,16 @@ static void op_log(void *u, const char *msg)
         !strncmp(msg, "us/bytes", 8) || !strncmp(msg, "msg:", 4)) trace(msg);   /* once per connection, or every 600 frames, or the message trace: kept in the log file too */
 }
 
+/* the GE's frame count when the status page last drew (it covers both frame buffers, 32-bit): no
+ * recording dot drawn over it until the GE draws a frame again */
+static uint32_t g_status_at;
+
 static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
 {
     PspExpUsbStats us;
     int i;
+    g_status_at = g_ge.stats.frames;
+    pspexp_ge_dot_forget(&g_ge);
     pspexpUsbGetStats(&us);
     pspDebugScreenSetXY(0, 0);
     printf("PSPExp %s  %s  (hold HOME 2 s to exit)          \n", g_version,
@@ -457,6 +464,27 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
 static void show_status_page(void)
 {
     pspDebugScreenInit();
+    g_status_at = g_ge.stats.frames;
+    pspexp_ge_dot_forget(&g_ge);
+}
+
+/* the note button with PSPExp Capture's receiver there (runtime/pspexp_note.c): ♪+R a clip, ♪+L a
+ * recording, the dot; the board gets the buttons it should see */
+static PspExpNote g_note;
+static uint32_t note_buttons(uint32_t buttons, uint32_t now)
+{
+    static const uint16_t dot[3] = { 0, 0x4606, 0x211C };   /* none, green, red (RGB 5650: the plugin's colours) */
+    PspExpNoteOut o;
+    int cap = pspexp_capture_psp_on(), e;
+    pspexp_note_step(&g_note, buttons, cap ? pspexpUsbMute(-1) : -1, cap, now, &o);
+    if (o.set_mute >= 0) pspexpUsbMute(o.set_mute);
+    for (e = PSPEXP_NOTE_CLIP; e <= PSPEXP_NOTE_REC_STOP; e++)
+        if (o.events & (1u << e)) {
+            pspexp_capture_psp_event(e);
+            trace(e == PSPEXP_NOTE_CLIP ? "note+R: a clip" : e == PSPEXP_NOTE_REC_START ? "note+L: a recording starts" : "note+L: the recording stops");
+        }
+    g_ge.rec_dot = dot[o.dot];
+    return o.buttons;
 }
 
 /* A hand-over (DISCONNECT with PSPEXP_DISCONNECT_HANDOVER: the launcher starting a game): the
@@ -529,6 +557,7 @@ int main(int argc, char *argv[])
     g_link_sema = sceKernelCreateSema("PSPExpLinkWrite", 0, 1, 1, NULL);
     pspexp_capture_psp_init(&g_ge, link_write, link_lock, link_unlock);   /* PSPExp Capture inside PSPExp */
     pspexp_capture_psp_ops(&ops);
+    pspexp_note_init(&g_note);
     ops.now_us = op_now;
     ops.screenshot = op_screenshot;
     ops.clock_get = op_clock_get;
@@ -686,8 +715,10 @@ int main(int argc, char *argv[])
             last_input = now;
             sceCtrlPeekBufferPositive(&pad, 1);
             if (rt.connected && !g_kb)   /* (the keyboard's buttons are its own) */   /* the volume buttons and the note button: kernel mode's to read (the board's
-                                 * Bluetooth volume; the note pauses and resumes the board's music) */
-                pspexp_runtime_push_input(&rt, pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE)), pad.Lx, pad.Ly);
+                                 * Bluetooth volume; the note pauses and resumes the board's music, or makes clips) */
+                pspexp_runtime_push_input(&rt, note_buttons(pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE)), now),
+                                          pad.Lx, pad.Ly);
+            if (rt.connected && !g_kb && g_ge.stats.frames != g_status_at) pspexp_ge_dot_tick(&g_ge);
         }
         if (g_kb) { keyboard_tick(&rt); continue; }   /* (the keyboard owns the screen) */
         /* Keep the status page until the first frame; after that the GE owns the screen. While

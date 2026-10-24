@@ -292,6 +292,8 @@ static void op_lights3d(void *u, const PspExp3DLights *l)
 }
 
 static uint32_t draw_offset(PspExpGeExecutor *ge);
+static int buf_index(uint32_t off);
+static void dot_put_back(PspExpGeExecutor *ge, uint32_t off);
 
 /* Drawn pixels into a render target: the GE's block transfer, in order with the draws */
 static void op_copy3d(void *u, PspExpCacheEntry *e, const PspExp3DCopy *c)
@@ -484,6 +486,7 @@ static void op_frame_begin(void *u, uint32_t seq)
     ge->mode3d = 1;   /* whatever the last frame left: set the 2D state afresh */
     leave_3d(ge);
     if (ge->depth_on) sceGuDepthBuffer((void *)(2u * FB_BYTES), PSPEXP_DISPLAY_STRIDE);
+    if (ge->dot_col[buf_index(draw_offset(ge))]) dot_put_back(ge, draw_offset(ge));   /* (a frame need not draw every pixel) */
 }
 
 static void op_set_clip(void *u, int16_t x, int16_t y, int16_t w, int16_t h)
@@ -608,7 +611,31 @@ static void draw_osd(PspExpGeExecutor *ge)
 }
 
 /* the recording dot (PSPExp Capture): bottom right, as the plugin's in a native game, a 12-pixel
- * dot in a dark ring, row by row */
+ * dot in a dark ring, row by row. The GE keeps the 16x16 pixels under it first (a copy into RAM)
+ * and puts them back when it goes, in the frame shown (pspexp_ge_dot_tick) or before a frame is
+ * drawn into its buffer again (op_frame_begin); the processor never touches VRAM (in PPSSPP its
+ * writes would not reach the frames, which live in its GPU) */
+#define DOT_X 456
+#define DOT_Y 248
+#define DOT_SIZE 16
+static uint16_t g_dot_px[2][DOT_SIZE * DOT_SIZE] __attribute__((aligned(64)));
+static int buf_index(uint32_t off) { return off ? 1 : 0; }
+
+static void dot_keep(uint32_t off)
+{
+    sceGuCopyImage(GU_PSM_5650, DOT_X, DOT_Y, DOT_SIZE, DOT_SIZE, PSPEXP_DISPLAY_STRIDE,
+                   (unsigned char *)sceGeEdramGetAddr() + off, 0, 0, DOT_SIZE, g_dot_px[buf_index(off)]);
+    sceGuTexSync();
+}
+
+static void dot_put_back(PspExpGeExecutor *ge, uint32_t off)
+{
+    sceGuCopyImage(GU_PSM_5650, 0, 0, DOT_SIZE, DOT_SIZE, DOT_SIZE, g_dot_px[buf_index(off)],
+                   DOT_X, DOT_Y, PSPEXP_DISPLAY_STRIDE, (unsigned char *)sceGeEdramGetAddr() + off);
+    sceGuTexSync();
+    ge->dot_col[buf_index(off)] = 0;
+}
+
 static void draw_rec_dot(PspExpGeExecutor *ge)
 {
     static const unsigned char ring[14] = { 4, 7, 9, 10, 11, 12, 12, 12, 12, 11, 10, 9, 7, 4 };   /* half-widths x2 */
@@ -635,7 +662,8 @@ static uint32_t op_present(void *u)
     }
     if (ge->osd_until && (int32_t)(ge->osd_until - sceKernelGetSystemTimeLow()) > 0) draw_osd(ge);
     else ge->osd_until = 0;
-    if (ge->rec_dot) draw_rec_dot(ge);
+    if (ge->rec_dot) { dot_keep(draw_offset(ge)); draw_rec_dot(ge); }
+    ge->dot_col[buf_index(draw_offset(ge))] = ge->rec_dot;
     sceKernelDcacheWritebackAll();
     sceGuFinish();
     t0 = sceKernelGetSystemTimeLow();
@@ -673,6 +701,7 @@ void pspexp_ge_keyboard_frame(PspExpGeExecutor *ge, int update)
     sceGuClearColor(0);
     sceGuFinish();
     sceGuSync(0, 0);
+    ge->dot_col[buf_index(ge->displayed_offset == 0 ? FB_BYTES : 0)] = 0;
     if (update) sceUtilityOskUpdate(1);   /* (only while it is visible: the samples' rule) */
     sceDisplayWaitVblankStart();
     sceGuSwapBuffers();
@@ -750,6 +779,30 @@ void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32
     ge->cur_atlas = NULL;
 }
 
+void pspexp_ge_dot_tick(PspExpGeExecutor *ge)
+{
+    uint32_t off = ge->displayed_offset;
+    int k = buf_index(off);
+    if (ge->in_frame || ge->keyboard || ge->dot_col[k] == ge->rec_dot) return;
+    sceGuStart(GU_DIRECT, ge->list);
+    sceGuDrawBufferList(GU_PSM_5650, (void *)(uintptr_t)off, PSPEXP_DISPLAY_STRIDE);   /* the frame on screen */
+    if (ge->dot_col[k]) dot_put_back(ge, off);   /* (the frame's pixels: kept as they are for another colour) */
+    else dot_keep(off);
+    if (ge->rec_dot) {
+        ge->mode3d = 1; leave_3d(ge);   /* the 2D state, whatever the last program left */
+        ge->tex_enabled = 1;            /* (so the rectangles turn texturing off, whatever it is) */
+        draw_rec_dot(ge);
+    }
+    ge->dot_col[k] = ge->rec_dot;
+    sceKernelDcacheWritebackAll();
+    sceGuFinish();
+    sceGuSync(0, 0);
+    ge->mode3d = 1;   /* the next frame sets its state afresh */
+    ge->cur_atlas = NULL;
+}
+
+void pspexp_ge_dot_forget(PspExpGeExecutor *ge) { ge->dot_col[0] = ge->dot_col[1] = 0; }
+
 static uint32_t op_frame_ge_us(void *u) { return ((PspExpGeExecutor *)u)->stats.last_ge_us; }
 
 /* ---- setup ---------------------------------------------------------------- */
@@ -762,6 +815,8 @@ int pspexp_ge_init(PspExpGeExecutor *ge)
     ge->tex_base = 2u * FB_BYTES; ge->depth_on = 0; ge->mode3d = 0; ge->have_state = 0; ge->state_dirty = 1;
     ge->clip_x = ge->clip_y = 0; ge->clip_w = PSPEXP_DISPLAY_WIDTH; ge->clip_h = PSPEXP_DISPLAY_HEIGHT;
     ge->displayed_offset = FB_BYTES;   /* sceGuDispBuffer below */
+    ge->dot_col[0] = ge->dot_col[1] = 0;
+    sceKernelDcacheWritebackInvalidateRange(g_dot_px, sizeof(g_dot_px));   /* (the GE writes it: no line of it left to be written over it) */
     sceGuInit();
     sceGuStart(GU_DIRECT, ge->list);
     sceGuDrawBuffer(GU_PSM_5650, (void *)0, PSPEXP_DISPLAY_STRIDE);

@@ -1,6 +1,6 @@
 # pspexp_usb.prx (kernel USB driver) and libpspexpusb.a (user-mode stubs)
 TARGET = pspexp_usb
-OBJS = main.o exports.o
+OBJS = main.o exports.o systemctrl.o
 
 USE_KERNEL_LIBS = 1
 INCDIR =

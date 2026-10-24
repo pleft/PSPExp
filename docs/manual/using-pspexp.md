@@ -14,7 +14,7 @@ buttons; the board needs no screen, keyboard or mouse.
 | START | search, refresh or rescan, options |
 | SELECT, held | home: the launcher, from any app (from the launcher: the terminal) |
 | L / R | the other tab, panel or page |
-| ♪ (note) | pause or resume the music, from anywhere (not during a game) |
+| ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + R saves the last 30 seconds as a video, ♪ + L records ([Recording](recording.md)) |
 
 ## The launcher
 

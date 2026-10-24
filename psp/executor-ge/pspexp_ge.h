@@ -47,11 +47,13 @@ typedef struct PspExpGeExecutor {
     PspExpCacheEntry *target;    /* the render target drawn into, NULL: the screen */
     /* PSPExp Capture inside PSPExp (psp/runtime/pspexp_capture_psp.c): at each frame's end the GE
      * copies the frame into cap_target's buffer (480x272 RGB 5650, before the volume bar and
-     * the dot), cap_done once it has; rec_dot the dot's colour (RGB 5650, 0: none) */
+     * the dot), cap_done once it has; rec_dot the dot's colour (RGB 5650, 0: none), drawn into
+     * each frame and, when it changes between frames, by pspexp_ge_dot_tick */
     void *(*cap_target)(void *user);
     void (*cap_done)(void *user, uint32_t t);
     void *cap_user;
     uint16_t rec_dot;
+    uint16_t dot_col[2];         /* the dot each frame buffer has (0: none, the frame's own pixels there) */
 } PspExpGeExecutor;
 
 /* The hand-over spinner (PspExpDisconnect), between programs: a PSPEXP_SPINNER_SIZE square of
@@ -66,6 +68,10 @@ void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out);
  * vertical blank (update: let it draw and take the buttons; only while it is
  * visible). Only between the host's frames (not while one is open). */
 void pspexp_ge_keyboard_frame(PspExpGeExecutor *ge, int update);
+/* the recording dot on the frame shown made rec_dot, between frames (PSPExp may draw nothing new
+ * for seconds: the launcher); dot_forget after something else drew the screen (the status page) */
+void pspexp_ge_dot_tick(PspExpGeExecutor *ge);
+void pspexp_ge_dot_forget(PspExpGeExecutor *ge);
 
 /* Initialises the GU (framebuffers at VRAM 0 and 0x44000; a depth buffer at
  * 0x88000 when the host asks for one). */

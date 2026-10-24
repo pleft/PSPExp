@@ -37,6 +37,7 @@ add_library(pspexp_runtime STATIC
   runtime/pspexp_mixer.c
   runtime/pspexp_bmp.c
   runtime/pspexp_runtime.c
+  runtime/pspexp_note.c
   runtime/pspexp_fs_posix.c)
 target_link_libraries(pspexp_runtime PUBLIC pspexp_protocol)
 
@@ -265,6 +266,9 @@ if(PSPEXP_BUILD_TESTS)
   add_executable(test_runtime tests/test_runtime.c)
   target_link_libraries(test_runtime PRIVATE pspexp pspexp_null)
   add_test(NAME runtime COMMAND test_runtime)
+  add_executable(test_note tests/test_note.c)
+  target_link_libraries(test_note PRIVATE pspexp_runtime)
+  add_test(NAME note COMMAND test_note)
   add_executable(test_fs tests/test_fs.c)
   target_link_libraries(test_fs PRIVATE pspexp pspexp_null)
   add_test(NAME fs COMMAND test_fs)
