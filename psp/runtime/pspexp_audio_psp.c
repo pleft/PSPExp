@@ -1,4 +1,5 @@
 #include "pspexp_audio_psp.h"
+#include "pspexp_capture_psp.h"
 #include <pspkernel.h>
 #include <pspaudio.h>
 #include <pspaudiocodec.h>
@@ -23,6 +24,7 @@ static int audio_thread(SceSize args, void *argp)
         if (g_mixer) pspexp_mixer_render(g_mixer, g_buf[cur], BLOCK_FRAMES);
         else memset(g_buf[cur], 0, sizeof(g_buf[cur]));
         sceKernelSignalSema(g_sema, 1);
+        pspexp_capture_psp_audio(g_buf[cur], BLOCK_FRAMES);   /* (PSPExp Capture: what is about to play) */
         sceAudioOutputPannedBlocking(g_channel, PSP_AUDIO_VOLUME_MAX, PSP_AUDIO_VOLUME_MAX, g_buf[cur]);
         cur ^= 1;
     }

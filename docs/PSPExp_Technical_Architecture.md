@@ -567,6 +567,14 @@ Update the PSP (only then: a new runtime that fell back never loops), and the
 control port's `psp-restart` and `pspexp-ms restart` ask for it. Tried in
 PPSSPP: an update into slot b, then a restart, booted slot b and confirmed it.
 
+CAPTURE_SET and CAPTURE_DATA (DEBUG 0x0508 and 0x0509, 2026-10-24, runtimes
+with `PSPEXP_FEATURE_CAPTURE`): PSPExp Capture inside PSPExp (§12b). The host
+sends CAPTURE_SET (`PspExpCaptureSet`, `on` 1 or 0) when PSPExp Capture's
+receiver is there; the PSP then sends what it shows and plays as CAPTURE_DATA
+(`PspExpCaptureData`: the count of bytes that follow, padded to 16), the
+bytes being the receiver's own packets, cut anywhere. A new link (HELLO)
+turns it off.
+
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 
 *The FILE channel (6), added 2026-09-28:*
@@ -1059,7 +1067,14 @@ The plugin sends the press as an event ("PXCE": its type, its time on the PSP's 
 
 **On a board (2026-10-24).** The plugin presents the link under a USB product of its own, 0x01CB with the driver name `PSPExpCapture` (PSPExp's runtime keeps 0x01CA and `PSPExpUSBDriver`), so a board's console, waiting for PSPExp, never takes a native game, and the receiver runs beside it (first tried as a second service; now the console starts it with the launcher over USB when it and ffmpeg are installed, `pspexp-capture -k -q -s ~/Videos/PSPExp`, again 10 s after it ends, stopped with the console, its clips under way finished; `PSPEXP_CAPTURE=0` turns it off; `-q` keeps the console's log to the connections, the clips and the errors; on a 32-bit ARM board libx264 encodes at `ultrafast`); the boards' USB rule now allows both (`01c[ab]`). The receiver also builds on the Pi with gcc alone (its file, the USB transport, `pspexp_time.c`, libusb). On the Pi 400, with Castlevania: ♪+R clips and a ♪+L recording saved in `~/Videos/PSPExp` with nothing on a computer, the beeps heard; ffmpeg encoding at 36–48 % of one of its four cores, the system 77–87 % idle, 41 °C. PSPExp, started after, reached the console as before.
 
+**Inside PSPExp (2026-10-24, in progress).** One feature for both worlds: PSPExp's own games record the same way, with the same receiver, clips and (to come) ♪ buttons. The board has a game's picture only in part (the PSP draws it: the 3D games' GE lists, the textures it keeps), so the PSP captures what it shows, as the plugin does:
+- **The PSP** (`psp/runtime/pspexp_capture_psp.c`): at a frame's end the GE copies it into one of two buffers in RAM (`sceGuCopyImage`, 480x272 RGB 5650, before the volume bar and the dot), at most 30 a second and only when a buffer is free; the audio thread puts each block it is about to play into a ring (whole packets, the PSP's time on them). A thread below the main loop's priority sends the ring's packets, then a frame, in 32 KB CAPTURE_DATA messages (§9); a lock keeps each message whole against the main loop's own writes, which go in between. The packets are the plugin's ("PXCF", "PXCA", "PXCE"), so the receiver's clips, recordings and rolling buffer work unchanged. The buffers (522 KB) are taken from the runtime's heap the first time it is asked.
+- **The board:** whichever program holds the link (the console, or a game through the SDL layer) asks for it once the receiver's socket (`/tmp/pspexp-capture-<uid>.sock`) answers, at the connection and every 2 s after (the console starts the receiver only once the PSP is there), and passes the bytes on as they come; when the receiver's socket is full they are dropped, the receiver finding the next packet; when it goes, the PSP is told to stop. `PSPEXP_CAPTURE=0` keeps a program from asking.
+- **The receiver** listens on that socket beside the USB cable; a session over the socket waits 8 s for the next holder (the console handing the PSP to a game and back), so its rolling buffer goes on across them. PSPExp draws only when something changes (the launcher: 0.2 frames a second), so the last frame is held up to the sound's time (the audio thread plays always, silence included), half a second behind for a frame on its way.
+- **Tried in PPSSPP** (the runtime over TCP, the receiver on the Mac): an SDL game at its 19 fps there, 30 s clips with 900 frames and their sound; the launcher, 0.2 frames a second, a 30 s clip of 900 frames and 30 s of sound, the picture right at 1:1.
+
 **Next:**
+- inside PSPExp: ♪+R and ♪+L read by the runtime (the dot as the plugin's, the sound's mute put back, ♪ alone still the console's music toggle); on the PSP, the cost: the GE's copy, the link's 7.8 MB/s more beside a game's own (the board-GPU games send 137–230 KB a frame) and the board's encoding (36–48 % of a Pi 400 core); if a game slows, the rolling buffer only on demand;
 - the other games, with clips (Castlevania holds 30 of 30 and now exits cleanly);
 - **memory, 2026-10-24 (afternoon):** the plugin's buffers moved out of the kernel's memory (≈450 KB free while a game runs, also what the system's screens, modules and a game's exit need: taking ≈520 KB of it left Bomberman's exit waiting forever) into the game's own spare memory, taken only with 4 MB left free and not in the game's first 20 s, and given back whenever the game or its system needs memory (a failed memory request, module load, pool, thread or message pipe is retried for the game once the plugin has given its buffers back; system screens). Jeanne d'Arc and Crisis Core froze or crashed when the buffers were taken 2 s in: once set up they leave 497 KB and 15–40 KB of their memory free. With that, six games in a row played and exited cleanly: Bomberman, Gran Turismo, Lunar recorded; Jeanne d'Arc, Crisis Core, Phantasy Star Portable 2 (1.4 MB free) recorded since through the fallback in the kernel's memory (above);
 - more games: Ace Combat X holds 30 of 30 (16-bit, 8.4 MB/s); **Gran Turismo stays on black screens with the plugin on** (normal without it): not the frames (still black at one frame a second, the unchanged ones skipped), but twice it went on the moment the plugin's USB link was stopped (HOME, the restart command), and with the link not up at all it reached its first logo, slowly: the link itself, perhaps the Sony vendor and product ID it borrows from PSPExp's runtime (psp-cast, with its own, records GT); also, after HOME the link did not start again (80243001) when its steps were one call: now one by one. Bomberman, Crisis Core, Jeanne d'Arc, Lunar, Phantasy Star Portable 2 recorded since;
@@ -1073,7 +1088,7 @@ The plugin sends the press as an event ("PXCE": its type, its time on the PSP's 
 - the shutdown's last log line ("stopped") never appears though the exit works: find which step does not return in time;
 - more games (one game tried so far); 60 fps games (a 32-bit copy at the link's pace, 22 ms, is longer than a 60 fps frame: 16-bit there, or every other frame);
 - shipping: the plugin in PSPExp's zip, with THIRD_PARTY.txt and licenses/ beside it as the PSP's zip has (it carries the USB driver's PSPLINK parts and PSPSDK), a page in the manual, a section on the site;
-- later: live streaming; Share for PSPExp's own games (the board already has their frames and sound).
+- later: live streaming.
 
 ## 13. Host Independence
 

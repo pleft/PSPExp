@@ -24,10 +24,13 @@
  * -k: after the link goes (a restart), wait for the game again: clip.mp4, clip-2.mp4, ...
  * -q: only the connections, the clips and what went wrong (a board's console runs it so: its log)
  * The link is PSPExp's own USB transport (host/transport-usb), under the plugin's own product ID
- * (PSPEXP_CAPTURE_USB_PID), so it runs beside a board's console.
+ * (PSPEXP_CAPTURE_USB_PID), so it runs beside a board's console. Inside PSPExp the same packets
+ * come over a local socket instead (host/libpspexp/pspexp_capture.h): the PSP's runtime captures
+ * what it shows, and the program holding PSPExp's link passes them on.
  */
 #include "../../host/transport-usb/pspexp_usb.h"
 #include "../../protocol/pspexp_usb_link.h"
+#include "../../host/libpspexp/pspexp_capture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +42,10 @@
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <errno.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #define W 480
 #define H 272
@@ -342,6 +349,59 @@ static void *control_thread(void *arg)
     return NULL;
 }
 
+/* ---- PSPExp's own games: the socket source ----
+ * The program holding PSPExp's link connects and writes the PSP's capture packets. The link moves
+ * between programs (the console hands the PSP to a game and takes it back), each connecting anew:
+ * a session goes on across them, as the PSP's clock does, when the next connects within 8 s. */
+static int g_listen = -1;
+typedef struct { PspExpTransport t; int fd; } SockSource;
+
+static int sock_accept(int timeout_ms)
+{
+    struct pollfd p = { g_listen, POLLIN, 0 };
+    if (g_listen < 0 || poll(&p, 1, timeout_ms) <= 0) return -1;
+    return accept(g_listen, NULL, NULL);
+}
+
+static long sock_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
+{
+    SockSource *s = (SockSource *)t;
+    if (s->fd < 0) {   /* a hand-over: the next holder of the link, or the end of the session */
+        static double since;
+        if (!since) since = now();
+        if ((s->fd = sock_accept(timeout_ms)) >= 0) { since = 0; return 0; }
+        if (now() - since > 8) { since = 0; return -1; }
+        return 0;
+    }
+    struct pollfd p = { s->fd, POLLIN, 0 };
+    int r = poll(&p, 1, timeout_ms);
+    if (r <= 0) return 0;
+    long n = read(s->fd, buf, cap);
+    if (n > 0) return n;
+    if (n < 0 && (errno == EINTR || errno == EAGAIN)) return 0;
+    close(s->fd); s->fd = -1;   /* (this holder gave the link up) */
+    return 0;
+}
+static int sock_send(PspExpTransport *t, const void *d, size_t n) { (void)t; (void)d; (void)n; return -1; }   /* (no commands into PSPExp) */
+static void sock_close(PspExpTransport *t) { SockSource *s = (SockSource *)t; if (s->fd >= 0) close(s->fd); s->fd = -1; }
+
+static void sock_listen(void)
+{
+    struct sockaddr_un a;
+    memset(&a, 0, sizeof(a));
+    a.sun_family = AF_UNIX;
+    pspexp_capture_socket_path(a.sun_path, sizeof(a.sun_path));
+    unlink(a.sun_path);   /* (a stale one: only one receiver runs, see the lock) */
+    g_listen = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (g_listen < 0 || bind(g_listen, (struct sockaddr *)&a, sizeof(a)) < 0 || listen(g_listen, 4) < 0) {
+        fprintf(stderr, "pspexp-capture: no socket for PSPExp's own games (%s)\n", a.sun_path);
+        if (g_listen >= 0) close(g_listen);
+        g_listen = -1;
+        return;
+    }
+    chmod(a.sun_path, 0600);
+}
+
 /* one run of the game, from its connection until the link goes (or -t, or stop) */
 static int session(PspExpTransport *t, const char *out, const char *dir, double limit)
 {
@@ -430,6 +490,13 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             if (need(t, (uint8_t *)pcm, len) < 0) break;
             mix_block(hdr[4], hdr[5], (int)chans, get32(hdr + 8), (int)get16(hdr + 12), (int)get16(hdr + 14), samples, pcm, at);
             g_audio_blocks++; g_audio_bytes += len; bytes += 32 + len;
+            if (ff && frames && at > 500000) {   /* a picture that holds still (PSPExp draws nothing new): the last frame
+                                                  * held up to the sound's time, less half a second for a frame on its way */
+                uint64_t due = (uint64_t)((at - 500000) * 30 / 1e6);
+                int bad = 0;
+                while (written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
+                g_frames_out = written;
+            }
             continue;
         }
         uint32_t w = get16(hdr + 4), h = get16(hdr + 6), fmt = get16(hdr + 8), changes = get32(hdr + 16);
@@ -540,6 +607,7 @@ int main(int argc, char **argv)
         int fd = open(lock, O_CREAT | O_RDWR, 0600);
         if (fd < 0 || flock(fd, LOCK_EX | LOCK_NB) != 0) { fprintf(stderr, "pspexp-capture: another one is running (%s)\n", lock); return 1; }
     }
+    sock_listen();
     if (fifo) {
         pthread_t th;
         struct stat st;
@@ -552,12 +620,23 @@ int main(int argc, char **argv)
         char err[256], name[1100];
         pspexp_usb_options_default(&o);
         o.pid = PSPEXP_CAPTURE_USB_PID;   /* (the plugin's own product: PSPExp's console waits for PSPExp's) */
-        if (!g_quiet || run == 1) fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable...\n");
+        if (!g_quiet || run == 1) fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable, or for PSPExp...\n");
         PspExpTransport *t = NULL;
-        while (!t && !g_quit) t = pspexp_usb_wait(&o, 1000, err, sizeof(err));   /* (in steps: Ctrl-C ends a wait) */
+        static SockSource ss;
+        int from_psp_exp = 0;
+        while (!t && !g_quit) {   /* (in steps: Ctrl-C ends a wait) a native game on the USB cable, or PSPExp's own on the socket */
+            int fd = sock_accept(0);
+            if (fd >= 0) {
+                memset(&ss, 0, sizeof(ss));
+                ss.t.name = "pspexp"; ss.t.recv = sock_recv; ss.t.send = sock_send; ss.t.close = sock_close; ss.fd = fd;
+                t = &ss.t; from_psp_exp = 1;
+                break;
+            }
+            t = pspexp_usb_wait(&o, 500, err, sizeof(err));
+        }
         if (!t) break;
-        fprintf(stderr, "pspexp-capture: connected\n");
-        pthread_mutex_lock(&g_link_lock); g_link = t; pthread_mutex_unlock(&g_link_lock);
+        fprintf(stderr, "pspexp-capture: connected%s\n", from_psp_exp ? " (PSPExp)" : "");
+        pthread_mutex_lock(&g_link_lock); g_link = from_psp_exp ? NULL : t; pthread_mutex_unlock(&g_link_lock);
         if (out && run > 1) {   /* clip.mp4, clip-2.mp4, ... */
             const char *dot = strrchr(out, '.');
             int stem = dot ? (int)(dot - out) : (int)strlen(out);

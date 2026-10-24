@@ -7,6 +7,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include "pspexp_capture.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #define RX_BUFFER_SIZE (256u * 1024u)
 #define SEND_RING 32
@@ -76,6 +81,9 @@ struct PspExpContext {
     /* the PSP's keyboard (TEXT_REQUEST): asked and not answered yet (no frames meanwhile); the answer */
     int text_pending, text_have, text_status;
     char text[1025];
+    /* PSPExp Capture inside PSPExp: the receiver's socket while the PSP captures (-1 none) */
+    int cap_fd;
+    uint64_t cap_dropped, cap_tried;
 };
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
@@ -118,7 +126,72 @@ PspExpContext *pspexp_create(PspExpTransport *transport, const PspExpConfig *cfg
         return NULL;
     }
     ctx->next_frame_seq = 1;
+    ctx->cap_fd = -1;
     return ctx;
+}
+
+/* ---- PSPExp Capture inside PSPExp ----
+ * With a receiver there (pspexp-capture, which a board's console runs) and a PSP that can
+ * (PSPEXP_FEATURE_CAPTURE), the PSP is asked to capture what it shows and plays, and the bytes
+ * it sends back (CAPTURE_DATA) go to the receiver's socket as they come. Every program holding
+ * the PSP does so through this library, so the receiver hears from each in turn. A receiver that
+ * cannot keep up loses data, never the game its pace: the socket never blocks. PSPEXP_CAPTURE=0:
+ * not asked. */
+static void capture_close(PspExpContext *ctx)
+{
+    if (ctx->cap_fd >= 0) close(ctx->cap_fd);
+    ctx->cap_fd = -1;
+}
+
+static void capture_open(PspExpContext *ctx)
+{
+    struct sockaddr_un a;
+    const char *e = getenv("PSPEXP_CAPTURE");
+    PspExpCaptureSet c;
+    int fd, big = 4 << 20;
+    capture_close(ctx);
+    ctx->cap_tried = pspexp_time_us();
+    if (!(ctx->hello.features & PSPEXP_FEATURE_CAPTURE) || (e && !strcmp(e, "0"))) return;
+    memset(&a, 0, sizeof(a));
+    a.sun_family = AF_UNIX;
+    pspexp_capture_socket_path(a.sun_path, sizeof(a.sun_path));
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) return;
+#ifdef SO_NOSIGPIPE
+    { int one = 1; setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one)); }   /* (a receiver gone: no SIGPIPE into the game) */
+#endif
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    if (connect(fd, (struct sockaddr *)&a, sizeof(a)) < 0) { close(fd); return; }   /* (no receiver: nothing asked) */
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &big, sizeof(big));
+    ctx->cap_fd = fd;
+    memset(&c, 0, sizeof(c));
+    c.on = 1;
+    pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_CAPTURE_SET, &c, sizeof(c));
+    ctx_log(ctx, "PSPExp Capture: the PSP sends what it shows to the receiver");
+}
+
+static void capture_data(PspExpContext *ctx, const PspExpMessage *m)
+{
+    const PspExpCaptureData *d = (const PspExpCaptureData *)m->payload;
+    const uint8_t *p = (const uint8_t *)m->payload + sizeof(*d);
+    PspExpCaptureSet off;
+    size_t n;
+    if (ctx->cap_fd < 0 || m->length < sizeof(*d)) return;
+    n = d->bytes < m->length - sizeof(*d) ? d->bytes : m->length - sizeof(*d);
+    while (n) {
+#ifdef MSG_NOSIGNAL
+        ssize_t w = send(ctx->cap_fd, p, n, MSG_NOSIGNAL);
+#else
+        ssize_t w = send(ctx->cap_fd, p, n, 0);
+#endif
+        if (w > 0) { p += w; n -= (size_t)w; continue; }
+        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { ctx->cap_dropped += n; return; }   /* (the receiver resyncs at the next packet) */
+        if (w < 0 && errno == EINTR) continue;
+        capture_close(ctx);   /* the receiver went: the PSP stops sending until one is back */
+        memset(&off, 0, sizeof(off));
+        pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_CAPTURE_SET, &off, sizeof(off));
+        return;
+    }
 }
 
 void pspexp_destroy(PspExpContext *ctx)
@@ -126,6 +199,7 @@ void pspexp_destroy(PspExpContext *ctx)
     size_t i;
     if (!ctx) return;
     pspexp_la_close(&ctx->la);
+    capture_close(ctx);
     if (ctx->t && ctx->t->close) ctx->t->close(ctx->t);
     for (i = 0; i < ctx->nres; i++) free(ctx->res[i].retained);
     free(ctx->res);
@@ -160,6 +234,7 @@ static void link_lost(PspExpContext *ctx)
         if (ctx->res[i].state != PSPEXP_RES_FAILED) ctx->res[i].state = PSPEXP_RES_NONE;
     pspexp_stream_reset(&ctx->in);
     ctx->batch_len = 0;   /* half a batch is worth nothing to a new link */
+    capture_close(ctx);   /* (the receiver waits for the next holder of the PSP) */
 }
 
 /* PSPEXP_RECORD=FILE: every byte sent, in order (debugging: tools replay it) */
@@ -552,6 +627,7 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
     ctx_log(ctx, "connected: executor %u, %ux%u, vram %u KiB, ram %u KiB, formats 0x%x",
             ctx->hello.executor, ctx->hello.display_width, ctx->hello.display_height,
             ctx->hello.vram_budget / 1024, ctx->hello.ram_budget / 1024, ctx->hello.texture_formats);
+    capture_open(ctx);
 
     /* Replay the working set (section 9.2): palettes first, since indexed
      * textures require theirs to be resident at upload. */
@@ -578,6 +654,9 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
         ctx->power_at = 0;   /* (another PSP, or the same after a restart) */
         ctx->text_pending = 0;   /* (a keyboard that PSP had open is gone with it) */
         on_hello(ctx, m);
+        break;
+    case PSPEXP_OP_CAPTURE_DATA:
+        capture_data(ctx, m);
         break;
     case PSPEXP_OP_TEXT_RESULT:
         if (m->length >= sizeof(PspExpTextResult)) {
@@ -704,6 +783,11 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms)
         if (r < 0) { ctx_log(ctx, "inbound stream corrupt"); link_lost(ctx); return -1; }
         wait = 0;  /* drain whatever else is already there */
     }
+    /* a receiver that started after the PSP connected (the console starts it then): looked for
+     * every 2 s */
+    if (ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && ctx->cap_fd < 0 &&
+        (ctx->hello.features & PSPEXP_FEATURE_CAPTURE) && pspexp_time_us() - ctx->cap_tried >= 2000000)
+        capture_open(ctx);
     return count;
 }
 

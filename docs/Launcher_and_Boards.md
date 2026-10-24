@@ -681,6 +681,14 @@ PSP screen's corner confirms it (green for a clip, red while recording).
 The console's log keeps the receiver's lines (`-q`: the connections, the
 clips and what went wrong).
 
+PSPExp's own games (in progress, 2026-10-24): the receiver also listens on
+a local socket, `/tmp/pspexp-capture-<uid>.sock`. The program holding the
+PSP (the console, or a game through the SDL layer) finds it, at the
+connection and every 2 s after, asks the PSP's runtime to capture what it
+shows and plays, and passes it on; one session goes on across the console
+handing the PSP to a game and back (8 s allowed between them).
+`PSPEXP_CAPTURE=0` in a program's environment keeps it from asking.
+
 ## 4. A clean GameShell with PSPExp packages (done 2026-09-26)
 
 The goal is a card image: the PSPExp launcher with preinstalled games,

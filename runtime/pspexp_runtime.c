@@ -146,6 +146,7 @@ static void send_hello(PspExpRuntime *rt)
                  (rt->ops.power_get ? PSPEXP_FEATURE_POWER : 0) |
                  (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) | (rt->ops.osd_volume ? PSPEXP_FEATURE_OSD : 0) |
                  (rt->ops.text_begin ? PSPEXP_FEATURE_TEXT : 0) | (rt->ops.restart ? PSPEXP_FEATURE_RESTART : 0) |
+                 (rt->ops.capture_set ? PSPEXP_FEATURE_CAPTURE : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
                  (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
@@ -166,6 +167,7 @@ void pspexp_runtime_connect(PspExpRuntime *rt)
 void pspexp_runtime_disconnect(PspExpRuntime *rt)
 {
     release_all(rt);
+    if (rt->ops.capture_set) rt->ops.capture_set(rt->ops.user, 0);   /* (the next host asks anew) */
 }
 
 static void send_error(PspExpRuntime *rt, uint16_t code, const PspExpMessage *m, uint32_t detail)
@@ -994,6 +996,14 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
     case PSPEXP_OP_BENCH_ECHO: case PSPEXP_OP_BENCH_UPLINK:
         handle_bench(rt, m);
         return;
+    case PSPEXP_OP_CAPTURE_SET: {
+        const PspExpCaptureSet *c;
+        if (!rt->ops.capture_set) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }   /* (not advertised) */
+        if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        c = (const PspExpCaptureSet *)m->payload;
+        rt->ops.capture_set(rt->ops.user, c->on != 0);
+        return;
+    }
     case PSPEXP_OP_DEBUG_SCREENSHOT: {
         const PspExpScreenshot *sc;
         if (pspexp_message_expect(m, sizeof(*sc)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }

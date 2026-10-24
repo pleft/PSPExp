@@ -189,6 +189,13 @@ next clip; it once switched the PSP off from a game recorded through the fallbac
 HOME and start the game again instead), `clip` and `record` (with `-s`, as ♪+R and ♪+L), `log`, `pause` / `resume`. `dir/latest.ppm` is the screen now. Only one receiver runs at
 a time. Design and measurements: the architecture's §12b.
 
+PSPExp's own games (in progress, 2026-10-24): the same receiver records them. Its socket
+(`/tmp/pspexp-capture-<uid>.sock`) is found by whichever program holds PSPExp's link, which asks
+the PSP's runtime to capture (CAPTURE_SET) and passes what comes on (`PSPEXP_CAPTURE=0`: not).
+Without a PSP: `scripts/dev/run-ppsspp.sh`, then `build/host/pspexp-capture -k -s clips -c ctl`
+and `build/host/pspexp-term --tcp 127.0.0.1:3838 --launcher` (or a game with
+`PSPEXP=tcp:127.0.0.1:3838 scripts/dev/pspexp-run build/host/sdl-game`); `echo clip > ctl` saves the last 30 s.
+
 ## Without a PSP: the runtime under PPSSPP
 
 ```sh

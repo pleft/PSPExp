@@ -607,18 +607,44 @@ static void draw_osd(PspExpGeExecutor *ge)
     ge->state_dirty = 1;
 }
 
+/* the recording dot (PSPExp Capture): bottom right, as the plugin's in a native game, a 12-pixel
+ * dot in a dark ring, row by row */
+static void draw_rec_dot(PspExpGeExecutor *ge)
+{
+    static const unsigned char ring[14] = { 4, 7, 9, 10, 11, 12, 12, 12, 12, 11, 10, 9, 7, 4 };   /* half-widths x2 */
+    static const unsigned char dot[12] = { 3, 6, 8, 9, 10, 10, 10, 10, 9, 8, 6, 3 };
+    int y;
+    leave_3d(ge);
+    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    for (y = 0; y < 14; y++) op_draw_rect(ge, (int16_t)(463 - ring[y] / 2), (int16_t)(249 + y), (int16_t)ring[y], 1, 0x0000, 255);
+    for (y = 0; y < 12; y++) op_draw_rect(ge, (int16_t)(463 - dot[y] / 2), (int16_t)(250 + y), (int16_t)dot[y], 1, ge->rec_dot, 255);
+    ge->state_dirty = 1;
+}
+
 static uint32_t op_present(void *u)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
     uint32_t t0;
+    void *cap;
     screen_target(ge);
+    cap = ge->cap_target ? ge->cap_target(ge->cap_user) : NULL;
+    if (cap) {   /* PSPExp Capture: the frame as drawn, before the volume bar and the dot, into RAM by the GE */
+        sceGuCopyImage(GU_PSM_5650, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT, PSPEXP_DISPLAY_STRIDE,
+                       (unsigned char *)sceGeEdramGetAddr() + draw_offset(ge), 0, 0, PSPEXP_DISPLAY_WIDTH, cap);
+        sceGuTexSync();
+    }
     if (ge->osd_until && (int32_t)(ge->osd_until - sceKernelGetSystemTimeLow()) > 0) draw_osd(ge);
     else ge->osd_until = 0;
+    if (ge->rec_dot) draw_rec_dot(ge);
     sceKernelDcacheWritebackAll();
     sceGuFinish();
     t0 = sceKernelGetSystemTimeLow();
     sceGuSync(0, 0);
     ge->stats.last_ge_us = sceKernelGetSystemTimeLow() - t0;
+    if (cap) {
+        sceKernelDcacheInvalidateRange(cap, PSPEXP_DISPLAY_WIDTH * PSPEXP_DISPLAY_HEIGHT * 2);
+        ge->cap_done(ge->cap_user, sceKernelGetSystemTimeLow());
+    }
     if (ge->keyboard) { ge->in_frame = 0; return sceKernelGetSystemTimeLow(); }   /* (a frame already on its way: drawn, not shown) */
     sceDisplayWaitVblankStart();
     sceGuSwapBuffers();

@@ -16,6 +16,7 @@
 #include "../executor-ge/pspexp_ge.h"
 #include "pspexp_audio_psp.h"
 #include "pspexp_fs_psp.h"
+#include "pspexp_capture_psp.h"
 #include "../transport-usb/pspexp_usb_driver.h"
 #include "../transport-tcp/pspexp_tcp_psp.h"
 #include "../../protocol/pspexp_usb_link.h"
@@ -138,6 +139,10 @@ static int link_read(void *buf, int len, unsigned timeout_us)
     if (g_link == LINK_TCP) return pspexp_tcp_psp_read(buf, len, timeout_us);
     return -1;
 }
+/* one writer at a time on the link: the main loop's messages, PSPExp Capture's (its own thread) */
+static SceUID g_link_sema = -1;
+static void link_lock(void) { if (g_link_sema >= 0) sceKernelWaitSema(g_link_sema, 1, NULL); }
+static void link_unlock(void) { if (g_link_sema >= 0) sceKernelSignalSema(g_link_sema, 1); }
 static int link_write(const void *data, int len)
 {
     if (g_link == LINK_USB) return pspexpUsbWrite(data, len);
@@ -521,6 +526,9 @@ int main(int argc, char *argv[])
     pspexp_ge_ops(&g_ge, &ops);
     pspexp_audio_psp_ops(&ops);
     pspexp_fs_psp_ops(&ops);   /* the memory stick as a drive of the board's file manager */
+    g_link_sema = sceKernelCreateSema("PSPExpLinkWrite", 0, 1, 1, NULL);
+    pspexp_capture_psp_init(&g_ge, link_write, link_lock, link_unlock);   /* PSPExp Capture inside PSPExp */
+    pspexp_capture_psp_ops(&ops);
     ops.now_us = op_now;
     ops.screenshot = op_screenshot;
     ops.clock_get = op_clock_get;
@@ -646,7 +654,9 @@ int main(int argc, char *argv[])
             size_t len;
             const void *out = pspexp_runtime_out_peek(&rt, &len);
             if (len == 0) break;
-            if (link_write(out, (int)len) < 0) { link_lost(&rt, gen, "link write failed"); connected = 0; if (!g_ho_on) show_status_page(); break; }
+            int wr;
+            link_lock(); wr = link_write(out, (int)len); link_unlock();
+            if (wr < 0) { link_lost(&rt, gen, "link write failed"); connected = 0; if (!g_ho_on) show_status_page(); break; }
             pspexp_runtime_out_consume(&rt);
             rt.stats.messages_out++;
         }

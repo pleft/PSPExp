@@ -214,9 +214,30 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_OSD        0x00002000u  /* OSD_VOLUME: the PSP draws a volume bar over the frames itself */
 #define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
 #define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
+#define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: PSPExp Capture inside PSPExp (what the PSP shows and plays,
+                                                  sent back as CAPTURE_DATA) */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
+
+/* Host -> PSP (CAPTURE_SET): PSPExp Capture inside PSPExp on (a receiver is there to take it)
+ * or off. While on, the PSP copies what it shows (up to 30 frames a second, the volume bar and
+ * the recording dot left out) and what it plays, and sends them back as CAPTURE_DATA: the bytes
+ * of a stream in PSPExp Capture's own packets ("PXCF" frames, "PXCA" sound, "PXCE" note-button
+ * events; tools/pspexp-capture), cut where it suits the PSP, so a message's bytes join the last
+ * message's. Off again at every disconnect: the next host asks anew. */
+typedef struct PspExpCaptureSet {
+    uint32_t on;
+    uint32_t reserved[3];
+} PspExpCaptureSet;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureSet) == 16, capture_set_size);
+
+/* PSP -> host (CAPTURE_DATA): `bytes` of the stream follow (then padding to 16) */
+typedef struct PspExpCaptureData {
+    uint32_t bytes;
+    uint32_t reserved[3];
+} PspExpCaptureData;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureData) == 16, capture_data_size);
 
 /* Host -> PSP (CLOCK_SET): the board's clock, for a PSP whose own one is
  * wrong (a flat clock battery puts it back years). The PSP keeps UTC; what
