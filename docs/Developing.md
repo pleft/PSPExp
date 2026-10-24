@@ -47,7 +47,10 @@ the pspdev toolchain at `../pspdev` (or `PSPDEV=...`).
 - **PSP side:** built in the pspdev toolchain's own container
   (`ghcr.io/pspdev/pspdev`, the same GCC 15.2 as `../pspdev`), then made a
   memory-stick install (`runtime-slot --install`): `PSPExp-psp-<ref>.zip`,
-  unzipped at the stick's root, a download on the run's page.
+  unzipped at the stick's root, a download on the run's page. Beside the
+  programs it carries LICENSE.txt, THIRD_PARTY.txt and licenses/: the
+  notices of PSPLINK's code in the USB driver, PSPSDK and newlib, which BSD
+  asks to go with every copy of the programs.
 - **A tag `v*`:** `.github/workflows/release.yml` makes the GitHub Release
   with everything: the PSP's zip and both card images, built there from
   public things only (`git tag v0.5 && git push origin v0.5`; or

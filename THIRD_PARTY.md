@@ -18,3 +18,20 @@ These keep the licence of the project they come from or change; PSPExp's MIT lic
 - recipes/: each package's games, data and cover art belong to their
   authors; a recipe says where they come from and under which terms. The
   games themselves are not in this repository.
+
+# Code from other projects in PSPExp's own files and builds
+
+The rest of these files is PSPExp's, under its MIT licence; the parts and
+libraries below keep theirs, whose texts are in licenses/ and go with every
+copy of the programs (the PSP's zip, the pspexp-runtime package):
+
+- psp/transport-usb/main.c, PSPExp's USB driver on the PSP (pspexp_usb.prx),
+  also built into PSPExp Capture's plugin (psp/capture, pspexp_capture.prx):
+  its USB descriptors and the driver's start and table come from PSPLINK's
+  usbhostfs, Copyright (c) 2006 James F, BSD (licenses/PSPLINK.txt).
+- Every PSP program (EBOOT.PBP, pspexp_runtime.prx, pspexp_usb.prx,
+  pspexp_capture.prx) is built with PSPSDK and links its libraries, BSD
+  (licenses/PSPSDK.txt).
+- EBOOT.PBP and pspexp_runtime.prx link newlib's C library (pspdev's port),
+  under the notices in licenses/newlib-COPYING.NEWLIB.txt. The kernel modules
+  (pspexp_usb.prx, pspexp_capture.prx) use the PSP's own instead.

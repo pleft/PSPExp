@@ -55,6 +55,8 @@ jobs:
         run: |
           python3 scripts/packages/runtime-slot --install stick/PSP/GAME/PSPExp
           cp LICENSE stick/PSP/GAME/PSPExp/LICENSE.txt
+          cp THIRD_PARTY.md stick/PSP/GAME/PSPExp/THIRD_PARTY.txt   # (the code and libraries inside, under their own licences)
+          mkdir -p stick/PSP/GAME/PSPExp/licenses && cp licenses/* stick/PSP/GAME/PSPExp/licenses/
           name="PSPExp-psp-${GITHUB_REF_NAME//\//-}"
           (cd stick && zip -qr "../$name.zip" PSP)
           echo "PSP_ZIP=$name.zip" >> "$GITHUB_ENV"

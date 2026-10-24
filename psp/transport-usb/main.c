@@ -2,7 +2,11 @@
  * PSPExp USB kernel driver. Registers a vendor-specific device with two bulk
  * endpoints and exposes a byte stream in each direction to user mode.
  * Structure follows PSPLink's usbhostfs (BSD), reduced to what PSPExp needs:
- * see protocol/pspexp_usb_link.h for the link rules.
+ * see protocol/pspexp_usb_link.h for the link rules. Its descriptors and the
+ * driver's start (start_func) and table come from usbhostfs/main.c:
+ *   Copyright (c) 2006 James F <tyranid@gmail.com>
+ *   Licensed under the BSD license (PSPLINK's: licenses/PSPLINK.txt).
+ * The rest is PSPExp's (MIT, LICENSE); THIRD_PARTY.md lists both.
  */
 #include <pspkernel.h>
 #include <pspsdk.h>

@@ -102,8 +102,10 @@ instead, and each finished frame is sent as a picture.
 ## Licence
 
 PSPExp is under the [MIT licence](LICENSE). A few files keep their own
-(patches to other projects, fonts, the GameShell's Wi-Fi settings):
-[THIRD_PARTY.md](THIRD_PARTY.md) lists them. Games come from their authors, under their own
+(patches to other projects, fonts, the GameShell's Wi-Fi settings), and the
+PSP's programs carry code and libraries from PSPLINK, PSPSDK and newlib under
+theirs: [THIRD_PARTY.md](THIRD_PARTY.md) lists them, with the texts in
+[licenses/](licenses/). Games come from their authors, under their own
 terms; none are in this repository.
 
 PSPExp is not made by or affiliated with Sony. "PSP" names the console it
