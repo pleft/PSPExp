@@ -1064,6 +1064,7 @@ int sctrlSEGetBootConfFileIndex(void);
 void sctrlSESetBootConfFileIndex(int index);
 static void cap_shutdown(const char *why);
 static void usb_quiesce(const char *why);
+static void back_note_read(void);
 
 #ifdef PSPEXP_CAPTURE_DEV
 /* the running game started again from its ISO, as PRO's own menu starts one (Vshctrl
@@ -1445,9 +1446,11 @@ static int capture_thread(SceSize args, void *argp)
 
     t0 = now_us();
     while (!g_quit) {
+        static int back_looked;
         sceDisplayWaitVblankStart();
         util_check();
         home_check();
+        if (!back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
         if (g_pad_on) note_check(pspexpUsbConnected() && (int)g_generation != g_dead_gen);
         if (!g_mem_held && !g_util_active && !g_home_paused && !g_quit && pspexpUsbConnected()
             && now_us() - g_mem_released_at > 5000000 && now_us() - g_mem_tried_at > 1000000
@@ -1574,8 +1577,64 @@ static void exit_note(void)
     cap_log("exit call %u, thread %x, USB %s", ++g_exit_calls, (u32)sceKernelGetThreadId(), g_usb_up ? "running" : "stopped");   /* (from here every thread of the plugin stops touching anything: no log, no copy, no USB) */
     pspSdkSetK1(k1);
 }
-static int exit_game(void) { exit_note(); return g_exit_game(); }
-static int exit_game_status(int status) { exit_note(); return g_exit_game_status(status); }
+/* A game PSPExp's shelf started (BOOT_DISC: architecture §12c) goes back to PSPExp when it
+ * exits, not to the XMB. PSPExp leaves a note before starting it, ms0:/PSP/GAME/PSPExp/launch.txt:
+ * the ISO, then PSPExp's EBOOT. Read once the game is past its start (6 s: no memory stick while
+ * a game starts), kept if it names this game's ISO, removed either way (a game started from the
+ * XMB later goes back there). At the exit, as ARK-4's exitgame.c: the ISO mode cleared (PSPExp
+ * would start with the disc still bound), then PSPExp's EBOOT (apitype 0x141, key "game") from a
+ * thread of the highest priority. */
+static char g_back_eboot[256];
+static void back_note_read(void)
+{
+    char buf[600], *nl, *iso = sctrlSEGetUmdFile();
+    SceUID fd = sceIoOpen("ms0:/PSP/GAME/PSPExp/launch.txt", PSP_O_RDONLY, 0);
+    int n;
+    if (fd < 0) return;
+    n = sceIoRead(fd, buf, sizeof(buf) - 1);
+    sceIoClose(fd);
+    sceIoRemove("ms0:/PSP/GAME/PSPExp/launch.txt");
+    if (n <= 0) return;
+    buf[n] = 0;
+    if (!(nl = strchr(buf, '\n'))) return;
+    *nl = 0;
+    if (!iso || strcmp(buf, iso) != 0) { cap_log("a start note for another game: the XMB at its exit"); return; }
+    {
+        char *e = nl + 1, *end = strchr(e, '\n');
+        if (end) *end = 0;
+        if (strncmp(e, "ms0:/", 5) != 0 || strlen(e) >= sizeof(g_back_eboot)) return;
+        strcpy(g_back_eboot, e);
+        cap_log("started from PSPExp: back to %s at the exit", g_back_eboot);
+    }
+}
+
+static struct SceKernelLoadExecVSHParam g_back_param;
+static int back_thread(SceSize args, void *argp)
+{
+    (void)args; (void)argp;
+    sctrlSESetUmdFile("");
+    sctrlSESetBootConfFileIndex(0);
+    memset(&g_back_param, 0, sizeof(g_back_param));
+    g_back_param.size = sizeof(g_back_param);
+    g_back_param.argp = g_back_eboot;
+    g_back_param.args = strlen(g_back_eboot) + 1;
+    g_back_param.key = "game";
+    sctrlKernelLoadExecVSHWithApitype(0x141, g_back_eboot, &g_back_param);
+    return 0;   /* (only when it failed: the XMB then) */
+}
+static void back_to_pspexp(void)
+{
+    SceUID th;
+    int k1 = pspSdkSetK1(0);
+    if (g_back_eboot[0] && (th = sceKernelCreateThread("PSPExpBack", back_thread, 1, 0x1000, 0, NULL)) >= 0) {
+        sceKernelStartThread(th, 0, NULL);
+        sceKernelWaitThreadEnd(th, NULL);
+    }
+    pspSdkSetK1(k1);
+}
+
+static int exit_game(void) { exit_note(); back_to_pspexp(); return g_exit_game(); }
+static int exit_game_status(int status) { exit_note(); back_to_pspexp(); return g_exit_game_status(status); }
 
 static void catch_exit(void)
 {

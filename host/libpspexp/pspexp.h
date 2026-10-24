@@ -139,6 +139,10 @@ int pspexp_osd_volume(PspExpContext *ctx, int percent);
  * connects anew. */
 int pspexp_restart_supported(const PspExpContext *ctx);
 int pspexp_restart_psp(PspExpContext *ctx);
+/* BOOT_DISC: PSPExp leaves and the PSP starts a PSP game's disc natively ("ms0:/ISO/game.iso"),
+ * on runtimes with PSPEXP_FEATURE_BOOT_DISC (PRO custom firmware); the link then goes */
+int pspexp_boot_disc_supported(const PspExpContext *ctx);
+int pspexp_boot_disc(PspExpContext *ctx, const char *path);
 /* when the bar last sent goes away (pspexp_time_us), 0 none: the PSP draws it at
  * each PRESENT, so a program that draws only on change should draw once after */
 uint64_t pspexp_osd_until(const PspExpContext *ctx);

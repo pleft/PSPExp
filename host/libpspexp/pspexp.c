@@ -1096,6 +1096,20 @@ int pspexp_restart_psp(PspExpContext *ctx)
     return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_RESTART, NULL, 0);
 }
 
+int pspexp_boot_disc_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_BOOT_DISC);
+}
+
+int pspexp_boot_disc(PspExpContext *ctx, const char *path)
+{
+    PspExpBootDisc b;
+    if (!pspexp_boot_disc_supported(ctx) || !path || strlen(path) >= sizeof(b.path)) return -1;
+    memset(&b, 0, sizeof(b));
+    snprintf(b.path, sizeof(b.path), "%s", path);
+    return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_BOOT_DISC, &b, sizeof(b));
+}
+
 int pspexp_audio_stream_reset(PspExpContext *ctx)
 {
     if (pspexp_audio_local(ctx)) pspexp_la_reset(&ctx->la);

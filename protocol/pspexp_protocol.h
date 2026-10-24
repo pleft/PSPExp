@@ -214,6 +214,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_OSD        0x00002000u  /* OSD_VOLUME: the PSP draws a volume bar over the frames itself */
 #define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
 #define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
+#define PSPEXP_FEATURE_BOOT_DISC  0x00020000u  /* answers BOOT_DISC: a PSP game started natively (PRO's ISO driver; architecture §12c) */
 #define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: PSPExp Capture inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
@@ -235,6 +236,16 @@ typedef struct PspExpCaptureSet {
     uint32_t reserved[3];
 } PspExpCaptureSet;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureSet) == 16, capture_set_size);
+
+/* Host -> PSP (BOOT_DISC): PSPExp leaves and the PSP starts this PSP game's disc as the XMB
+ * would (an ISO or CSO path the PSP can read: "ms0:/ISO/game.iso"). Nothing answers: the link
+ * goes. The capture plugin, when on, brings PSPExp back at the game's exit. */
+typedef struct PspExpBootDisc {
+    char path[240];              /* NUL-terminated */
+    uint32_t flags;              /* 0 */
+    uint32_t reserved[3];
+} PspExpBootDisc;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpBootDisc) == 256, boot_disc_size);
 
 /* PSP -> host (CAPTURE_DATA): `bytes` of the stream follow (then padding to 16) */
 typedef struct PspExpCaptureData {

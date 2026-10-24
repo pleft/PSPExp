@@ -1136,6 +1136,19 @@ metadata sits 40–50 MB in (after the firmware update folder), at most 335 MB: 
   disc. Reads come synchronously, whole sectors, any length, no cache on a PSP-1000 (every read
   of the game's reaches the device). NP9660 opens in its own start without retrying: unusable.
 
+**(A) in code, not yet tried on the PSP (2026-10-25).** SYSTEM 0x0010 BOOT_DISC
+(`PspExpBootDisc`: the path; `PSPEXP_FEATURE_BOOT_DISC`, offered only when the kernel module
+finds PRO's functions: not in PPSSPP, where the runtime starts as before and refuses it). The
+runtime leaves as for RESTART (its USB stopped), writes `launch.txt` beside its EBOOT (the ISO,
+then the EBOOT), and `pspexpUsbBootDisc` starts the game: `sctrlSESetUmdFile`,
+`sctrlSESetBootConfFileIndex(3)`, `sctrlSESetDiscType(0x10)`, apitype 0x120 (found through
+`sctrlHENFindFunction` in "SystemControl"; the NIDs are the names' SHA-1, as PRO-C exports them,
+checked against the five the plugin already calls). The plugin reads the note once 6 s into the
+game, removes it, and keeps PSPExp's EBOOT when the note names this game's ISO; its catch of the
+game's exit then clears the ISO mode and starts that EBOOT (0x141, key "game", a thread at
+priority 1), else the XMB as before. On the board: `pspexp_boot_disc`, the control port's
+`psp-boot PATH`; the shelf still says "Not yet" (its games are on the board: (B)).
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's

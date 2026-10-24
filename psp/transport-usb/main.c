@@ -568,6 +568,49 @@ int pspexpUsbMute(int set)
     return r;
 }
 
+/* A PSP game started from PSPExp's shelf, natively, as the XMB starts an ISO (PRO's Vshctrl,
+ * vpbp_loadexec): the ISO's path, PRO's Inferno driver (boot config 3), a game disc, then the
+ * disc's EBOOT with apitype 0x120 (architecture §12c). Through the custom firmware's finder,
+ * as pspexpUsbMute (NIDs: the names' SHA-1, as PRO-C exports them). NULL path: only whether it
+ * can (0) or not (-1: no PRO, PPSSPP). Returns only when it failed. */
+#include <psploadexec_kernel.h>
+int pspexpUsbBootDisc(const char *path)
+{
+    static int (*set_umd)(const char *), (*set_conf)(int), (*set_type)(int), (*loadexec)(int, const char *, struct SceKernelLoadExecVSHParam *);
+    static int looked;
+    static char iso[256];
+    static const char boot[] = "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN";
+    static struct SceKernelLoadExecVSHParam param;
+    int k1 = pspSdkSetK1(0), r = -1;
+    if (!looked) {
+        looked = 1;
+        if ((*(volatile u32 *)(void *)sctrlHENFindFunction >> 26) == 2) {   /* (linked: see pspexpUsbMute) */
+            set_umd = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0x5A35C948);     /* sctrlSESetUmdFile */
+            set_conf = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0xBC939DC1);    /* sctrlSESetBootConfFileIndex */
+            set_type = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0x31C6160D);    /* sctrlSESetDiscType */
+            loadexec = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0x2D10FB28);    /* sctrlKernelLoadExecVSHWithApitype */
+        }
+    }
+    if (set_umd && set_conf && set_type && loadexec) {
+        if (!path) r = 0;
+        else {
+            strncpy(iso, path, sizeof(iso) - 1);
+            iso[sizeof(iso) - 1] = 0;
+            set_umd(iso);
+            set_conf(3);        /* Inferno (1 March33, 2 NP9660: that one opens the ISO once, no retries) */
+            set_type(0x10);     /* a game disc (PSP_UMD_TYPE_GAME), which Inferno reports */
+            memset(&param, 0, sizeof(param));
+            param.size = sizeof(param);
+            param.argp = (void *)boot;
+            param.args = sizeof(boot);
+            param.key = "umdemu";
+            r = loadexec(0x120, boot, &param);
+        }
+    }
+    pspSdkSetK1(k1);
+    return r;
+}
+
 /* The system clock (UTC), in microseconds since 0001-01-01: setting it is
  * kernel-only. For CLOCK_SET: a PSP whose clock battery ran flat starts years
  * behind, and the board it plays for knows the time. */

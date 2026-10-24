@@ -3216,6 +3216,8 @@ static void ctl_step(uint64_t now, int connected)
         int r = psp_runtime_update(cmd[14] == ' ' ? cmd + 15 : NULL, m, sizeof(m));
         snprintf(reply, sizeof(reply), "%s %s", r == 0 ? "ok" : "error", m);
         ctl_reply(reply);
+    } else if (!strncmp(cmd, "psp-boot ", 9)) {   /* a PSP game's disc, started natively by the PSP (BOOT_DISC; tests: the shelf's next step) */
+        ctl_reply(pspexp_boot_disc(ctx, cmd + 9) == 0 ? "ok starting it: PSPExp leaves" : "error the PSP's runtime cannot start a game (an older one, no PRO, or not connected)");
     } else if (!strcmp(cmd, "psp-restart")) {   /* PSPExp on the PSP starts again (a runtime with RESTART) */
         ctl_reply(pspexp_restart_psp(ctx) == 0 ? "ok restarting" : "error the PSP's runtime cannot start itself again (an older one, or not connected)");
     } else if (!strcmp(cmd, "slots")) {
@@ -3243,7 +3245,7 @@ static void ctl_step(uint64_t now, int connected)
         launcher_set_test_mode(0);
         g_pkgchk_quiet = 0;
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, psp-boot PATH, ping, end");
 }
 
 /* ---- PSPExp Capture's receiver (tools/pspexp-capture) beside the console ----

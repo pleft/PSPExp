@@ -1230,6 +1230,7 @@ console). The commands:
 | `relink` | drops the link as a cable pull would, and answers when it is back |
 | `clock [force]` | the PSP's clock and time zone from the board (§9) |
 | `psp-restart` | PSPExp on the PSP starts itself again (runtimes with `PSPEXP_FEATURE_RESTART`); the link goes and comes back |
+| `psp-boot PATH` | PSPExp leaves and the PSP starts that PSP game natively (`ms0:/ISO/game.iso`; runtimes with `PSPEXP_FEATURE_BOOT_DISC`, PRO custom firmware); with the capture plugin on, PSPExp comes back at the game's exit (the architecture's §12c) |
 | `type TEXT` | writes into the shell (`\n` is Enter) |
 | `fs ls|get|put|rm|rmtree|mkdir|mv|df` | the memory stick over the console's link, with timings |
 | `end` | lifts test mode |
