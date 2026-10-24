@@ -779,16 +779,18 @@ static void catch_util(void)
 static volatile u32 g_pad_buttons, g_pad_until, g_pad_reads;
 static SceUID g_cmd_th = -1;
 
+static volatile u32 g_pad_mask;   /* the game's buttons hidden from it: those pressed with the note button (see note_check) */
 static void pad_apply(SceCtrlData *pad, int n, int negative)
 {
-    u32 b = g_pad_buttons;
+    u32 b = g_pad_buttons, m = g_pad_mask;
     int i;
     g_pad_reads++;
-    if (!b || n <= 0) return;
-    if (g_pad_until && (int)(now_us() - g_pad_until) >= 0) { g_pad_buttons = 0; return; }
+    if (n <= 0) return;
+    if (b && g_pad_until && (int)(now_us() - g_pad_until) >= 0) { g_pad_buttons = 0; b = 0; }
+    if (!b && !m) return;
     for (i = 0; i < n; i++) {
-        if (negative) pad[i].Buttons &= ~b;
-        else pad[i].Buttons |= b;
+        if (negative) pad[i].Buttons = (pad[i].Buttons | m) & ~b;
+        else pad[i].Buttons = (pad[i].Buttons & ~m) | b;
     }
 }
 static int (*o_rbp)(SceCtrlData *, int), (*o_pbp)(SceCtrlData *, int), (*o_rbn)(SceCtrlData *, int), (*o_pbn)(SceCtrlData *, int);
@@ -797,6 +799,8 @@ static int h_pbp(SceCtrlData *p, int n) { int r = o_pbp(p, n); pad_apply(p, r, 0
 static int h_rbn(SceCtrlData *p, int n) { int r = o_rbn(p, n); pad_apply(p, r, 1); return r; }
 static int h_pbn(SceCtrlData *p, int n) { int r = o_pbn(p, n); pad_apply(p, r, 1); return r; }
 
+static int g_pad_on;   /* the buttons part (B): the game's reads caught, the note button with them */
+static int (*g_led)(u32 led, u32 on);   /* sceSysconCtrlLED (1: the WLAN light; see note_check) */
 static void catch_pad(void)
 {
     int n = 0;
@@ -804,7 +808,8 @@ static void catch_pad(void)
     n += redirect("sceController_Service", "sceCtrl", 0x3A622550, h_pbp, &o_pbp);   /* ...PeekBufferPositive */
     n += redirect("sceController_Service", "sceCtrl", 0x60B81F86, h_rbn, &o_rbn);   /* ...ReadBufferNegative */
     n += redirect("sceController_Service", "sceCtrl", 0xC152080A, h_pbn, &o_pbn);   /* ...PeekBufferNegative */
-    cap_log("buttons: %d of 4 calls caught", n);
+    g_led = (void *)sctrlHENFindFunction("sceSYSCON_Driver", "sceSyscon_driver", 0x18BFBE65);   /* sceSysconCtrlLED (6.60's NID) */
+    cap_log("buttons: %d of 4 calls caught; the WLAN light %s", n, g_led ? "found" : "not found");
 }
 
 static unsigned char g_cmd_buf[4096] __attribute__((aligned(64)));
@@ -990,6 +995,45 @@ static int log_send(void)
     return 0;
 }
 
+/* ---- the note button (the PSP-1000's sound button): a clip, a recording ----
+ * Note+R: the receiver saves the last 30 s as a clip. Note+L: a recording starts, or stops.
+ * Pairs pressed briefly, as the note button held alone for over a second mutes the PSP's sound.
+ * While it is down the game sees none of its buttons (nor those held with it, until let go). The
+ * receiver keeps the clips; the WLAN light says the press was heard: two blinks for a clip, lit
+ * while recording. Only with a receiver reading, and not over the HOME menu or a system screen. */
+#define EV_CLIP 1
+#define EV_REC_START 2
+#define EV_REC_STOP 3
+static volatile u32 g_ev_type[4], g_ev_time[4], g_ev_head, g_ev_sent;   /* (the watcher's, sent by the sender) */
+static volatile int g_recording;
+static u32 g_blink_at;
+static int g_led_on;
+
+static void event_put(u32 type)
+{
+    u32 i = g_ev_head;
+    if (i - g_ev_sent >= 4) return;
+    g_ev_type[i % 4] = type;
+    g_ev_time[i % 4] = now_us();
+    g_ev_head = i + 1;
+    sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);
+}
+
+/* the events to the receiver ("PXCE": the type at 4, the time at 20; the sender's, under g_tx_lock) */
+static int event_send(void)
+{
+    static unsigned char h[32] __attribute__((aligned(64)));
+    while (g_ev_sent != g_ev_head) {
+        u32 i = g_ev_sent % 4;
+        memset(h, 0, 32);
+        memcpy(h, "PXCE", 4);
+        put32(h + 4, g_ev_type[i]); put32(h + 20, g_ev_time[i]);
+        if (pspexpUsbWrite(h, 32) < 0) return -1;
+        g_ev_sent++;
+    }
+    return 0;
+}
+
 /* the sender: the sound so far, then the frame when there is one, over the link (the driver cuts
  * it in 64 KB pieces). A write that times out
  * means the receiver went (the cable stays plugged in): nothing more is sent until a receiver
@@ -1008,6 +1052,7 @@ static int send_thread(SceSize args, void *argp)
         sceKernelWaitSema(g_tx_lock, 1, NULL);
         r = audio_send();
         if (r >= 0) r = log_send();
+        if (r >= 0) r = event_send();
         sceKernelSignalSema(g_tx_lock, 1);
         if (r < 0) { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); g_busy = 0; continue; }
         if (g_busy == 1) {   /* the frame, once the copier has it: its header, then the whole of it */
@@ -1113,6 +1158,120 @@ static void home_check(void)
     }
 }
 
+/* The press heard: a short beep on a sound channel of the plugin's own, taken for the beep only
+ * (the game's original calls, so it is not in the clips, which hold the game's own sound): two
+ * short ones for a clip, rising for a recording that starts, falling for one that stops. And the
+ * WLAN light (two blinks, lit while recording), told so and answering 0, yet dark on the
+ * PSP-1000 tried (2026-10-24): the beep is the confirmation. */
+#define BEEP_RATE 44100
+static SceUID g_beep_ev = -1;
+static volatile u32 g_beep_kind;
+static int (*o_release)(int);
+static short g_beep_buf[2][1024 * 2] __attribute__((aligned(64)));
+static const short g_beep_tunes[3][4][2] = {   /* (hz, blocks of 1024 samples, ≈23 ms), 0 hz silence */
+    { { 1568, 2 }, { 0, 2 }, { 1568, 2 }, { 0, 1 } },      /* a clip */
+    { { 1047, 3 }, { 1568, 4 }, { 0, 1 }, { 0, 0 } },      /* a recording starts */
+    { { 1568, 3 }, { 1047, 4 }, { 0, 1 }, { 0, 0 } } };    /* it stops */
+
+static int beep_thread(SceSize args, void *argp)
+{
+    static int warned;
+    u32 bits;
+    while (!g_quit && sceKernelWaitEventFlag(g_beep_ev, 1, PSP_EVENT_WAITOR | PSP_EVENT_WAITCLEAR, &bits, NULL) >= 0) {
+        u32 kind = g_beep_kind, ph = 16384, step;
+        int ch = o_reserve(-1, 1024, 0), seg, blk, i, k = 0, tries;   /* (any free channel, stereo) */
+        if (kind < 1 || kind > 3 || g_quit) continue;
+        if (ch < 0) { if (!warned++) cap_log("no free sound channel for the beep (%x)", (u32)ch); continue; }
+        for (seg = 0; seg < 4; seg++) {
+            int hz = g_beep_tunes[kind - 1][seg][0], n = g_beep_tunes[kind - 1][seg][1] * 1024;
+            step = (u32)hz * 65536 / BEEP_RATE;
+            for (blk = 0; blk < n; blk += 1024, k++) {
+                short *b = g_beep_buf[k & 1];
+                for (i = 0; i < 1024; i++) {
+                    int at = blk + i, v = 0;
+                    if (hz) {   /* a soft triangle, faded in and out over 128 samples */
+                        int tri = ph < 32768 ? (int)ph * 2 - 32768 : (65535 - (int)ph) * 2 - 32768;
+                        int fade = at < 128 ? at : n - at < 128 ? n - at : 128;
+                        v = tri / 6 * fade / 128;
+                        ph = (ph + step) & 0xFFFF;
+                    }
+                    b[i * 2] = b[i * 2 + 1] = (short)v;
+                }
+                sceKernelDcacheWritebackRange(b, sizeof(g_beep_buf[0]));
+                o_out_b(ch, 0x6000, b);
+            }
+        }
+        for (tries = 0; tries < 40 && o_release && o_release(ch) < 0; tries++) sceKernelDelayThread(5000);   /* (busy until its last block has played) */
+    }
+    return 0;
+}
+
+static void beep(u32 kind)
+{
+    if (g_beep_ev < 0) return;
+    g_beep_kind = kind;
+    sceKernelSetEventFlag(g_beep_ev, 1);
+}
+
+/* the note button, each screen refresh (see event_put): the pairs, the buttons hidden from the
+ * game, the mute put back, the WLAN light. The note button pressed mutes the PSP's sound (the
+ * HOME menu's driver sees the buttons before any mask); used for a pair, the mute is put back as
+ * it was, at once, and for half a second after the button is let go (in case it toggles on the
+ * release); pressed alone it mutes as it always does, when let go. */
+#define GAME_BUTTONS 0xF3F9   /* select, start, the pad, L, R, the four shapes */
+#define IMPOSE_MUTE 0x8
+static int (*g_impose_get)(int), (*g_impose_set)(int, int);
+static void note_check(int reading)
+{
+    static u32 was, keep_until;
+    static int before = -1, wanted = -1, pair;
+    SceCtrlData pad;
+    u32 b, t;
+    int on, mute;
+    if (sceCtrlPeekBufferPositive(&pad, 1) <= 0) return;
+    b = pad.Buttons;
+    mute = g_impose_get && g_impose_set ? g_impose_get(IMPOSE_MUTE) : -1;
+    if (b & PSP_CTRL_NOTE) {
+        u32 pressed = b & ~was;
+        g_pad_mask = GAME_BUTTONS;
+        if (!(was & PSP_CTRL_NOTE)) { pair = 0; wanted = -1; }
+        if (mute >= 0 && before >= 0 && mute != before) { wanted = mute; g_impose_set(IMPOSE_MUTE, before); }   /* (the system's toggle, kept for a press alone) */
+        if (reading && !g_home_paused && !g_util_active) {
+            if (pressed & PSP_CTRL_RTRIGGER) { pair = 1; event_put(EV_CLIP); beep(1); g_blink_at = now_us() | 1; cap_log("note+R: a clip"); }
+            if (pressed & PSP_CTRL_LTRIGGER) {
+                pair = 1;
+                g_recording = !g_recording;
+                event_put(g_recording ? EV_REC_START : EV_REC_STOP);
+                beep(g_recording ? 2 : 3);
+                cap_log("note+L: the recording %s", g_recording ? "starts" : "stops");
+            }
+        }
+    } else {
+        g_pad_mask &= b;   /* (those held with it hidden until let go) */
+        if (was & PSP_CTRL_NOTE) {   /* let go */
+            if (pair) keep_until = now_us() + 500000;
+            else if (wanted >= 0 && g_impose_set) g_impose_set(IMPOSE_MUTE, wanted);
+            wanted = -1;
+        }
+        if (keep_until && (int)(now_us() - keep_until) < 0) { if (mute >= 0 && mute != before) g_impose_set(IMPOSE_MUTE, before); }
+        else { keep_until = 0; before = mute; }
+    }
+    was = b;
+    if (!reading) g_recording = 0;
+    on = g_recording;
+    if (g_blink_at) {   /* two blinks: 150 ms on, 150 off, 150 on */
+        t = now_us() - g_blink_at;
+        if (t < 450000) on = t < 150000 || t >= 300000;
+        else g_blink_at = 0;
+    }
+    if (g_led && on != g_led_on) {
+        static int told;
+        int r = g_led(1, (u32)on);
+        if (!told++) cap_log("the WLAN light: %x", (u32)r);
+        g_led_on = on;
+    }
+}
+
 /* the watcher: every screen refresh, the frame shown; a new one counted (the game's frame rate)
  * and, when none is on its way and a receiver is there, handed to the copier and the sender */
 static int capture_thread(SceSize args, void *argp)
@@ -1163,6 +1322,16 @@ static int capture_thread(SceSize args, void *argp)
     g_usb_up = 1;
     pspexpUsbSetTx(128 * 1024, 0);   /* (a stream read without pause: no short-ending splits) */
     g_impose_status = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x1B6E3400);   /* sceImposeGetStatus */
+    g_impose_get = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x531C9778);      /* sceImposeGetParam */
+    g_impose_set = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x810FB7FB);      /* sceImposeSetParam */
+    o_release = (void *)sctrlHENFindFunction("sceAudio_Driver", "sceAudio", 0x6FC46853);                  /* sceAudioChRelease */
+    if (g_pad_on && o_reserve && o_out_b && o_release) {
+        SceUID th;
+        g_beep_ev = sceKernelCreateEventFlag("PSPExpCaptureBeep", 0, 0, NULL);
+        th = sceKernelCreateThread("PSPExpCaptureBeep", beep_thread, 0x20, 0x1000, 0, NULL);
+        if (th >= 0) sceKernelStartThread(th, 0, NULL);
+    }
+    cap_log("the note button: mute setting %s, beep %s", g_impose_get && g_impose_set ? "found" : "not found", g_beep_ev >= 0 ? "ready" : "off");
     cap_log("HOME menu watched: %x", (u32)g_impose_status);
     g_cmd_th = sceKernelCreateThread("PSPExpCaptureCmd", cmd_thread, 0x30, 0x2000, 0, NULL);
     if (g_cmd_th >= 0) sceKernelStartThread(g_cmd_th, 0, NULL);
@@ -1172,6 +1341,7 @@ static int capture_thread(SceSize args, void *argp)
         sceDisplayWaitVblankStart();
         util_check();
         home_check();
+        if (g_pad_on) note_check(pspexpUsbConnected() && (int)g_generation != g_dead_gen);
         if (!g_mem_held && !g_util_active && !g_home_paused && !g_quit && pspexpUsbConnected()
             && now_us() - g_mem_released_at > 5000000 && now_us() - g_mem_tried_at > 1000000
             && now_us() - g_started_at > 20000000) {   /* (the buffers, when the game's margin allows; never in its first 20 s, while it sets up its pools and threads) */
@@ -1249,7 +1419,7 @@ int module_start(SceSize args, void *argp)
     g_tx_lock = sceKernelCreateSema("PSPExpCaptureTx", 0, 1, 1, NULL);
     if (part_on('X')) catch_exit();
     if (part_on('S')) catch_audio();   /* now, before the game reserves its channels */
-    if (part_on('B')) catch_pad();
+    if (part_on('B')) { catch_pad(); g_pad_on = 1; }
     if (part_on('U')) catch_util();
     catch_mem();
     g_frames_on = part_on('F');
