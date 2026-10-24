@@ -14,7 +14,7 @@ buttons; the board needs no screen, keyboard or mouse.
 | START | search, refresh or rescan, options |
 | SELECT, held | home: the launcher, from any app (from the launcher: the terminal) |
 | L / R | the other tab, panel or page |
-| ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + R saves the last 30 seconds as a video, ♪ + L records ([Recording](recording.md)) |
+| ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
 
 ## The launcher
 
@@ -344,6 +344,7 @@ with a single option opens that option at once), circle comes back.
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
+| Recording | Last 30 seconds: ♪ + R saves them, the board then recording all the time (off at first; ♪ + L recordings work either way: [Recording](recording.md)) |
 | Clock | Time zone, for the clock; PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
 | This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |

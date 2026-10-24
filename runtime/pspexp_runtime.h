@@ -115,7 +115,7 @@ typedef struct PspExpRuntimeOps {
     /* Optional: PSPExp Capture inside PSPExp on or off (CAPTURE_SET; off at every disconnect).
      * The platform then copies its frames and sound and sends CAPTURE_DATA itself. With it,
      * HELLO advertises PSPEXP_FEATURE_CAPTURE. */
-    void (*capture_set)(void *user, int on);
+    void (*capture_set)(void *user, int on);   /* PSPEXP_CAPTURE_* */
     /* Optional: open the PSP's own keyboard (TEXT_REQUEST) with a title and the text the
      * field starts with (UTF-8), for at most max_chars characters; returns 0 when it is
      * shown, < 0 when it cannot be. The answer comes later: pspexp_runtime_text_done.

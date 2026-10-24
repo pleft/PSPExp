@@ -102,6 +102,7 @@ static int g_nactions;
 static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
 static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board; asked for now */
+static int g_clips_keep, g_clips_change;   /* the recorder keeps the last 30 seconds (off by default: it costs); just changed */
 static int g_core_updated, g_console_restart_req;   /* PSPExp's own files were upgraded; the user asked to restart it */
 static int g_psp_update, g_psp_update_req;          /* a newer PSP runtime is on the board; the user asked to install it */
 
@@ -234,6 +235,7 @@ static void cats_build(void)
     ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
+    ACTION("clips", "Last 30 seconds", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
@@ -246,6 +248,7 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
             { "Sound", "headphones", { "a:sound", NULL } },
+            { "Recording", "film", { "a:clips", NULL } },
             { "Clock", "clock", { "a:tz", "a:pspclock", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
             { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
@@ -679,6 +682,7 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "tz")) { int k = board_zone_find(g_cur_tz); return k >= 0 ? board_zone(k)->label : g_cur_tz[0] ? g_cur_tz : "UTC"; }
     if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
+    if (!strcmp(a, "clips")) return g_clips_keep ? "On" : "Off";
     if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
     if (!strcmp(a, "ssh")) return g_ssh_on ? "On" : "Off";
@@ -721,6 +725,11 @@ static void run_action(LEntry *e, uint64_t now)
         lib_setting_set(&L, "psp_clock", g_psp_clock);
         toast("clock", g_psp_clock ? "The PSP's clock follows this board" : "The PSP keeps its own clock", now);
         if (g_psp_clock) g_clock_req = 1;   /* now, not at the next connection */
+    } else if (!strcmp(a, "clips")) {
+        g_clips_keep = !g_clips_keep;
+        g_clips_change = 1;
+        lib_setting_set(&L, "clips", g_clips_keep);
+        toast("history", g_clips_keep ? "♪ + R saves the last 30 seconds" : "♪ + L recordings only", now);
     } else if (!strcmp(a, "boxart")) {
         g_nofetch = !g_nofetch;
         lib_setting_set(&L, "boxart", !g_nofetch);
@@ -872,6 +881,8 @@ int  launcher_take_console_restart(void) { int r = g_console_restart_req; g_cons
 void launcher_set_psp_update(int available) { if (g_psp_update != available) { g_psp_update = available; cats_build(); } }
 int  launcher_take_psp_update(void) { int r = g_psp_update_req; g_psp_update_req = 0; return r; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
+int  launcher_clips_keep(void) { return g_clips_keep; }
+int  launcher_take_clips_change(void) { int r = g_clips_change; g_clips_change = 0; return r; }
 
 void launcher_state(char *out, size_t n)
 {
@@ -2108,6 +2119,8 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
         else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
+        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "♪ + R saves the last 30 seconds: the board records all the time"
+                                                                              : "Only ♪ + L recordings: nothing recorded otherwise");
         else snprintf(s, n, "%s", e->tags);
         break;
     default: snprintf(s, n, "Game  /  %s%s%s", renderer(e), e->tags[0] ? "  /  " : "", e->tags); break;
@@ -2857,6 +2870,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     lib_load(&L);
     g_nofetch = getenv("PSPEXP_LAUNCHER_NO_FETCH") != NULL || !lib_setting_int(&L, "boxart", 1);
     g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
+    g_clips_keep = lib_setting_int(&L, "clips", 0);
     cats_build();
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i;   /* start on Games */
     /* screenshots and tests: open a page without replaying keys, which a slow

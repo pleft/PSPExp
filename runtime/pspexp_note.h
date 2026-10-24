@@ -6,7 +6,8 @@
  * alone reaches the board when it is let go, held for a moment (the console's music toggle). The
  * system toggles its mute as ♪ is pressed: for a pair it is put back, at once and for half a
  * second after; for ♪ alone it is applied when ♪ is let go, as it always was. Without a receiver
- * every button passes as read.
+ * every button passes as read. With a receiver keeping recordings only (no last 30 seconds:
+ * PSPEXP_CAPTURE_RECORDINGS), ♪+R is a pair that does nothing.
  *
  * Plain C99, no PSP calls: the runtime reads the buttons and the mute, and does what comes out.
  */
@@ -51,7 +52,7 @@ typedef struct PspExpNoteOut {
 
 void pspexp_note_init(PspExpNote *n);
 /* one reading: the buttons (♪ and the volume buttons included), the system's mute (-1: not
- * known), whether the receiver is there, the time in microseconds (wrapping) */
+ * known), the receiver's PSPEXP_CAPTURE_* (0: none there), the time in microseconds (wrapping) */
 void pspexp_note_step(PspExpNote *n, uint32_t buttons, int mute, int capture, uint32_t now_us, PspExpNoteOut *out);
 
 #ifdef __cplusplus

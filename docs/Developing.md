@@ -169,7 +169,8 @@ Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspex
    (the whole game as one clip), or `build/host/pspexp-capture -k -s ~/Movies/clips` for the
    note button: on the PSP, ♪+R saves the last 30 s (`-b` changes it) and ♪+L starts and stops a
    recording; a dot in the screen's corner confirms (green for a clip, red while recording). On a board the console runs the receiver beside itself
-   (`pspexp-capture -k -q -s ~/Videos/PSPExp`, when it and ffmpeg are installed;
+   (`pspexp-capture -k -q -s ~/Videos/PSPExp -b 0`, or `-b 30` with Settings > Recording > Last
+   30 seconds on, when it and ffmpeg are installed; `-b 0`: ♪+L recordings only, nothing sent otherwise;
    `PSPEXP_CAPTURE=0` turns it off): the plugin has a USB product of its own (0x01CB), which the
    console's link leaves alone.
 3. Start a game from the XMB: the receiver connects, prints the frames and sound received and the

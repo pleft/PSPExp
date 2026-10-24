@@ -221,13 +221,17 @@ enum PspExpExecutorKind {
                                                   A host must not send it otherwise (older runtimes drop it) */
 
 /* Host -> PSP (CAPTURE_SET): PSPExp Capture inside PSPExp on (a receiver is there to take it)
- * or off. While on, the PSP copies what it shows (up to 30 frames a second, the volume bar and
- * the recording dot left out) and what it plays, and sends them back as CAPTURE_DATA: the bytes
- * of a stream in PSPExp Capture's own packets ("PXCF" frames, "PXCA" sound, "PXCE" note-button
- * events; tools/pspexp-capture), cut where it suits the PSP, so a message's bytes join the last
- * message's. Off again at every disconnect: the next host asks anew. */
+ * or off. While on, the PSP reads the note button (♪+R a clip, ♪+L a recording) and copies what
+ * it shows (up to 30 frames a second, the volume bar and the recording dot left out) and what it
+ * plays, and sends them back as CAPTURE_DATA: the bytes of a stream in PSPExp Capture's own
+ * packets ("PXCF" frames, "PXCA" sound, "PXCE" note-button events; tools/pspexp-capture), cut
+ * where it suits the PSP, so a message's bytes join the last message's. Off again at every
+ * disconnect: the next host asks anew. */
+#define PSPEXP_CAPTURE_OFF        0
+#define PSPEXP_CAPTURE_ALL        1   /* everything, all the time: the receiver keeps the last seconds (♪+R) */
+#define PSPEXP_CAPTURE_RECORDINGS 2   /* only while a ♪+L recording runs (the events always); ♪+R does nothing */
 typedef struct PspExpCaptureSet {
-    uint32_t on;
+    uint32_t on;                 /* PSPEXP_CAPTURE_* */
     uint32_t reserved[3];
 } PspExpCaptureSet;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureSet) == 16, capture_set_size);

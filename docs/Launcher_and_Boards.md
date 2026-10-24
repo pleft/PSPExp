@@ -676,8 +676,13 @@ when `pspexp-capture` and ffmpeg are on the PATH (both are on the card
 images), as `pspexp-capture -k -q -s ~/Videos/PSPExp` (`~/Movies/PSPExp` on
 a Mac), again 10 s after it ends, and stopped with the console, a clip under
 way finished first. `PSPEXP_CAPTURE=0` keeps it from starting. In the game,
-♪+R saves the last 30 s and ♪+L starts and stops a recording; a dot in the
+♪+L starts and stops a recording and ♪+R saves the last 30 s; a dot in the
 PSP screen's corner confirms it (green for a clip, red while recording).
+Keeping the last 30 s means recording all the time, so it is a setting,
+off at first: Settings > Recording > Last 30 seconds (`clips` in the
+library's settings). Off, the receiver runs with `-b 0` (recordings only:
+the PSP sends nothing until ♪+L); on, with `-b 30`; a change starts it
+again.
 The console's log keeps the receiver's lines (`-q`: the connections, the
 clips and what went wrong).
 

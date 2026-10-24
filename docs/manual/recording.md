@@ -1,10 +1,10 @@
 # Recording your PSP games
 
 **Your PSP games, recorded with their sound: your own UMD and ISO games, and
-everything you play in PSPExp.** Press **♪ + R** and the last 30 seconds are
-saved as a video; press **♪ + L** to start a recording and again to stop it.
-A small dot in the corner of the screen says it heard you. The videos are
-kept on the board, ready to watch or share.
+everything you play in PSPExp.** Press **♪ + L** to start a recording and
+again to stop it; with **Last 30 seconds** turned on in Settings, **♪ + R**
+saves the last 30 seconds as a video. A small dot in the corner of the screen
+says it heard you. The videos are kept on the board, ready to watch or share.
 
 This is PSPExp Capture. In PSPExp (its games, emulators, apps and the
 launcher) it works by itself. For a game started from the XMB, a small
@@ -30,6 +30,15 @@ Play as usual: ♪ + R and ♪ + L work everywhere in PSPExp, in the board's
 games and emulators as in the launcher, with the same dot. **♪ on its own
 still pauses and resumes the music**, when you let go of it.
 
+## The last 30 seconds
+
+To save what just happened, the board has to be recording all the time: the
+PSP sends its picture and sound down the cable and the board encodes them,
+keeping the last 30 seconds. That costs a little (a game can run a little
+slower, the board works harder), so it is off at first. Turn it on in
+**Settings > Recording > Last 30 seconds**; then ♪ + R saves the last 30
+seconds. With it off, nothing is sent or recorded until you press ♪ + L.
+
 ## Switching on the plugin, for games from the XMB
 
 The plugin is switched on in custom firmware's list of game plugins, once:
@@ -54,7 +63,7 @@ In PSPExp you can press the buttons from the start. With a game from the XMB:
 
 | Press | What happens | You see, bottom right |
 |---|---|---|
-| **♪ + R** | the last 30 seconds are saved | a green dot, for a second |
+| **♪ + R** | the last 30 seconds are saved (with Last 30 seconds on) | a green dot, for a second |
 | **♪ + L** | a recording starts | a red dot, while it records |
 | **♪ + L** again | the recording stops and is saved | the red dot goes |
 
@@ -77,9 +86,8 @@ in **Media**, like any film.
   Bomberman, Lunar: Silver Star Harmony, Phantasy Star Portable 2.
 - Games that run at 60 pictures a second are recorded at 30.
 - Recording costs the PSP a little: in the heaviest scenes a game can lose a
-  few pictures a second (Burnout Legends' races: 25 instead of 30).
-- In PSPExp the recorder keeps the last 30 seconds all the time, so the
-  board's processor encodes video while you play.
+  few pictures a second (Burnout Legends' races: 25 instead of 30). That is
+  while a recording runs, or all the time with Last 30 seconds on.
 - The dot is only on the PSP's screen, never in the videos. It may flicker a
   little.
 - No dot? Check that the PSP is plugged into the board and that the board's
@@ -92,5 +100,6 @@ in **Media**, like any film.
 A Mac or a Linux computer can be the recorder instead: the program is
 `pspexp-capture`, built from PSPExp's source
 ([Developing](../Developing.md)). `pspexp-capture -k -s ~/Movies/PSP`
-keeps the ♪ clips in that folder; `pspexp-capture -o game.mp4` records a
+keeps the ♪ clips in that folder (with `-b 0`, only ♪ + L recordings, as with
+Last 30 seconds off); `pspexp-capture -o game.mp4` records a
 whole game into one file.

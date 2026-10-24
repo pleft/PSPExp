@@ -45,8 +45,10 @@ void pspexp_note_step(PspExpNote *n, uint32_t b, int mute, int capture, uint32_t
             }
             if (pressed & PSPEXP_BUTTON_RTRIGGER) {
                 n->pair = 1;
-                out->events |= 1u << PSPEXP_NOTE_CLIP;
-                n->green_until = stamp(now + GREEN_US);
+                if (capture == PSPEXP_CAPTURE_ALL) {   /* (recordings only: no last seconds to save) */
+                    out->events |= 1u << PSPEXP_NOTE_CLIP;
+                    n->green_until = stamp(now + GREEN_US);
+                }
             }
             if (pressed & PSPEXP_BUTTON_LTRIGGER) {
                 n->pair = 1;

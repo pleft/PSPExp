@@ -3252,7 +3252,9 @@ static void ctl_step(uint64_t now, int connected)
  * clips (note+R the last 30 s, note+L a recording) in ~/Videos/PSPExp (~/Movies/PSPExp on a Mac).
  * Started with the launcher over USB when it and ffmpeg are on the PATH, again 10 s after it ends;
  * PSPEXP_CAPTURE=0: not at all. Its own process group; stopped with the console, its clips under
- * way finished first. */
+ * way finished first. Settings > Last 30 seconds (off by default) keeps them for note+R, the PSP
+ * then sending everything all the time; off, -b 0: note+L recordings only, nothing sent or encoded
+ * otherwise. */
 static pid_t g_capture_pid;
 static uint64_t g_capture_next;
 
@@ -3271,12 +3273,18 @@ static int in_path(const char *name)
     return 0;
 }
 
+static void capture_stop(void);
+
 static void capture_tick(uint64_t now)
 {
     static int off = -1;
     pid_t pid;
     if (off < 0) { const char *e = getenv("PSPEXP_CAPTURE"); off = (e && !strcmp(e, "0")) || !g_launcher_on || g_mode != MODE_USB; }
     if (off) return;
+    if (launcher_take_clips_change() && g_capture_pid > 0) {   /* Settings > Last 30 seconds: started again, keeping what it says */
+        capture_stop();
+        g_capture_next = 0;
+    }
     if (g_capture_pid > 0) {
         int st;
         if (waitpid(g_capture_pid, &st, WNOHANG) != g_capture_pid) return;
@@ -3301,7 +3309,7 @@ static void capture_tick(uint64_t now)
         for (fd = 3; fd < 1024; fd++) close(fd);   /* (none of the console's: the PSP's link, the shells' terminals) */
         fd = open("/dev/null", O_RDONLY);
         if (fd >= 0) dup2(fd, 0);
-        execlp("pspexp-capture", "pspexp-capture", "-k", "-q", "-s", dir, (char *)NULL);
+        execlp("pspexp-capture", "pspexp-capture", "-k", "-q", "-s", dir, "-b", launcher_clips_keep() ? "30" : "0", (char *)NULL);
         _exit(127);
     }
     if (pid > 0) { g_capture_pid = pid; fprintf(stderr, "[pspexp-term] capture: the receiver started (pid %d)\n", (int)pid); }

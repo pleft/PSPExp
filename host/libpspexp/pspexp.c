@@ -81,8 +81,10 @@ struct PspExpContext {
     /* the PSP's keyboard (TEXT_REQUEST): asked and not answered yet (no frames meanwhile); the answer */
     int text_pending, text_have, text_status;
     char text[1025];
-    /* PSPExp Capture inside PSPExp: the receiver's socket while the PSP captures (-1 none) */
-    int cap_fd;
+    /* PSPExp Capture inside PSPExp: the receiver's socket while the PSP captures (-1 none); the
+     * mode its hello gave (0: not yet: the PSP not asked) */
+    int cap_fd, cap_mode, cap_got;
+    uint8_t cap_hello[32];
     uint64_t cap_dropped, cap_tried;
 };
 
@@ -141,13 +143,13 @@ static void capture_close(PspExpContext *ctx)
 {
     if (ctx->cap_fd >= 0) close(ctx->cap_fd);
     ctx->cap_fd = -1;
+    ctx->cap_mode = ctx->cap_got = 0;
 }
 
 static void capture_open(PspExpContext *ctx)
 {
     struct sockaddr_un a;
     const char *e = getenv("PSPEXP_CAPTURE");
-    PspExpCaptureSet c;
     int fd, big = 4 << 20;
     capture_close(ctx);
     ctx->cap_tried = pspexp_time_us();
@@ -164,10 +166,26 @@ static void capture_open(PspExpContext *ctx)
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
     setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &big, sizeof(big));
     ctx->cap_fd = fd;
+    ctx->cap_mode = ctx->cap_got = 0;   /* (the PSP asked once the receiver's hello says what it keeps: capture_hello) */
+}
+
+/* the receiver's hello ("PXCH", its PSPEXP_CAPTURE_*: the last 30 seconds kept, or recordings
+ * only), read as it comes; then the PSP asked */
+static void capture_hello(PspExpContext *ctx)
+{
+    PspExpCaptureSet c;
+    ssize_t r = recv(ctx->cap_fd, ctx->cap_hello + ctx->cap_got, sizeof(ctx->cap_hello) - (size_t)ctx->cap_got, MSG_DONTWAIT);
+    if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) { capture_close(ctx); return; }
+    if (r < 0) return;
+    ctx->cap_got += (int)r;
+    if (ctx->cap_got < (int)sizeof(ctx->cap_hello)) return;
+    if (memcmp(ctx->cap_hello, "PXCH", 4) != 0) { capture_close(ctx); return; }
     memset(&c, 0, sizeof(c));
-    c.on = 1;
+    c.on = ctx->cap_hello[4] == PSPEXP_CAPTURE_RECORDINGS ? PSPEXP_CAPTURE_RECORDINGS : PSPEXP_CAPTURE_ALL;
+    ctx->cap_mode = (int)c.on;
     pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_CAPTURE_SET, &c, sizeof(c));
-    ctx_log(ctx, "PSPExp Capture: the PSP sends what it shows to the receiver");
+    ctx_log(ctx, c.on == PSPEXP_CAPTURE_ALL ? "PSPExp Capture: the PSP sends what it shows to the receiver (♪+R, ♪+L)"
+                                             : "PSPExp Capture: the PSP sends what it shows to the receiver during ♪+L recordings");
 }
 
 static void capture_data(PspExpContext *ctx, const PspExpMessage *m)
@@ -176,7 +194,7 @@ static void capture_data(PspExpContext *ctx, const PspExpMessage *m)
     const uint8_t *p = (const uint8_t *)m->payload + sizeof(*d);
     PspExpCaptureSet off;
     size_t n;
-    if (ctx->cap_fd < 0 || m->length < sizeof(*d)) return;
+    if (ctx->cap_fd < 0 || !ctx->cap_mode || m->length < sizeof(*d)) return;
     n = d->bytes < m->length - sizeof(*d) ? d->bytes : m->length - sizeof(*d);
     while (n) {
 #ifdef MSG_NOSIGNAL
@@ -788,6 +806,7 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms)
     if (ctx->state == PSPEXP_LINK_CONNECTED && !ctx->maintenance && ctx->cap_fd < 0 &&
         (ctx->hello.features & PSPEXP_FEATURE_CAPTURE) && pspexp_time_us() - ctx->cap_tried >= 2000000)
         capture_open(ctx);
+    if (ctx->cap_fd >= 0 && !ctx->cap_mode && ctx->state == PSPEXP_LINK_CONNECTED) capture_hello(ctx);
     return count;
 }
 

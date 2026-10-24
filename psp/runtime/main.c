@@ -480,9 +480,12 @@ static uint32_t note_buttons(uint32_t buttons, uint32_t now)
     if (o.set_mute >= 0) pspexpUsbMute(o.set_mute);
     for (e = PSPEXP_NOTE_CLIP; e <= PSPEXP_NOTE_REC_STOP; e++)
         if (o.events & (1u << e)) {
+            if (e == PSPEXP_NOTE_REC_STOP) pspexp_capture_psp_recording(0);   /* (recordings only: nothing sent after the stop) */
             pspexp_capture_psp_event(e);
             trace(e == PSPEXP_NOTE_CLIP ? "note+R: a clip" : e == PSPEXP_NOTE_REC_START ? "note+L: a recording starts" : "note+L: the recording stops");
         }
+    pspexp_capture_psp_recording(g_note.recording);   /* (after the start event: nothing sent before it) */
+    if ((o.events & (1u << PSPEXP_NOTE_REC_START)) && cap == PSPEXP_CAPTURE_RECORDINGS) pspexp_capture_psp_grab();   /* (before the red dot) */
     g_ge.rec_dot = dot[o.dot];
     return o.buttons;
 }

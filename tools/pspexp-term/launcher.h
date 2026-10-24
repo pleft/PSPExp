@@ -72,6 +72,10 @@ void launcher_set_psp_update(int available);
 int  launcher_take_psp_update(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);
+/* Settings > Last 30 seconds: the recorder keeps them (♪ + R) and so records all the time (0, the
+ * default: ♪ + L recordings only, nothing sent or encoded otherwise); 1 once when it changed */
+int  launcher_clips_keep(void);
+int  launcher_take_clips_change(void);
 /* a message at the bottom of the launcher, as its own ones */
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */

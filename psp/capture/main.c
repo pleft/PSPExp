@@ -217,6 +217,8 @@ static volatile u32 g_static;            /* frames not sent: the same as the las
 #define OV_RED 0xE02020
 #define OV_GREEN 0x30C040
 static volatile int g_recording;         /* note+L: a recording under way */
+static volatile int g_keep = 1;          /* the receiver keeps the last seconds (note+R); 0: recordings only, the frames
+                                          * and the sound sent only while one runs (CMD_KEEP: a board's setting) */
 static volatile u32 g_clip_dot_until;    /* note+R: the green dot until then (0: none) */
 static volatile u32 g_ov_copying;        /* a frame handed to the copier: its dot drawn once copied */
 static volatile u32 g_ov_shown;          /* the frame shown now */
@@ -514,7 +516,7 @@ static void audio_put(int kind, int ch, int chans, u32 rate, int lvol, int rvol,
     unsigned char h[32];
     u32 n = samples * chans * 2, intr;
     int k1;
-    if (!g_aring || !buf || !pspexpUsbConnected() || g_quit) return;
+    if (!g_aring || !buf || !pspexpUsbConnected() || g_quit || (!g_keep && !g_recording)) return;
     if (!samples) { g_aunknown++; return; }
     k1 = pspSdkSetK1(0);
     memcpy(h, "PXCA", 4);
@@ -910,6 +912,7 @@ static void catch_util(void)
 #define CMD_EXP 10       /* u32 the experiment (g_exp) */
 #define CMD_COPYPRIO 11  /* u32 the copier's priority */
 #define CMD_TX 13        /* u32 the transfer size, u32 split (see pspexpUsbSetTx) */
+#define CMD_KEEP 14      /* u32 1: everything, all the time (the receiver keeps the last seconds); 0: recordings only */
 static volatile u32 g_pad_buttons, g_pad_until, g_pad_reads;
 static SceUID g_cmd_th = -1;
 
@@ -1085,6 +1088,9 @@ static int cmd_thread(SceSize args, void *argp)
             int old = 0;
             if (len >= 4 && cmd_read(g_cmd_buf, 4) == 0) old = get32(g_cmd_buf) != 0;
             cmd_log(old);
+        } else if (cmd == CMD_KEEP && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
+            g_keep = get32(g_cmd_buf) != 0;
+            cap_log(g_keep ? "the receiver keeps the last seconds" : "the receiver keeps recordings only");
         } else if (cmd == CMD_PAUSE && len >= 4 && cmd_read(g_cmd_buf, 4) == 0) {
             g_paused = get32(g_cmd_buf) != 0;
             cap_log(g_paused ? "paused" : "capturing again");
@@ -1313,7 +1319,11 @@ static void note_check(int reading)
         if (!(was & PSP_CTRL_NOTE)) { pair = 0; wanted = -1; }
         if (mute >= 0 && before >= 0 && mute != before) { wanted = mute; g_impose_set(IMPOSE_MUTE, before); }   /* (the system's toggle, kept for a press alone) */
         if (reading && !g_home_paused && !g_util_active) {
-            if (pressed & PSP_CTRL_RTRIGGER) { pair = 1; event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip"); }
+            if (pressed & PSP_CTRL_RTRIGGER) {
+                pair = 1;
+                if (g_keep) { event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip"); }
+                else cap_log("note+R: no clip (the receiver keeps recordings only)");
+            }
             if (pressed & PSP_CTRL_LTRIGGER) {
                 pair = 1;
                 g_recording = !g_recording;
@@ -1422,7 +1432,8 @@ static int capture_thread(SceSize args, void *argp)
             ov_new_frame((u32)top & 0x1FFFFFFF);   /* (a dot from an earlier showing off it first) */
             if (pspexpUsbConnected()) {
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
-                if (!g_frames_on || !g_mem_held || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen) ;   /* (nobody reading: nothing copied) */
+                if (!g_frames_on || !g_mem_held || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen
+                    || (!g_keep && !g_recording)) ;   /* (nobody reading, or no recording to take it: nothing copied) */
                 else if (now_us() - g_last_hand < 30000) ;
                 else if (frame_unchanged(top, bw, fmt) && now_us() - g_last_hand < 1000000) g_static++;   /* (30 a second at most: clips are 30 fps, and every frame sent costs the game processor time; Gran Turismo's black loading screens at 60 starved its loading, 2026-10-24) */
                 else if (!g_busy) {   /* to the copier and the sender */

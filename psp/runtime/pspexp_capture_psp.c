@@ -10,6 +10,9 @@
  * sends the ring's packets, then a frame in 32 KB messages: the link's writes block, and the
  * main loop's own messages (PRESENT_DONE, input) go in between, the lock keeping each message
  * whole. A frame's bytes never have others inside them: the receiver reads whole packets.
+ * A receiver keeping recordings only (PSPEXP_CAPTURE_RECORDINGS: the last 30 seconds off in the
+ * board's settings) gets the frames and the sound only while a ♪+L recording runs: nothing is
+ * copied or sent otherwise, the events aside.
  */
 #include <pspkernel.h>
 #include <pspthreadman.h>
@@ -27,7 +30,8 @@
 static PspExpGeExecutor *g_ge;
 static int (*g_write)(const void *, int);
 static void (*g_lock)(void), (*g_unlock)(void);
-static volatile int g_on;
+static volatile int g_on;                  /* PSPEXP_CAPTURE_* */
+static volatile int g_rec;                 /* a ♪+L recording under way */
 static unsigned char *g_frame[2];          /* (64-byte aligned, taken the first time it is on) */
 static volatile int g_state[2];            /* 0 free, 1 the GE copying into it, 2 to send, 3 sending */
 static volatile uint32_t g_ftime[2];
@@ -125,13 +129,15 @@ static int sender(SceSize args, void *argp)
 
 /* ---- the hooks ---- */
 
+static int streaming(void) { return g_on == PSPEXP_CAPTURE_ALL || (g_on == PSPEXP_CAPTURE_RECORDINGS && g_rec); }
+
 /* the GE, at a frame's end: the buffer to copy this one into, or NULL (off, too soon, none free) */
 static void *cap_target(void *u)
 {
     uint32_t now = sceKernelGetSystemTimeLow();
     int k;
     (void)u;
-    if (!g_on || now - g_last_frame < FRAME_GAP_US) return NULL;
+    if (!streaming() || now - g_last_frame < FRAME_GAP_US) return NULL;
     for (k = 0; k < 2; k++)
         if (g_state[k] == 0) { g_state[k] = 1; g_copying = k; return g_frame[k]; }
     return NULL;
@@ -163,7 +169,7 @@ static void cap_set(void *u, int on)
 void pspexp_capture_psp_audio(const short *pcm, int frames)
 {
     unsigned char h[32];
-    if (!g_on) return;
+    if (!streaming()) return;
     memset(h, 0, sizeof(h));
     memcpy(h, "PXCA", 4);
     h[4] = 0; h[5] = 0;   /* (one channel: what the PSP plays, mixed) */
@@ -183,7 +189,24 @@ void pspexp_capture_psp_event(int type)
     sceKernelSignalSema(g_wake, 1);
 }
 
+/* the frame on screen, now: a recording starting while nothing new is drawn (the launcher may draw
+ * nothing for seconds; recordings only, no earlier frame went), copied by the GE as a screenshot
+ * is, before the dot goes on it */
+void pspexp_capture_psp_grab(void)
+{
+    int k;
+    if (!g_on || !g_frame[0] || g_ge->in_frame || g_ge->keyboard) return;   /* (a frame on its way comes anyway) */
+    for (k = 0; k < 2 && g_state[k] != 0; k++) ;
+    if (k == 2) return;
+    g_state[k] = 1;
+    pspexp_ge_read_display(g_ge, (uint16_t *)g_frame[k]);
+    g_ftime[k] = g_last_frame = sceKernelGetSystemTimeLow();
+    g_state[k] = 2;
+    sceKernelSignalSema(g_wake, 1);
+}
+
 int pspexp_capture_psp_on(void) { return g_on; }
+void pspexp_capture_psp_recording(int rec) { g_rec = rec; }
 
 void pspexp_capture_psp_init(PspExpGeExecutor *ge, int (*write)(const void *, int), void (*lock)(void), void (*unlock)(void))
 {

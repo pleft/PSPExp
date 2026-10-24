@@ -3,9 +3,10 @@
 ## Since 1.2.0
 
 - **Record what you play** (PSPExp Capture), in PSPExp and in your own PSP
-  games alike: **♪ + R** saves the last 30 seconds as a video, **♪ + L**
-  starts and stops a recording, and a dot in the screen's corner says it
-  heard you; the board keeps the videos in `~/Videos/PSPExp`, up to 30
+  games alike: **♪ + L** starts and stops a recording, **♪ + R** saves the
+  last 30 seconds as a video (Settings > Recording > Last 30 seconds: off at
+  first, since the board then records all the time), and a dot in the
+  screen's corner says it heard you; the board keeps the videos in `~/Videos/PSPExp`, up to 30
   pictures a second in full colour, and PSPExp's Files and Media play them
   on the PSP. In PSPExp the PSP sends what it shows to the board itself (♪
   alone still pauses the music); for UMD and ISO games, a plugin for PRO

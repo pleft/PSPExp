@@ -1001,7 +1001,7 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (!rt->ops.capture_set) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }   /* (not advertised) */
         if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         c = (const PspExpCaptureSet *)m->payload;
-        rt->ops.capture_set(rt->ops.user, c->on != 0);
+        rt->ops.capture_set(rt->ops.user, c->on <= PSPEXP_CAPTURE_RECORDINGS ? (int)c->on : PSPEXP_CAPTURE_ALL);
         return;
     }
     case PSPEXP_OP_DEBUG_SCREENSHOT: {

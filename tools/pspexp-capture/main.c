@@ -8,7 +8,9 @@
  * -s: the note button's clips (psp/capture: note+R on the PSP saves the last -b seconds, 30 by
  * default, as clip-DATE.mp4; note+L starts and stops recording-DATE.mp4). The picture is kept
  * as it comes in 1 s pieces, the sound mixed in memory, both only as far back as a clip or a
- * recording under way needs.
+ * recording under way needs. -b 0: recordings only, no last seconds kept: the PSP (the plugin,
+ * PSPExp) sends the picture and the sound only while a note+L recording runs, and nothing is
+ * encoded otherwise (a board's console runs it so unless Settings keeps the last 30 seconds).
  * -d also keeps latest.ppm there, the screen as it is now (twice a second), and psp.log (the
  * plugin's log, sent over the cable as it goes; also printed with "PSP: ").
  * -c: a FIFO (mkfifo) taking commands for the PSP, one a line, for testing without hands on it:
@@ -31,6 +33,7 @@
 #include "../../host/transport-usb/pspexp_usb.h"
 #include "../../protocol/pspexp_usb_link.h"
 #include "../../host/libpspexp/pspexp_capture.h"
+#include "../../protocol/pspexp_protocol.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -275,6 +278,7 @@ static PspExpTransport *volatile g_link;
 static pthread_mutex_t g_link_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void put32le(uint8_t *p, uint32_t v) { p[0] = v; p[1] = v >> 8; p[2] = v >> 16; p[3] = v >> 24; }
+#define CMD_KEEP 14   /* u32 1: everything, all the time (the last seconds kept); 0: only during a note+L recording */
 
 static int send_cmd(uint32_t cmd, const void *a, uint32_t alen, const void *b, uint32_t blen)
 {
@@ -363,13 +367,25 @@ static int sock_accept(int timeout_ms)
     return accept(g_listen, NULL, NULL);
 }
 
+/* what this receiver keeps, to each program connecting ("PXCH", PSPEXP_CAPTURE_*): it asks the PSP
+ * for that (recordings only: the picture and the sound only while a note+L recording runs) */
+static int recordings_only(void) { return g_clips && g_clip_len == 0; }
+static void sock_hello(int fd)
+{
+    uint8_t h[32];
+    memset(h, 0, sizeof(h));
+    memcpy(h, "PXCH", 4);
+    h[4] = recordings_only() ? PSPEXP_CAPTURE_RECORDINGS : PSPEXP_CAPTURE_ALL;
+    if (write(fd, h, sizeof(h)) != (ssize_t)sizeof(h)) fprintf(stderr, "pspexp-capture: the hello did not go\n");
+}
+
 static long sock_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
 {
     SockSource *s = (SockSource *)t;
     if (s->fd < 0) {   /* a hand-over: the next holder of the link, or the end of the session */
         static double since;
         if (!since) since = now();
-        if ((s->fd = sock_accept(timeout_ms)) >= 0) { since = 0; return 0; }
+        if ((s->fd = sock_accept(timeout_ms)) >= 0) { sock_hello(s->fd); since = 0; return 0; }
         if (now() - since > 8) { since = 0; return -1; }
         return 0;
     }
@@ -402,6 +418,49 @@ static void sock_listen(void)
     chmod(a.sun_path, 0600);
 }
 
+static void mix_reset(void)
+{
+    free(g_mix); g_mix = NULL; g_mix_len = g_mix_cap = 0;
+    memset(g_end, 0xff, sizeof(g_end));
+    g_audio_blocks = g_audio_bytes = 0;
+    g_mix_base = 0;
+}
+
+/* the note button's clips: the picture in 1 s pieces (see jobs_step), from piece 0 */
+static FILE *seg_open(void)
+{
+    char cmd[1600];
+    FILE *ff;
+    snprintf(g_segdir, sizeof(g_segdir), "%s/pspexp-capture-%d", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
+    mkdir(g_segdir, 0700);
+    g_rec_first = -1; g_frames_out = 0; g_seg_closed = 0; g_seg_final = -1; g_seg_dropped = 0;
+    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
+             "-c:v libx264 -preset " X264_PRESET " -crf 18 -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
+             "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
+    ff = popen(cmd, "w");
+    if (!ff) perror("ffmpeg");
+    return ff;
+}
+
+/* the pieces end (the game ended, or a recording only): a recording under way saved, every clip
+ * made before going on, the pieces deleted */
+static void seg_close(FILE *ff, uint64_t written)
+{
+    pclose(ff);
+    g_seg_closed = 1;
+    g_seg_final = written ? (int)((written - 1) / 30) : -1;
+    if (g_rec_first >= 0) { job_add(g_rec_first, g_seg_final, "recording"); g_rec_first = -1; }
+    jobs_step();
+    for (int i = 0; i < 8; i++)
+        if (g_jobs[i].state >= 2) { pthread_join(g_jobs[i].th, NULL); g_jobs[i].state = 0; }
+    for (int k = g_seg_dropped; k <= g_seg_final + 1; k++) {
+        char p[1200];
+        snprintf(p, sizeof(p), "%s/seg-%06d.ts", g_segdir, k);
+        unlink(p);
+    }
+    rmdir(g_segdir);
+}
+
 /* one run of the game, from its connection until the link goes (or -t, or stop) */
 static int session(PspExpTransport *t, const char *out, const char *dir, double limit)
 {
@@ -410,21 +469,11 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     static uint8_t reply[64 * 1024];
     char video[1100] = "";
     FILE *ff = NULL;
-    free(g_mix); g_mix = NULL; g_mix_len = g_mix_cap = 0;
-    memset(g_end, 0xff, sizeof(g_end));
-    g_audio_blocks = g_audio_bytes = 0;
-    g_mix_base = 0;
+    int rec_only = recordings_only(), pic = 0;   /* (pic: a frame of the game in this picture, not only black) */
+    mix_reset();
     memset(prev, 0, sizeof(prev));
-    if (g_clips) {   /* the note button's clips: the picture in 1 s pieces (see jobs_step) */
-        char cmd[1600];
-        snprintf(g_segdir, sizeof(g_segdir), "%s/pspexp-capture-%d", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
-        mkdir(g_segdir, 0700);
-        g_rec_first = -1; g_frames_out = 0; g_seg_closed = 0; g_seg_final = -1; g_seg_dropped = 0;
-        snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-                 "-c:v libx264 -preset " X264_PRESET " -crf 18 -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
-                 "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
-        ff = popen(cmd, "w");
-        if (!ff) { perror("ffmpeg"); return -1; }
+    if (g_clips && !rec_only) {   /* (recordings only: the pieces start with each recording) */
+        if (!(ff = seg_open())) return -1;
     } else if (out) {
         char cmd[1400];
         /* the picture first on its own (the sound is mixed while it comes, added at the end); a
@@ -442,9 +491,10 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     int have_base = 0;
     while (!g_stop) {
         if (g_clips) {   /* the FIFO's clip and record; the clips' pieces looked at twice a second */
-            if (g_req_clip) { g_req_clip = 0; note_event(1, written); }
-            if (g_req_rec) { g_req_rec = 0; note_event(g_rec_first < 0 ? 2 : 3, written); }
-            if (now() - last_jobs >= 0.5) { jobs_step(); last_jobs = now(); }
+            if ((g_req_clip || g_req_rec) && rec_only) fprintf(stderr, "pspexp-capture: recordings only (-b 0): the PSP's note+L starts one\n");
+            if (g_req_clip) { g_req_clip = 0; if (!rec_only) note_event(1, written); }
+            if (g_req_rec) { g_req_rec = 0; if (!rec_only) note_event(g_rec_first < 0 ? 2 : 3, written); }
+            if (ff && now() - last_jobs >= 0.5) { jobs_step(); last_jobs = now(); }
         }
         if (need(t, hdr, 4) < 0) break;
         int sound = memcmp(hdr, "PXCA", 4) == 0, rep = !memcmp(hdr, "PXCR", 4) || !memcmp(hdr, "PXCL", 4);
@@ -480,17 +530,34 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (!have_base) { base = when; have_base = 1; }   /* the clip's start: the first thing to arrive */
         double at = (double)(int32_t)(when - base);       /* us into the clip (the PSP's 32-bit clock) */
         if (ev) {   /* the note button: 1 a clip, 2 a recording starts, 3 it stops (at the PSP's time of the press) */
+            int type = (int)get32(hdr + 4);
             if (len > sizeof(reply) || (len && need(t, reply, len) < 0)) break;
-            note_event((int)get32(hdr + 4), at > 0 ? (uint64_t)(at * 30 / 1e6) : 0);
+            if (!rec_only) note_event(type, at > 0 ? (uint64_t)(at * 30 / 1e6) : 0);
+            else if (type == 2 && !ff) {   /* recordings only: pieces of its own, its time from the press */
+                mix_reset();
+                if (!(ff = seg_open())) break;
+                base = when; written = 0; pic = 0;
+                memset(prev, 0, sizeof(prev));
+                g_rec_first = 0;
+                fprintf(stderr, "pspexp-capture: recording\n");
+            } else if (type == 3 && ff) {   /* the picture held up to the press, then the recording saved */
+                uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
+                int bad = 0;
+                while (pic && written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
+                g_frames_out = written;
+                if (!written) fprintf(stderr, "pspexp-capture: nothing recorded (no picture came)\n");
+                seg_close(ff, written); ff = NULL;
+            }
             continue;
         }
         if (sound) {
             uint32_t chans = get16(hdr + 6), samples = get32(hdr + 16);
             if (len > sizeof(pcm) || len != samples * chans * 2) { fprintf(stderr, "bad sound block (%u bytes)\n", len); continue; }
             if (need(t, (uint8_t *)pcm, len) < 0) break;
+            if (rec_only && !ff) continue;   /* (between recordings: an older PSP side still sending) */
             mix_block(hdr[4], hdr[5], (int)chans, get32(hdr + 8), (int)get16(hdr + 12), (int)get16(hdr + 14), samples, pcm, at);
             g_audio_blocks++; g_audio_bytes += len; bytes += 32 + len;
-            if (ff && frames && at > 500000) {   /* a picture that holds still (PSPExp draws nothing new): the last frame
+            if (ff && pic && at > 500000) {   /* a picture that holds still (PSPExp draws nothing new): the last frame
                                                   * held up to the sound's time, less half a second for a frame on its way */
                 uint64_t due = (uint64_t)((at - 500000) * 30 / 1e6);
                 int bad = 0;
@@ -510,7 +577,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
             int bad = 0;
             while (written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
-            if (!bad && written <= due) { bad = fwrite(rgb, 1, sizeof(rgb), ff) != sizeof(rgb); written++; }
+            if (!bad && written <= due) { bad = fwrite(rgb, 1, sizeof(rgb), ff) != sizeof(rgb); written++; pic = 1; }
             if (bad) { fprintf(stderr, "ffmpeg stopped\n"); break; }
             memcpy(prev, rgb, sizeof(rgb));
             g_frames_out = written;
@@ -541,20 +608,8 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     fprintf(stderr, "pspexp-capture: %u frames in %.1f s (%.1f/s); the game changed frames %u times (%.1f/s); "
             "%llu sound blocks (%.1f MB)\n", frames, dt, frames / dt, ch_last - ch_first, (ch_last - ch_first) / dt,
             (unsigned long long)g_audio_blocks, g_audio_bytes / 1e6);
-    if (ff && g_clips) {   /* a recording under way ends with the game; every clip made before the next session */
-        pclose(ff);
-        g_seg_closed = 1;
-        g_seg_final = written ? (int)((written - 1) / 30) : -1;
-        if (g_rec_first >= 0) { job_add(g_rec_first, g_seg_final, "recording"); g_rec_first = -1; }
-        jobs_step();
-        for (int i = 0; i < 8; i++)
-            if (g_jobs[i].state >= 2) { pthread_join(g_jobs[i].th, NULL); g_jobs[i].state = 0; }
-        for (int k = g_seg_dropped; k <= g_seg_final + 1; k++) {
-            char p[1200];
-            snprintf(p, sizeof(p), "%s/seg-%06d.ts", g_segdir, k);
-            unlink(p);
-        }
-        rmdir(g_segdir);
+    if (g_clips) {   /* a recording under way ends with the game; every clip made before the next session */
+        if (ff) seg_close(ff, written);
         return 0;
     }
     if (ff) {
@@ -582,13 +637,13 @@ int main(int argc, char **argv)
     while ((c = getopt(argc, argv, "o:s:b:d:t:c:kq")) != -1) {
         if (c == 'o') out = optarg;
         else if (c == 's') g_clips = optarg;
-        else if (c == 'b') g_clip_len = atoi(optarg) > 0 ? atoi(optarg) : 30;
+        else if (c == 'b') g_clip_len = atoi(optarg) >= 0 ? atoi(optarg) : 30;   /* (0: recordings only) */
         else if (c == 'd') dir = optarg;
         else if (c == 't') limit = atof(optarg);
         else if (c == 'c') fifo = optarg;
         else if (c == 'k') keep = 1;
         else if (c == 'q') g_quiet = 1;
-        else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k] [-q]\n"); return 2; }
+        else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds, 0: recordings only]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k] [-q]\n"); return 2; }
     }
     if (out && g_clips) { fprintf(stderr, "pspexp-capture: -o or -s, not both\n"); return 2; }
     if (g_clips) {   /* the clips' folder, made if missing (a board's ~/Videos/PSPExp) */
@@ -627,6 +682,7 @@ int main(int argc, char **argv)
         while (!t && !g_quit) {   /* (in steps: Ctrl-C ends a wait) a native game on the USB cable, or PSPExp's own on the socket */
             int fd = sock_accept(0);
             if (fd >= 0) {
+                sock_hello(fd);
                 memset(&ss, 0, sizeof(ss));
                 ss.t.name = "pspexp"; ss.t.recv = sock_recv; ss.t.send = sock_send; ss.t.close = sock_close; ss.fd = fd;
                 t = &ss.t; from_psp_exp = 1;
@@ -637,6 +693,10 @@ int main(int argc, char **argv)
         if (!t) break;
         fprintf(stderr, "pspexp-capture: connected%s\n", from_psp_exp ? " (PSPExp)" : "");
         pthread_mutex_lock(&g_link_lock); g_link = from_psp_exp ? NULL : t; pthread_mutex_unlock(&g_link_lock);
+        if (!from_psp_exp) {   /* what to send: everything (the last seconds kept), or only during a note+L recording */
+            uint8_t m[4] = { recordings_only() ? 0 : 1, 0, 0, 0 };
+            send_cmd(CMD_KEEP, m, 4, NULL, 0);
+        }
         if (out && run > 1) {   /* clip.mp4, clip-2.mp4, ... */
             const char *dot = strrchr(out, '.');
             int stem = dot ? (int)(dot - out) : (int)strlen(out);

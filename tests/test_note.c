@@ -100,6 +100,19 @@ int main(void)
     step(NOTE | L, 0, 1);
     CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START);
 
+    /* recordings only: ♪+R a pair doing nothing (R hidden, no event, no dot, no ♪ for the board);
+     * ♪+L records as before */
+    pspexp_note_init(&n);
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    step(NOTE, 0, PSPEXP_CAPTURE_RECORDINGS);
+    step(NOTE | R, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 0); CHECK_EQ(o.buttons, 0); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.buttons, 0);
+    step(NOTE, 0, PSPEXP_CAPTURE_RECORDINGS);
+    step(NOTE | L, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+
     /* no mute setting known (-1): nothing set */
     pspexp_note_init(&n);
     step(0, -1, 1); step(NOTE, -1, 1); step(0, -1, 1);

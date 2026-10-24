@@ -12,6 +12,11 @@ void pspexp_capture_psp_ops(PspExpRuntimeOps *ops);
 void pspexp_capture_psp_audio(const short *pcm, int frames);
 /* a note-button event into the stream (1 a clip, 2 a recording starts, 3 it stops) */
 void pspexp_capture_psp_event(int type);
+/* the receiver's PSPEXP_CAPTURE_* (0: none) */
 int pspexp_capture_psp_on(void);
+/* a ♪+L recording under way (after its start event; before its stop event goes, 0) */
+void pspexp_capture_psp_recording(int rec);
+/* the frame on screen sent as it is (a recording starting: recordings only) */
+void pspexp_capture_psp_grab(void);
 
 #endif
