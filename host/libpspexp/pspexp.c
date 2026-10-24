@@ -982,6 +982,17 @@ int pspexp_osd_volume(PspExpContext *ctx, int percent)
 
 uint64_t pspexp_osd_until(const PspExpContext *ctx) { return ctx->osd_until; }
 
+int pspexp_restart_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_RESTART);
+}
+
+int pspexp_restart_psp(PspExpContext *ctx)
+{
+    if (!pspexp_restart_supported(ctx)) return -1;
+    return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_RESTART, NULL, 0);
+}
+
 int pspexp_audio_stream_reset(PspExpContext *ctx)
 {
     if (pspexp_audio_local(ctx)) pspexp_la_reset(&ctx->la);

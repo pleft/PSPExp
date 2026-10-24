@@ -9,6 +9,7 @@
 #include <pspdisplay.h>
 #include <pspctrl.h>
 #include <psppower.h>
+#include <psploadexec.h>
 #include <stdio.h>
 #include <string.h>
 #include "../../runtime/pspexp_runtime.h"
@@ -192,9 +193,12 @@ static int g_log_n;
 static PspExpGeExecutor g_ge;
 
 static volatile int g_quit_asked;                 /* the HOME menu's quit */
+static volatile int g_restart_asked;              /* the board's RESTART: this EBOOT started again */
+static char g_eboot[256];                         /* (argv[0], as the loader passed it) */
 static volatile unsigned g_suspends, g_resumes;     /* the power service's notices, logged by the main loop */
 static volatile int g_power_off_switch;             /* the switch held up: switching off, not sleeping */
 static int exit_callback(int arg1, int arg2, void *common) { g_quit_asked = 1; g_running = 0; return 0; }
+static void op_restart(void *u) { (void)u; g_restart_asked = 1; g_running = 0; }
 static int power_callback(int unknown, int info, void *common)
 {
     if (info & PSP_POWER_CB_POWER_SWITCH) g_power_off_switch = 1;
@@ -503,6 +507,7 @@ int main(int argc, char *argv[])
     rc = pspexpUsbStart();
     printf("pspexpUsbStart: 0x%08X\n", rc);
     trace_init(argc > 0 ? argv[0] : NULL);
+    if (argc > 0 && argv[0]) snprintf(g_eboot, sizeof(g_eboot), "%s", argv[0]);
     version_init();
     trace("runtime starting");
     pspexp_tcp_psp_set_trace(trace);
@@ -523,6 +528,7 @@ int main(int argc, char *argv[])
     ops.zone_set = op_zone_set;
     ops.power_get = op_power_get;
     ops.text_begin = op_text_begin;
+    if (g_eboot[0]) ops.restart = op_restart;
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 
@@ -680,10 +686,19 @@ int main(int argc, char *argv[])
         if (!handover_tick(&rt, now) && rt.stats.frames == 0 && now - last_status > 250000) { draw_status(&rt, gen, 1); last_status = now; }
     }
 
-    trace(g_quit_asked ? "leaving: quit from the HOME menu" : "leaving");
+    trace(g_restart_asked ? "leaving: starting again (the board's RESTART)" : g_quit_asked ? "leaving: quit from the HOME menu" : "leaving");
     pspexp_runtime_free(&rt);
     pspexp_ge_term(&g_ge);
     pspexpUsbStop();
+    if (g_restart_asked) {   /* this EBOOT again: the loader boots the active slot (a runtime just installed, after an update) */
+        struct SceKernelLoadExecParam p;
+        memset(&p, 0, sizeof(p));
+        p.size = sizeof(p);
+        p.args = strlen(g_eboot) + 1;
+        p.argp = g_eboot;
+        sceKernelLoadExec(g_eboot, &p);
+        trace("starting again failed: leaving");   /* (it returns only when it failed) */
+    }
     sceKernelExitGame();
     return 0;
 }

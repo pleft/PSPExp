@@ -21,6 +21,7 @@ enum PspExpOpcode {
     PSPEXP_OP_OSD_VOLUME     = 0x000C,  /* host -> PSP, PspExpOsdVolume (only with PSPEXP_FEATURE_OSD) */
     PSPEXP_OP_TEXT_REQUEST   = 0x000D,  /* host -> PSP, PspExpTextRequest + title + text: the PSP's keyboard (PSPEXP_FEATURE_TEXT) */
     PSPEXP_OP_TEXT_RESULT    = 0x000E,  /* PSP -> host, PspExpTextResult + text: what was typed, the answer */
+    PSPEXP_OP_RESTART        = 0x000F,  /* host -> PSP, no payload: PSPExp starts itself again, its loader booting the active slot (PSPEXP_FEATURE_RESTART) */
 
     /* GRAPHICS (0x01xx) */
     PSPEXP_OP_BEGIN_FRAME       = 0x0101,  /* PspExpBeginFrame */

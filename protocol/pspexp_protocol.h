@@ -213,6 +213,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_POWER      0x00000800u  /* answers POWER_QUERY: the battery and power supply */
 #define PSPEXP_FEATURE_OSD        0x00002000u  /* OSD_VOLUME: the PSP draws a volume bar over the frames itself */
 #define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
+#define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */

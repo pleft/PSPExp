@@ -1196,6 +1196,7 @@ console). The commands:
 | `stop` | ends the program the launcher started (its process group), and answers when the launcher has the PSP back |
 | `relink` | drops the link as a cable pull would, and answers when it is back |
 | `clock [force]` | the PSP's clock and time zone from the board (§9) |
+| `psp-restart` | PSPExp on the PSP starts itself again (runtimes with `PSPEXP_FEATURE_RESTART`); the link goes and comes back |
 | `type TEXT` | writes into the shell (`\n` is Enter) |
 | `fs ls|get|put|rm|rmtree|mkdir|mv|df` | the memory stick over the console's link, with timings |
 | `end` | lifts test mode |

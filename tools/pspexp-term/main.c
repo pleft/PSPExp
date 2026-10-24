@@ -2725,13 +2725,15 @@ static int psp_runtime_update(const char *dir, char *msg, size_t n)
 {
     char err[300];
     int r = pspexp_slots_update(ctx, dir && *dir ? dir : runtime_dir(), getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
-    if (r == 0) snprintf(msg, n, "PSP updated: quit PSPExp on the PSP and start it again");
+    int restart = r == 0 && pspexp_restart_supported(ctx);   /* (a runtime that can: PSPExp starts again with the new one) */
+    if (r == 0) snprintf(msg, n, restart ? "PSP updated: PSPExp starts again with it" : "PSP updated: quit PSPExp on the PSP and start it again");
     else snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
-    if (g_launcher_on) { notify(r == 0 ? NOTE_DONE : NOTE_FAIL, r == 0 ? "download" : "circle-x", r == 0 ? "PSP updated" : "The PSP update did not finish", r == 0 ? "Quit PSPExp on the PSP and start it again" : strchr(msg, ':') ? strchr(msg, ':') + 2 : msg, NULL, "psp-runtime"); if (r == 0) launcher_set_psp_update(0); }
+    if (g_launcher_on) { notify(r == 0 ? NOTE_DONE : NOTE_FAIL, r == 0 ? "download" : "circle-x", r == 0 ? "PSP updated" : "The PSP update did not finish", r == 0 ? (restart ? "PSPExp starts again with it" : "Quit PSPExp on the PSP and start it again") : strchr(msg, ':') ? strchr(msg, ':') + 2 : msg, NULL, "psp-runtime"); if (r == 0) launcher_set_psp_update(0); }
     if (r == 0 && g_launcher_on) {   /* About: the update now waiting in the other slot */
         PspExpSlots s;
         if (pspexp_slots_read(ctx, &s) == 0) launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
     }
+    if (restart) { fprintf(stderr, "[pspexp-term] PSP updated: PSPExp starts again with it\n"); pspexp_restart_psp(ctx); }   /* (only right after this update: a new runtime that falls back never loops) */
     return r;
 }
 
@@ -3214,6 +3216,8 @@ static void ctl_step(uint64_t now, int connected)
         int r = psp_runtime_update(cmd[14] == ' ' ? cmd + 15 : NULL, m, sizeof(m));
         snprintf(reply, sizeof(reply), "%s %s", r == 0 ? "ok" : "error", m);
         ctl_reply(reply);
+    } else if (!strcmp(cmd, "psp-restart")) {   /* PSPExp on the PSP starts again (a runtime with RESTART) */
+        ctl_reply(pspexp_restart_psp(ctx) == 0 ? "ok restarting" : "error the PSP's runtime cannot start itself again (an older one, or not connected)");
     } else if (!strcmp(cmd, "slots")) {
         PspExpSlots sl;
         if (pspexp_slots_read(ctx, &sl) < 0) { ctl_reply("error no slotted PSPExp on the stick"); return; }
@@ -3239,7 +3243,7 @@ static void ctl_step(uint64_t now, int connected)
         launcher_set_test_mode(0);
         g_pkgchk_quiet = 0;
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, ping, end");
 }
 
 /* ---- PSPExp Capture's receiver (tools/pspexp-capture) beside the console ----

@@ -44,7 +44,7 @@ static void slot_log(void *u, const char *m) { (void)u; printf("%s\n", m); }
 
 static int usage(void)
 {
-    fprintf(stderr, "usage: pspexp-ms [--tcp HOST[:PORT] | --usb] ls PATH | get PATH [FILE] | put FILE PATH | mkdir PATH | rm PATH | mv FROM TO | df [DEVICE] | slots | runtime-update DIR\n");
+    fprintf(stderr, "usage: pspexp-ms [--tcp HOST[:PORT] | --usb] ls PATH | get PATH [FILE] | put FILE PATH | mkdir PATH | rm PATH | mv FROM TO | df [DEVICE] | slots | runtime-update DIR | restart\n");
     return 2;
 }
 
@@ -145,6 +145,9 @@ int main(int argc, char **argv)
         int r = pspexp_slots_update(ctx, argv[a], getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
         if (r == -2) return 3;   /* stopped on purpose (tests) */
         if (r < 0) { fprintf(stderr, "pspexp-ms: %s\n", err); return 1; }
+    } else if (!strcmp(cmd, "restart")) {   /* PSPExp on the PSP starts again (a runtime with RESTART): after runtime-update, the new one runs */
+        if (pspexp_restart_psp(ctx) < 0) { fprintf(stderr, "pspexp-ms: the PSP's runtime cannot start itself again (an older one)\n"); return 1; }
+        { int i; for (i = 0; i < 20; i++) pspexp_pump(ctx, 10); }   /* (the message out before the link goes) */
     } else if (!strcmp(cmd, "df")) {
         uint64_t fr, tot;
         const char *dev = a < argc ? argv[a] : "ms0:/";

@@ -557,6 +557,16 @@ RecastNavigation fetched at build, all in the source archive) with
 folder or GOG's installer, unpacked by innoextract), writes openmw.cfg for it
 and the PSP's settings once; recipe `morrowind`, a Pi only.*
 
+RESTART (2026-10-24, runtimes with `PSPEXP_FEATURE_RESTART`): the host asks
+PSPExp on the PSP to start itself again (`pspexp_restart_psp`). The runtime
+leaves as it does for HOME (the runtime freed, the GE and the USB stopped) and
+starts its own EBOOT again with `sceKernelLoadExec` (`argv[0]`, the path the
+loader passed it), so the loader boots the active slot: a runtime the console
+has just put in the spare one runs. The console does so right after its own
+Update the PSP (only then: a new runtime that fell back never loops), and the
+control port's `psp-restart` and `pspexp-ms restart` ask for it. Tried in
+PPSSPP: an update into slot b, then a restart, booted slot b and confirmed it.
+
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 
 *The FILE channel (6), added 2026-09-28:*

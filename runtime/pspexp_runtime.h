@@ -108,6 +108,10 @@ typedef struct PspExpRuntimeOps {
     /* Optional: a volume bar drawn over the frames for 1.5 s (OSD_VOLUME; < 0 hides
      * it). With it, HELLO advertises PSPEXP_FEATURE_OSD. */
     void (*osd_volume)(void *user, int percent);
+    /* Optional: PSPExp starts itself again (RESTART), its loader booting the active slot, so a
+     * runtime just installed in the spare slot runs. With it, HELLO advertises
+     * PSPEXP_FEATURE_RESTART. */
+    void (*restart)(void *user);
     /* Optional: open the PSP's own keyboard (TEXT_REQUEST) with a title and the text the
      * field starts with (UTF-8), for at most max_chars characters; returns 0 when it is
      * shown, < 0 when it cannot be. The answer comes later: pspexp_runtime_text_done.

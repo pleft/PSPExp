@@ -145,7 +145,7 @@ static void send_hello(PspExpRuntime *rt)
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
                  (rt->ops.power_get ? PSPEXP_FEATURE_POWER : 0) |
                  (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) | (rt->ops.osd_volume ? PSPEXP_FEATURE_OSD : 0) |
-                 (rt->ops.text_begin ? PSPEXP_FEATURE_TEXT : 0) |
+                 (rt->ops.text_begin ? PSPEXP_FEATURE_TEXT : 0) | (rt->ops.restart ? PSPEXP_FEATURE_RESTART : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
                  (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
@@ -957,6 +957,10 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (rt->ops.osd_volume) rt->ops.osd_volume(rt->ops.user, v->percent);
         return;
     }
+    case PSPEXP_OP_RESTART:
+        if (!rt->ops.restart) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }   /* (not advertised) */
+        rt->ops.restart(rt->ops.user);
+        return;
     case PSPEXP_OP_POWER_QUERY: {
         PspExpPowerStatus p;
         memset(&p, 0, sizeof(p));
