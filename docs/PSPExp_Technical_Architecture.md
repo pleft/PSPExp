@@ -1062,7 +1062,7 @@ The plugin sends the press as an event ("PXCE": its type, its time on the PSP's 
 - the receiver as the board's console in a capture mode (clips kept by PSPExp), plus the Mac/Linux tool for people without a board;
 - the shutdown's last log line ("stopped") never appears though the exit works: find which step does not return in time;
 - more games (one game tried so far); 60 fps games (a 32-bit copy at the link's pace, 22 ms, is longer than a 60 fps frame: 16-bit there, or every other frame);
-- shipping: the plugin in PSPExp's zip, a page in the manual, a section on the site;
+- shipping: the plugin in PSPExp's zip, with THIRD_PARTY.txt and licenses/ beside it as the PSP's zip has (it carries the USB driver's PSPLINK parts and PSPSDK), a page in the manual, a section on the site;
 - later: live streaming; Share for PSPExp's own games (the board already has their frames and sound).
 
 ## 13. Host Independence
