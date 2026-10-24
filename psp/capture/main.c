@@ -630,6 +630,31 @@ static void catch_audio(void)
 
 /* ---- the plugin's memory: taken from the game's spare memory, given back on demand ---- */
 static u32 g_mem_released_at, g_mem_tried_at, g_started_at;
+static int g_settled;   /* game_settled said so once: from then on as before */
+
+/* the game set up: its memory and the kernel's unchanged (within 64 KB) for 3 s while it shows
+ * pictures, 6 s after its start at the earliest; 20 s at the latest, the old fixed wait (Jeanne d'Arc
+ * and Crisis Core froze or crashed with the buffers taken 2 s in, setting up their pools) */
+#define SETTLE_MIN_US 6000000
+#define SETTLE_HOLD_US 3000000
+#define SETTLE_MAX_US 20000000
+static int game_settled(u32 now, u32 shown)
+{
+    static u32 last2, last1, since, looked;
+    u32 f2, f1, el = now - g_started_at;
+    if (el > SETTLE_MAX_US) return 1;
+    if (now - looked < 250000 && since) return 0;
+    looked = now;
+    f2 = sceKernelPartitionTotalFreeMemSize(2);
+    f1 = sceKernelPartitionTotalFreeMemSize(1);
+    if (!since || shown < 30 || (f2 > last2 ? f2 - last2 : last2 - f2) > 65536 || (f1 > last1 ? f1 - last1 : last1 - f1) > 65536) {
+        last2 = f2; last1 = f1; since = now;
+        return 0;
+    }
+    if (el < SETTLE_MIN_US || now - since < SETTLE_HOLD_US) return 0;
+    cap_log("the game is set up after %u.%u s (%u KB free, the kernel %u KB)", el / 1000000, el / 100000 % 10, f2 / 1024, f1 / 1024);
+    return 1;
+}
 
 /* The volatile memory: 4 MB at 0x08400000 that a game may lock for itself (sceKernelVolatileMemLock
  * or scePowerVolatileMemLock; Lock waits while another holds it, TryLock refuses). Its lock is
@@ -1319,16 +1344,20 @@ static void note_check(int reading)
         if (!(was & PSP_CTRL_NOTE)) { pair = 0; wanted = -1; }
         if (mute >= 0 && before >= 0 && mute != before) { wanted = mute; g_impose_set(IMPOSE_MUTE, before); }   /* (the system's toggle, kept for a press alone) */
         if (reading && !g_home_paused && !g_util_active) {
+            /* (pairs still, the mute kept, but nothing done before the buffers are there: a
+             * clip asked for in a game's first seconds had no picture, its green dot a lie) */
             if (pressed & PSP_CTRL_RTRIGGER) {
                 pair = 1;
-                if (g_keep) { event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip"); }
-                else cap_log("note+R: no clip (the receiver keeps recordings only)");
+                if (g_keep && g_mem_held) { event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip"); }
+                else cap_log(g_keep ? "note+R: not capturing yet" : "note+R: no clip (the receiver keeps recordings only)");
             }
             if (pressed & PSP_CTRL_LTRIGGER) {
                 pair = 1;
-                g_recording = !g_recording;
-                event_put(g_recording ? EV_REC_START : EV_REC_STOP);
-                cap_log("note+L: the recording %s", g_recording ? "starts" : "stops");
+                if (g_mem_held || g_recording) {
+                    g_recording = !g_recording;
+                    event_put(g_recording ? EV_REC_START : EV_REC_STOP);
+                    cap_log("note+L: the recording %s", g_recording ? "starts" : "stops");
+                } else cap_log("note+L: not capturing yet");
             }
         }
     } else {
@@ -1422,7 +1451,7 @@ static int capture_thread(SceSize args, void *argp)
         if (g_pad_on) note_check(pspexpUsbConnected() && (int)g_generation != g_dead_gen);
         if (!g_mem_held && !g_util_active && !g_home_paused && !g_quit && pspexpUsbConnected()
             && now_us() - g_mem_released_at > 5000000 && now_us() - g_mem_tried_at > 1000000
-            && now_us() - g_started_at > 20000000) {   /* (the buffers, when the game's margin allows; never in its first 20 s, while it sets up its pools and threads) */
+            && (g_settled || (g_settled = game_settled(now_us(), g_changes)))) {   /* (the buffers, when the game's margin allows; never while it sets up its pools and threads) */
             g_mem_tried_at = now_us();
             mem_acquire();
         }

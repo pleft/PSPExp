@@ -59,7 +59,7 @@ PSPExp itself, so it can stay on all the time.
 In PSPExp you can press the buttons from the start. With a game from the XMB:
 
 1. Plug the PSP into the board and start a game from the XMB.
-2. About 20 seconds after the game starts, recording begins (the first
+2. Once the game has set itself up (a few seconds, at most 20), recording begins (the first
    seconds are usually the logos). From then on:
 
 | Press | What happens | You see, bottom right |

@@ -264,11 +264,13 @@ static void jobs_step(void)
 }
 
 /* an event from the plugin (note+R, note+L), or the FIFO's: at frame `idx` of the session */
+static int g_have_pic;   /* a picture of the game in the pieces (a clip of none is not made) */
 static void note_event(int type, uint64_t idx)
 {
     int k = (int)(idx / 30);
     if (!g_clips) return;
-    if (type == 1) job_add(k - g_clip_len + 1, k, "clip");
+    if (type == 1 && !g_have_pic) fprintf(stderr, "pspexp-capture: no picture yet: no clip\n");
+    else if (type == 1) job_add(k - g_clip_len + 1, k, "clip");
     else if (type == 2 && g_rec_first < 0) { g_rec_first = k; fprintf(stderr, "pspexp-capture: recording\n"); }
     else if (type == 3 && g_rec_first >= 0) { job_add(g_rec_first, k, "recording"); g_rec_first = -1; }
 }
@@ -470,6 +472,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     char video[1100] = "";
     FILE *ff = NULL;
     int rec_only = recordings_only(), pic = 0;   /* (pic: a frame of the game in this picture, not only black) */
+    g_have_pic = 0;
     mix_reset();
     memset(prev, 0, sizeof(prev));
     if (g_clips && !rec_only) {   /* (recordings only: the pieces start with each recording) */
@@ -508,8 +511,14 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (msg) {   /* the plugin's log, sent as it goes (it never writes to the memory stick) */
             if (len > sizeof(reply) || need(t, reply, len) < 0) break;
             if (dir) { char p[512]; snprintf(p, sizeof(p), "%s/psp.log", dir); FILE *f = fopen(p, "ab"); if (f) { fwrite(reply, 1, len, f); fclose(f); } }
-            for (uint32_t i = 0, b0 = 0; i < len && !g_quiet; i++)
-                if (reply[i] == '\n') { fprintf(stderr, "PSP: %.*s\n", (int)(i - b0), (char *)reply + b0); b0 = i + 1; }
+            for (uint32_t i = 0, b0 = 0; i < len; i++)
+                if (reply[i] == '\n') {   /* (-q: the note button's and the start's lines only: a board's log) */
+                    const char *l = (char *)reply + b0;
+                    int n = (int)(i - b0);
+                    if (!g_quiet || (n > 5 && !memcmp(l, "note+", 5)) || (n > 16 && !memcmp(l, "the game is set ", 16)))
+                        fprintf(stderr, "PSP: %.*s\n", n, l);
+                    b0 = i + 1;
+                }
             continue;
         }
         if (rep) {   /* the plugin's answer to a command */
@@ -577,7 +586,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
             int bad = 0;
             while (written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
-            if (!bad && written <= due) { bad = fwrite(rgb, 1, sizeof(rgb), ff) != sizeof(rgb); written++; pic = 1; }
+            if (!bad && written <= due) { bad = fwrite(rgb, 1, sizeof(rgb), ff) != sizeof(rgb); written++; pic = g_have_pic = 1; }
             if (bad) { fprintf(stderr, "ffmpeg stopped\n"); break; }
             memcpy(prev, rgb, sizeof(rgb));
             g_frames_out = written;
