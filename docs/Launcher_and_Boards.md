@@ -894,9 +894,10 @@ image in `/tmp/pspexp-disc-<uid>` for the receiver, and sends BOOT_DISC with
 `pxd0:/disc.iso`), and the line under the shelf says "Runs on the PSP". Their covers
 are their own icons, PSP_GAME/ICON0.PNG read from the disc on the board
 (`pspexp_disc.c`) in the background for the game selected, as box art is
-fetched, into `~/.cache/pspexp-launcher/boxart/psp/icon0/` (`.noicon`: none,
-a PS1 game in the folder); box art (libretro's "Sony - PlayStation
-Portable") only for a game without one. Walked in PPSSPP with six games of
+fetched, then the shelf's others without one, one after another while it
+is open, into `~/.cache/pspexp-launcher/boxart/psp/icon0/` (`.noicon`: no PSP
+game on it, a PS1 disc in the folder, which the shelf then leaves out); box
+art (libretro's "Sony - PlayStation Portable") only for a game without one. Walked in PPSSPP with six games of
 the Pi 400's collection: the icons on the discs at 1:1, the PS1 one left
 with its generated cover.
 

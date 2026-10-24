@@ -1740,7 +1740,8 @@ static void back_note_read(void)
     {
         char *e = nl + 1, *end = strchr(e, '\n');
         if (end) *end = 0;
-        if (strncmp(e, "ms0:/", 5) != 0 || strlen(e) >= sizeof(g_back_eboot)) return;
+        SceIoStat st;
+        if (strncmp(e, "ms0:/", 5) != 0 || strlen(e) >= sizeof(g_back_eboot) || sceIoGetstat(e, &st) < 0) return;   /* (never a start of an EBOOT not there) */
         strcpy(g_back_eboot, e);
         cap_log("started from PSPExp: back to %s at the exit", g_back_eboot);
     }
@@ -1749,7 +1750,9 @@ static void back_note_read(void)
 static struct SceKernelLoadExecVSHParam g_back_param;
 static int back_thread(SceSize args, void *argp)
 {
+    int (*hold)(int) = (void *)sctrlHENFindFunction("sceDisplay_Service", "sceDisplay", 0x7ED59BC4);   /* sceDisplaySetHoldMode, as ARK-4's exit does */
     (void)args; (void)argp;
+    if (hold) hold(0);
     sctrlSESetUmdFile("");
     sctrlSESetBootConfFileIndex(0);
     memset(&g_back_param, 0, sizeof(g_back_param));

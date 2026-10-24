@@ -175,6 +175,8 @@ static void cats_free(void)
 /* (re)builds the rail from the library; keeps the current category and selection */
 static int ssh_available(void);
 
+static int psp_not_a_game(const LEntry *e);
+
 static void cats_build(void)
 {
     char keep[64] = "", keep_id[160] = "";
@@ -286,7 +288,10 @@ static void cats_build(void)
         if (!L.sys[s].nroms) continue;
         c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", system_colour(L.sys[s].id), CK_SYSTEM, "game");
         c->sys = s; c->hidden = 1;
-        for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
+        for (i = 0; i < L.sys[s].nroms; i++) {
+            if (psp_not_a_game(&L.sys[s].roms_list[i])) continue;   /* (a PS1 disc in the PSP folder: the PSP shelf leaves it out) */
+            cat_push(c, &L.sys[s].roms_list[i]);
+        }
     }
     /* back to where we were */
     g_cur = -1;
@@ -384,6 +389,7 @@ static void toast(const char *icon, const char *s, uint64_t now) { (void)now; no
 
 static pid_t g_fetch_pid;
 static char g_fetch_id[160];
+static char g_fetch_miss[700];   /* a PSP icon's ".noicon", while its child looks */
 
 static void art_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m)
 {
@@ -411,6 +417,16 @@ static void icon_paths(const LEntry *e, char *png, size_t n, char *miss, size_t 
     slash = strrchr(art, '/');
     snprintf(png, n, "%.*s/icon0/%s", (int)(slash - art), art, slash + 1);
     if (miss) snprintf(miss, m, "%.*s.noicon", (int)(strlen(png) - 4), png);
+}
+
+/* a file in the PSP folder found to be no PSP game (its icon looked for: no PSP_GAME on it) */
+static int psp_not_a_game(const LEntry *e)
+{
+    char png[700], miss[700];
+    struct stat st;
+    if (!is_psp_rom(e)) return 0;
+    icon_paths(e, png, sizeof(png), miss, sizeof(miss));
+    return stat(miss, &st) == 0;
 }
 
 /* the picture for a ROM's cover: its box art; a PSP game's own icon first (the XMB's picture of
@@ -539,7 +555,10 @@ static void fetch_poll(uint64_t now)
     if (g_fetch_pid > 0) {
         int st;
         if (waitpid(g_fetch_pid, &st, WNOHANG) == g_fetch_pid) {
+            struct stat ms;
             g_fetch_pid = 0;
+            if (g_fetch_miss[0] && stat(g_fetch_miss, &ms) == 0) { g_fetch_miss[0] = 0; cats_build(); g_dirty = 1; }   /* (no PSP game: off the shelf now) */
+            g_fetch_miss[0] = 0;
             if ((e = cur_entry()) && !strcmp(e->id, g_fetch_id)) g_dirty = 1;   /* the cover picks the art up */
             if (!g_fetch_id[0]) g_sel_since = 0;   /* a system's cover list arrived: match the selection now */
         }
@@ -551,8 +570,16 @@ static void fetch_poll(uint64_t now)
         char png[700], miss[700];
         struct stat st;
         icon_paths(e, png, sizeof(png), miss, sizeof(miss));
-        if (stat(png, &st) == 0) return;   /* (its icon: no box art fetched) */
-        if (stat(miss, &st) != 0) {
+        if (stat(png, &st) == 0 || stat(miss, &st) == 0) {   /* this one done: the next of the shelf without one, so it fills in while open */
+            int s = e->sys, i;
+            for (i = 0; i < L.sys[s].nroms; i++) {
+                LEntry *o = &L.sys[s].roms_list[i];
+                icon_paths(o, png, sizeof(png), miss, sizeof(miss));
+                if (stat(png, &st) != 0 && stat(miss, &st) != 0) { e = o; break; }
+            }
+            if (i == L.sys[s].nroms) { icon_paths(e, png, sizeof(png), miss, sizeof(miss)); if (stat(png, &st) == 0) return; }   /* (all done) */
+        }
+        if (stat(png, &st) != 0 && stat(miss, &st) != 0) {
             pid_t pid;
             char dir[700], *slash;
             snprintf(dir, sizeof(dir), "%s", png);
@@ -568,7 +595,7 @@ static void fetch_poll(uint64_t now)
                 if (pspexp_disc_info(e->exec, &in, png, NULL, 0) < 0 || stat(png, &st) != 0) { FILE *f = fopen(miss, "w"); if (f) fclose(f); }
                 _exit(0);
             }
-            if (pid > 0) { g_fetch_pid = pid; snprintf(g_fetch_id, sizeof(g_fetch_id), "%s", e->id); }
+            if (pid > 0) { g_fetch_pid = pid; snprintf(g_fetch_id, sizeof(g_fetch_id), "%s", e->id); snprintf(g_fetch_miss, sizeof(g_fetch_miss), "%s", miss); }
             return;
         }
     }

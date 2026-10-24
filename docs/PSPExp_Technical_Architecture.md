@@ -1158,6 +1158,17 @@ shelf starts it). `tests/run_disc_serve.sh` drives it through a stand-in plugin 
 CSO, byte for byte (21 checks). The console's start, with its checks skipped (PPSSPP has no
 PRO), unpacked Chameleon's zip into the cache identical to the zip's ISO and named it.
 
+**Reviewed against PRO-C's and ARK-4's source (2026-10-25)** (NIDs, finding SystemControl's own
+exports, the boot's order and arguments as vpbp_loadexec, a syscall's user thread allowed by
+PRO-C's loadexec patches, `SetUmdFile("")` copied by PRO, 0x141 and "game" as the XMB's homebrew
+start); fixed from it: the PSP takes only an ISO or CSO it has (`sceIoGetstat`, in the runtime
+and again in the kernel module) or "pxd0:", as Inferno given anything else retries its open for
+ever and the PSP hangs at the start; `launch.txt` at one fixed path (`ms0:/PSP/GAME/PSPExp/`),
+removed as PSPExp starts and when a start fails (with the ISO mode cleared); the plugin keeps
+an EBOOT to go back to only when it is there, and resets the display's hold mode first, as
+ARK-4. Open: the plugin now opens a file 6 s into every game (the first test: a game from the
+XMB, exited), multi-EBOOT games lose the note, PRO's EBOOT.OLD (Prometheus) not used.
+
 **(B), the PSP's side, in code, not yet tried (2026-10-25).** The capture plugin, when the
 game's ISO is "pxd0:...", adds that device at module_start (`sceIoAddDrv`, "pxd") and starts its
 USB at once instead of 2 s in. Its open asks the board for the size (failing until the link is

@@ -593,6 +593,7 @@ int pspexpUsbBootDisc(const char *path)
     }
     if (set_umd && set_conf && set_type && loadexec) {
         if (!path) r = 0;
+        else if (strncmp(path, "pxd0:", 5) != 0 && sceIoGetstat(path, &(SceIoStat){0}) < 0) r = -1;   /* (no such file: Inferno would retry for ever) */
         else {
             strncpy(iso, path, sizeof(iso) - 1);
             iso[sizeof(iso) - 1] = 0;
@@ -605,6 +606,8 @@ int pspexpUsbBootDisc(const char *path)
             param.args = sizeof(boot);
             param.key = "umdemu";
             r = loadexec(0x120, boot, &param);
+            set_umd("");        /* (only when it failed: no ISO mode left for PSPExp's next start) */
+            set_conf(0);
         }
     }
     pspSdkSetK1(k1);

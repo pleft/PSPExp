@@ -207,7 +207,24 @@ static int exit_callback(int arg1, int arg2, void *common) { g_quit_asked = 1; g
 static void op_restart(void *u) { (void)u; g_restart_asked = 1; g_running = 0; }
 /* BOOT_DISC: a PSP game started natively once PSPExp has left (architecture §12c) */
 static char g_boot_disc[240];
-static void op_boot_disc(void *u, const char *path) { (void)u; snprintf(g_boot_disc, sizeof(g_boot_disc), "%s", path); g_running = 0; }
+/* only an ISO or CSO that is there (Inferno, given anything else, retries its open for ever: the
+ * PSP hangs at the game's start), or the capture plugin's virtual disc ("pxd0:", which exists only
+ * inside the game: the board checked the plugin is on) */
+static int boot_disc_ok(const char *path)
+{
+    size_t n = strlen(path);
+    SceIoStat st;
+    if (n < 5 || (strcasecmp(path + n - 4, ".iso") && strcasecmp(path + n - 4, ".cso"))) return 0;
+    return !strncmp(path, "pxd0:", 5) || sceIoGetstat(path, &st) >= 0;
+}
+#define LAUNCH_NOTE "ms0:/PSP/GAME/PSPExp/launch.txt"   /* (the capture plugin reads it there) */
+static void op_boot_disc(void *u, const char *path)
+{
+    (void)u;
+    if (!boot_disc_ok(path)) { trace("BOOT_DISC refused: not an ISO or CSO the PSP has"); return; }
+    snprintf(g_boot_disc, sizeof(g_boot_disc), "%s", path);
+    g_running = 0;
+}
 static int power_callback(int unknown, int info, void *common)
 {
     if (info & PSP_POWER_CB_POWER_SWITCH) g_power_off_switch = 1;
@@ -572,7 +589,8 @@ int main(int argc, char *argv[])
     ops.power_get = op_power_get;
     ops.text_begin = op_text_begin;
     if (g_eboot[0]) ops.restart = op_restart;
-    if (g_eboot[0] && pspexpUsbBootDisc(NULL) == 0) ops.boot_disc = op_boot_disc;   /* (PRO's functions found: not in PPSSPP) */
+    if (g_eboot[0] && pspexpUsbBootDisc(NULL) == 0) ops.boot_disc = op_boot_disc;
+    sceIoRemove(LAUNCH_NOTE);   /* (a note left by a start that failed, or a game left before the plugin read it) */   /* (PRO's functions found: not in PPSSPP) */
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
 
@@ -748,19 +766,17 @@ int main(int argc, char *argv[])
         trace("starting again failed: leaving");   /* (it returns only when it failed) */
     }
     if (g_boot_disc[0]) {   /* the game: a note for the capture plugin first (PSPExp started it: back here at its exit), then PRO's start */
-        char note[400];
         SceUID fd;
         int n;
-        snprintf(note, sizeof(note), "%s", g_eboot);
-        { char *slash = strrchr(note, '/'); if (slash) snprintf(slash + 1, sizeof(note) - (size_t)(slash + 1 - note), "launch.txt"); }
-        if ((fd = sceIoOpen(note, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777)) >= 0) {
+        if ((fd = sceIoOpen(LAUNCH_NOTE, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777)) >= 0) {
             char line[600];
             n = snprintf(line, sizeof(line), "%s\n%s\n", g_boot_disc, g_eboot);
             sceIoWrite(fd, line, n);
             sceIoClose(fd);
         }
         pspexpUsbBootDisc(g_boot_disc);
-        trace("starting the game failed: leaving");   /* (it returns only when it failed) */
+        sceIoRemove(LAUNCH_NOTE);   /* (it returns only when it failed: no note left for a later game) */
+        trace("starting the game failed: leaving");
     }
     sceKernelExitGame();
     return 0;
