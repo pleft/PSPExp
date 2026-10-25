@@ -1178,6 +1178,19 @@ an ask given up on, after 3 s, dropped by their seq); while the link is down (th
 still stops the USB, for the exit's sake) a read waits and asks again: the game pauses, it is
 not told of an error. A 64-bit seek (SET, CUR, END), a getstat with the size; writes refused.
 
+**The first virtual disc, on the PSP (2026-10-25 morning): it hung.** Sega Mega Drive Collection
+chosen on the shelf: unpacked, started (PSPExp left), the plugin's link connected to the
+receiver twice, but no read ever came (the receiver never opened the disc) and the PSP stayed
+black until its power switch. Why is not known: the plugin's log goes out with frames or sound,
+and its loop skipped its 5 s report until the game shows a picture, so nothing of it came; and a
+board's quiet receiver kept only the note button's lines. Now: in a virtual-disc start the
+plugin logs the device's adding, Inferno's first open and the open's success, and every 5 s
+until then how many opens and asks failed (and the last ask's result), the USB and the
+receiver, sent without a picture; after 30 s without the disc it gives up and starts PSPExp
+again (no PSP left stuck on black); the quiet receiver keeps those lines. Also: the games suite
+(tests/psp) left the PSP shelf alone after it started a PSP game's unpacking while the next
+game ran.
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's

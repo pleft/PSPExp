@@ -571,7 +571,9 @@ def suite_games(r):
     r.ctl("idle 3000")
     s = r.state()
     cats = s["launcher.categories"].split("|")
-    systems = [x for x in s.get("launcher.systems", "").split("|") if x]
+    # (not the PSP shelf: its games run on the PSP itself, PSPExp leaving for them; a run started
+    # one, 2026-10-25, unpacking it while the next game ran)
+    systems = [x for x in s.get("launcher.systems", "").split("|") if x and x != "PSP"]
     games = [x for x in r.to_category("Games")["launcher.items"].split("|") if x] if "Games" in cats else []
     r.note("games installed: %s" % (", ".join(games) or "none"))
     r.note("systems with ROMs: %s" % (", ".join(systems) or "none"))

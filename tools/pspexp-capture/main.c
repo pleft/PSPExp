@@ -602,7 +602,8 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
                 if (reply[i] == '\n') {   /* (-q: the note button's and the start's lines only: a board's log) */
                     const char *l = (char *)reply + b0;
                     int n = (int)(i - b0);
-                    if (!g_quiet || (n > 5 && !memcmp(l, "note+", 5)) || (n > 16 && !memcmp(l, "the game is set ", 16)))
+                    if (!g_quiet || (n > 5 && !memcmp(l, "note+", 5)) || (n > 16 && !memcmp(l, "the game is set ", 16)) ||
+                        (n > 16 && !memcmp(l, "the virtual disc", 16)) || (n > 12 && !memcmp(l, "started from", 12)))
                         fprintf(stderr, "PSP: %.*s\n", n, l);
                     b0 = i + 1;
                 }

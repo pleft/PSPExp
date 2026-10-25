@@ -1108,7 +1108,9 @@ static volatile u32 g_vd_want, g_vd_status, g_vd_got, g_vd_cap;
 static void *volatile g_vd_dst;
 static u32 g_vd_seq;
 static u64 g_vd_size, g_vd_pos;
-static volatile u32 g_vd_reads, g_vd_waits;
+static volatile u32 g_vd_reads, g_vd_waits, g_vd_opens, g_vd_fails;
+static volatile int g_vd_opened, g_vd_last;   /* the device opened once; the last ask's result */
+static char g_back_eboot[256];   /* PSPExp's EBOOT, started again at the game's exit (back_note_read) */
 
 /* one ask: n bytes at off into dst; the bytes got, -1 the link is not up (ask again), -2 the
  * board has no such disc */
@@ -1123,12 +1125,13 @@ static int vd_ask(u64 off, u32 n, void *dst)
     g_vd_status = 0xFFFFFFFFu; g_vd_got = 0; g_vd_dst = dst; g_vd_cap = n;
     g_vd_want = ++g_vd_seq;
     put32(h + 4, g_vd_want); put32(h + 8, (u32)off); put32(h + 12, (u32)(off >> 32)); put32(h + 16, n); put32(h + 20, now_us());
-    if (sceKernelWaitSema(g_tx_lock, 1, &t) < 0) return -1;
+    if (sceKernelWaitSema(g_tx_lock, 1, &t) < 0) { g_vd_last = -3; return -1; }
     w = pspexpUsbWrite(h, 32);
     sceKernelSignalSema(g_tx_lock, 1);
-    if (w < 0) return -1;
+    if (w < 0) { g_vd_last = w; return -1; }
     t = 3000000;
-    if (sceKernelWaitSema(g_vd_done, 1, &t) < 0) { g_vd_want = 0; return -1; }   /* (an answer after this is dropped) */
+    if (sceKernelWaitSema(g_vd_done, 1, &t) < 0) { g_vd_want = 0; g_vd_last = -4; return -1; }   /* (an answer after this is dropped) */
+    g_vd_last = (int)g_vd_status;
     if (g_vd_status) return -2;
     return (int)g_vd_got;
 }
@@ -1159,12 +1162,14 @@ static int vd_open(PspIoDrvFileArg *a, char *file, int flags, SceMode mode)
     int r;
     (void)a; (void)file; (void)mode;
     if ((flags & PSP_O_WRONLY) && !(flags & PSP_O_RDONLY)) return 0x80010013;   /* (read only) */
+    if (!g_vd_opens++) cap_log("the virtual disc: Inferno opens it (flags %x)", (u32)flags);
     sceKernelWaitSema(g_vd_lock, 1, NULL);
     r = vd_ask(0, 0, NULL);   /* its size: the board answers once the link is up */
     sceKernelSignalSema(g_vd_lock, 1);
-    if (r < 0) return 0x80010002;   /* (not yet: Inferno tries again in 20 ms) */
+    if (r < 0) { g_vd_fails++; return 0x80010002; }   /* (not yet: Inferno tries again in 20 ms) */
     g_vd_pos = 0;
-    cap_log("the virtual disc: %u MB", (u32)(g_vd_size >> 20));
+    if (!g_vd_opened) cap_log("the virtual disc: open, %u MB, after %u tries", (u32)(g_vd_size >> 20), g_vd_opens);
+    g_vd_opened = 1;
     return 0;
 }
 static int vd_close(PspIoDrvFileArg *a) { (void)a; return 0; }
@@ -1223,6 +1228,21 @@ static void vd_setup(void)
     r = sceIoAddDrv(&g_vd_drv);
     g_vdisc = r >= 0;
     cap_log("the virtual disc %s: device added %x", iso, (u32)r);
+}
+
+/* the disc never opened (the board's receiver not there, the image missing): the game's start
+ * would wait for ever, the PSP stuck on black until its power switch; PSPExp started again
+ * instead (2026-10-25: the first virtual disc hung so) */
+static void back_to_pspexp(void);
+static void vd_give_up(void)
+{
+    SceIoStat st;
+    cap_log("the virtual disc never opened in 30 s: back to PSPExp");
+    sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);
+    sceKernelDelayThread(300000);   /* (the log out first) */
+    if (!g_back_eboot[0] && sceIoGetstat("ms0:/PSP/GAME/PSPExp/EBOOT.PBP", &st) >= 0) strcpy(g_back_eboot, "ms0:/PSP/GAME/PSPExp/EBOOT.PBP");
+    g_quit = 1;
+    back_to_pspexp();
 }
 
 static int cmd_thread(SceSize args, void *argp)
@@ -1588,6 +1608,16 @@ static int capture_thread(SceSize args, void *argp)
         util_check();
         home_check();
         if (!back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
+        if (g_vdisc && !g_vd_opened) {   /* the virtual disc not open yet: said every 5 s (no picture yet to carry the log), given up after 30 s */
+            static u32 said;
+            if (now_us() - said > 5000000) {
+                said = now_us();
+                cap_log("the virtual disc not open yet: %u opens, %u failed asks (last %d), USB %s, receiver %s", g_vd_opens, g_vd_fails, g_vd_last,
+                        g_usb_up ? "up" : "down", pspexpUsbConnected() ? "there" : "not there");
+                sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);
+            }
+            if (now_us() - g_started_at > 30000000) vd_give_up();
+        }
         if (g_pad_on) note_check(pspexpUsbConnected() && (int)g_generation != g_dead_gen);
         if (!g_mem_held && !g_util_active && !g_home_paused && !g_quit && pspexpUsbConnected()
             && now_us() - g_mem_released_at > 5000000 && now_us() - g_mem_tried_at > 1000000
@@ -1722,7 +1752,6 @@ static void exit_note(void)
  * XMB later goes back there). At the exit, as ARK-4's exitgame.c: the ISO mode cleared (PSPExp
  * would start with the disc still bound), then PSPExp's EBOOT (apitype 0x141, key "game") from a
  * thread of the highest priority. */
-static char g_back_eboot[256];
 static void back_note_read(void)
 {
     char buf[600], *nl, *iso = sctrlSEGetUmdFile();
