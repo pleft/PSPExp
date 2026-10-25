@@ -1,21 +1,45 @@
 # Release notes
 
-## Since 1.2.0
+## 1.3.0 (2026-10-25)
 
-- **Record what you play**, in PSPExp and in your own PSP
-  games alike: **♪ + L** starts and stops a recording, **♪ + R** saves the
-  last 30 seconds as a video (Settings > Recording > Clips: off at
-  first, since the board then records all the time), and a dot in the
-  screen's corner says it heard you; the board keeps the videos in `~/Videos/PSPExp`, up to 30
-  pictures a second in full colour, and PSPExp's Files and Media play them
-  on the PSP. In PSPExp the PSP sends what it shows to the board itself (♪
-  alone still pauses the music); for UMD and ISO games, the PSPExp plugin for PRO
-  custom firmware, in the PSP's download, sends the game's picture and sound
-  down the cable, switched on with one line in `seplugins/game.txt` (the
-  manual's The PSPExp plugin). Recorded so far:
-  Castlevania: The Dracula X Chronicles, Crisis Core, Jeanne d'Arc, Gran
-  Turismo, Ace Combat X, Burnout Legends, Bomberman, Lunar: Silver Star
-  Harmony, Phantasy Star Portable 2.
+Two big additions: recording what you play, and your own PSP games kept on
+the board and played on the PSP. New card images for the Raspberry Pi and the
+GameShell have all of it in; a board already set up gets the same through
+Apps > Packages, then Settings > Update the PSP for the PSP's part.
+
+- **Record what you play**: **♪ + L** starts and stops a recording, with its
+  sound; a red dot in the screen's corner says it is on. It works in
+  everything PSPExp runs and in your own PSP games (a UMD, an ISO, the PSP
+  section). With **Settings > Recording > Clips** on, **♪ + R** saves the
+  last 30 seconds (off at first: the board then records all the time). The
+  videos go to `Videos/PSPExp` on the board, up to 30 frames a second;
+  Settings > Recording > Videos plays them on the PSP. In a game's heaviest
+  scenes the video gets fewer frames for a moment, so that the game keeps its
+  own speed. On a GameShell the videos are less smooth (its USB is slower).
+- **Your PSP games, kept on the board**: ISO, CSO or zipped games in
+  `roms/psp` appear in the launcher's new **PSP** section, with their own
+  icons; the PSP runs them itself, reading the disc from the board over the
+  cable, with no copying to the memory stick, and PSPExp comes back when you
+  leave the game. They start as fast and play as they do from the memory
+  stick. Tested with Ace Combat X, Bomberman, Burnout Legends, Despicable Me,
+  Gran Turismo and Pro Evolution Soccer 2014. Needs PRO custom firmware.
+- **The PSPExp plugin** does both for your own PSP games. It comes with the
+  PSP's download and with Settings > Update the PSP, and **Settings > This
+  PSP > PSPExp plugin** switches it on: there is nothing to edit by hand. The
+  first time PSPExp finds it off, a notification says so once.
+- **The launcher**: PSP first after Favourites, where the launcher opens;
+  a **This PSP** group in Settings with the plugin and PSP clock (Clock keeps
+  the time zone).
+- **Update the PSP restarts PSPExp by itself** after installing: it never
+  did on a real PSP (it went to the XMB, and PSPExp had to be started by
+  hand).
+- **A link that drops in a game comes back**: if the board stops hearing the
+  PSP while a PSP game runs (a GameShell's USB did, mid-recording), the PSP
+  reconnects after a few seconds instead of staying silent until the game
+  ends.
+- **A recording no longer stops by itself**: once, the PSP read ♪ and L
+  pressed together though neither was touched, and ended a recording; a ♪
+  pair now counts only with ♪ held first, as it is pressed.
 - **The PSP's download carries the licences** of the code and libraries
   inside PSPExp's PSP programs (PSPLINK, PSPSDK, newlib): `THIRD_PARTY.txt`
   and `licenses/`.
@@ -24,6 +48,8 @@
 - **One command on a Raspberry Pi OS you already have**:
   `curl -fsSL https://pspexp.dev/install.sh | sh` on the Pi sets it up as
   the card image does, without writing a new card.
+- Known limits: the cartridge emulators do not open zipped ROMs yet (unpack
+  them into the system's folder).
 
 ## 1.2.0 (2026-10-22)
 
