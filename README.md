@@ -23,8 +23,11 @@ What you get on the PSP:
   WonderSwan and, on a Pi, the Nintendo 64, the Dreamcast, the Nintendo DS and the Sega Saturn. Bring your own ROMs.
 - **A media player for music and films, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
-- **Recording your own PSP games**: ♪ + R saves the last 30 seconds of a
-  UMD or ISO game as a video on the board ([how](docs/manual/recording.md)).
+- **Your PSP games, kept on the board**: ISO, CSO or zipped games in the
+  launcher's PSP section, run by the PSP itself with no copying to the memory
+  stick ([how](docs/manual/psp-games.md)).
+- **Recording what you play**: ♪ + L records a video with its sound on the
+  board, in PSPExp or your own PSP games ([how](docs/manual/recording.md)).
 
 | | |
 |---|---|

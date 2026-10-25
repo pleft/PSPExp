@@ -67,6 +67,15 @@ section.wrap { padding-top: 56px; }
 .gallery img { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--line); }
 .gallery figcaption, .note { color: var(--muted); font-size: .9rem; margin-top: 8px; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+/* a feature: its text beside its pictures (the front page's "Your PSP games, too") */
+.feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 32px; align-items: start; margin: 8px 0 40px; }
+.feature h3 { font-size: 1.3rem; margin: 0 0 8px; }
+.feature p { color: var(--sub); }
+.feature figure { margin: 0; }
+.feature img, .feature video { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
+.feature figcaption { color: var(--muted); font-size: .88rem; margin-top: 6px; }
+.strip { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.strip .wide { grid-column: span 2; }
 .split p, .needs { color: var(--sub); }
 .needs { padding-left: 1.1em; }
 .needs li { margin: 6px 0; }
@@ -109,7 +118,7 @@ footer p { margin: 6px 0; }
 
 /* phones */
 @media (max-width: 860px) {
-  .hero-grid, .split { grid-template-columns: 1fr; }
+  .hero-grid, .split, .feature { grid-template-columns: 1fr; }
   .cards { grid-template-columns: repeat(2, 1fr); }
   .manual { grid-template-columns: 1fr; }
   .manual aside { position: static; flex-direction: row; flex-wrap: wrap; }

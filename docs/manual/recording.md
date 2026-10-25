@@ -1,98 +1,88 @@
-# Recording your PSP games
+# Recording your games
 
-**Your PSP games, recorded with their sound: your own UMD and ISO games, and
-everything you play in PSPExp.** Press **♪ + L** to start a recording and
-again to stop it; with **Clips** turned on in Settings, **♪ + R**
-saves the last 30 seconds as a video. A small dot in the corner of the screen
-says it heard you. The videos are kept on the board, ready to watch or share.
+**Press ♪ + L to record what you play, with its sound.** It works in
+everything PSPExp runs (its games, emulators, apps, the launcher) and in your
+own PSP games, from a UMD, an ISO on the memory stick or the launcher's
+[PSP section](psp-games.md). The videos are saved on the board, ready to
+watch on the PSP or copy anywhere.
 
-In PSPExp (its games, emulators, apps and the launcher) it works by itself.
-For a game the PSP runs itself (started from the XMB or from PSPExp's PSP
-shelf), [the PSPExp plugin](plugin.md) sends the game's picture and sound down
-the USB cable, and the board makes the videos; the game runs on the PSP as
-always.
+![Recording: the red dot in the corner of the PSP's screen](../images/record-dot.png)
 
-## What you need
+## Quick start
 
-- A **board with PSPExp** (a Raspberry Pi, tested on a Pi 400; a GameShell
-  too, with less smooth videos: [its page](gameshell.md)), plugged into
-  the PSP with the same USB cable. The board's PSPExp starts the recorder by
-  itself; it needs ffmpeg, which the card images have.
-- For what you play in PSPExp: nothing more, once PSPExp on the PSP is up to
-  date (Settings > Update the PSP).
-- For games the PSP runs itself: [the PSPExp plugin](plugin.md), switched on
-  once in **Settings > This PSP > PSPExp plugin** (PRO custom firmware;
-  Update the PSP puts the plugin on the memory stick).
+**In PSPExp:**
 
-## In PSPExp
+1. Press **♪ + L**: a red dot appears in the bottom-right corner.
+2. Play.
+3. Press **♪ + L** again: the dot goes and the video is saved.
 
-Play as usual: ♪ + R and ♪ + L work everywhere in PSPExp, in the board's
-games and emulators as in the launcher, with the same dot. **♪ on its own
-still pauses and resumes the music**, when you let go of it.
+**In your own PSP games** (UMD, ISO, the PSP section), the same, with two
+things first:
 
-## The last 30 seconds
+- Once: switch on the PSPExp plugin in **Settings > This PSP > PSPExp
+  plugin** (it needs PRO custom firmware; [the plugin](plugin.md)).
+- Keep the PSP plugged into the board, and wait until the game has started:
+  ♪ + L does nothing in its first seconds (up to 20).
 
-To save what just happened, the board has to be recording all the time: the
-PSP sends its picture and sound down the cable and the board encodes them,
-keeping the last 30 seconds. That costs a little (a game can run a little
-slower, the board works harder), so it is off at first. Turn it on in
-**Settings > Recording > Clips** (cross switches it on or off; it shows
-On or Off on the right); then ♪ + R saves the last 30
-seconds. With it off, nothing is sent or recorded until you press ♪ + L.
+Press **♪ first**, then L, briefly: the game does not see the L. ♪ on its own
+still does what it always did (the sound on and off; in the launcher, the
+music).
 
-## Recording
+## Where the videos go
 
-In PSPExp you can press the buttons from the start. With a game the PSP runs
-itself:
+Into **Videos/PSPExp** in the board's home folder (on a Raspberry Pi,
+`/home/pi/Videos/PSPExp`), named by date and time, for example
+`recording-2026-10-25-20.24.26.mp4`. They are MP4 files with sound, at the
+PSP's 480x272, up to 30 pictures a second.
 
-1. Plug the PSP into the board and start a game from the XMB or the PSP shelf.
-2. Once the game has set itself up (a few seconds, at most 20), recording begins (the first
-   seconds are usually the logos). From then on:
+![The new recording in Files, on the board](../images/record-saved.png)
+
+- **Watch one on the PSP:** **Settings > Recording > Videos** opens the folder
+  in Files; choose a video and it plays full screen.
+- **Copy one to a computer:** in Files, show the PSP's memory stick in the
+  other panel, select the video and choose **triangle > Copy**. Then connect
+  the PSP to the computer in USB mode as usual.
+
+## The last 30 seconds (Clips)
+
+For the moment you did not plan: turn on **Settings > Recording > Clips**,
+and **♪ + R** saves the last 30 seconds (a green dot for a second). The board
+then records all the time in the background, which costs a little (a game can
+run a few pictures a second slower, the board works harder), so it is off at
+first.
 
 | Press | What happens | You see, bottom right |
 |---|---|---|
-| **♪ + R** | the last 30 seconds are saved (with Clips on) | a green dot, for a second |
-| **♪ + L** | a recording starts | a red dot, while it records |
-| **♪ + L** again | the recording stops and is saved | the red dot goes |
-
-Press ♪ first and R or L with it, briefly: the game does not see the R or L.
-♪ on its own still mutes and unmutes the sound, as it always has.
-
-The videos go to **`Videos/PSPExp`** in the board user's home folder (on a
-Raspberry Pi: `/home/pi/Videos/PSPExp`), named by the date and time:
-`clip-2026-10-24-16.26.43.mp4`, `recording-...mp4`. They are MP4 files, up
-to 30 pictures a second in full colour, with the game's sound.
-
-**Watching them on the PSP:** in PSPExp, **Settings > Recording > Videos**
-opens them in **Files** (`Videos/PSPExp` in your home folder); choose one and
-it plays full screen in **Media**, like any film.
+| ♪ + L | a recording starts | a red dot, while it records |
+| ♪ + L again | the recording stops and is saved | the red dot goes |
+| ♪ + R | the last 30 seconds are saved (Clips on) | a green dot, for a second |
 
 ## Good to know
 
-- Games from the XMB recorded so far: Castlevania: The Dracula X Chronicles,
-  Crisis Core, Jeanne d'Arc, Gran Turismo, Ace Combat X, Burnout Legends,
-  Bomberman, Lunar: Silver Star Harmony, Phantasy Star Portable 2.
+- The dot is only on the PSP's screen, never in the videos.
+- In a game's heaviest scenes, the video gets fewer pictures for a moment so
+  that the game keeps its own speed.
 - Games that run at 60 pictures a second are recorded at 30.
-- Recording costs the PSP a little: in the heaviest scenes a game can lose a
-  few pictures a second. When a game starts to slow down, the PSP sends the
-  video fewer pictures (down to 5 a second) until the game is back to speed,
-  so the game keeps its pace and the video is less smooth for those seconds
-  (Gran Turismo's heaviest stretch: about 51 instead of 20). To tell, the
-  PSP now and then leaves the video one second without new pictures, often
-  when the game changes scene. That is while a recording runs, or all the
-  time with Clips on.
-- The dot is only on the PSP's screen, never in the videos. It may flicker a
-  little.
-- No dot? Check that the PSP is plugged into the board and that the board's
-  PSPExp is up to date (Apps > Packages); for a game the PSP runs itself, that
-  [the plugin](plugin.md) is on; in PSPExp, that PSPExp on the PSP is up
-  to date (Settings > Update the PSP).
+- On a GameShell the videos are less smooth than on a Raspberry Pi (its USB
+  is slower); the games run as fast.
+- Own PSP games recorded so far: Ace Combat X, Bomberman, Burnout Legends,
+  Castlevania: The Dracula X Chronicles, Crisis Core, Gran Turismo, Jeanne
+  d'Arc, Lunar: Silver Star Harmony, Phantasy Star Portable 2.
+
+## If something does not work
+
+- **No dot:** check that the PSP is plugged into the board. In your own PSP
+  games, check that the PSPExp plugin is On (Settings > This PSP) and that the
+  game has started. Keep PSPExp up to date on the board (Apps > Packages) and
+  on the PSP (Settings > Update the PSP).
+- **The dot goes out by itself:** the board stopped hearing the PSP. What was
+  recorded is saved; the plugin reconnects after a few seconds, and ♪ + L
+  starts a new recording.
 
 ## Without a board
 
-A Mac or a Linux computer can be the recorder instead: the program is
-`pspexp-plugin-host`, built from PSPExp's source
-([Developing](../Developing.md)). `pspexp-plugin-host -k -s ~/Movies/PSP`
-keeps the ♪ clips in that folder (with `-b 0`, only ♪ + L recordings, as with
-Clips off); `pspexp-plugin-host -o game.mp4` records a
-whole game into one file.
+A Mac or a Linux computer can do the recording instead: the program is
+`pspexp-plugin-host`, built from PSPExp's source ([Developing](../Developing.md)).
+`pspexp-plugin-host -k -s ~/Movies/PSP` keeps ♪ clips and recordings in that
+folder (add `-b 0` for ♪ + L recordings only); `pspexp-plugin-host -o game.mp4`
+records a whole game into one file.
