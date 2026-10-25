@@ -638,10 +638,13 @@ static int g_settled;   /* game_settled said so once: from then on as before */
 #define SETTLE_MIN_US 6000000
 #define SETTLE_HOLD_US 3000000
 #define SETTLE_MAX_US 20000000
+static int g_vdisc;                 /* the game's ISO on the board (the virtual disc, below) */
+static volatile int g_vd_opened;    /* its disc opened once: the game's start */
 static int game_settled(u32 now, u32 shown)
 {
     static u32 last2, last1, since, looked;
     u32 f2, f1, el = now - g_started_at;
+    if (g_vdisc && !g_vd_opened) return 0;   /* (the game not started yet: its disc not open) */
     if (el > SETTLE_MAX_US) return 1;
     if (now - looked < 250000 && since) return 0;
     looked = now;
@@ -1102,14 +1105,13 @@ static int cmd_restart(void)
  * is down (the HOME menu stops it, a cable out) a read waits and asks again: the game pauses
  * instead of failing. Answers to an ask given up on are dropped by their seq. */
 #define CMD_DISC 15
-static int g_vdisc;
 static SceUID g_vd_lock = -1, g_vd_done = -1;
 static volatile u32 g_vd_want, g_vd_status, g_vd_got, g_vd_cap;
 static void *volatile g_vd_dst;
 static u32 g_vd_seq;
 static u64 g_vd_size, g_vd_pos;
 static volatile u32 g_vd_reads, g_vd_waits, g_vd_opens, g_vd_fails;
-static volatile int g_vd_opened, g_vd_last;   /* the device opened once; the last ask's result */
+static volatile int g_vd_last;   /* the last ask's result */
 static char g_back_eboot[256];   /* PSPExp's EBOOT, started again at the game's exit (back_note_read) */
 
 /* one ask: n bytes at off into dst; the bytes got, -1 the link is not up (ask again), -2 the
@@ -1168,7 +1170,12 @@ static int vd_open(PspIoDrvFileArg *a, char *file, int flags, SceMode mode)
     sceKernelSignalSema(g_vd_lock, 1);
     if (r < 0) { g_vd_fails++; return 0x80010002; }   /* (not yet: Inferno tries again in 20 ms) */
     g_vd_pos = 0;
-    if (!g_vd_opened) cap_log("the virtual disc: open, %u MB, after %u tries", (u32)(g_vd_size >> 20), g_vd_opens);
+    if (!g_vd_opened) {
+        cap_log("the virtual disc: open, %u MB, after %u tries", (u32)(g_vd_size >> 20), g_vd_opens);
+        g_started_at = now_us();   /* the game starts only now (it waited for its disc): the 6-20 s before its memory is taken
+                                    * count from here (from the plugin's load, the 20 s were over when a link came late: the
+                                    * memory taken before the game had loaded, the PSP off at once, 2026-10-25) */
+    }
     g_vd_opened = 1;
     return 0;
 }

@@ -1202,6 +1202,13 @@ waiting its 8 s, and more, for PSPExp to come back on its socket while the plugi
 the plugin's 30 s safety net then fired just as the disc opened, PSPExp's restart in the middle
 of the game's start left the PSP black, then off. Now the receiver takes the plugin's link at
 once during that wait, and the safety net waits 90 s and only while the board is not there.
+A third start (Clips off) died the same way, 0.4 s after the board's first disc answer, and
+showed why: the plugin's 6–20 s before taking its memory counted from its load, but a game on the
+virtual disc starts only once its disc opens (8 s, then 28 s later); past 20 s the memory was
+taken the moment the link came up, before the game had even loaded (as Jeanne d'Arc and Crisis
+Core crashed when taken 2 s in), and in the 8 s start the game was judged set up 5 s after its
+disc opened, still loading (the switch-off at 35 s). Now, on the virtual disc, those seconds count
+from the disc's opening, and nothing is judged set up before it.
 
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
