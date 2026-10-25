@@ -21,7 +21,8 @@
 
 #define PACE_NONE 0xFFFFFFFFu   /* no frame copied (the second measured) */
 
-enum { PACE_SAID_NOTHING, PACE_SAID_COST, PACE_SAID_OWN, PACE_SAID_FURTHER, PACE_SAID_TRYING, PACE_SAID_KEPT, PACE_SAID_UNDONE };
+enum { PACE_SAID_NOTHING, PACE_SAID_COST, PACE_SAID_OWN, PACE_SAID_FURTHER, PACE_SAID_TRYING, PACE_SAID_KEPT, PACE_SAID_UNDONE,
+       PACE_SAID_DISTURBED };
 
 typedef struct Pace {
     unsigned level;       /* 0..3: 30, 15, 10, 5 copies a second */
@@ -55,6 +56,7 @@ static const char *pace_note(int said)
     case PACE_SAID_TRYING: return "frames copied %u a second: trying (the game at %u fps of its %u)";
     case PACE_SAID_KEPT: return "frames copied %u a second (the game at %u fps of its %u)";
     case PACE_SAID_UNDONE: return "frames copied %u a second: faster cost the game (%u fps of its %u)";
+    case PACE_SAID_DISTURBED: return "frames copied %u a second: a measured second disturbed (%u fps without copies, %u with)";
     }
     return 0;
 }
@@ -74,6 +76,12 @@ static unsigned pace_second(Pace *p, unsigned rate, int copying)
     if (p->since_measure < 1000) p->since_measure++;
     if (p->measuring) {   /* the second without copies: its rate is the game's own */
         p->measuring = 0;
+        if (rate * 10 < p->with_rate * 9) {   /* slower without copies than with them: something else in that second
+                                                * (Gran Turismo, 2026-10-25: a hitch, 18 fps against 53, taken for its
+                                                * own rate, its heavy stretch then left at 43 instead of 50): not used */
+            p->cool = 3;
+            return pace_say(p, PACE_SAID_DISTURBED, rate, p->with_rate);
+        }
         p->free_rate = rate;
         p->since_measure = 0;
         if (p->with_rate * 10 < rate * 9) {
@@ -85,6 +93,10 @@ static unsigned pace_second(Pace *p, unsigned rate, int copying)
             p->level++;
             p->wait = p->hold;
             return pace_say(p, PACE_SAID_COST, p->with_rate, rate);
+        }
+        if (p->level && !p->probing) {   /* slowed, and the copies cost it nothing now: a step faster tried */
+            p->level--;
+            p->probing = 1; p->probe_left = 2; p->probe_sum = 0;
         }
         return pace_say(p, PACE_SAID_OWN, rate, p->with_rate);
     }
@@ -103,9 +115,15 @@ static unsigned pace_second(Pace *p, unsigned rate, int copying)
         if (!p->level) { p->hold = 10; p->cool = 0; }   /* (back at the full rate: the next scene measured at once) */
         return pace_say(p, PACE_SAID_KEPT, p->probe_sum / 2, p->free_rate);
     }
-    if (rate * 10 > p->free_rate * 11 && p->level) {   /* faster than its own rate while slowed: a new scene, the copies
-                                                         * not holding it back: that is its rate, and a step faster tried */
-        p->free_rate = rate;
+    if (rate * 10 > p->free_rate * 11 && p->level) {   /* faster than its own rate while slowed: a new scene, measured
+                                                         * (not taken as its rate: copying, it may be faster still) */
+        if (p->since_measure >= 3) {   /* (a rise is rare and plain: measured, whatever the hold) */
+            p->measuring = 1;
+            p->with_rate = rate;
+            p->cool = 3;
+            return PACE_NONE;
+        }
+        p->free_rate = rate;   /* (just measured: at least that, and a step faster tried) */
         p->level--;
         p->probing = 1; p->probe_left = 2; p->probe_sum = 0;
         return pace_say(p, PACE_SAID_TRYING, rate, p->free_rate);

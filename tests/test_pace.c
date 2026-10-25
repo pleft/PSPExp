@@ -63,14 +63,33 @@ int main(int argc, char **argv)
 {
     int v = argc > 1;
     static const Scene gt[] = { { "normal", 60, 0, 60 }, { "heavy stretch", 60, 2.1, 40 }, { "normal again", 60, 0, 60 } };
+    /* (the PSP, 2026-10-25: a hitch of a second as the heavy stretch began, measured as the game's own
+     * rate, 18 fps without copies against 53 with them: its stretch then left at 43 instead of 50) */
+    static const Scene gt_hitch[] = { { "normal", 60, 0, 30 }, { "heavier", 60, 0.6, 4 }, { "hitch", 18, 0, 2 },
+                                      { "heavy stretch", 60, 2.1, 40 }, { "normal again", 60, 0, 60 } };
     static const Scene burnout[] = { { "menu", 60, 0, 20 }, { "load", 10, 0, 5 }, { "race", 30, 0.6, 70 },
                                      { "load", 10, 0, 5 }, { "menu", 60, 0, 25 }, { "race", 30, 0.6, 70 } };
     static const Scene bomberman[] = { { "play", 30, 0, 90 } };
     static const Scene ace[] = { { "menu", 60, 0, 25 }, { "mission", 30, 0.05, 90 } };
     run("Gran Turismo", gt, 3, 0.97, 25, 8, v);
+    run("Gran Turismo, a hitch", gt_hitch, 5, 0.97, 25, 10, v);
     run("Burnout Legends", burnout, 6, 0.97, 25, 12, v);
     run("Bomberman", bomberman, 1, 0.97, 25, 2, v);
     run("Ace Combat X", ace, 2, 0.97, 25, 4, v);
+    {   /* the PSP's sequence (Gran Turismo, 2026-10-25): at 60, a fall to 53 measured, the measured second a
+         * hitch of 18 (slower than copying: not the game's own rate), then the heavy stretch */
+        static const unsigned seq[] = { 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 53, 18 };
+        Pace p;
+        unsigned i;
+        pace_init(&p);
+        printf("a hitch in a measured second:\n");
+        for (i = 0; i < sizeof(seq) / sizeof(seq[0]); i++) {
+            pace_second(&p, seq[i], 1);
+            if (p.said && v) { printf("      %2u ", i); printf(pace_note(p.said), g_pace_per_s[p.level], p.a, p.b); printf("\n"); }
+        }
+        printf("    its rate without copies kept at %u\n", p.free_rate);
+        check(p.free_rate >= 55, "a measured second slower than copying is not taken for the game's own rate");
+    }
     printf(g_fail ? "FAILED\n" : "all passed\n");
     return g_fail;
 }
