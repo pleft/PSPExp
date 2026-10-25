@@ -67,9 +67,9 @@ section.wrap { padding-top: 56px; }
 .gallery img { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--line); }
 .gallery figcaption, .note { color: var(--muted); font-size: .9rem; margin-top: 8px; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-/* a feature: its text beside its pictures (the front page's "Your PSP games, too") */
+/* a feature: its text beside its pictures (the front page's recording and PSP games) */
 .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 32px; align-items: start; margin: 8px 0 40px; }
-.feature h3 { font-size: 1.3rem; margin: 0 0 8px; }
+.feature h2 { margin-top: 0; }
 .feature p { color: var(--sub); }
 .feature figure { margin: 0; }
 .feature img, .feature video { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }

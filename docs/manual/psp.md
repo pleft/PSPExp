@@ -42,6 +42,15 @@ plug it again at any time: the launcher comes back by itself.
 To leave PSPExp, press **HOME** and quit as from any game, or hold **HOME**
 for 2 seconds.
 
+## For your own PSP games: the PSPExp plugin
+
+To [play your PSP games from the board](psp-games.md) and to
+[record your own PSP games](recording.md), switch on the PSPExp plugin once:
+in PSPExp, **Settings > This PSP > PSPExp plugin**, then cross. It shows
+**On**. The plugin came with the `PSPExp` folder (it is in its `plugin`
+folder), and PSPExp adds it to PRO's plugin list itself: there is nothing
+to edit by hand. It needs PRO custom firmware ([the plugin](plugin.md)).
+
 ## Things the PSP does by itself
 
 - **Updates.** When the board has a newer PSPExp for the PSP, the launcher's
