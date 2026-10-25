@@ -452,14 +452,23 @@ static void icon_paths(const LEntry *e, char *png, size_t n, char *miss, size_t 
     if (miss) snprintf(miss, m, "%.*s.noicon", (int)(strlen(png) - 4), png);
 }
 
+/* a PSP game's ".noicon", made no earlier than the file it is about: one made while the file was
+ * still being copied (Ace Combat X on the GameShell, 2026-10-25: looked at 5 minutes before its copy
+ * ended, and left off the PSP section for good) is no verdict on the file as it is now */
+static int noicon_current(const LEntry *e, const char *miss)
+{
+    struct stat m, f;
+    if (stat(miss, &m) != 0) return 0;
+    return stat(e->exec, &f) != 0 || m.st_mtime >= f.st_mtime;
+}
+
 /* a file in the PSP folder found to be no PSP game (its icon looked for: no PSP_GAME on it) */
 static int psp_not_a_game(const LEntry *e)
 {
     char png[700], miss[700];
-    struct stat st;
     if (!is_psp_rom(e)) return 0;
     icon_paths(e, png, sizeof(png), miss, sizeof(miss));
-    return stat(miss, &st) == 0;
+    return noicon_current(e, miss);
 }
 
 /* the picture for a ROM's cover: its box art; a PSP game's own icon first (the XMB's picture of
@@ -603,16 +612,16 @@ static void fetch_poll(uint64_t now)
         char png[700], miss[700];
         struct stat st;
         icon_paths(e, png, sizeof(png), miss, sizeof(miss));
-        if (stat(png, &st) == 0 || stat(miss, &st) == 0) {   /* this one done: the next of the shelf without one, so it fills in while open */
+        if (stat(png, &st) == 0 || noicon_current(e, miss)) {   /* this one done: the next of the shelf without one, so it fills in while open */
             int s = e->sys, i;
             for (i = 0; i < L.sys[s].nroms; i++) {
                 LEntry *o = &L.sys[s].roms_list[i];
                 icon_paths(o, png, sizeof(png), miss, sizeof(miss));
-                if (stat(png, &st) != 0 && stat(miss, &st) != 0) { e = o; break; }
+                if (stat(png, &st) != 0 && !noicon_current(o, miss)) { e = o; break; }
             }
             if (i == L.sys[s].nroms) { icon_paths(e, png, sizeof(png), miss, sizeof(miss)); if (stat(png, &st) == 0) return; }   /* (all done) */
         }
-        if (stat(png, &st) != 0 && stat(miss, &st) != 0) {
+        if (stat(png, &st) != 0 && !noicon_current(e, miss)) {
             pid_t pid;
             char dir[700], *slash;
             snprintf(dir, sizeof(dir), "%s", png);
