@@ -78,6 +78,8 @@ int  launcher_take_psp_update(void);
 /* the PSPExp plugin on the PSP's stick (psp_plugin.h: PSP_PLUGIN_*; UNKNOWN hides Settings > Recording >
  * PSPExp plugin), and the switch chosen there: 1 on, 0 off, once; -1 none */
 void launcher_set_psp_plugin(int state);
+/* 1 the first time KEY is asked for on this board, 0 ever after (the library's settings): a notice once */
+int  launcher_first_time(const char *key);
 int  launcher_take_plugin_switch(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);

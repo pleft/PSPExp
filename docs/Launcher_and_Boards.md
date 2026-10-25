@@ -694,7 +694,10 @@ game's start, written by the console (`psp_plugin.c`: one write, read back,
 the file's other lines and line ends kept, the old text put back if it did
 not check out; the plugin put on the stick first when it is not there). The
 console reads its state at each connection; the PSP section's "Switch on
-the PSPExp plugin first" points here. `pspexp-term --ctl plugin` tells it
+the PSPExp plugin first" points here, and the first time the console finds
+the plugin off or missing on a board it says so once ("Play and record your
+own PSP games", its action this group; `plugin_hint` in the library's
+settings, set as well once it has been seen on). `pspexp-term --ctl plugin` tells it
 (`on`, `off`, `missing`, and whether it is this board's); `--ctl "plugin
 on"` and `"plugin off"` switch it as the setting does.
 The console's log keeps the receiver's lines (`-q`: the connections, the

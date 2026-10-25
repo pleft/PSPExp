@@ -2792,8 +2792,13 @@ static void psp_slots_check(void)
     int plug_old;
     if (pspexp_slots_read(ctx, &s) < 0) { if (g_launcher_on) launcher_set_psp_runtime('-', 0, NULL); return; }   /* no slots (an install before them) */
     if (g_launcher_on) {
+        int plug = psp_plugin_state(ctx, s.dir);
         launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
-        launcher_set_psp_plugin(psp_plugin_state(ctx, s.dir));
+        launcher_set_psp_plugin(plug);
+        /* the plugin not on: said once on this board, for someone who never opens the manual (once
+         * seen on, never: switching it off is a choice); its switch is a notification's cross away */
+        if ((plug == PSP_PLUGIN_ON || plug == PSP_PLUGIN_OFF || plug == PSP_PLUGIN_MISSING) && launcher_first_time("plugin_hint") && plug != PSP_PLUGIN_ON)
+            notify(NOTE_ATTN, "puzzle", "Play and record your own PSP games", "Switch on the PSPExp plugin once: Settings > This PSP", "category:This PSP", "psp-plugin");
     }
     if (s.fallback[0] && strcmp(s.fallback, reported)) {   /* the loader fell back: say so once */
         snprintf(reported, sizeof(reported), "%s", s.fallback);

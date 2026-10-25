@@ -262,7 +262,7 @@ static void cats_build(void)
     ACTION("clips", "Clips", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
     ACTION("videos", "Videos", "film", "The recordings and clips, in Files");
     if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP section's, and recording them");
-    if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
+    if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp for the PSP, or its plugin: put it on its memory stick");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
     ACTION("poweroff", "Power off", "power", "Shut this board down");
@@ -1000,6 +1000,14 @@ int launcher_open_file(const char *path)
 const char *launcher_running_title(void) { return g_running ? g_running_e.title : NULL; }
 
 void launcher_set_test_mode(int on) { g_test_mode = on; }
+
+/* 1 the first time KEY is asked for on this board (kept in the library's settings), 0 after */
+int launcher_first_time(const char *key)
+{
+    if (lib_setting_int(&L, key, 0)) return 0;
+    lib_setting_set(&L, key, 1);
+    return 1;
+}
 
 int launcher_category(const char *name)
 {

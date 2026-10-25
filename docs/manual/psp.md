@@ -50,6 +50,8 @@ in PSPExp, **Settings > This PSP > PSPExp plugin**, then cross. It shows
 **On**. The plugin came with the `PSPExp` folder (it is in its `plugin`
 folder), and PSPExp adds it to PRO's plugin list itself: there is nothing
 to edit by hand. It needs PRO custom firmware ([the plugin](plugin.md)).
+The first time PSPExp finds it off, it says so once in a notification,
+whose cross takes you straight to the switch.
 
 ## Things the PSP does by itself
 
