@@ -3066,8 +3066,11 @@ static void ctl_fs(const char *args, char *reply, size_t rn)
         uint64_t off = 0;
         size_t n;
         if (!f) { snprintf(reply, rn, "error cannot open %s", get ? b : a); return; }
-        if (get) { while ((r = pspexp_fs_read(ctx, a, off, buf, sizeof(buf))) > 0) { fwrite(buf, 1, (size_t)r, f); off += (uint64_t)r; } }
+        /* (the copy in the main loop: systemd's watchdog told it is alive meanwhile, or a copy over a
+         * minute had the console stopped and restarted mid-copy: 1.1 GB, 2026-10-25) */
+        if (get) { while ((r = pspexp_fs_read(ctx, a, off, buf, sizeof(buf))) > 0) { fwrite(buf, 1, (size_t)r, f); off += (uint64_t)r; watchdog_ping(pspexp_time_us()); } }
         else do {
+            watchdog_ping(pspexp_time_us());
             n = fread(buf, 1, sizeof(buf), f);
             if ((r = pspexp_fs_write(ctx, b, off, buf, (uint32_t)n, off ? 0 : PSPEXP_FS_CREATE | PSPEXP_FS_TRUNCATE)) < 0) break;
             off += n;
