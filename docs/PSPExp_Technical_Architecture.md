@@ -1191,6 +1191,18 @@ again (no PSP left stuck on black); the quiet receiver keeps those lines. Also: 
 (tests/psp) left the PSP shelf alone after it started a PSP game's unpacking while the next
 game ran.
 
+**(A) and (B) on the PSP (2026-10-25).** (A) works: Bomberman on the stick, started from the
+board (`psp-boot`), played, HOME > Exit back to PSPExp (set up after 8 s, PSPExp connected again
+12 s after the exit). (B), Bust-A-Move Ghost from the shelf: the disc opened (the device added,
+Inferno's open succeeding once the link came up, 274 tries) and the game ran from the board's
+disc, then the PSP switched itself off about 35 s in (Clips on: frames going up the cable while
+the disc came down it; the plugin's lines before it lost: a board's quiet receiver now keeps all
+of them, `~/.cache/pspexp/psp-plugin.log`). A second start (Clips off) found the receiver still
+waiting its 8 s, and more, for PSPExp to come back on its socket while the plugin's link was up;
+the plugin's 30 s safety net then fired just as the disc opened, PSPExp's restart in the middle
+of the game's start left the PSP black, then off. Now the receiver takes the plugin's link at
+once during that wait, and the safety net waits 90 s and only while the board is not there.
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's

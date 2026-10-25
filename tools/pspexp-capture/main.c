@@ -431,13 +431,21 @@ static void sock_hello(int fd)
     if (write(fd, h, sizeof(h)) != (ssize_t)sizeof(h)) fprintf(stderr, "pspexp-capture: the hello did not go\n");
 }
 
+/* the plugin's USB link coming up while PSPExp's session waits for its next holder: PSPExp left for
+ * a PSP game (the shelf), whose start waits for its disc from here; taken at once, the session
+ * ended (it waited out its 8 s first: 28 s, 2026-10-25, the plugin's safety net firing meanwhile) */
+static PspExpUsbOptions g_usb_opts;
+static PspExpTransport *g_usb_pending;
+
 static long sock_recv(PspExpTransport *t, void *buf, size_t cap, int timeout_ms)
 {
     SockSource *s = (SockSource *)t;
     if (s->fd < 0) {   /* a hand-over: the next holder of the link, or the end of the session */
         static double since;
+        char err[200];
         if (!since) since = now();
         if ((s->fd = sock_accept(timeout_ms)) >= 0) { sock_hello(s->fd); since = 0; return 0; }
+        if (g_usb_opts.pid && (g_usb_pending = pspexp_usb_wait(&g_usb_opts, 0, err, sizeof(err)))) { since = 0; return -1; }
         if (now() - since > 8) { since = 0; return -1; }
         return 0;
     }
@@ -598,6 +606,16 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (msg) {   /* the plugin's log, sent as it goes (it never writes to the memory stick) */
             if (len > sizeof(reply) || need(t, reply, len) < 0) break;
             if (dir) { char p[512]; snprintf(p, sizeof(p), "%s/psp.log", dir); FILE *f = fopen(p, "ab"); if (f) { fwrite(reply, 1, len, f); fclose(f); } }
+            else if (g_quiet) {   /* a board's quiet receiver: all of it in ~/.cache/pspexp/psp-plugin.log (1 MB, then .old), for
+                                   * when a game goes wrong (the first virtual discs, 2026-10-25: the PSP off, its last lines lost) */
+                char p[600], q[620];
+                const char *h = getenv("HOME");
+                struct stat st;
+                FILE *f;
+                snprintf(p, sizeof(p), "%s/.cache/pspexp/psp-plugin.log", h && *h ? h : "/tmp");
+                if (stat(p, &st) == 0 && st.st_size > (1 << 20)) { snprintf(q, sizeof(q), "%s.old", p); rename(p, q); }
+                if ((f = fopen(p, "ab"))) { fwrite(reply, 1, len, f); fclose(f); }
+            }
             for (uint32_t i = 0, b0 = 0; i < len; i++)
                 if (reply[i] == '\n') {   /* (-q: the note button's and the start's lines only: a board's log) */
                     const char *l = (char *)reply + b0;
@@ -775,9 +793,11 @@ int main(int argc, char **argv)
         char err[256], name[1100];
         pspexp_usb_options_default(&o);
         o.pid = PSPEXP_CAPTURE_USB_PID;   /* (the plugin's own product: PSPExp's console waits for PSPExp's) */
+        g_usb_opts = o;
         if (!g_quiet || run == 1) fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable, or for PSPExp...\n");
-        PspExpTransport *t = NULL;
+        PspExpTransport *t = g_usb_pending;   /* (the plugin, come while PSPExp's session waited) */
         static SockSource ss;
+        g_usb_pending = NULL;
         int from_psp_exp = 0;
         while (!t && !g_quit) {   /* (in steps: Ctrl-C ends a wait) a native game on the USB cable, or PSPExp's own on the socket */
             static TcpSource ts;

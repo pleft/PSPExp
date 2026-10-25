@@ -1237,7 +1237,7 @@ static void back_to_pspexp(void);
 static void vd_give_up(void)
 {
     SceIoStat st;
-    cap_log("the virtual disc never opened in 30 s: back to PSPExp");
+    cap_log("the virtual disc never opened in 90 s, the board not there: back to PSPExp");
     sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);
     sceKernelDelayThread(300000);   /* (the log out first) */
     if (!g_back_eboot[0] && sceIoGetstat("ms0:/PSP/GAME/PSPExp/EBOOT.PBP", &st) >= 0) strcpy(g_back_eboot, "ms0:/PSP/GAME/PSPExp/EBOOT.PBP");
@@ -1616,7 +1616,8 @@ static int capture_thread(SceSize args, void *argp)
                         g_usb_up ? "up" : "down", pspexpUsbConnected() ? "there" : "not there");
                 sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);
             }
-            if (now_us() - g_started_at > 30000000) vd_give_up();
+            if (now_us() - g_started_at > 90000000 && !g_vd_opened && !pspexpUsbConnected()) vd_give_up();   /* (90 s, the board never there: a
+                * last resort; at 30 s it fired as the disc opened, the receiver held back, and the restart mid-start left the PSP black) */
         }
         if (g_pad_on) note_check(pspexpUsbConnected() && (int)g_generation != g_dead_gen);
         if (!g_mem_held && !g_util_active && !g_home_paused && !g_quit && pspexpUsbConnected()
