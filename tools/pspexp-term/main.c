@@ -3252,8 +3252,8 @@ static void ctl_step(uint64_t now, int connected)
     } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, psp-boot PATH, ping, end");
 }
 
-/* ---- PSPExp Capture's receiver (tools/pspexp-capture) beside the console ----
- * A native PSP game with the Capture plugin on (psp/capture) reaches the board under the plugin's
+/* ---- the PSPExp plugin host (tools/pspexp-plugin-host) beside the console ----
+ * A native PSP game with the PSPExp plugin on (psp/plugin) reaches the board under the plugin's
  * own USB product, which the console's link leaves alone; the receiver keeps the note button's
  * clips (note+R the last 30 s, note+L a recording) in ~/Videos/PSPExp (~/Movies/PSPExp on a Mac).
  * Started with the launcher over USB when it and ffmpeg are on the PATH, again 10 s after it ends;
@@ -3300,7 +3300,7 @@ static void capture_tick(uint64_t now)
     }
     if (now < g_capture_next) return;
     g_capture_next = now + 60000000u;   /* (missing: looked for again in a minute) */
-    if (!in_path("pspexp-capture") || !in_path("ffmpeg")) return;
+    if (!in_path("pspexp-plugin-host") || !in_path("ffmpeg")) return;
     pid = fork();
     if (pid == 0) {
         char dir[1024];
@@ -3315,7 +3315,7 @@ static void capture_tick(uint64_t now)
         for (fd = 3; fd < 1024; fd++) close(fd);   /* (none of the console's: the PSP's link, the shells' terminals) */
         fd = open("/dev/null", O_RDONLY);
         if (fd >= 0) dup2(fd, 0);
-        execlp("pspexp-capture", "pspexp-capture", "-k", "-q", "-s", dir, "-b", launcher_clips_keep() ? "30" : "0", (char *)NULL);
+        execlp("pspexp-plugin-host", "pspexp-plugin-host", "-k", "-q", "-s", dir, "-b", launcher_clips_keep() ? "30" : "0", (char *)NULL);
         _exit(127);
     }
     if (pid > 0) { g_capture_pid = pid; fprintf(stderr, "[pspexp-term] capture: the receiver started (pid %d)\n", (int)pid); }

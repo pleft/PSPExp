@@ -20,7 +20,7 @@ What you get on the PSP:
 - **A file manager** that reaches both the board and the PSP's memory stick.
 - **A real terminal**: the board's Linux shell on the PSP, typed on an
   on-screen keyboard.
-- **Recording**: with PSPExp Capture, ♪ + L records what you play as a
+- **Recording**: ♪ + L records what you play as a
   video on the board, in PSPExp or a UMD or ISO game, and ♪ + R saves the
   last 30 seconds when that is turned on ([Recording PSP games](recording.md)).
 
@@ -49,7 +49,8 @@ the setup and the list of packages differ.
 4. [Using PSPExp](using-pspexp.md): the launcher, packages, emulators,
    files, music, Bluetooth and the terminal.
 5. Optional: [Recording PSP games](recording.md), your own PSP games as
-   videos, with the note button.
+   videos, with the note button, and [the PSPExp plugin](plugin.md), which
+   your own PSP games need for recording and for PSPExp's PSP shelf.
 
 > **The downloads** (the PSP's files and the card images) are on the
 > [download page](https://pspexp.dev/download) (each release's files also on GitHub's

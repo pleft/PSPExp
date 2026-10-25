@@ -195,10 +195,10 @@ if(PSPEXP_HAVE_USB)
   target_link_libraries(pspexp-ms PRIVATE pspexp_usb)
   target_compile_definitions(pspexp-ms PRIVATE PSPEXP_HAVE_USB=1)
 endif()
-# PSPExp Capture's receiver (psp/capture: a native PSP game's picture over USB); USB only
+# The PSPExp plugin's board side (psp/plugin: a native PSP game's picture over USB, the PSP shelf's disc); USB only
 if(PSPEXP_HAVE_USB)
-  add_executable(pspexp-capture tools/pspexp-capture/main.c)
-  target_link_libraries(pspexp-capture PRIVATE pspexp pspexp_usb)
+  add_executable(pspexp-plugin-host tools/pspexp-plugin-host/main.c)
+  target_link_libraries(pspexp-plugin-host PRIVATE pspexp pspexp_usb)
 endif()
 add_executable(pspexp-bench tools/usb-bench/main.c)
 target_link_libraries(pspexp-bench PRIVATE pspexp pspexp_null pspexp_tcp)
@@ -283,7 +283,7 @@ if(PSPEXP_BUILD_TESTS)
   add_executable(test_note tests/test_note.c)
   target_link_libraries(test_note PRIVATE pspexp_runtime)
   add_test(NAME note COMMAND test_note)
-  add_executable(test_pace tests/test_pace.c)   # the capture plugin's pacing (psp/capture/pace.c), against modelled games
+  add_executable(test_pace tests/test_pace.c)   # the PSPExp plugin's pacing (psp/plugin/pace.c), against modelled games
   add_test(NAME pace COMMAND test_pace)
   add_executable(test_fs tests/test_fs.c)
   target_link_libraries(test_fs PRIVATE pspexp pspexp_null)

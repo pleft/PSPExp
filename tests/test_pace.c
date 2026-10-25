@@ -1,5 +1,5 @@
 /*
- * The capture plugin's pacing (psp/capture/pace.c) against games modelled on the PSP's
+ * The capture plugin's pacing (psp/plugin/pace.c) against games modelled on the PSP's
  * measurements (2026-10-25): in a scene a game runs at its own rate, and each frame copied a
  * second costs it `cost` frames a second (Gran Turismo's heavier stretch about 2: 20 copies left
  * it at 20 fps, 12 at 36, 4.5 at 51; Burnout Legends' races about 0.6, its copies 23-25 ms; most
@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../psp/capture/pace.c"
+#include "../psp/plugin/pace.c"
 
 typedef struct { const char *name; double own, cost; int seconds; } Scene;
 

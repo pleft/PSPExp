@@ -215,17 +215,17 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
 #define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
 #define PSPEXP_FEATURE_BOOT_DISC  0x00020000u  /* answers BOOT_DISC: a PSP game started natively (PRO's ISO driver; architecture §12c) */
-#define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: PSPExp Capture inside PSPExp (what the PSP shows and plays,
+#define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: Recording inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
 
-/* Host -> PSP (CAPTURE_SET): PSPExp Capture inside PSPExp on (a receiver is there to take it)
+/* Host -> PSP (CAPTURE_SET): Recording inside PSPExp on (a receiver is there to take it)
  * or off. While on, the PSP reads the note button (♪+R a clip, ♪+L a recording) and copies what
  * it shows (up to 30 frames a second, the volume bar and the recording dot left out) and what it
- * plays, and sends them back as CAPTURE_DATA: the bytes of a stream in PSPExp Capture's own
- * packets ("PXCF" frames, "PXCA" sound, "PXCE" note-button events; tools/pspexp-capture), cut
+ * plays, and sends them back as CAPTURE_DATA: the bytes of a stream in the PSPExp plugin's own
+ * packets ("PXCF" frames, "PXCA" sound, "PXCE" note-button events; tools/pspexp-plugin-host), cut
  * where it suits the PSP, so a message's bytes join the last message's. Off again at every
  * disconnect: the next host asks anew. */
 #define PSPEXP_CAPTURE_OFF        0

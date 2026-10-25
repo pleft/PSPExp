@@ -1,7 +1,7 @@
 #!/bin/sh
 # pspexp-core: PSPExp on a Debian board, as a package (docs/Package_Manager.md §6):
 # the console and launcher (pspexp-term), the SDL layer, pspexp-exec / -run /
-# -pkg / -ms, PSPExp Capture's receiver (pspexp-capture), the root helper pspexp-pkg-apt, the board setup script, the
+# -pkg / -ms, the PSPExp plugin host (pspexp-plugin-host), the root helper pspexp-pkg-apt, the board setup script, the
 # launcher's fonts. Its scripts never restart the running console: it notices
 # the new file and offers System > Restart PSPExp.
 #   build OUTDIR arm64 USER@PI      the Pi's own build (~/pspexp/src/build: scripts/pi/install.sh build)
@@ -18,12 +18,12 @@ arm64)
 	if [ -d "$SRC_HOST" ]; then   # a build made elsewhere (a Debian 13 arm64 container: the same libraries as Raspberry Pi OS)
 		cp "$SRC_HOST/pspexp-term" "$SRC_HOST/libsdl-pspexp.so" "$W/b/"
 		cp "$SRC_HOST/pspexp-ms" "$SRC_HOST/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true
-		cp "$SRC_HOST/pspexp-capture" "$W/b/"   # PSPExp Capture's receiver (the console runs it)
+		cp "$SRC_HOST/pspexp-plugin-host" "$W/b/"   # the PSPExp plugin host (the console runs it)
 		cp "$SRC_HOST/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true   # SDL 1.2 programs (pspexp-run)
 	else
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-term" "$SRC_HOST:pspexp/src/build/libsdl-pspexp.so" "$W/b/"
 	scp -q "$SRC_HOST:pspexp/src/build/pspexp-ms" "$W/b/" 2>/dev/null || true
-	scp -q "$SRC_HOST:pspexp/src/build/pspexp-capture" "$W/b/"   # PSPExp Capture's receiver (the console runs it)
+	scp -q "$SRC_HOST:pspexp/src/build/pspexp-plugin-host" "$W/b/"   # the PSPExp plugin host (the console runs it)
 	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-hostgl.so" "$W/b/" 2>/dev/null || true   # the board's GPU draws (pspexp-run PSPEXP_HOSTGL)
 	scp -q "$SRC_HOST:pspexp/src/build/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true   # SDL 1.2 programs (pspexp-run)
 	fi ;;
@@ -31,7 +31,7 @@ armhf)
 	cp "$ROOT/build/gameshell/bin/pspexp-term" "$W/b/"
 	cp "$ROOT/build/gameshell/lib/libsdl-pspexp.so" "$ROOT/build/gameshell/lib/libsdl-pspexp-sdl12.so" "$W/b/" 2>/dev/null || true
 	cp "$ROOT/build/gameshell/bin/pspexp-ms" "$W/b/" 2>/dev/null || true
-	cp "$ROOT/build/gameshell/bin/pspexp-capture" "$W/b/" ;;
+	cp "$ROOT/build/gameshell/bin/pspexp-plugin-host" "$W/b/" ;;
 *) echo "arch: arm64 | armhf" >&2; exit 2 ;;
 esac
 V="$(date -u +%Y.%m.%d.%H%M%S)+g$(git -C "$ROOT" rev-parse --short HEAD)"
@@ -39,12 +39,12 @@ R="$W/root"
 mkdir -p "$R/usr/bin" "$R/usr/sbin" "$R/usr/lib/pspexp" "$R/usr/share/pspexp/launcher" "$R/usr/share/doc/pspexp-core"
 install -m 755 "$W/b/pspexp-term" "$R/usr/bin/pspexp-term"
 [ -f "$W/b/pspexp-ms" ] && install -m 755 "$W/b/pspexp-ms" "$R/usr/bin/pspexp-ms"
-install -m 755 "$W/b/pspexp-capture" "$R/usr/bin/pspexp-capture"   # (ffmpeg, which it needs, is on the card images; a build without it fails here:
+install -m 755 "$W/b/pspexp-plugin-host" "$R/usr/bin/pspexp-plugin-host"   # (ffmpeg, which it needs, is on the card images; a build without it fails here:
 # an upgrade would take the receiver away, as a test package of 2026-10-24 did, its Pi build lacking the target)
-# the board's user may open PSPExp Capture's USB product (0x01CB): the card images' own rule, written
+# the board's user may open the PSPExp plugin's USB product (0x01CB): the card images' own rule, written
 # when they were made, names only PSPExp's (0x01CA); a game starting the plugin plugs it in anew
 mkdir -p "$R/usr/lib/udev/rules.d"
-echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01cb", MODE="0666"' > "$R/usr/lib/udev/rules.d/60-pspexp-capture.rules"
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="01cb", MODE="0666"' > "$R/usr/lib/udev/rules.d/60-pspexp-plugin-host.rules"
 [ -f "$W/b/libsdl-pspexp.so" ] && install -m 644 "$W/b/libsdl-pspexp.so" "$R/usr/lib/pspexp/libsdl-pspexp.so"
 [ -f "$W/b/libsdl-pspexp-hostgl.so" ] && install -m 644 "$W/b/libsdl-pspexp-hostgl.so" "$R/usr/lib/pspexp/libsdl-pspexp-hostgl.so"
 [ -f "$W/b/libsdl-pspexp-sdl12.so" ] && install -m 644 "$W/b/libsdl-pspexp-sdl12.so" "$R/usr/lib/pspexp/libsdl-pspexp-sdl12.so"
@@ -80,7 +80,7 @@ cat > "$W/postinst" <<'P'
 set -e
 [ "$1" = configure ] || exit 0
 sysctl -q -p /etc/sysctl.d/90-pspexp-routes.conf >/dev/null 2>&1 || true
-udevadm control --reload-rules >/dev/null 2>&1 || true   # (PSPExp Capture's rule)
+udevadm control --reload-rules >/dev/null 2>&1 || true   # (the PSPExp plugin's rule)
 # the board's user (uid 1000, the console's) in the games group: Debian's games keep their shared
 # scores there and pspexp-run starts a setgid game as the user (the SDL layer loads then); without
 # the group Kobo Deluxe could not save a player on the GameShell ("Cannot save player profile").
@@ -107,7 +107,7 @@ Depends: libc6, libusb-1.0-0, libsdl2-2.0-0, sudo, gpgv, libarchive-tools, curl,
 Description: PSPExp: the PSP as this board's console
  The console and launcher that make a PSP the screen, sound and controller
  of this board, the SDL layer that puts SDL2 programs on the PSP, and the
- package tools behind Apps > Packages, and PSPExp Capture's receiver, which
+ package tools behind Apps > Packages, and the PSPExp plugin host, which
  keeps the clips of native PSP games recorded with the PSP's note button.
  Upgrading it never restarts the running console; the console offers a
  restart.

@@ -666,14 +666,14 @@ Packages, square, START twice, the history after a restart (a repeated key
 counted x2), and a program running: nothing shown, then "3 notifications
 while you played".
 
-### 3.8 PSPExp Capture's receiver (2026-10-24)
+### 3.8 The PSPExp plugin's board side, `pspexp-plugin-host` (2026-10-24; `pspexp-capture` until 2026-10-25)
 
-A native PSP game with the Capture plugin on (psp/capture, the
+A native PSP game with the PSPExp plugin on (psp/plugin, the
 architecture's §12b) reaches the board under the plugin's own USB product,
 0x01CB, which the console's link (0x01CA) leaves alone. The console runs
-PSPExp Capture's receiver beside itself: started with the launcher over USB
-when `pspexp-capture` and ffmpeg are on the PATH (both are on the card
-images), as `pspexp-capture -k -q -s ~/Videos/PSPExp` (`~/Movies/PSPExp` on
+the PSPExp plugin host beside itself: started with the launcher over USB
+when `pspexp-plugin-host` and ffmpeg are on the PATH (both are on the card
+images), as `pspexp-plugin-host -k -q -s ~/Videos/PSPExp` (`~/Movies/PSPExp` on
 a Mac), again 10 s after it ends, and stopped with the console, a clip under
 way finished first. `PSPEXP_CAPTURE=0` keeps it from starting. In the game,
 ♪+L starts and stops a recording and ♪+R saves the last 30 s; a dot in the
@@ -690,7 +690,7 @@ The console's log keeps the receiver's lines (`-q`: the connections, the
 clips and what went wrong).
 
 PSPExp's own games (2026-10-24): the receiver also listens on
-a local socket, `/tmp/pspexp-capture-<uid>.sock`. The program holding the
+a local socket, `/tmp/pspexp-plugin-host-<uid>.sock`. The program holding the
 PSP (the console, or a game through the SDL layer) finds it, at the
 connection and every 2 s after, asks the PSP's runtime to capture what it
 shows and plays, and passes it on; one session goes on across the console
@@ -886,7 +886,7 @@ pspexp-core installs `/opt/pspexp/systems/psp.system`: the board's PSP games
 in `~/roms/psp` (ISO, CSO, or a zip holding an ISO, as collections keep them)
 on a "PSP" shelf under Emulators, with no emulator: `exec=@psp-boot` asks
 the console to have the PSP start the game itself (`psp_native.c`: it checks
-the PSP's runtime offers BOOT_DISC and PSPExp Capture is on in
+the PSP's runtime offers BOOT_DISC and the PSPExp plugin is on in
 `seplugins/game.txt`, without which the PSP would wait for its disc for
 ever; unpacks a zipped game once into `~/.cache/pspexp/discs`, the oldest
 others removed for room, a "Preparing" banner with its progress; names the
@@ -1239,7 +1239,7 @@ console). The commands:
 | `relink` | drops the link as a cable pull would, and answers when it is back |
 | `clock [force]` | the PSP's clock and time zone from the board (§9) |
 | `psp-restart` | PSPExp on the PSP starts itself again (runtimes with `PSPEXP_FEATURE_RESTART`); the link goes and comes back |
-| `psp-boot PATH` | PSPExp leaves and the PSP starts that PSP game natively (`ms0:/ISO/game.iso`; runtimes with `PSPEXP_FEATURE_BOOT_DISC`, PRO custom firmware); with the capture plugin on, PSPExp comes back at the game's exit (the architecture's §12c) |
+| `psp-boot PATH` | PSPExp leaves and the PSP starts that PSP game natively (`ms0:/ISO/game.iso`; runtimes with `PSPEXP_FEATURE_BOOT_DISC`, PRO custom firmware); with the PSPExp plugin on, PSPExp comes back at the game's exit (the architecture's §12c) |
 | `type TEXT` | writes into the shell (`\n` is Enter) |
 | `fs ls|get|put|rm|rmtree|mkdir|mv|df` | the memory stick over the console's link, with timings |
 | `end` | lifts test mode |

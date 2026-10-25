@@ -1,6 +1,6 @@
-# pspexp_capture.prx: PSPExp Capture, a kernel plugin for custom firmware's game.txt
+# pspexp_plugin.prx: the PSPExp plugin, a kernel plugin for custom firmware's game.txt
 # (main.c, systemctrl.S: the custom firmware's functions it uses; PSPExp's USB driver built in from ../transport-usb)
-TARGET = pspexp_capture
+TARGET = pspexp_plugin
 OBJS = main.o systemctrl.o
 
 USE_KERNEL_LIBS = 1

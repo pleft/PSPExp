@@ -1,6 +1,6 @@
 #!/bin/sh
-# The virtual disc's board side (architecture §12c): pspexp-capture serving a PSP game's sectors
-# to the capture plugin, here a stand-in over TCP (-T). A disc image and a CSO of it are made,
+# The virtual disc's board side (architecture §12c): pspexp-plugin-host serving a PSP game's sectors
+# to the PSPExp plugin, here a stand-in over TCP (-T). A disc image and a CSO of it are made,
 # then reads of every kind are checked byte for byte against the image.
 set -e
 BUILD="$1"
@@ -26,7 +26,7 @@ idx.append(at + len(data))
 h = b'CISO' + struct.pack('<IQIBBH', 24, len(iso), 2048, 1, 0, 0)
 open(w + '/game.cso', 'wb').write(h + b''.join(struct.pack('<I', x) for x in idx) + data)
 PY
-"$BUILD/pspexp-capture" -k -q -T "$PORT" > "$W/recv.log" 2>&1 &
+"$BUILD/pspexp-plugin-host" -k -q -T "$PORT" > "$W/recv.log" 2>&1 &
 PID=$!
 python3 - "$W" "$PORT" <<'PY'
 import socket, struct, sys, time

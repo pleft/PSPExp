@@ -4,7 +4,7 @@
 #include "../../runtime/pspexp_runtime.h"
 #include "../executor-ge/pspexp_ge.h"
 
-/* PSPExp Capture inside PSPExp (pspexp_capture_psp.c). write sends bytes on the link; lock and
+/* Recording inside PSPExp (pspexp_capture_psp.c). write sends bytes on the link; lock and
  * unlock keep one message whole against the main loop's writes. */
 void pspexp_capture_psp_init(PspExpGeExecutor *ge, int (*write)(const void *, int), void (*lock)(void), void (*unlock)(void));
 void pspexp_capture_psp_ops(PspExpRuntimeOps *ops);

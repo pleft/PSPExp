@@ -17,7 +17,7 @@
 #include "../../protocol/pspexp_usb_link.h"
 #include "pspexp_usb_driver.h"
 
-#ifndef PSPEXP_USB_EMBEDDED   /* (built into another kernel module: psp/capture, PSPExp Capture) */
+#ifndef PSPEXP_USB_EMBEDDED   /* (built into another kernel module: psp/plugin, the PSPExp plugin) */
 PSP_MODULE_INFO("PSPExpUSB", PSP_MODULE_KERNEL, 1, 0);
 PSP_NO_CREATE_MAIN_THREAD();
 #endif
@@ -88,7 +88,7 @@ static struct UsbdDeviceReq g_rx_req;
 static struct UsbdDeviceReq g_tx_req;
 static struct UsbdDeviceReq g_sync_req;
 
-/* each receive: a whole chunk; a host that only says hello (PSPExp Capture, built in) asks for
+/* each receive: a whole chunk; a host that only says hello (the PSPExp plugin, built in) asks for
  * less, its buffers being kernel memory a game's capture needs */
 #ifndef PSPEXP_USB_RX_SIZE
 #define PSPEXP_USB_RX_SIZE PSPEXP_USB_CHUNK
@@ -477,7 +477,7 @@ static int tx_one(const unsigned char *data, int len)
 }
 
 /* The size of each transfer, and whether one that ends on a packet boundary is split so both
- * parts end short (what the runtime's host reads need). PSPExp Capture, built in, sets its own:
+ * parts end short (what the runtime's host reads need). The PSPExp plugin, built in, sets its own:
  * a stream the receiver reads without pause, where fewer, larger transfers may cost the PSP less. */
 static int g_tx_chunk = PSPEXP_USB_CHUNK, g_tx_split = 1;
 #ifdef PSPEXP_USB_EMBEDDED
@@ -547,7 +547,7 @@ unsigned int pspexpUsbButtons(void)
 
 /* The system's mute (the HOME menu's driver toggles it as the note button is pressed, before any
  * program sees the buttons), through the custom firmware's finder, which resolves the old NIDs, as
- * PSPExp Capture's plugin does. The finder is imported weakly (systemctrl.S): called only once the
+ * the PSPExp plugin does. The finder is imported weakly (systemctrl.S): called only once the
  * loader has linked it, its stub then a jump (PPSSPP leaves "jr ra" there, an unlinked stub data). */
 u32 sctrlHENFindFunction(char *modname, char *libname, u32 nid);
 #define IMPOSE_MUTE 0x8

@@ -6,9 +6,9 @@ again to stop it; with **Clips** turned on in Settings, **♪ + R**
 saves the last 30 seconds as a video. A small dot in the corner of the screen
 says it heard you. The videos are kept on the board, ready to watch or share.
 
-This is PSPExp Capture. In PSPExp (its games, emulators, apps and the
-launcher) it works by itself. For a game started from the XMB, a small
-plugin for the PSP's custom firmware sends the game's picture and sound down
+In PSPExp (its games, emulators, apps and the launcher) it works by itself.
+For a game the PSP runs itself (started from the XMB or from PSPExp's PSP
+shelf), [the PSPExp plugin](plugin.md) sends the game's picture and sound down
 the USB cable, and the board makes the videos; the game runs on the PSP as
 always.
 
@@ -19,10 +19,9 @@ always.
   itself; it needs ffmpeg, which the card images have.
 - For what you play in PSPExp: nothing more, once PSPExp on the PSP is up to
   date (Settings > Update the PSP).
-- For games started from the XMB: a PSP with **PRO custom firmware** (tested
-  on a PSP-1000 with 6.60 PRO-C; ARK has not been tried yet) and the **PSPExp
-  download for the PSP**: the plugin comes with it, in
-  `PSP/GAME/PSPExp/capture/` on the memory stick, switched on once as below.
+- For games the PSP runs itself: [the PSPExp plugin](plugin.md), switched on
+  once (PRO custom firmware; the plugin comes with the PSPExp download for
+  the PSP).
 
 ## In PSPExp
 
@@ -40,25 +39,12 @@ slower, the board works harder), so it is off at first. Turn it on in
 On or Off on the right); then ♪ + R saves the last 30
 seconds. With it off, nothing is sent or recorded until you press ♪ + L.
 
-## Switching on the plugin, for games from the XMB
-
-The plugin is switched on in custom firmware's list of game plugins, once:
-
-1. Put the PSP in USB mode (Settings > USB Connection on the XMB).
-2. On the memory stick, open `seplugins/game.txt` (make the folder and the
-   file if they are not there) and add this line:
-   `ms0:/PSP/GAME/PSPExp/capture/pspexp_capture.prx 1`
-3. Leave USB mode.
-
-The `1` at the end switches it on; a `0` switches it off. PRO's recovery menu
-(from its VSH menu: SELECT on the XMB) lists it under Plugins too. It stays out of
-PSPExp itself, so it can stay on all the time.
-
 ## Recording
 
-In PSPExp you can press the buttons from the start. With a game from the XMB:
+In PSPExp you can press the buttons from the start. With a game the PSP runs
+itself:
 
-1. Plug the PSP into the board and start a game from the XMB.
+1. Plug the PSP into the board and start a game from the XMB or the PSP shelf.
 2. Once the game has set itself up (a few seconds, at most 20), recording begins (the first
    seconds are usually the logos). From then on:
 
@@ -97,15 +83,15 @@ it plays full screen in **Media**, like any film.
 - The dot is only on the PSP's screen, never in the videos. It may flicker a
   little.
 - No dot? Check that the PSP is plugged into the board and that the board's
-  PSPExp is up to date (Apps > Packages); for a game from the XMB, that the
-  line is in `game.txt` with a `1`; in PSPExp, that PSPExp on the PSP is up
+  PSPExp is up to date (Apps > Packages); for a game the PSP runs itself, that
+  [the plugin](plugin.md) is on; in PSPExp, that PSPExp on the PSP is up
   to date (Settings > Update the PSP).
 
 ## Without a board
 
 A Mac or a Linux computer can be the recorder instead: the program is
-`pspexp-capture`, built from PSPExp's source
-([Developing](../Developing.md)). `pspexp-capture -k -s ~/Movies/PSP`
+`pspexp-plugin-host`, built from PSPExp's source
+([Developing](../Developing.md)). `pspexp-plugin-host -k -s ~/Movies/PSP`
 keeps the ♪ clips in that folder (with `-b 0`, only ♪ + L recordings, as with
-Clips off); `pspexp-capture -o game.mp4` records a
+Clips off); `pspexp-plugin-host -o game.mp4` records a
 whole game into one file.

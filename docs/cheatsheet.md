@@ -96,7 +96,7 @@ cable pull, so pull the cable to read it after a session.
 | **Doom / Tyrian on the PSP** | `scripts/dev/pspexp-doom` / `scripts/dev/pspexp-tyrian` |
 | an emulator: one core, one ROM | `build/host/pspexp-retro CORE ROM` (through `scripts/dev/pspexp-run` for the PSP) |
 | **the PSP as this machine's console** | `build/host/pspexp-term` |
-| record a native PSP game (Capture plugin on): clips with ♪+R / ♪+L, or the whole game | `build/host/pspexp-capture -k -s ~/Movies/clips` (`-b 0`: ♪+L recordings only) / `build/host/pspexp-capture -o clip.mp4` (the console starts the first itself on a board, `-b` per Settings > Recording; `PSPEXP_CAPTURE=0` not) |
+| record a native PSP game (PSPExp plugin on): clips with ♪+R / ♪+L, or the whole game | `build/host/pspexp-plugin-host -k -s ~/Movies/clips` (`-b 0`: ♪+L recordings only) / `build/host/pspexp-plugin-host -o clip.mp4` (the console starts the first itself on a board, `-b` per Settings > Recording; `PSPEXP_CAPTURE=0` not) |
 | the PSP's memory stick from a shell (list, copy both ways, mkdir, rm, mv, free space) | `build/host/pspexp-ms [--tcp <host>] ls ms0:/PSP/GAME` / `get ms0:/X [file]` / `put file ms0:/PSP/GAME/X/` / `mkdir` / `rm` / `mv` / `df` |
 | a stand-in PSP whose memory stick is a folder (file manager, `pspexp-ms`) | `PSPEXP_MS0=<folder> build/host/pspexp-sdl-server` |
 | PSPExp's apt repository and catalogue: build (signed) / push to the home server / to the public R2 bucket (keys in `~/.pspexp/r2.env`) | `scripts/packages/apt-repo build build/debs` / `scripts/packages/apt-repo push` / `scripts/packages/apt-repo push r2` |

@@ -2,17 +2,17 @@
 
 ## Since 1.2.0
 
-- **Record what you play** (PSPExp Capture), in PSPExp and in your own PSP
+- **Record what you play**, in PSPExp and in your own PSP
   games alike: **♪ + L** starts and stops a recording, **♪ + R** saves the
   last 30 seconds as a video (Settings > Recording > Clips: off at
   first, since the board then records all the time), and a dot in the
   screen's corner says it heard you; the board keeps the videos in `~/Videos/PSPExp`, up to 30
   pictures a second in full colour, and PSPExp's Files and Media play them
   on the PSP. In PSPExp the PSP sends what it shows to the board itself (♪
-  alone still pauses the music); for UMD and ISO games, a plugin for PRO
+  alone still pauses the music); for UMD and ISO games, the PSPExp plugin for PRO
   custom firmware, in the PSP's download, sends the game's picture and sound
   down the cable, switched on with one line in `seplugins/game.txt` (the
-  manual's Recording PSP games). Recorded so far:
+  manual's The PSPExp plugin). Recorded so far:
   Castlevania: The Dracula X Chronicles, Crisis Core, Jeanne d'Arc, Gran
   Turismo, Ace Combat X, Burnout Legends, Bomberman, Lunar: Silver Star
   Harmony, Phantasy Star Portable 2.

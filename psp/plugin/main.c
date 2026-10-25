@@ -1,14 +1,16 @@
 /*
- * PSPExp Capture: a kernel plugin for custom firmware (PRO/ARK: ms0:/seplugins/game.txt) that
- * sends a native PSP game's picture over USB to a PSPExp receiver (tools/pspexp-capture), so a
- * board or a computer can record it: its picture and, from stage 2, its sound.
+ * The PSPExp plugin: a kernel plugin for custom firmware (PRO/ARK: ms0:/seplugins/game.txt) for
+ * native PSP games, talking over USB to its board side (tools/pspexp-plugin-host): it sends the
+ * game's picture and sound so the board can record them, and serves the PSP games shelf's virtual
+ * disc (pxd0:, a game's ISO kept on the board). Named PSPExp Capture until 2026-10-25, when the disc
+ * made it more than a recorder.
  *
  * A watcher thread looks at the frame being shown once per screen refresh (sceDisplayGetFrameBuf)
  * and, when the game has put up a new one, has it copied out band by band by the DMA engine
  * (copy_thread) while a sender thread writes the bands to the USB link; frames that come while
  * one is on its way are skipped. It
  * also counts the game's own frame changes (its frame rate, with and without a receiver), for
- * measuring what the capture costs it. Its log: ms0:/seplugins/pspexp_capture.log. The game's exit
+ * measuring what the capture costs it. Its log: ms0:/seplugins/pspexp_plugin.log. The game's exit
  * is caught so the plugin stops before the system restarts (cap_shutdown). What was tried and
  * measured: docs/PSPExp_Technical_Architecture.md section 12b.
  *
@@ -30,8 +32,8 @@
 #define PSPEXP_USB_RX_SIZE 4096   /* it receives only the receiver's hello and short commands */
 #define PSPEXP_USB_TXBUF 16384    /* (its unaligned writes, the sound ring's, go in pieces this size) */
 #include "pspexp_usb_link.h"
-#define PSPEXP_USB_DEVICE_PID PSPEXP_CAPTURE_USB_PID          /* (its own product: a board's console, waiting */
-#define PSPEXP_USB_DEVICE_NAME PSPEXP_CAPTURE_USB_DRIVER_NAME /* for PSPExp, leaves it to the receiver) */
+#define PSPEXP_USB_DEVICE_PID PSPEXP_PLUGIN_USB_PID          /* (its own product: a board's console, waiting */
+#define PSPEXP_USB_DEVICE_NAME PSPEXP_PLUGIN_USB_DRIVER_NAME /* for PSPExp, leaves it to the receiver) */
 #include "../transport-usb/main.c"
 
 #include <pspdisplay.h>
@@ -56,12 +58,12 @@
  * Chronicles later with its exit calls still redirected here, 2026-10-24). The system's
  * restart wipes it instead, as it does psp-cast, a plugin of the same kind (Lucaspcaldeira/
  * psp-cast: PSP_MODULE_INFO attribute 0x1007). */
-PSP_MODULE_INFO("PSPExpCapture", PSP_MODULE_KERNEL | PSP_MODULE_NO_STOP | PSP_MODULE_SINGLE_LOAD | PSP_MODULE_SINGLE_START, 1, 0);
+PSP_MODULE_INFO("PSPExpPlugin", PSP_MODULE_KERNEL | PSP_MODULE_NO_STOP | PSP_MODULE_SINGLE_LOAD | PSP_MODULE_SINGLE_START, 1, 0);
 PSP_NO_CREATE_MAIN_THREAD();
 
 #define CAP_W 480
 #define CAP_H 272
-#define LOG_PATH "ms0:/seplugins/pspexp_capture.log"
+#define LOG_PATH "ms0:/seplugins/pspexp_plugin.log"
 
 
 /* the log's own small formatter (the kernel's libc has no vsnprintf): %s %d %u %x (as %08x) */
@@ -77,7 +79,7 @@ static int fmt_num(char *p, u32 v, int base, int width)
 
 /* The log: in memory (the newest 8 KB), sent to the receiver between frames ("PXCM"), which keeps
  * it: the plugin never touches the memory stick. A developer build (make DEV=1) also writes it to
- * ms0:/seplugins/pspexp_capture.log, and then only between 2 s after the game's start and the HOME
+ * ms0:/seplugins/pspexp_plugin.log, and then only between 2 s after the game's start and the HOME
  * menu or the game's exit; before and after, the lines wait in memory. psp-cast found an sceIoOpen on ms0
  * during the start (module_start or right after) "hung the PSP, always, after exiting a game";
  * this plugin opened and renamed its log in module_start from v10 on, and every exit of
@@ -778,9 +780,9 @@ static int mem_acquire(void)
     if (g_busy) return 0;   /* (a frame still finishing in buffers given back) */
     if (g_fblock >= 0) { sceKernelFreePartitionMemory(g_fblock); g_fblock = -1; g_fbuf = NULL; }   /* (kept by a release that came mid-frame) */
     if (freem >= need + UMARGIN && sceKernelPartitionMaxFreeMemSize(2) >= FRAME_MAX + 64) {
-        f = sceKernelAllocPartitionMemory(2, "PSPExpCaptureFrame", PSP_SMEM_High, FRAME_MAX + 64, NULL);
+        f = sceKernelAllocPartitionMemory(2, "PSPExpPluginFrame", PSP_SMEM_High, FRAME_MAX + 64, NULL);
         if (f < 0) return 0;
-        a = sceKernelAllocPartitionMemory(2, "PSPExpCaptureSound", PSP_SMEM_High, AUDIO_RING + 64, NULL);
+        a = sceKernelAllocPartitionMemory(2, "PSPExpPluginSound", PSP_SMEM_High, AUDIO_RING + 64, NULL);
         if (a < 0) { sceKernelFreePartitionMemory(f); return 0; }
         g_aring_size = AUDIO_RING;
         g_fblock = f; g_ablock = a;
@@ -804,9 +806,9 @@ static int mem_acquire(void)
     while (nb >= 2 && (u32)nb * BAND + 64 > kmax) nb--;
     if (nb < want && vol_acquire(freem)) return 1;
     if (nb < 2) return 0;
-    f = sceKernelAllocPartitionMemory(1, "PSPExpCaptureBands", PSP_SMEM_High, nb * BAND + 64, NULL);
+    f = sceKernelAllocPartitionMemory(1, "PSPExpPluginBands", PSP_SMEM_High, nb * BAND + 64, NULL);
     if (f < 0) return 0;
-    a = sceKernelAllocPartitionMemory(1, "PSPExpCaptureSound", PSP_SMEM_High, AUDIO_RING_K + 64, NULL);
+    a = sceKernelAllocPartitionMemory(1, "PSPExpPluginSound", PSP_SMEM_High, AUDIO_RING_K + 64, NULL);
     if (a < 0) { sceKernelFreePartitionMemory(f); return 0; }
     g_fblock = f; g_ablock = a;
     g_fbuf = (unsigned char *)(((u32)sceKernelGetBlockHeadAddr(f) + 63) & ~63u);
@@ -1922,18 +1924,18 @@ static int capture_thread(SceSize args, void *argp)
     g_log_ready = 1;
     cap_log("kernel memory: %u KB free; the game's: %u KB free", (u32)sceKernelPartitionTotalFreeMemSize(1) / 1024,
             (u32)sceKernelPartitionTotalFreeMemSize(2) / 1024);
-    g_copy_go = sceKernelCreateSema("PSPExpCaptureCopy", 0, 0, 1, NULL);
-    g_copied = sceKernelCreateSema("PSPExpCaptureCopied", 0, 0, 1, NULL);
-    g_band_free = sceKernelCreateSema("PSPExpCaptureFree", 0, 0, MAXBAND, NULL);   /* (filled when the bands are taken) */
-    g_band_full = sceKernelCreateSema("PSPExpCaptureFull", 0, 0, MAXBAND, NULL);
+    g_copy_go = sceKernelCreateSema("PSPExpPluginCopy", 0, 0, 1, NULL);
+    g_copied = sceKernelCreateSema("PSPExpPluginCopied", 0, 0, 1, NULL);
+    g_band_free = sceKernelCreateSema("PSPExpPluginFree", 0, 0, MAXBAND, NULL);   /* (filled when the bands are taken) */
+    g_band_full = sceKernelCreateSema("PSPExpPluginFull", 0, 0, MAXBAND, NULL);
     if (g_frames_on) {
-        g_copy_th = sceKernelCreateThread("PSPExpCaptureCopy", copy_thread, 0x19, 0x2000, 0, NULL);
+        g_copy_th = sceKernelCreateThread("PSPExpPluginCopy", copy_thread, 0x19, 0x2000, 0, NULL);
         if (g_copy_th >= 0) sceKernelStartThread(g_copy_th, 0, NULL);
     }
     {   /* the sender just below the watcher (at 0x60, below the game's threads, a race got 14 frames
          * of 28 a second sent; 0x1A, 14-23; above the game's threads, 0x11 with the watcher at
          * 0x10, no more frames and the game itself slower, 20-25 fps: 2026-10-23) */
-        g_send_th = sceKernelCreateThread("PSPExpCaptureSend", send_thread, 0x1A, 0x4000, 0, NULL);
+        g_send_th = sceKernelCreateThread("PSPExpPluginSend", send_thread, 0x1A, 0x4000, 0, NULL);
         if (g_send_th >= 0) sceKernelStartThread(g_send_th, 0, NULL);
     }
     cap_log("battery %d%%", scePowerGetBatteryLifePercent());
@@ -1961,7 +1963,7 @@ static int capture_thread(SceSize args, void *argp)
     ov_init();
     cap_log("the note button: mute setting %s", g_impose_get && g_impose_set ? "found" : "not found");
     cap_log("HOME menu watched: %x", (u32)g_impose_status);
-    g_cmd_th = sceKernelCreateThread("PSPExpCaptureCmd", cmd_thread, 0x30, 0x2000, 0, NULL);
+    g_cmd_th = sceKernelCreateThread("PSPExpPluginCmd", cmd_thread, 0x30, 0x2000, 0, NULL);
     if (g_cmd_th >= 0) sceKernelStartThread(g_cmd_th, 0, NULL);
 
     t0 = now_us();
@@ -2094,7 +2096,7 @@ static void crash_handler(PspDebugRegBlock *r)
 {
     int i;
     pspDebugScreenInit();
-    pspDebugScreenPuts("PSPExp Capture: the PSP crashed. Please take a photo of this screen.\n\n");
+    pspDebugScreenPuts("PSPExp plugin: the PSP crashed. Please take a photo of this screen.\n\n");
     crash_hex("epc      ", r->epc); crash_where("  in ", r->epc);
     crash_hex("ra       ", r->r[31]); crash_where("  in ", r->r[31]);
     crash_hex("cause    ", r->cause);
@@ -2121,7 +2123,7 @@ static void show_restart(const char *what, u32 ra, const u32 *p)
     int i;
     const u32 *blk = p && (p[2] & 0x1FFFFFFF) < 0x0A000000 && p[2] >= 0x08000000 ? (const u32 *)p[2] : NULL;
     pspDebugScreenInit();
-    pspDebugScreenPuts("PSPExp Capture: the system is restarting. Please take a photo of this screen.\n\n");
+    pspDebugScreenPuts("PSPExp plugin: the system is restarting. Please take a photo of this screen.\n\n");
     pspDebugScreenPuts(what); pspDebugScreenPuts("\n");
     crash_hex("called from ", ra); crash_where("  in ", ra);
     if (p) for (i = 0; i < 8; i++) crash_hex("param ", p[i]);
@@ -2149,7 +2151,7 @@ static void hook_jump(u32 f, void *h)   /* (f's first instructions: a jump to h,
 int module_start(SceSize args, void *argp)
 {
     g_started_at = now_us();
-    cap_log("PSPExp Capture: stage 2 (picture and sound; a DMA ring, 32-bit as the game draws; control from the receiver); parts: %s", g_parts[0] ? g_parts : "none");
+    cap_log("PSPExp plugin: stage 2 (picture and sound; a DMA ring, 32-bit as the game draws; control from the receiver); parts: %s", g_parts[0] ? g_parts : "none");
     if (part_on('Z')) return 0;   /* (loaded, nothing else) */
 #ifdef PSPEXP_CAPTURE_CRASH
     g_mod_by_addr = (void *)sctrlHENFindFunction("sceLoaderCore", "LoadCoreForKernel", 0xDD303D79);   /* sceKernelFindModuleByAddress */
@@ -2162,8 +2164,8 @@ int module_start(SceSize args, void *argp)
     }
 #endif
     vd_setup();   /* (a game from PSPExp's shelf: its disc on the board) */
-    g_send_ev = sceKernelCreateEventFlag("PSPExpCaptureSend", 0, 0, NULL);
-    g_tx_lock = sceKernelCreateSema("PSPExpCaptureTx", 0, 1, 1, NULL);
+    g_send_ev = sceKernelCreateEventFlag("PSPExpPluginSend", 0, 0, NULL);
+    g_tx_lock = sceKernelCreateSema("PSPExpPluginTx", 0, 1, 1, NULL);
     if (part_on('X')) catch_exit();
     if (part_on('S')) catch_audio();   /* now, before the game reserves its channels */
     if (part_on('B')) { catch_pad(); g_pad_on = 1; }
@@ -2173,7 +2175,7 @@ int module_start(SceSize args, void *argp)
     g_link_on = part_on('L');
     /* the watcher above most of the game's threads, to copy a frame the moment it is shown; it does
      * little: one look per refresh, and the DMA engine copies while it waits */
-    g_cap_th = sceKernelCreateThread("PSPExpCapture", capture_thread, 0x18, 0x4000, 0, NULL);
+    g_cap_th = sceKernelCreateThread("PSPExpPlugin", capture_thread, 0x18, 0x4000, 0, NULL);
     if (g_cap_th >= 0) sceKernelStartThread(g_cap_th, 0, NULL);
     return 0;
 }

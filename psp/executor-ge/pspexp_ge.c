@@ -610,7 +610,7 @@ static void draw_osd(PspExpGeExecutor *ge)
     ge->state_dirty = 1;
 }
 
-/* the recording dot (PSPExp Capture): bottom right, as the plugin's in a native game, a 12-pixel
+/* the recording dot: bottom right, as the plugin's in a native game, a 12-pixel
  * dot in a dark ring, row by row. The GE keeps the 16x16 pixels under it first (a copy into RAM)
  * and puts them back when it goes, in the frame shown (pspexp_ge_dot_tick) or before a frame is
  * drawn into its buffer again (op_frame_begin); the processor never touches VRAM (in PPSSPP its
@@ -655,7 +655,7 @@ static uint32_t op_present(void *u)
     void *cap;
     screen_target(ge);
     cap = ge->cap_target ? ge->cap_target(ge->cap_user) : NULL;
-    if (cap) {   /* PSPExp Capture: the frame as drawn, before the volume bar and the dot, into RAM by the GE */
+    if (cap) {   /* recording: the frame as drawn, before the volume bar and the dot, into RAM by the GE */
         sceGuCopyImage(GU_PSM_5650, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT, PSPEXP_DISPLAY_STRIDE,
                        (unsigned char *)sceGeEdramGetAddr() + draw_offset(ge), 0, 0, PSPEXP_DISPLAY_WIDTH, cap);
         sceGuTexSync();

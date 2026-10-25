@@ -679,8 +679,8 @@ recipe needs a new meta-package, not just newer packages.
 
 **What goes in, and only this:**
 - `pspexp-core`: the console and launcher, the SDL layer, the emulator
-  player, `pspexp-pkg`, the catalogue, PSPExp Capture's receiver
-  (`pspexp-capture`, which the console runs: Launcher_and_Boards §3.8);
+  player, `pspexp-pkg`, the catalogue, the PSPExp plugin host
+  (`pspexp-plugin-host`, which the console runs: Launcher_and_Boards §3.8);
 - `pspexp-runtime`: the PSP's own files (EBOOT, runtime, USB driver),
   installed on the board and copied to the PSP under the lifecycle of §6.1;
 - games Debian lacks (`pspexp-cavestory`);

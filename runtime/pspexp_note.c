@@ -1,6 +1,6 @@
 /*
- * The note button inside PSPExp (pspexp_note.h), as PSPExp Capture's plugin handles it in a native
- * game (psp/capture/main.c, note_check).
+ * The note button inside PSPExp (pspexp_note.h), as the PSPExp plugin handles it in a native
+ * game (psp/plugin/main.c, note_check).
  */
 #include "pspexp_note.h"
 #include "../protocol/pspexp_protocol.h"

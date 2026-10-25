@@ -81,7 +81,7 @@ struct PspExpContext {
     /* the PSP's keyboard (TEXT_REQUEST): asked and not answered yet (no frames meanwhile); the answer */
     int text_pending, text_have, text_status;
     char text[1025];
-    /* PSPExp Capture inside PSPExp: the receiver's socket while the PSP captures (-1 none); the
+    /* Recording inside PSPExp: the receiver's socket while the PSP captures (-1 none); the
      * mode its hello gave (0: not yet: the PSP not asked) */
     int cap_fd, cap_mode, cap_got;
     uint8_t cap_hello[32];
@@ -132,8 +132,8 @@ PspExpContext *pspexp_create(PspExpTransport *transport, const PspExpConfig *cfg
     return ctx;
 }
 
-/* ---- PSPExp Capture inside PSPExp ----
- * With a receiver there (pspexp-capture, which a board's console runs) and a PSP that can
+/* ---- Recording inside PSPExp ----
+ * With a receiver there (pspexp-plugin-host, which a board's console runs) and a PSP that can
  * (PSPEXP_FEATURE_CAPTURE), the PSP is asked to capture what it shows and plays, and the bytes
  * it sends back (CAPTURE_DATA) go to the receiver's socket as they come. Every program holding
  * the PSP does so through this library, so the receiver hears from each in turn. A receiver that
@@ -184,8 +184,8 @@ static void capture_hello(PspExpContext *ctx)
     c.on = ctx->cap_hello[4] == PSPEXP_CAPTURE_RECORDINGS ? PSPEXP_CAPTURE_RECORDINGS : PSPEXP_CAPTURE_ALL;
     ctx->cap_mode = (int)c.on;
     pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_CAPTURE_SET, &c, sizeof(c));
-    ctx_log(ctx, c.on == PSPEXP_CAPTURE_ALL ? "PSPExp Capture: the PSP sends what it shows to the receiver (♪+R, ♪+L)"
-                                             : "PSPExp Capture: the PSP sends what it shows to the receiver during ♪+L recordings");
+    ctx_log(ctx, c.on == PSPEXP_CAPTURE_ALL ? "Recording: the PSP sends what it shows to the plugin host (♪+R, ♪+L)"
+                                             : "Recording: the PSP sends what it shows to the plugin host during ♪+L recordings");
 }
 
 static void capture_data(PspExpContext *ctx, const PspExpMessage *m)

@@ -27,7 +27,7 @@ Every document and what it is for: [docs/README.md](README.md).
 | TCP transport (host + PSP over Wi-Fi / PPSSPP), `DEBUG_SCREENSHOT`, `scripts/dev/run-ppsspp.sh` | done: bench, sprite demo and Warcraft run against the real PSP runtime under PPSSPP |
 | **v0.2** Stratagus renderer backend (branch `pspexp` of Stratagus in the WarCraft project; no longer in PSPExp) | **Warcraft runs on the PSP over USB at 60 fps with audio**; PSP spends ~1 ms per frame |
 | host-rendered OpenGL (`libsdl-pspexp-hostgl`): a game too heavy for the GE drawn by the board's own GPU, each frame sent to the PSP as a picture | OpenMW from a Mac at 60 fps on the PSP (2026-10-02); on the Pi 400's GPU, headless: SuperTuxKart, Trackballs, Open Surge packaged (2026-10-03; ~30 fps in PPSSPP, not yet measured on the PSP) |
-| `psp/capture` PSPExp Capture `pspexp_capture.prx` (a CFW game.txt plugin: a native PSP game's picture and sound over USB) + `tools/pspexp-capture` (the receiver: an MP4) | **runs on the PSP-1000 2026-10-23** (Burnout Legends: picture and sound in sync over 4½ minutes; menus every frame at 30 in full colour; saves load; exits cleanly; driven from the Mac for tests); a race: every frame, the game 25 fps instead of 30 (the USB driver's processor time); Castlevania 30 of 30; Castlevania's HOME > Exit switched the PSP off with the plugin on: fixed (no memory-stick access while a game starts), exits cleanly while streaming; Jeanne d'Arc, Crisis Core, Phantasy Star Portable 2 recorded through a fallback in the kernel's memory (2026-10-24); the note button: ♪+R saves the last 30 s, ♪+L records, a dot on the screen confirms (2026-10-24); on the Pi 400 beside the console, the clips kept on the board (2026-10-24); not shipped (architecture §12b) |
+| `psp/plugin` the PSPExp plugin `pspexp_plugin.prx` (a CFW game.txt plugin: a native PSP game's picture and sound over USB, and the PSP shelf's virtual disc) + `tools/pspexp-plugin-host` (its board side: the recordings as MP4, the shelf's disc) | **runs on the PSP-1000 2026-10-23** (Burnout Legends: picture and sound in sync over 4½ minutes; menus every frame at 30 in full colour; saves load; exits cleanly; driven from the Mac for tests); a race: every frame, the game 25 fps instead of 30 (the USB driver's processor time); Castlevania 30 of 30; Castlevania's HOME > Exit switched the PSP off with the plugin on: fixed (no memory-stick access while a game starts), exits cleanly while streaming; Jeanne d'Arc, Crisis Core, Phantasy Star Portable 2 recorded through a fallback in the kernel's memory (2026-10-24); the note button: ♪+R saves the last 30 s, ♪+L records, a dot on the screen confirms (2026-10-24); on the Pi 400 beside the console, the clips kept on the board (2026-10-24); not shipped (architecture §12b) |
 | **v0.4** `compatibility/sdl-pspexp`: any unmodified SDL2 program on the PSP (`scripts/dev/pspexp-run`) | **runs on the PSP-1000 over USB 2026-09-22**: the test game at 60 fps, 3.7 KB/frame, PSP CPU 0.2–0.8 ms + GE 0.5–0.8 ms, audio streamed with no underruns; renderer and window-surface paths, controller/keyboard input |
 
 ## Build
@@ -159,17 +159,17 @@ round-trip latency for 16 B, 4 KiB and 40 KB messages, and a 300-frame loop
 with 500 sprites paced on PRESENT_DONE. `pspexp-bench --null` runs the same
 against the in-process Null executor as a CPU baseline.
 
-## Recording a native PSP game: PSPExp Capture
+## The PSPExp plugin: recording a native PSP game, the PSP shelf's disc
 
-Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspexp_capture.prx`.
+Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/plugin/pspexp_plugin.prx`.
 
-1. Copy it to `ms0:/seplugins/` and add the line `ms0:/seplugins/pspexp_capture.prx 1` to
+1. Copy it to `ms0:/seplugins/` and add the line `ms0:/seplugins/pspexp_plugin.prx 1` to
    `ms0:/seplugins/game.txt` (`0` switches it off). It can stay on: it keeps out of PSPExp itself.
-2. Plug the PSP into the computer and run `build/host/pspexp-capture -o clip.mp4 -d frames -t 90`
-   (the whole game as one clip), or `build/host/pspexp-capture -k -s ~/Movies/clips` for the
+2. Plug the PSP into the computer and run `build/host/pspexp-plugin-host -o clip.mp4 -d frames -t 90`
+   (the whole game as one clip), or `build/host/pspexp-plugin-host -k -s ~/Movies/clips` for the
    note button: on the PSP, ♪+R saves the last 30 s (`-b` changes it) and ♪+L starts and stops a
    recording; a dot in the screen's corner confirms (green for a clip, red while recording). On a board the console runs the receiver beside itself
-   (`pspexp-capture -k -q -s ~/Videos/PSPExp -b 0`, or `-b 30` with Settings > Recording >
+   (`pspexp-plugin-host -k -q -s ~/Videos/PSPExp -b 0`, or `-b 30` with Settings > Recording >
    Clips on, when it and ffmpeg are installed; `-b 0`: ♪+L recordings only, nothing sent otherwise;
    `PSPEXP_CAPTURE=0` turns it off): the plugin has a USB product of its own (0x01CB), which the
    console's link leaves alone.
@@ -178,13 +178,13 @@ Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/capture/pspex
    has the game's picture and sound and plays at its speed.
 
 The plugin never touches the memory stick: its log goes over the cable, printed by the receiver
-with `PSP:` and kept in `psp.log` beside the clip. A developer build (`make -C psp/capture DEV=1`)
-also writes it to `ms0:/seplugins/pspexp_capture.log` (the last run's: `.log.old`) and takes new
+with `PSP:` and kept in `psp.log` beside the clip. A developer build (`make -C psp/plugin DEV=1`)
+also writes it to `ms0:/seplugins/pspexp_plugin.log` (the last run's: `.log.old`) and takes new
 plugins and restarts over the cable (`put`, `restart`). Exit games with HOME as usual.
 
-Testing without hands on the PSP, once the game runs: `pspexp-capture -k -c ctl -d dir -o clip.mp4`
+Testing without hands on the PSP, once the game runs: `pspexp-plugin-host -k -c ctl -d dir -o clip.mp4`
 and commands written into the FIFO `ctl`: `echo "press cross 150" > ctl` (buttons for the game;
-`hold`, `release`), `put psp/capture/pspexp_capture.prx` (a new plugin written over the cable),
+`hold`, `release`), `put psp/plugin/pspexp_plugin.prx` (a new plugin written over the cable),
 `restart` (the game again from its ISO, the new plugin with it; `-k` waits for it and starts the
 next clip; it once switched the PSP off from a game recorded through the fallback: there, exit with
 HOME and start the game again instead), `clip` and `record` (with `-s`, as ♪+R and ♪+L), `log`, `pause` / `resume`. `dir/latest.ppm` is the screen now. Only one receiver runs at
@@ -192,21 +192,21 @@ a time. Design and measurements: the architecture's §12b.
 
 PSPExp's own games (2026-10-24): the same receiver records them, with the same ♪ buttons
 (`runtime/pspexp_note.c`, `tests/test_note.c`) and dot. Its socket
-(`/tmp/pspexp-capture-<uid>.sock`) is found by whichever program holds PSPExp's link, which asks
+(`/tmp/pspexp-plugin-host-<uid>.sock`) is found by whichever program holds PSPExp's link, which asks
 the PSP's runtime to capture (CAPTURE_SET) and passes what comes on (`PSPEXP_CAPTURE=0`: not).
 The PSP shelf's virtual disc (architecture §12c): the receiver answers the plugin's disc reads
-(`tests/run_disc_serve.sh`, a stand-in plugin over TCP: `pspexp-capture -T PORT`, with
+(`tests/run_disc_serve.sh`, a stand-in plugin over TCP: `pspexp-plugin-host -T PORT`, with
 `PSPEXP_DISC_FILE` and `PSPEXP_CAPTURE_SOCKET` pointing at a test's own files). Test builds of
-the plugin for a start that goes wrong (`make -C psp/capture clean` between them):
+the plugin for a start that goes wrong (`make -C psp/plugin clean` between them):
 `TRACE=1` sends each step of a board's disc over the cable before going on (a quiet receiver
 keeps every line in `~/.cache/pspexp/psp-plugin.log`); `CRASH=1` shows an unhandled crash, or the
 system restarting (`sceKernelExitVSHKernel`, `ExitVSHVSH`: its caller and error), on the PSP's
 screen and holds it there (any exit then stops on that screen); `LOCAL=1` serves the virtual disc
 from the ISO named in `ms0:/seplugins/pxd-local.txt`, without USB. The plugin's pacing of the frames it
-copies (`psp/capture/pace.c`) is tested on the host against games modelled on the PSP's measurements:
+copies (`psp/plugin/pace.c`) is tested on the host against games modelled on the PSP's measurements:
 `tests/test_pace.c` (`build/host/test_pace v` prints each decision).
 
-Without a PSP: `scripts/dev/run-ppsspp.sh`, then `build/host/pspexp-capture -k -s clips -c ctl`
+Without a PSP: `scripts/dev/run-ppsspp.sh`, then `build/host/pspexp-plugin-host -k -s clips -c ctl`
 and `build/host/pspexp-term --tcp 127.0.0.1:3838 --launcher` (or a game with
 `PSPEXP=tcp:127.0.0.1:3838 scripts/dev/pspexp-run build/host/sdl-game`); `echo clip > ctl` saves the last 30 s.
 
@@ -452,8 +452,8 @@ host/                the host side: libpspexp (application API), executor-null
                      transport-usb (libusb), transport-tcp (Wi-Fi)
 psp/                 the PSP side: runtime (pspexp_runtime.prx), executor-ge (the GE),
                      transport-usb (kernel USB driver pspexp_usb.prx), transport-tcp,
-                     boot (EBOOT loader), capture (PSPExp Capture, a plugin
-                     for native games, with the USB driver built in)
+                     boot (EBOOT loader), plugin (the PSPExp plugin for native
+                     games: recording, the PSP shelf's disc; the USB driver built in)
 compatibility/       existing programs on the PSP: sdl-pspexp (the SDL layer: any
                      SDL2 program), war1gus and wargus (the Warcraft packages'
                      patches)
@@ -464,8 +464,8 @@ tools/               pspexp-term (the PSP as a console, with the launcher and a
                      keyboard request with TEXT, as if typed; PSPEXP_SDL_SHOT=FILE.bmp
                      saves every 30th frame, with a %d in the name every frame,
                      numbered, or every PSPEXP_SDL_SHOT_EVERY-th), pspexp-ms (the memory stick from a
-                     shell), usb-bench (pspexp-bench), pspexp-capture (PSPExp
-                     Capture's receiver)
+                     shell), usb-bench (pspexp-bench), pspexp-plugin-host (the PSPExp
+                     plugin's board side)
 examples/            sdl-game (SDL2 test game), sprite-demo
 tests/               unit tests (ctest)
 scripts/             building, installing and packaging, one folder per board

@@ -1,7 +1,7 @@
 /*
  * The PSP shelf's games, started on the PSP (architecture §12c): the chosen disc made ready on the
  * board (an ISO or CSO as it is; a zip unpacked once into a cache, in the background), named for
- * PSPExp Capture's receiver, which serves it to the capture plugin's virtual disc, then BOOT_DISC:
+ * the PSPExp plugin host, which serves it to the PSPExp plugin's virtual disc, then BOOT_DISC:
  * PSPExp leaves and the PSP starts the game from "pxd0:"; the plugin brings PSPExp back at its exit.
  */
 #ifndef PSP_NATIVE_H

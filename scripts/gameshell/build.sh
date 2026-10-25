@@ -2,7 +2,7 @@
 # ClockworkPi GameShell (Allwinner R16: 4x Cortex-A7, ARMv7 hard-float) host
 # build, cross-compiled on this machine with Zig:
 #   1. static musl binaries that run on any GameShell image:
-#      pspexp-term, pspexp-ms, pspexp-capture, pspexp-bench, pspexp-sprite-demo  ->  build/gameshell/bin/
+#      pspexp-term, pspexp-ms, pspexp-plugin-host, pspexp-bench, pspexp-sprite-demo  ->  build/gameshell/bin/
 #   2. the sdl-pspexp shim as a glibc armhf shared library for LD_PRELOAD
 #      into the image's own SDL2 programs (chocolate-doom, RetroArch's sdl2
 #      driver, ...)                                   ->  build/gameshell/lib/

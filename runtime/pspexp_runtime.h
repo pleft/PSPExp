@@ -113,7 +113,7 @@ typedef struct PspExpRuntimeOps {
      * PSPEXP_FEATURE_RESTART. */
     void (*restart)(void *user);
     void (*boot_disc)(void *user, const char *path);   /* BOOT_DISC: PSPExp leaves, the PSP starts that game (NULL: not offered) */
-    /* Optional: PSPExp Capture inside PSPExp on or off (CAPTURE_SET; off at every disconnect).
+    /* Optional: Recording inside PSPExp on or off (CAPTURE_SET; off at every disconnect).
      * The platform then copies its frames and sound and sends CAPTURE_DATA itself. With it,
      * HELLO advertises PSPEXP_FEATURE_CAPTURE. */
     void (*capture_set)(void *user, int on);   /* PSPEXP_CAPTURE_* */

@@ -1,11 +1,12 @@
 /*
- * pspexp-capture: the receiving end of PSPExp Capture (psp/capture, a custom-firmware plugin that
- * sends a native PSP game's picture and sound over USB). It reads the frames and the sound,
+ * pspexp-plugin-host: the board side of the PSPExp plugin (psp/plugin, a custom-firmware plugin that
+ * sends a native PSP game's picture and sound over USB, and reads the PSP shelf's games from here;
+ * named pspexp-capture until 2026-10-25). It reads the frames and the sound,
  * tells the game's frame rate and what arrives, saves a frame as a picture every few seconds,
  * and with -o makes an MP4: the picture through ffmpeg as it comes, the sound mixed here and
  * added at the end.
- *   pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds]] [-d folder-for-frames] [-t seconds] [-c control-fifo] [-k] [-q]
- * -s: the note button's clips (psp/capture: note+R on the PSP saves the last -b seconds, 30 by
+ *   pspexp-plugin-host [-o clip.mp4 | -s clips-folder [-b seconds]] [-d folder-for-frames] [-t seconds] [-c control-fifo] [-k] [-q]
+ * -s: the note button's clips (psp/plugin: note+R on the PSP saves the last -b seconds, 30 by
  * default, as clip-DATE.mp4; note+L starts and stops recording-DATE.mp4). The picture is kept
  * as it comes in 1 s pieces, the sound mixed in memory, both only as far back as a clip or a
  * recording under way needs. -b 0: recordings only, no last seconds kept: the PSP (the plugin,
@@ -15,7 +16,7 @@
  * plugin's log, sent over the cable as it goes; also printed with "PSP: ").
  * -c: a FIFO (mkfifo) taking commands for the PSP, one a line, for testing without hands on it:
  *   press BUTTONS MS | hold BUTTONS | release   (BUTTONS: cross+up, ...: the game sees them)
- *   put FILE [NAME]   (into ms0:/seplugins/, e.g. a new pspexp_capture.prx; developer builds, make DEV=1)
+ *   put FILE [NAME]   (into ms0:/seplugins/, e.g. a new pspexp_plugin.prx; developer builds, make DEV=1)
  *   log [old] | restart (the game again, from its ISO: a new plugin loads; developer builds) | stop | quit
  *   pause | resume   (no frames copied meanwhile: the game's own frame rate, for comparing)
  *   vram   (the game's GE buffer addresses, a fingerprint of each 32 KB of VRAM)
@@ -26,7 +27,7 @@
  * -k: after the link goes (a restart), wait for the game again: clip.mp4, clip-2.mp4, ...
  * -q: only the connections, the clips and what went wrong (a board's console runs it so: its log)
  * The link is PSPExp's own USB transport (host/transport-usb), under the plugin's own product ID
- * (PSPEXP_CAPTURE_USB_PID), so it runs beside a board's console. Inside PSPExp the same packets
+ * (PSPEXP_PLUGIN_USB_PID), so it runs beside a board's console. Inside PSPExp the same packets
  * come over a local socket instead (host/libpspexp/pspexp_capture.h): the PSP's runtime captures
  * what it shows, and the program holding PSPExp's link passes them on.
  */
@@ -208,8 +209,8 @@ static void *job_run(void *arg)
     char p[1200];
     snprintf(p, sizeof(p), "%s.txt", j->seg); unlink(p);
     snprintf(p, sizeof(p), "%s.raw", j->seg); unlink(p);
-    if (r == 0) fprintf(stderr, "pspexp-capture: saved %s (%d s)\n", j->name, j->last - j->first + 1);
-    else fprintf(stderr, "pspexp-capture: ffmpeg could not make %s\n", j->name);
+    if (r == 0) fprintf(stderr, "pspexp-plugin-host: saved %s (%d s)\n", j->name, j->last - j->first + 1);
+    else fprintf(stderr, "pspexp-plugin-host: ffmpeg could not make %s\n", j->name);
     j->state = 3;
     return NULL;
 }
@@ -229,10 +230,10 @@ static void job_add(int first, int last, const char *kind)
         snprintf(j->name, sizeof(j->name), "%s/%s-%s.mp4", g_clips, kind, when);
         snprintf(j->seg, sizeof(j->seg), "%s/job-%d", g_segdir, i);
         j->state = 1;
-        fprintf(stderr, "pspexp-capture: %s of %d s to come: %s\n", kind, j->last - j->first + 1, j->name);
+        fprintf(stderr, "pspexp-plugin-host: %s of %d s to come: %s\n", kind, j->last - j->first + 1, j->name);
         return;
     }
-    fprintf(stderr, "pspexp-capture: too many clips at once: %s not made\n", kind);
+    fprintf(stderr, "pspexp-plugin-host: too many clips at once: %s not made\n", kind);
 }
 
 /* the jobs whose pieces are complete started; old pieces and sound dropped */
@@ -253,7 +254,7 @@ static void jobs_step(void)
             snprintf(p, sizeof(p), "%s.raw", j->seg);
             write_sound_range(p, (int64_t)j->first * RATE, (int64_t)(j->last + 1) * RATE);
             j->state = 2;
-            if (pthread_create(&j->th, NULL, job_run, j) != 0) { fprintf(stderr, "pspexp-capture: no thread for %s\n", j->name); j->state = 0; }
+            if (pthread_create(&j->th, NULL, job_run, j) != 0) { fprintf(stderr, "pspexp-plugin-host: no thread for %s\n", j->name); j->state = 0; }
         }
         if ((j->state == 1 || j->state == 2) && j->first < keep) keep = j->first;
     }
@@ -272,13 +273,13 @@ static void note_event(int type, uint64_t idx)
 {
     int k = (int)(idx / 30);
     if (!g_clips) return;
-    if (type == 1 && !g_have_pic) fprintf(stderr, "pspexp-capture: no picture yet: no clip\n");
+    if (type == 1 && !g_have_pic) fprintf(stderr, "pspexp-plugin-host: no picture yet: no clip\n");
     else if (type == 1) job_add(k - g_clip_len + 1, k, "clip");
-    else if (type == 2 && g_rec_first < 0) { g_rec_first = k; fprintf(stderr, "pspexp-capture: recording\n"); }
+    else if (type == 2 && g_rec_first < 0) { g_rec_first = k; fprintf(stderr, "pspexp-plugin-host: recording\n"); }
     else if (type == 3 && g_rec_first >= 0) { job_add(g_rec_first, k, "recording"); g_rec_first = -1; }
 }
 
-/* ---- control: commands for the plugin (psp/capture), from a FIFO ---- */
+/* ---- control: commands for the plugin (psp/plugin), from a FIFO ---- */
 static PspExpTransport *volatile g_link;
 static pthread_mutex_t g_link_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -312,7 +313,7 @@ static void disc_serve(uint32_t seq, uint64_t off, uint32_t n)
         pspexp_disc_close(g_disc);
         g_disc = pspexp_disc_open(path, err, sizeof(err));
         snprintf(g_disc_path, sizeof(g_disc_path), "%s", path);
-        fprintf(stderr, "pspexp-capture: the disc %s%s%s\n", path, g_disc ? "" : ": ", g_disc ? "" : err);
+        fprintf(stderr, "pspexp-plugin-host: the disc %s%s%s\n", path, g_disc ? "" : ": ", g_disc ? "" : err);
     }
     if (!g_disc) status = 1;
     else {
@@ -428,7 +429,7 @@ static void sock_hello(int fd)
     memset(h, 0, sizeof(h));
     memcpy(h, "PXCH", 4);
     h[4] = recordings_only() ? PSPEXP_CAPTURE_RECORDINGS : PSPEXP_CAPTURE_ALL;
-    if (write(fd, h, sizeof(h)) != (ssize_t)sizeof(h)) fprintf(stderr, "pspexp-capture: the hello did not go\n");
+    if (write(fd, h, sizeof(h)) != (ssize_t)sizeof(h)) fprintf(stderr, "pspexp-plugin-host: the hello did not go\n");
 }
 
 /* the plugin's USB link coming up while PSPExp's session waits for its next holder: PSPExp left for
@@ -503,7 +504,7 @@ static void sock_listen(void)
     unlink(a.sun_path);   /* (a stale one: only one receiver runs, see the lock) */
     g_listen = socket(AF_UNIX, SOCK_STREAM, 0);
     if (g_listen < 0 || bind(g_listen, (struct sockaddr *)&a, sizeof(a)) < 0 || listen(g_listen, 4) < 0) {
-        fprintf(stderr, "pspexp-capture: no socket for PSPExp's own games (%s)\n", a.sun_path);
+        fprintf(stderr, "pspexp-plugin-host: no socket for PSPExp's own games (%s)\n", a.sun_path);
         if (g_listen >= 0) close(g_listen);
         g_listen = -1;
         return;
@@ -524,7 +525,7 @@ static FILE *seg_open(void)
 {
     char cmd[1600];
     FILE *ff;
-    snprintf(g_segdir, sizeof(g_segdir), "%s/pspexp-capture-%d", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
+    snprintf(g_segdir, sizeof(g_segdir), "%s/pspexp-plugin-host-%d", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
     mkdir(g_segdir, 0700);
     g_rec_first = -1; g_frames_out = 0; g_seg_closed = 0; g_seg_final = -1; g_seg_dropped = 0;
     snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
@@ -585,7 +586,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     int have_base = 0;
     while (!g_stop) {
         if (g_clips) {   /* the FIFO's clip and record; the clips' pieces looked at twice a second */
-            if ((g_req_clip || g_req_rec) && rec_only) fprintf(stderr, "pspexp-capture: recordings only (-b 0): the PSP's note+L starts one\n");
+            if ((g_req_clip || g_req_rec) && rec_only) fprintf(stderr, "pspexp-plugin-host: recordings only (-b 0): the PSP's note+L starts one\n");
             if (g_req_clip) { g_req_clip = 0; if (!rec_only) note_event(1, written); }
             if (g_req_rec) { g_req_rec = 0; if (!rec_only) note_event(g_rec_first < 0 ? 2 : 3, written); }
             if (ff && now() - last_jobs >= 0.5) { jobs_step(); last_jobs = now(); }
@@ -654,13 +655,13 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
                 base = when; written = 0; pic = 0;
                 memset(prev, 0, sizeof(prev));
                 g_rec_first = 0;
-                fprintf(stderr, "pspexp-capture: recording\n");
+                fprintf(stderr, "pspexp-plugin-host: recording\n");
             } else if (type == 3 && ff) {   /* the picture held up to the press, then the recording saved */
                 uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
                 int bad = 0;
                 while (pic && written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
                 g_frames_out = written;
-                if (!written) fprintf(stderr, "pspexp-capture: nothing recorded (no picture came)\n");
+                if (!written) fprintf(stderr, "pspexp-plugin-host: nothing recorded (no picture came)\n");
                 seg_close(ff, written); ff = NULL;
             }
             continue;
@@ -720,7 +721,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (limit > 0 && n - t0 >= limit) break;
     }
     double dt = now() - t0;
-    fprintf(stderr, "pspexp-capture: %u frames in %.1f s (%.1f/s); the game changed frames %u times (%.1f/s); "
+    fprintf(stderr, "pspexp-plugin-host: %u frames in %.1f s (%.1f/s); the game changed frames %u times (%.1f/s); "
             "%llu sound blocks (%.1f MB)\n", frames, dt, frames / dt, ch_last - ch_first, (ch_last - ch_first) / dt,
             (unsigned long long)g_audio_blocks, g_audio_bytes / 1e6);
     if (g_clips) {   /* a recording under way ends with the game; every clip made before the next session */
@@ -737,9 +738,9 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (write_sound(raw, (int64_t)(written * RATE / 30)) < 0) { perror(raw); return -1; }
         snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -i '%s' -f s16le -ar %d -ac 2 -i '%s' "
                  "-c:v copy -c:a aac -b:a 160k -shortest '%s'", video, RATE, raw, out);
-        if (system(cmd) != 0) { fprintf(stderr, "pspexp-capture: ffmpeg could not join the sound (kept: %s, %s)\n", video, raw); return -1; }
+        if (system(cmd) != 0) { fprintf(stderr, "pspexp-plugin-host: ffmpeg could not join the sound (kept: %s, %s)\n", video, raw); return -1; }
         unlink(video); unlink(raw);
-        fprintf(stderr, "pspexp-capture: %s\n", out);
+        fprintf(stderr, "pspexp-plugin-host: %s\n", out);
     }
     return 0;
 }
@@ -760,9 +761,9 @@ int main(int argc, char **argv)
         else if (c == 'k') keep = 1;
         else if (c == 'q') g_quiet = 1;
         else if (c == 'T') test_port = atoi(optarg);
-        else { fprintf(stderr, "usage: pspexp-capture [-o clip.mp4 | -s clips-folder [-b seconds, 0: recordings only]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k] [-q]\n"); return 2; }
+        else { fprintf(stderr, "usage: pspexp-plugin-host [-o clip.mp4 | -s clips-folder [-b seconds, 0: recordings only]] [-d frames-folder] [-t seconds] [-c control-fifo] [-k] [-q]\n"); return 2; }
     }
-    if (out && g_clips) { fprintf(stderr, "pspexp-capture: -o or -s, not both\n"); return 2; }
+    if (out && g_clips) { fprintf(stderr, "pspexp-plugin-host: -o or -s, not both\n"); return 2; }
     if (g_clips) {   /* the clips' folder, made if missing (a board's ~/Videos/PSPExp) */
         char p[1100];
         snprintf(p, sizeof(p), "%s", g_clips);
@@ -775,12 +776,12 @@ int main(int argc, char **argv)
     {   /* one receiver at a time: a second one, idle, read the FIFO's commands meant for the one
          * holding the link (button presses lost, 2026-10-23) */
         char lock[1100];
-        snprintf(lock, sizeof(lock), "%s/pspexp-capture.lock", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
+        snprintf(lock, sizeof(lock), "%s/pspexp-plugin-host.lock", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
         int fd = open(lock, O_CREAT | O_RDWR, 0600);
-        if (fd < 0 || flock(fd, LOCK_EX | LOCK_NB) != 0) { fprintf(stderr, "pspexp-capture: another one is running (%s)\n", lock); return 1; }
+        if (fd < 0 || flock(fd, LOCK_EX | LOCK_NB) != 0) { fprintf(stderr, "pspexp-plugin-host: another one is running (%s)\n", lock); return 1; }
     }
     sock_listen();
-    if (test_port && tcp_listen(test_port) < 0) { fprintf(stderr, "pspexp-capture: no TCP port %d\n", test_port); return 1; }
+    if (test_port && tcp_listen(test_port) < 0) { fprintf(stderr, "pspexp-plugin-host: no TCP port %d\n", test_port); return 1; }
     if (fifo) {
         pthread_t th;
         struct stat st;
@@ -792,9 +793,9 @@ int main(int argc, char **argv)
         PspExpUsbOptions o;
         char err[256], name[1100];
         pspexp_usb_options_default(&o);
-        o.pid = PSPEXP_CAPTURE_USB_PID;   /* (the plugin's own product: PSPExp's console waits for PSPExp's) */
+        o.pid = PSPEXP_PLUGIN_USB_PID;   /* (the plugin's own product: PSPExp's console waits for PSPExp's) */
         g_usb_opts = o;
-        if (!g_quiet || run == 1) fprintf(stderr, "pspexp-capture: waiting for a PSP game with PSPExp Capture on the USB cable, or for PSPExp...\n");
+        if (!g_quiet || run == 1) fprintf(stderr, "pspexp-plugin-host: waiting for a PSP game with the PSPExp plugin on the USB cable, or for PSPExp...\n");
         PspExpTransport *t = g_usb_pending;   /* (the plugin, come while PSPExp's session waited) */
         static SockSource ss;
         g_usb_pending = NULL;
@@ -821,7 +822,7 @@ int main(int argc, char **argv)
             t = pspexp_usb_wait(&o, 500, err, sizeof(err));
         }
         if (!t) break;
-        fprintf(stderr, "pspexp-capture: connected%s\n", from_psp_exp ? " (PSPExp)" : "");
+        fprintf(stderr, "pspexp-plugin-host: connected%s\n", from_psp_exp ? " (PSPExp)" : "");
         pthread_mutex_lock(&g_link_lock); g_link = from_psp_exp ? NULL : t; pthread_mutex_unlock(&g_link_lock);
         if (!from_psp_exp) {   /* what to send: everything (the last seconds kept), or only during a note+L recording */
             uint8_t m[4] = { recordings_only() ? 0 : 1, 0, 0, 0 };

@@ -45,7 +45,7 @@ typedef struct PspExpGeExecutor {
     int      have_state;
     PspExp3DState st;
     PspExpCacheEntry *target;    /* the render target drawn into, NULL: the screen */
-    /* PSPExp Capture inside PSPExp (psp/runtime/pspexp_capture_psp.c): at each frame's end the GE
+    /* Recording inside PSPExp (psp/runtime/pspexp_capture_psp.c): at each frame's end the GE
      * copies the frame into cap_target's buffer (480x272 RGB 5650, before the volume bar and
      * the dot), cap_done once it has; rec_dot the dot's colour (RGB 5650, 0: none), drawn into
      * each frame and, when it changes between frames, by pspexp_ge_dot_tick */

@@ -47,7 +47,7 @@ jobs:
           make -C psp/transport-usb -j"$(nproc)"
           make -C psp/runtime -j"$(nproc)"
           make -C psp/boot -j"$(nproc)"
-          make -C psp/capture -j"$(nproc)"
+          make -C psp/plugin -j"$(nproc)"
           mkdir -p dist/PSPExp
           cp psp/boot/EBOOT.PBP psp/transport-usb/pspexp_usb.prx psp/runtime/pspexp_runtime.prx dist/PSPExp/
       - name: Memory-stick install
@@ -57,7 +57,7 @@ jobs:
           cp LICENSE stick/PSP/GAME/PSPExp/LICENSE.txt
           cp THIRD_PARTY.md stick/PSP/GAME/PSPExp/THIRD_PARTY.txt   # (the code and libraries inside, under their own licences)
           mkdir -p stick/PSP/GAME/PSPExp/licenses && cp licenses/* stick/PSP/GAME/PSPExp/licenses/
-          mkdir -p stick/PSP/GAME/PSPExp/capture && cp psp/capture/pspexp_capture.prx stick/PSP/GAME/PSPExp/capture/   # PSPExp Capture's plugin: game.txt names it there (not in seplugins/, which a Mac's Finder would replace whole)
+          mkdir -p stick/PSP/GAME/PSPExp/plugin && cp psp/plugin/pspexp_plugin.prx stick/PSP/GAME/PSPExp/plugin/   # the PSPExp plugin: game.txt names it there (not in seplugins/, which a Mac's Finder would replace whole)
           name="PSPExp-psp-${GITHUB_REF_NAME//\//-}"
           (cd stick && zip -qr "../$name.zip" PSP)
           echo "PSP_ZIP=$name.zip" >> "$GITHUB_ENV"

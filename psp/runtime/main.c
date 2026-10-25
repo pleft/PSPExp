@@ -140,7 +140,7 @@ static int link_read(void *buf, int len, unsigned timeout_us)
     if (g_link == LINK_TCP) return pspexp_tcp_psp_read(buf, len, timeout_us);
     return -1;
 }
-/* one writer at a time on the link: the main loop's messages, PSPExp Capture's (its own thread) */
+/* one writer at a time on the link: the main loop's messages, the recording's (its own thread) */
 static SceUID g_link_sema = -1;
 static void link_lock(void) { if (g_link_sema >= 0) sceKernelWaitSema(g_link_sema, 1, NULL); }
 static void link_unlock(void) { if (g_link_sema >= 0) sceKernelSignalSema(g_link_sema, 1); }
@@ -208,7 +208,7 @@ static void op_restart(void *u) { (void)u; g_restart_asked = 1; g_running = 0; }
 /* BOOT_DISC: a PSP game started natively once PSPExp has left (architecture §12c) */
 static char g_boot_disc[240];
 /* only an ISO or CSO that is there (Inferno, given anything else, retries its open for ever: the
- * PSP hangs at the game's start), or the capture plugin's virtual disc ("pxd0:", which exists only
+ * PSP hangs at the game's start), or the PSPExp plugin's virtual disc ("pxd0:", which exists only
  * inside the game: the board checked the plugin is on) */
 static int boot_disc_ok(const char *path)
 {
@@ -217,7 +217,7 @@ static int boot_disc_ok(const char *path)
     if (n < 5 || (strcasecmp(path + n - 4, ".iso") && strcasecmp(path + n - 4, ".cso"))) return 0;
     return !strncmp(path, "pxd0:", 5) || sceIoGetstat(path, &st) >= 0;
 }
-#define LAUNCH_NOTE "ms0:/PSP/GAME/PSPExp/launch.txt"   /* (the capture plugin reads it there) */
+#define LAUNCH_NOTE "ms0:/PSP/GAME/PSPExp/launch.txt"   /* (the PSPExp plugin reads it there) */
 static void op_boot_disc(void *u, const char *path)
 {
     (void)u;
@@ -488,7 +488,7 @@ static void show_status_page(void)
     pspexp_ge_dot_forget(&g_ge);
 }
 
-/* the note button with PSPExp Capture's receiver there (runtime/pspexp_note.c): ♪+R a clip, ♪+L a
+/* the note button with the PSPExp plugin host there (runtime/pspexp_note.c): ♪+R a clip, ♪+L a
  * recording, the dot; the board gets the buttons it should see */
 static PspExpNote g_note;
 static uint32_t note_buttons(uint32_t buttons, uint32_t now)
@@ -578,7 +578,7 @@ int main(int argc, char *argv[])
     pspexp_audio_psp_ops(&ops);
     pspexp_fs_psp_ops(&ops);   /* the memory stick as a drive of the board's file manager */
     g_link_sema = sceKernelCreateSema("PSPExpLinkWrite", 0, 1, 1, NULL);
-    pspexp_capture_psp_init(&g_ge, link_write, link_lock, link_unlock);   /* PSPExp Capture inside PSPExp */
+    pspexp_capture_psp_init(&g_ge, link_write, link_lock, link_unlock);   /* Recording inside PSPExp */
     pspexp_capture_psp_ops(&ops);
     pspexp_note_init(&g_note);
     ops.now_us = op_now;
@@ -765,7 +765,7 @@ int main(int argc, char *argv[])
         sceKernelLoadExec(g_eboot, &p);
         trace("starting again failed: leaving");   /* (it returns only when it failed) */
     }
-    if (g_boot_disc[0]) {   /* the game: a note for the capture plugin first (PSPExp started it: back here at its exit), then PRO's start */
+    if (g_boot_disc[0]) {   /* the game: a note for the PSPExp plugin first (PSPExp started it: back here at its exit), then PRO's start */
         SceUID fd;
         int n;
         if ((fd = sceIoOpen(LAUNCH_NOTE, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777)) >= 0) {

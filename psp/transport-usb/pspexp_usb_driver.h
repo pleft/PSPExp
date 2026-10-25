@@ -45,10 +45,10 @@ int pspexpUsbSetClock(unsigned int tick_lo, unsigned int tick_hi);
  * summer time, and summer time 0 / 1. 0 or < 0. */
 int pspexpUsbSetZone(int tz_minutes, int dst);
 int pspexpUsbGetZone(int *tz_minutes, int *dst);
-/* The system's mute, which the note button toggles (PSPExp Capture's ♪ pairs put it back): < 0 to
+/* The system's mute, which the note button toggles (the recording's ♪ pairs put it back): < 0 to
  * read it (0 or 1), 0 or 1 to set it (0). -1: not available (no custom firmware's finder: PPSSPP). */
 int pspexpUsbMute(int set);
-/* A PSP game's ISO (ms0:/ISO/x.iso; a device of the capture plugin's later) started natively, as
+/* A PSP game's ISO (ms0:/ISO/x.iso; a device of the PSPExp plugin's later) started natively, as
  * the XMB does: returns only when it failed (-1). NULL: 0 when the custom firmware allows it. */
 int pspexpUsbBootDisc(const char *path);
 

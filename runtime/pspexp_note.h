@@ -1,5 +1,5 @@
 /*
- * The note button (♪, the PSP-1000's sound button) inside PSPExp, while PSPExp Capture's receiver
+ * The note button (♪, the PSP-1000's sound button) inside PSPExp, while the PSPExp plugin host
  * is there (the PSP captures: pspexp_capture_psp.c): ♪+R saves the last 30 seconds as a clip, ♪+L
  * starts a recording and, pressed again, ends it, as the plugin does in a native game. While ♪ is
  * down the board sees none of the game's buttons (nor those held with it, until let go); ♪ pressed
@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-/* the events (PSPExp Capture's "PXCE" types) */
+/* the events (the recording's "PXCE" types) */
 #define PSPEXP_NOTE_CLIP       1
 #define PSPEXP_NOTE_REC_START  2
 #define PSPEXP_NOTE_REC_STOP   3

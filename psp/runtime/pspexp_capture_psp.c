@@ -1,7 +1,7 @@
 /*
- * PSPExp Capture inside PSPExp: what the PSP shows and plays, sent back to the board while a
- * receiver is there (CAPTURE_SET), in PSPExp Capture's own packets ("PXCF" frames, "PXCA" sound,
- * "PXCE" note-button events; tools/pspexp-capture), as CAPTURE_DATA messages on the link.
+ * Recording inside PSPExp: what the PSP shows and plays, sent back to the board while a
+ * receiver is there (CAPTURE_SET), in the PSPExp plugin's own packets ("PXCF" frames, "PXCA" sound,
+ * "PXCE" note-button events; tools/pspexp-plugin-host), as CAPTURE_DATA messages on the link.
  *
  * The frame: at its end the GE copies it into one of two buffers in RAM (480x272 RGB 5650,
  * before the volume bar and the recording dot: pspexp_ge.c's op_present), up to 30 a second
