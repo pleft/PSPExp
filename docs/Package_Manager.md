@@ -1404,10 +1404,21 @@ because boards differ.
   - **The console's side:** `pspexp_slots_update` (the four steps above,
     each file read back and checked), `pspexp-ms slots` / `runtime-update
     DIR`, and in the launcher System > Update the PSP, offered when the
-    `pspexp-runtime` package holds a newer set than the PSP's.
+    `pspexp-runtime` package holds a newer set than the PSP's, or a PSPExp
+    plugin other than the stick's (or the stick has none).
     `pspexp-term --ctl runtime-update` does the same for tests.
+  - **The PSPExp plugin** (2026-10-25): not a slot's (PRO loads it from the
+    path `game.txt` names, `ms0:/PSP/GAME/PSPExp/plugin/pspexp_plugin.prx`),
+    so Update the PSP puts it there itself after the slots: written as
+    `.new`, read back and compared, then put in place. An update the plugin
+    alone needs leaves the slots and PSPExp as they are (no restart).
+  - **The restart after an update:** PSPExp starts itself again through
+    its USB module in kernel mode (`pspexpUsbRestart`, PRO's loader): from
+    user mode the PSP refused it every time and went to the XMB (found and
+    fixed 2026-10-25; it had been tried only in PPSSPP).
   - **The package:** `pspexp-runtime` (arch all) puts the set in
-    `/usr/share/pspexp/runtime`, with the loader for the manual route.
+    `/usr/share/pspexp/runtime`, with the loader for the manual route and
+    the plugin in `plugin/` (the package is not made without it).
   - **The tests:** `tests/psp/slots-ppsspp.sh` runs the real loader and
     runtime in PPSSPP through every case of §10.3's runtime paths: an
     update and the switch, a stop after each of the update's six steps,

@@ -683,7 +683,15 @@ off at first: Settings > Recording > Clips (`clips` in the
 library's settings). Off, the receiver runs with `-b 0` (recordings only:
 the PSP sends nothing until ♪+L); on, with `-b 30`; a change starts it
 again. The Recording page also has Videos, which opens Files on that
-folder. (Its first version was a group of one, and a group of one acts at
+folder, and **PSPExp plugin** (On, Off, or Not on the PSP; cross switches
+it): its line in the stick's `ms0:/seplugins/game.txt`, which PRO reads at
+each game's start, written by the console (`psp_plugin.c`: one write, read
+back, the file's other lines and line ends kept, the old text put back if
+it did not check out; the plugin put on the stick first when it is not
+there). The console reads its state at each connection; the PSP shelf's
+"Switch on the PSPExp plugin first" points here. `pspexp-term --ctl plugin`
+tells it (`on`, `off`, `missing`, and whether it is this board's);
+`--ctl "plugin on"` and `"plugin off"` switch it as the setting does. (Its first version was a group of one, and a group of one acts at
 once: cross flipped the switch with only a toast. A switch alone now shows
 its group's page, its state on the right.)
 The console's log keeps the receiver's lines (`-q`: the connections, the

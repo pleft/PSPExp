@@ -208,7 +208,7 @@ if(PSPEXP_HAVE_USB)
 endif()
 
 add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/player.c tools/pspexp-term/music.c tools/pspexp-term/upnp.c tools/pspexp-term/modplay.c tools/pspexp-term/notify.c tools/pspexp-term/btaudio.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/apps.c tools/pspexp-term/monitor.c tools/pspexp-term/sysinfo.c tools/pspexp-term/store.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
-  tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c tools/pspexp-term/psp_native.c)
+  tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c tools/pspexp-term/psp_native.c tools/pspexp-term/psp_plugin.c)
 target_compile_definitions(pspexp-term PRIVATE PSPEXP_LAUNCHER_ASSET_DIR="${CMAKE_SOURCE_DIR}/tools/pspexp-term/assets")
 # the console's version, for About: generated at every build (cmake/pspexp_version.cmake)
 add_custom_target(pspexp_version
@@ -285,6 +285,9 @@ if(PSPEXP_BUILD_TESTS)
   add_test(NAME note COMMAND test_note)
   add_executable(test_pace tests/test_pace.c)   # the PSPExp plugin's pacing (psp/plugin/pace.c), against modelled games
   add_test(NAME pace COMMAND test_pace)
+  add_executable(test_psp_plugin tests/test_psp_plugin.c tools/pspexp-term/psp_plugin.c)   # the PSPExp plugin's game.txt line (Settings > Recording)
+  target_link_libraries(test_psp_plugin PRIVATE pspexp)
+  add_test(NAME psp_plugin COMMAND test_psp_plugin)
   add_executable(test_fs tests/test_fs.c)
   target_link_libraries(test_fs PRIVATE pspexp pspexp_null)
   add_test(NAME fs COMMAND test_fs)

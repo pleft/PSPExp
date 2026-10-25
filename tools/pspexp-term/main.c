@@ -67,6 +67,7 @@
 #include "music.h"
 #include "notify.h"
 #include "psp_native.h"
+#include "psp_plugin.h"
 #include "btaudio.h"
 #include "launcher_gfx.h"
 #include <sys/statvfs.h>
@@ -2721,20 +2722,63 @@ static void runtime_version(char *out, size_t n)
 
 static void slot_log(void *u, const char *m) { (void)u; fprintf(stderr, "[pspexp-term] PSP runtime: %s\n", m); }
 
-/* install the board's runtime set into the PSP's spare slot (docs/Package_Manager.md §6.1) */
+/* install the board's runtime set into the PSP's spare slot (docs/Package_Manager.md §6.1), and its
+ * PSPExp plugin beside PSPExp when the stick's is not the same (or there is none): an update the
+ * plugin alone needs leaves the slots and PSPExp as they are */
 static int psp_runtime_update(const char *dir, char *msg, size_t n)
 {
-    char err[300];
-    int r = pspexp_slots_update(ctx, dir && *dir ? dir : runtime_dir(), getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
-    int restart = r == 0 && pspexp_restart_supported(ctx);   /* (a runtime that can: PSPExp starts again with the new one) */
-    if (r == 0) snprintf(msg, n, restart ? "PSP updated: PSPExp starts again with it" : "PSP updated: quit PSPExp on the PSP and start it again");
-    else snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
-    if (g_launcher_on) { notify(r == 0 ? NOTE_DONE : NOTE_FAIL, r == 0 ? "download" : "circle-x", r == 0 ? "PSP updated" : "The PSP update did not finish", r == 0 ? (restart ? "PSPExp starts again with it" : "Quit PSPExp on the PSP and start it again") : strchr(msg, ':') ? strchr(msg, ':') + 2 : msg, NULL, "psp-runtime"); if (r == 0) launcher_set_psp_update(0); }
-    if (r == 0 && g_launcher_on) {   /* About: the update now waiting in the other slot */
-        PspExpSlots s;
-        if (pspexp_slots_read(ctx, &s) == 0) launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
+    char err[300] = "", perr[300] = "", have[64];
+    const char *src = dir && *dir ? dir : runtime_dir();
+    PspExpSlots s;
+    int r = 0, pr = 0, plug = 0, only_plugin = 0, restart;
+    if (pspexp_slots_read(ctx, &s) == 0) {
+        plug = psp_plugin_outdated(ctx, src, s.dir) > 0;
+        runtime_version(have, sizeof(have));
+        only_plugin = plug && !(dir && *dir) && s.current && !s.pending && have[0] && strcmp(have, s.version[s.current - 'a']) <= 0;
+    }
+    if (!only_plugin) r = pspexp_slots_update(ctx, src, getenv("PSPEXP_SLOT_CRASH"), slot_log, NULL, err, sizeof(err));
+    if (r == 0 && plug) {
+        pr = psp_plugin_install(ctx, src, s.dir, perr, sizeof(perr));
+        fprintf(stderr, "[pspexp-term] PSP runtime: the PSPExp plugin %s%s\n", pr == 0 ? "put on the stick" : "not put on the stick: ", pr == 0 ? "" : perr);
+    }
+    restart = r == 0 && !only_plugin && pspexp_restart_supported(ctx);   /* (a runtime that can: PSPExp starts again with the new one) */
+    if (r != 0) snprintf(msg, n, "The PSP update did not finish: %s", r == -2 ? "stopped (test)" : err);
+    else if (only_plugin && pr != 0) { r = -1; snprintf(msg, n, "The PSP update did not finish: %s", perr); }
+    else if (only_plugin) snprintf(msg, n, "PSP updated: the PSPExp plugin is on its memory stick");
+    else snprintf(msg, n, restart ? "PSP updated: PSPExp starts again with it" : "PSP updated: quit PSPExp on the PSP and start it again");
+    if (g_launcher_on) {
+        notify(r == 0 ? NOTE_DONE : NOTE_FAIL, r == 0 ? "download" : "circle-x", r == 0 ? "PSP updated" : "The PSP update did not finish",
+               r == 0 ? (only_plugin ? "The PSPExp plugin is on its memory stick" : restart ? "PSPExp starts again with it" : "Quit PSPExp on the PSP and start it again")
+                      : strchr(msg, ':') ? strchr(msg, ':') + 2 : msg, NULL, "psp-runtime");
+        if (r == 0 && !only_plugin && pr != 0) notify(NOTE_FAIL, "circle-x", "The PSPExp plugin was not updated", perr, NULL, "psp-plugin");
+        if (r == 0) launcher_set_psp_update(0);
+        if (r == 0 && plug) launcher_set_psp_plugin(psp_plugin_state(ctx, s.dir));
+    }
+    if (r == 0 && !only_plugin && g_launcher_on) {   /* About: the update now waiting in the other slot */
+        PspExpSlots w;
+        if (pspexp_slots_read(ctx, &w) == 0) launcher_set_psp_runtime(w.current, w.pending, w.current ? w.version[w.current - 'a'] : NULL);
     }
     if (restart) { fprintf(stderr, "[pspexp-term] PSP updated: PSPExp starts again with it\n"); pspexp_restart_psp(ctx); }   /* (only right after this update: a new runtime that falls back never loops) */
+    return r;
+}
+
+/* Settings > Recording > PSPExp plugin: its game.txt line on or off (the plugin put on the stick
+ * first when it is not there) */
+static int psp_plugin_set(int on, char *msg, size_t n)
+{
+    PspExpSlots s;
+    char err[300] = "";
+    int r = -1;
+    if (pspexp_slots_read(ctx, &s) < 0) snprintf(err, sizeof(err), "PSPExp's folder on the PSP's stick was not found");
+    else {
+        r = 0;
+        if (on && psp_plugin_state(ctx, s.dir) == PSP_PLUGIN_MISSING) r = psp_plugin_install(ctx, runtime_dir(), s.dir, err, sizeof(err));
+        if (r == 0) r = psp_plugin_switch(ctx, s.dir, on, err, sizeof(err));
+        if (g_launcher_on) launcher_set_psp_plugin(psp_plugin_state(ctx, s.dir));
+    }
+    snprintf(msg, n, r == 0 ? "the PSPExp plugin %s" : "the PSPExp plugin not switched %s: %s", on ? "on" : "off", err);
+    fprintf(stderr, "[pspexp-term] %s\n", msg);
+    if (r != 0 && g_launcher_on) notify(NOTE_FAIL, "circle-x", on ? "The PSPExp plugin was not switched on" : "The PSPExp plugin was not switched off", err, NULL, "psp-plugin");
     return r;
 }
 
@@ -2745,8 +2789,12 @@ static void psp_slots_check(void)
     PspExpSlots s;
     char have[64], msg[300];
     if (!pspexp_fs_supported(ctx)) return;
+    int plug_old;
     if (pspexp_slots_read(ctx, &s) < 0) { if (g_launcher_on) launcher_set_psp_runtime('-', 0, NULL); return; }   /* no slots (an install before them) */
-    if (g_launcher_on) launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
+    if (g_launcher_on) {
+        launcher_set_psp_runtime(s.current, s.pending, s.current ? s.version[s.current - 'a'] : NULL);
+        launcher_set_psp_plugin(psp_plugin_state(ctx, s.dir));
+    }
     if (s.fallback[0] && strcmp(s.fallback, reported)) {   /* the loader fell back: say so once */
         snprintf(reported, sizeof(reported), "%s", s.fallback);
         fprintf(stderr, "[pspexp-term] PSP runtime fallback: %s\n", s.fallback);
@@ -2763,8 +2811,15 @@ static void psp_slots_check(void)
     if (s.pending) { if (g_launcher_on) notify(NOTE_ATTN, "download", "PSP updated", "Quit PSPExp on the PSP and start it again", NULL, "psp-runtime"); return; }
     if (pspexp_link_maintenance(ctx)) { psp_runtime_update(NULL, msg, sizeof(msg)); return; }   /* nothing else works anyway */
     /* only a newer one is an update (versions start with their build time,
-     * so they sort): a PSP with a newer runtime than this board's keeps it */
-    if (strcmp(have, s.version[s.current - 'a']) <= 0) { if (g_launcher_on) launcher_set_psp_update(0); return; }
+     * so they sort): a PSP with a newer runtime than this board's keeps it; the PSPExp plugin
+     * (the same package's) an update when the stick's is not the board's, or missing */
+    plug_old = psp_plugin_outdated(ctx, runtime_dir(), s.dir) > 0;
+    if (strcmp(have, s.version[s.current - 'a']) <= 0) {
+        if (!plug_old) { if (g_launcher_on) launcher_set_psp_update(0); return; }
+        fprintf(stderr, "[pspexp-term] the PSP's PSPExp plugin is not this board's: Settings > Update the PSP\n");
+        if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSPExp plugin is here", "Settings > Update the PSP", "category:Settings", "psp-runtime"); }
+        return;
+    }
     fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: Settings > Update the PSP\n", s.version[s.current - 'a'], have);
     if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSP runtime is here", "Settings > Update the PSP", "category:Settings", "psp-runtime"); }
 }
@@ -3220,6 +3275,19 @@ static void ctl_step(uint64_t now, int connected)
         int r = psp_runtime_update(cmd[14] == ' ' ? cmd + 15 : NULL, m, sizeof(m));
         snprintf(reply, sizeof(reply), "%s %s", r == 0 ? "ok" : "error", m);
         ctl_reply(reply);
+    } else if (!strncmp(cmd, "plugin", 6)) {   /* the PSPExp plugin on the stick: "plugin" its state, "plugin on|off" as the setting */
+        PspExpSlots s;
+        char m[400];
+        if (!strcmp(cmd, "plugin on") || !strcmp(cmd, "plugin off")) {
+            int r = psp_plugin_set(cmd[8] == 'n', m, sizeof(m));
+            snprintf(reply, sizeof(reply), "%s %s", r == 0 ? "ok" : "error", m);
+        } else if (pspexp_slots_read(ctx, &s) < 0) snprintf(reply, sizeof(reply), "error no PSPExp folder on the stick");
+        else {
+            int st = psp_plugin_state(ctx, s.dir), old = psp_plugin_outdated(ctx, runtime_dir(), s.dir);
+            snprintf(reply, sizeof(reply), "ok %s%s", st == PSP_PLUGIN_ON ? "on" : st == PSP_PLUGIN_OFF ? "off" : st == PSP_PLUGIN_MISSING ? "missing" : "unknown",
+                     old > 0 ? ", not this board's" : old == 0 ? ", this board's" : "");
+        }
+        ctl_reply(reply);
     } else if (!strncmp(cmd, "psp-boot ", 9)) {   /* a PSP game's disc, started natively by the PSP (BOOT_DISC; tests: the shelf's next step) */
         ctl_reply(pspexp_boot_disc(ctx, cmd + 9) == 0 ? "ok starting it: PSPExp leaves" : "error the PSP's runtime cannot start a game (an older one, no PRO, or not connected)");
     } else if (!strcmp(cmd, "psp-restart")) {   /* PSPExp on the PSP starts again (a runtime with RESTART) */
@@ -3608,6 +3676,7 @@ int main(int argc, char **argv)
         if (!connected) continue;
         if (g_slots_pending) { g_slots_pending = 0; psp_slots_check(); }
         if (g_launcher_on && launcher_take_psp_update()) { char m[300]; psp_runtime_update(NULL, m, sizeof(m)); }
+        if (g_launcher_on) { int on = launcher_take_plugin_switch(); char m[400]; if (on >= 0) psp_plugin_set(on, m, sizeof(m)); }
         if (g_clock_pending || (g_launcher_on && launcher_take_clock_request())) {   /* a new connection (or the setting just on): the PSP's clock */
             char r[256];
             g_clock_pending = 0;

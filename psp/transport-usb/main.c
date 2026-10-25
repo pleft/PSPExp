@@ -614,6 +614,43 @@ int pspexpUsbBootDisc(const char *path)
     return r;
 }
 
+/* PSPExp's own EBOOT started again (the board's RESTART, after Update the PSP): from user mode
+ * sceKernelLoadExec failed at once on the PSP-1000 with 6.60 PRO-C every time (2026-10-25: the
+ * PSP left for the XMB; PPSSPP, where it was tried, allows it), so as the PSPExp plugin brings
+ * PSPExp back at a game's exit: PRO's loader in kernel mode, apitype 0x141 (a memory-stick
+ * homebrew), no ISO left set. -1 without PRO (PPSSPP: the caller's own LoadExec then); returns
+ * only when it failed. */
+int pspexpUsbRestart(const char *eboot)
+{
+    static int (*set_umd)(const char *), (*set_conf)(int), (*loadexec)(int, const char *, struct SceKernelLoadExecVSHParam *);
+    static int looked;
+    static char path[256];
+    static struct SceKernelLoadExecVSHParam param;
+    int k1 = pspSdkSetK1(0), r = -1;
+    if (!looked) {
+        looked = 1;
+        if ((*(volatile u32 *)(void *)sctrlHENFindFunction >> 26) == 2) {   /* (linked: see pspexpUsbMute) */
+            set_umd = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0x5A35C948);     /* sctrlSESetUmdFile */
+            set_conf = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0xBC939DC1);    /* sctrlSESetBootConfFileIndex */
+            loadexec = (void *)sctrlHENFindFunction("SystemControl", "SystemCtrlForKernel", 0x2D10FB28);    /* sctrlKernelLoadExecVSHWithApitype */
+        }
+    }
+    if (eboot && set_umd && set_conf && loadexec) {
+        strncpy(path, eboot, sizeof(path) - 1);
+        path[sizeof(path) - 1] = 0;
+        set_umd("");
+        set_conf(0);
+        memset(&param, 0, sizeof(param));
+        param.size = sizeof(param);
+        param.argp = path;
+        param.args = strlen(path) + 1;
+        param.key = "game";
+        r = loadexec(0x141, path, &param);
+    }
+    pspSdkSetK1(k1);
+    return r;
+}
+
 /* The system clock (UTC), in microseconds since 0001-01-01: setting it is
  * kernel-only. For CLOCK_SET: a PSP whose clock battery ran flat starts years
  * behind, and the board it plays for knows the time. */

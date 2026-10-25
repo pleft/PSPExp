@@ -45,9 +45,11 @@ for 2 seconds.
 ## Things the PSP does by itself
 
 - **Updates.** When the board has a newer PSPExp for the PSP, the launcher's
-  System page shows **Update the PSP**. It installs the new version beside
+  Settings page shows **Update the PSP**. It installs the new version beside
   the old one and restarts into it; if the new one ever fails to start, the
-  PSP goes back to the previous one by itself.
+  PSP goes back to the previous one by itself. It also puts the newest
+  [PSPExp plugin](plugin.md) on the memory stick (for an update of the plugin
+  alone, PSPExp does not even restart).
 - **Battery.** The launcher's top bar shows the PSP's battery (and when it
   charges) next to the board's own indicators.
 - **Saving power.** While nothing happens on screen the PSP turns its

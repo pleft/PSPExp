@@ -3,6 +3,7 @@
  */
 #include "psp_native.h"
 #include "notify.h"
+#include "psp_plugin.h"
 #include "../../host/libpspexp/pspexp_disc.h"
 #include "../../host/libpspexp/pspexp_capture.h"
 #include <dirent.h>
@@ -40,17 +41,10 @@ static void title_of(const char *path, char *out, size_t n)
 static int plugin_on(PspExpContext *ctx)
 {
     static char t[4097];
-    int n = pspexp_fs_read(ctx, "ms0:/seplugins/game.txt", 0, t, sizeof(t) - 1);
-    char *line, *save;
+    int n = pspexp_fs_read(ctx, PSP_PLUGIN_GAME_TXT, 0, t, sizeof(t) - 1);
     if (n <= 0) return 0;
     t[n] = 0;
-    for (line = strtok_r(t, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
-        size_t l = strcspn(line, "\r");
-        line[l] = 0;
-        while (l && (line[l - 1] == ' ' || line[l - 1] == '\t')) line[--l] = 0;
-        if (strstr(line, "pspexp_plugin.prx") && l >= 2 && line[l - 1] == '1' && (line[l - 2] == ' ' || line[l - 2] == '\t')) return 1;
-    }
-    return 0;
+    return psp_plugin_listed(t);
 }
 
 static void cache_dir(char *out, size_t n)
@@ -104,7 +98,7 @@ void native_start(PspExpContext *ctx, const char *disc, uint64_t now)
     if (g_pid > 0) { notify_hint("gamepad", "A game is being prepared"); return; }
     title_of(disc, g_title, sizeof(g_title));
     if (!pspexp_boot_disc_supported(ctx)) { fail("PSP games need PSPExp on the PSP updated", "Settings > Update the PSP, with PRO custom firmware on the PSP"); return; }
-    if (!plugin_on(ctx)) { fail("Switch on the PSPExp plugin first", "PSP games from the board come through it: see the manual's page on the plugin"); return; }
+    if (!plugin_on(ctx)) { fail("Switch on the PSPExp plugin first", "Settings > Recording > PSPExp plugin: PSP games from the board come through it"); return; }
     if (!(d = pspexp_disc_open(disc, err, sizeof(err)))) { fail("Not a PSP game disc", err); return; }
     g_size = pspexp_disc_size(d);
     if (strcmp(pspexp_disc_kind(d), "zip") != 0) {   /* an ISO or CSO: served as it is */

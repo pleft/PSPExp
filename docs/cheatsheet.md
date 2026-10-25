@@ -71,6 +71,8 @@ mode** (files only) and installs its runtime by itself.
 | the PSP's slots, versions, pending switch, last fallback | `pspexp-ms slots` (on the Mac: `build/host/pspexp-ms --tcp HOST:3838 slots`) |
 | install a runtime set into the inactive slot | `pspexp-ms runtime-update DIR` |
 | the same through a running console (tests) | `pspexp-term --ctl runtime-update [DIR]`, `pspexp-term --ctl slots` |
+| the PSPExp plugin on the stick: on, off, missing, this board's or not | `pspexp-term --ctl plugin` |
+| switch it on or off (its `game.txt` line), as Settings > Recording does | `pspexp-term --ctl "plugin on"`, `"plugin off"` |
 | PSPExp on the PSP starts again (a runtime from 2026-10-24 on): the slot just installed boots | `pspexp-ms restart` / `pspexp-term --ctl psp-restart` |
 | a PSP game on the stick started natively from the board, PSPExp back at its exit (plugin on; being built) | `pspexp-term --ctl "psp-boot ms0:/ISO/game.iso"` |
 | every slot case end to end in PPSSPP (~10 min) | `tests/psp/slots-ppsspp.sh` |

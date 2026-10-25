@@ -1,7 +1,8 @@
 #!/bin/sh
 # pspexp-runtime: the PSP's own runtime set (pspexp_runtime.prx, pspexp_usb.prx,
 # VERSION with their checksums; docs/Package_Manager.md §6.1) in
-# /usr/share/pspexp/runtime, from the build's dist/PSPExp (scripts/build.sh).
+# /usr/share/pspexp/runtime, from the build's dist/PSPExp (scripts/build.sh), and the
+# PSPExp plugin in plugin/ (Update the PSP puts it on the stick when it differs).
 # The console installs it into the PSP's inactive slot over the link. The boot
 # loader (EBOOT.PBP) is there too, for the manual route only. Arch all.
 # Usage: build OUTDIR
@@ -12,6 +13,8 @@ R="$W/root/usr/share/pspexp/runtime"
 mkdir -p "$R" "$W/root/usr/share/doc/pspexp-runtime"
 V=$("$ROOT/scripts/packages/runtime-slot" "$R" | sed 's/^version=//')
 cp "$ROOT/dist/PSPExp/EBOOT.PBP" "$R/EBOOT.PBP"
+mkdir -p "$R/plugin"   # the PSPExp plugin: Update the PSP puts it beside PSPExp (not made without it)
+cp "$ROOT/dist/PSPExp/plugin/pspexp_plugin.prx" "$R/plugin/pspexp_plugin.prx"
 echo "The PSP's PSPExp runtime; the console puts it in the PSP's inactive slot. EBOOT.PBP (the boot loader) is for the manual route: USB mode, ms0:/PSP/GAME/PSPExp/." > "$W/root/usr/share/doc/pspexp-runtime/README"
 cat > "$W/control" <<C
 Package: pspexp-runtime

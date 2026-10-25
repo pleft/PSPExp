@@ -28,6 +28,7 @@
 #include "launcher_mac.h"
 #endif
 #include "launcher_gfx.h"
+#include "psp_plugin.h"   /* PSP_PLUGIN_*: Settings > Recording > PSPExp plugin */
 #include "pspexp_version.h"   /* PSPEXP_VERSION: generated at build time (cmake/pspexp_version.cmake) */
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,9 +97,9 @@ static PspExpContext *g_ctx;
 static Library L;
 static Cat g_cat[40];
 static int g_ncat, g_cur;
-#define MAX_ACTIONS 16
+#define MAX_ACTIONS 20
 #define ACTION(...) do { if (g_nactions < MAX_ACTIONS) action(&g_actions[g_nactions++], __VA_ARGS__); } while (0)
-static LEntry g_actions[MAX_ACTIONS];   /* System's entries (up to 11 now: count them when adding one) */
+static LEntry g_actions[MAX_ACTIONS];   /* System's entries (up to 16 now: count them when adding one) */
 static int g_nactions;
 static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
@@ -106,6 +107,7 @@ static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board
 static int g_clips_keep, g_clips_change;   /* the recorder keeps the last 30 seconds (off by default: it costs); just changed */
 static int g_core_updated, g_console_restart_req;   /* PSPExp's own files were upgraded; the user asked to restart it */
 static int g_psp_update, g_psp_update_req;          /* a newer PSP runtime is on the board; the user asked to install it */
+static int g_psp_plugin = PSP_PLUGIN_UNKNOWN, g_plugin_req = -1;   /* the PSPExp plugin on the PSP's stick; on (1) or off (0) asked for */
 
 static void action(LEntry *e, const char *id, const char *title, const char *icon, const char *detail)
 {
@@ -240,6 +242,7 @@ static void cats_build(void)
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
     ACTION("clips", "Clips", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
     ACTION("videos", "Videos", "film", "The recordings and clips, in Files");
+    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: recording them, and the PSP shelf");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
@@ -252,7 +255,7 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
             { "Sound", "headphones", { "a:sound", NULL } },
-            { "Recording", "film", { "a:clips", "a:videos", NULL } },
+            { "Recording", "film", { "a:clips", "a:videos", "a:plugin", NULL } },
             { "Clock", "clock", { "a:tz", "a:pspclock", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
             { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
@@ -762,6 +765,7 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
     if (!strcmp(a, "clips")) return g_clips_keep ? "On" : "Off";
+    if (!strcmp(a, "plugin")) return g_psp_plugin == PSP_PLUGIN_ON ? "On" : g_psp_plugin == PSP_PLUGIN_OFF ? "Off" : "Not on the PSP";
     if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
     if (!strcmp(a, "ssh")) return g_ssh_on ? "On" : "Off";
@@ -822,6 +826,9 @@ static void run_action(LEntry *e, uint64_t now)
         g_clips_change = 1;
         lib_setting_set(&L, "clips", g_clips_keep);
         toast("history", g_clips_keep ? "Clips on: ♪ + R saves the last 30 seconds" : "Clips off: ♪ + L recordings only", now);
+    } else if (!strcmp(a, "plugin")) {   /* the console writes game.txt (and puts the plugin there first when missing) */
+        g_plugin_req = g_psp_plugin != PSP_PLUGIN_ON;
+        toast("puzzle", g_plugin_req ? "Switching the PSPExp plugin on" : "Switching the PSPExp plugin off", now);
     } else if (!strcmp(a, "boxart")) {
         g_nofetch = !g_nofetch;
         lib_setting_set(&L, "boxart", !g_nofetch);
@@ -993,6 +1000,13 @@ void launcher_set_core_updated(void)
 int  launcher_take_console_restart(void) { int r = g_console_restart_req; g_console_restart_req = 0; return r; }
 void launcher_set_psp_update(int available) { if (g_psp_update != available) { g_psp_update = available; cats_build(); } }
 int  launcher_take_psp_update(void) { int r = g_psp_update_req; g_psp_update_req = 0; return r; }
+void launcher_set_psp_plugin(int state)
+{
+    int shown = g_psp_plugin != PSP_PLUGIN_UNKNOWN;
+    g_psp_plugin = state;
+    if (shown != (state != PSP_PLUGIN_UNKNOWN)) cats_build();   /* (Recording gains or loses it) */
+}
+int  launcher_take_plugin_switch(void) { int r = g_plugin_req; g_plugin_req = -1; return r; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
 int  launcher_clips_keep(void) { return g_clips_keep; }
 int  launcher_take_clips_change(void) { int r = g_clips_change; g_clips_change = 0; return r; }
@@ -1751,7 +1765,7 @@ static void open_system(const LEntry *e, uint64_t now)
 }
 
 /* settings switched on and off where they are (cross), their state on the right */
-static int is_switch(const LEntry *e) { return !strcmp(e->id, "a:clips") || !strcmp(e->id, "a:boxart") || !strcmp(e->id, "a:pspclock"); }
+static int is_switch(const LEntry *e) { return !strcmp(e->id, "a:clips") || !strcmp(e->id, "a:boxart") || !strcmp(e->id, "a:pspclock") || !strcmp(e->id, "a:plugin"); }
 
 /* a Settings group: its settings; a group of one, that setting at once when it opens a page of its
  * own (Sound's list): a switch alone shows its group, else cross flipped it with only a toast */
@@ -2239,6 +2253,9 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
         else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "♪ + R saves the last 30 seconds: the board records all the time"
                                                                               : "Turn on for ♪ + R: the last 30 seconds as a video");
+        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "PSP games record, and the PSP shelf's games start"
+                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to record PSP games and start the PSP shelf's games"
+                                                                  : "Not on the PSP's memory stick: cross puts it there and turns it on");
         else snprintf(s, n, "%s", e->tags);
         break;
     default: snprintf(s, n, "Game  /  %s%s%s", renderer(e), e->tags[0] ? "  /  " : "", e->tags); break;

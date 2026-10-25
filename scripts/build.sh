@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds everything:
 #   build/host/            host libraries, pspexp-bench, tests (CMake)
-#   dist/PSPExp/           memory-stick folder: EBOOT.PBP + pspexp_usb.prx + pspexp_runtime.prx
+#   dist/PSPExp/           memory-stick folder: EBOOT.PBP + pspexp_usb.prx + pspexp_runtime.prx + plugin/pspexp_plugin.prx
 # Toolchain: pspdev unpacked at ../pspdev (override with PSPDEV=...). The PSP
 # part is skipped when psp-gcc is not found.
 set -e
@@ -24,6 +24,7 @@ if command -v psp-gcc >/dev/null 2>&1; then
 	DIST="$ROOT/dist/PSPExp"
 	mkdir -p "$DIST"
 	cp "$ROOT/psp/boot/EBOOT.PBP" "$ROOT/psp/transport-usb/pspexp_usb.prx" "$ROOT/psp/runtime/pspexp_runtime.prx" "$DIST/"
+	mkdir -p "$DIST/plugin" && cp "$ROOT/psp/plugin/pspexp_plugin.prx" "$DIST/plugin/"   # (where game.txt names it; pspexp-runtime carries it for Update the PSP)
 	echo "PSP: copy $DIST to ms0:/PSP/GAME/PSPExp/"
 else
 	echo "psp-gcc not found (PSPDEV=$PSPDEV): PSP build skipped" >&2

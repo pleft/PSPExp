@@ -50,6 +50,7 @@ jobs:
           make -C psp/plugin -j"$(nproc)"
           mkdir -p dist/PSPExp
           cp psp/boot/EBOOT.PBP psp/transport-usb/pspexp_usb.prx psp/runtime/pspexp_runtime.prx dist/PSPExp/
+          mkdir -p dist/PSPExp/plugin && cp psp/plugin/pspexp_plugin.prx dist/PSPExp/plugin/   # (pspexp-runtime carries it: Update the PSP)
       - name: Memory-stick install
         # unzipped at the stick's root: PSP/GAME/PSPExp/EBOOT.PBP, slot-a/, active (docs/manual/psp.md)
         run: |

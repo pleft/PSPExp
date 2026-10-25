@@ -51,6 +51,9 @@ int pspexpUsbMute(int set);
 /* A PSP game's ISO (ms0:/ISO/x.iso; a device of the PSPExp plugin's later) started natively, as
  * the XMB does: returns only when it failed (-1). NULL: 0 when the custom firmware allows it. */
 int pspexpUsbBootDisc(const char *path);
+/* PSPExp's EBOOT (argv[0]) started again through the custom firmware, as the plugin does at a
+ * game's exit: returns only when it failed; -1 without one (PPSSPP). */
+int pspexpUsbRestart(const char *eboot);
 
 #ifdef __cplusplus
 }

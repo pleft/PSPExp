@@ -758,6 +758,8 @@ int main(int argc, char *argv[])
     pspexpUsbStop();
     if (g_restart_asked) {   /* this EBOOT again: the loader boots the active slot (a runtime just installed, after an update) */
         struct SceKernelLoadExecParam p;
+        pspexpUsbRestart(g_eboot);   /* (through PRO, in kernel mode: the PSP refuses this one from user mode) */
+        trace("starting again through the custom firmware failed: the plain way");
         memset(&p, 0, sizeof(p));
         p.size = sizeof(p);
         p.args = strlen(g_eboot) + 1;

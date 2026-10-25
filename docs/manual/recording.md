@@ -21,8 +21,8 @@ always.
 - For what you play in PSPExp: nothing more, once PSPExp on the PSP is up to
   date (Settings > Update the PSP).
 - For games the PSP runs itself: [the PSPExp plugin](plugin.md), switched on
-  once (PRO custom firmware; the plugin comes with the PSPExp download for
-  the PSP).
+  once in **Settings > Recording > PSPExp plugin** (PRO custom firmware;
+  Update the PSP puts the plugin on the memory stick).
 
 ## In PSPExp
 

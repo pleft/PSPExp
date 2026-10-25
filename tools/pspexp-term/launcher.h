@@ -75,6 +75,10 @@ int  launcher_take_console_restart(void);
 /* a newer PSP runtime is on the board: System > Update the PSP (1 once when chosen) */
 void launcher_set_psp_update(int available);
 int  launcher_take_psp_update(void);
+/* the PSPExp plugin on the PSP's stick (psp_plugin.h: PSP_PLUGIN_*; UNKNOWN hides Settings > Recording >
+ * PSPExp plugin), and the switch chosen there: 1 on, 0 off, once; -1 none */
+void launcher_set_psp_plugin(int state);
+int  launcher_take_plugin_switch(void);
 /* 1 once when the user just turned it on: set it now */
 int  launcher_take_clock_request(void);
 /* Settings > Recording > Clips: the recorder keeps the last 30 seconds (♪ + R) and so records all the time (0, the
