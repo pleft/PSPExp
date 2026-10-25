@@ -1234,7 +1234,8 @@ plugin has loaded (and the board answered), while the system polls every 10 ms. 
 fetches the first sector while answering the open and writes it into Inferno's buffer (its address
 from the same devctl) before the open succeeds; Inferno's own read of it later is answered from
 the kept copy at once. Bomberman from the shelf then loaded and played from the board's disc
-(set up after 6.1 s, as from the stick; ≈30 fps, Clips recording alongside). Also kept from the
+(set up after 6.1 s, as from the stick; ≈30 fps, Clips recording alongside), and HOME > Exit
+brought PSPExp back (connected again 10 s after the game ended). Also kept from the
 hunt: the driver's other entries filled ("not supported"), reads handed to the disc thread,
 CPU-copied bytes written back from the cache, the drive status logged as it changes.
 
@@ -1258,7 +1259,7 @@ PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are
 games in the same folder listed (their covers generated).
 
 **Next:**
-- (B): a long session, HOME > Exit back to PSPExp, more games (big ones, CSO, games that read a lot
+- (B): a long session, more games (big ones, CSO, games that read a lot
   while playing), the cable pulled mid-game; the GameShell; the shelf's own games on the stick (A)
   listed too;
 - PS1 games (the PSP's own player, POPS: an EBOOT.PBP made from BIN/CUE), later.

@@ -900,7 +900,8 @@ game on it, a PS1 disc in the folder, which the shelf then leaves out); box
 art (libretro's "Sony - PlayStation Portable") only for a game without one. Walked in PPSSPP with six games of
 the Pi 400's collection: the icons on the discs at 1:1, the PS1 one left
 with its generated cover. On the PSP (2026-10-25): Bomberman chosen on the shelf
-loaded and played from the board's disc (Bust-A-Move Ghost does not run under
+loaded and played from the board's disc, and HOME > Exit came back to PSPExp
+(Bust-A-Move Ghost does not run under
 PRO even from the stick).
 
 ### 6.3 Packages and builds
