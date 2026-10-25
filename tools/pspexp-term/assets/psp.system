@@ -1,6 +1,6 @@
 name=PSP
 short=PSP
-icon=gamepad
+icon=disc-3
 roms=~/roms/psp
 ext=iso,cso,zip
 exec=@psp-boot %ROM%

@@ -683,17 +683,20 @@ off at first: Settings > Recording > Clips (`clips` in the
 library's settings). Off, the receiver runs with `-b 0` (recordings only:
 the PSP sends nothing until ♪+L); on, with `-b 30`; a change starts it
 again. The Recording page also has Videos, which opens Files on that
-folder, and **PSPExp plugin** (On, Off, or Not on the PSP; cross switches
-it): its line in the stick's `ms0:/seplugins/game.txt`, which PRO reads at
-each game's start, written by the console (`psp_plugin.c`: one write, read
-back, the file's other lines and line ends kept, the old text put back if
-it did not check out; the plugin put on the stick first when it is not
-there). The console reads its state at each connection; the PSP shelf's
-"Switch on the PSPExp plugin first" points here. `pspexp-term --ctl plugin`
-tells it (`on`, `off`, `missing`, and whether it is this board's);
-`--ctl "plugin on"` and `"plugin off"` switch it as the setting does. (Its first version was a group of one, and a group of one acts at
+folder. (Its first version was a group of one, and a group of one acts at
 once: cross flipped the switch with only a toast. A switch alone now shows
 its group's page, its state on the right.)
+**The PSPExp plugin's switch** is in Settings > **This PSP** (with PSP
+clock, beside This board: the plugin serves the PSP section's games as much
+as recording): On, Off, or Not on the PSP, cross switching it. It is its
+line in the stick's `ms0:/seplugins/game.txt`, which PRO reads at each
+game's start, written by the console (`psp_plugin.c`: one write, read back,
+the file's other lines and line ends kept, the old text put back if it did
+not check out; the plugin put on the stick first when it is not there). The
+console reads its state at each connection; the PSP section's "Switch on
+the PSPExp plugin first" points here. `pspexp-term --ctl plugin` tells it
+(`on`, `off`, `missing`, and whether it is this board's); `--ctl "plugin
+on"` and `"plugin off"` switch it as the setting does.
 The console's log keeps the receiver's lines (`-q`: the connections, the
 clips and what went wrong).
 
@@ -892,7 +895,9 @@ does not wait for a PSP the launcher holds.
 **The PSP's own games (2026-10-25, being built: the architecture's §12c).**
 pspexp-core installs `/opt/pspexp/systems/psp.system`: the board's PSP games
 in `~/roms/psp` (ISO, CSO, or a zip holding an ISO, as collections keep them)
-on a "PSP" shelf under Emulators, with no emulator: `exec=@psp-boot` asks
+in the rail's own **PSP** section (between Emulators and Apps, there with no
+games too, saying where they go; until 2026-10-25 a shelf under Emulators,
+which they are not), with no emulator: `exec=@psp-boot` asks
 the console to have the PSP start the game itself (`psp_native.c`: it checks
 the PSP's runtime offers BOOT_DISC and the PSPExp plugin is on in
 `seplugins/game.txt`, without which the PSP would wait for its disc for

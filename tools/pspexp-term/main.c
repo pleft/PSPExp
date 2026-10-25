@@ -2762,7 +2762,7 @@ static int psp_runtime_update(const char *dir, char *msg, size_t n)
     return r;
 }
 
-/* Settings > Recording > PSPExp plugin: its game.txt line on or off (the plugin put on the stick
+/* Settings > This PSP > PSPExp plugin: its game.txt line on or off (the plugin put on the stick
  * first when it is not there) */
 static int psp_plugin_set(int on, char *msg, size_t n)
 {

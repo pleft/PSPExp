@@ -98,7 +98,7 @@ void native_start(PspExpContext *ctx, const char *disc, uint64_t now)
     if (g_pid > 0) { notify_hint("gamepad", "A game is being prepared"); return; }
     title_of(disc, g_title, sizeof(g_title));
     if (!pspexp_boot_disc_supported(ctx)) { fail("PSP games need PSPExp on the PSP updated", "Settings > Update the PSP, with PRO custom firmware on the PSP"); return; }
-    if (!plugin_on(ctx)) { fail("Switch on the PSPExp plugin first", "Settings > Recording > PSPExp plugin: PSP games from the board come through it"); return; }
+    if (!plugin_on(ctx)) { fail("Switch on the PSPExp plugin first", "Settings > This PSP > PSPExp plugin: PSP games from the board come through it"); return; }
     if (!(d = pspexp_disc_open(disc, err, sizeof(err)))) { fail("Not a PSP game disc", err); return; }
     g_size = pspexp_disc_size(d);
     if (strcmp(pspexp_disc_kind(d), "zip") != 0) {   /* an ISO or CSO: served as it is */

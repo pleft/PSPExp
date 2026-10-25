@@ -18,8 +18,8 @@ buttons; the board needs no screen, keyboard or mouse.
 
 ## The launcher
 
-It opens on the **home screen**: five big tiles, **Favourites**, **Games**,
-**Emulators**, **Apps** and **Settings**, with what each holds underneath
+It opens on the **home screen**: six big tiles, **Favourites**, **Games**,
+**Emulators**, **PSP**, **Apps** and **Settings**, with what each holds underneath
 and, below, **Play again** with what you played last (it starts afresh;
 the game's own saves are there as always) and, while music is loaded,
 **Now playing** (or **Paused**) with the song. A note at the top shows
@@ -27,8 +27,8 @@ music playing, a pause sign that it is paused.
 
 ```
  12:04 Sat 03 Oct (bell)2          PSP 76%  |  headphones 40%  wifi  plug  board
-     (star)    (GAMES)   (joystick)   (apps)   (gear)
-   Favourites   Games    Emulators     Apps   Settings
+   (star)   (GAMES)  (joystick)   (psp)   (apps)   (gear)
+ Favourites  Games   Emulators    PSP     Apps   Settings
                          34 games
                  (>) Play again  GoldenEye 007
  (X) Open                          SELECT Notifications  START Search
@@ -38,7 +38,7 @@ Left and right pick a tile, cross opens it; down then cross plays what
 you were playing (or opens Media, on Now playing; left / right between
 the two).
 
-Inside a section, the same five run down the left as the **rail**, and the
+Inside a section, the same six run down the left as the **rail**, and the
 section's **shelf** runs to its right: games and ROMs as discs with their
 cover in the window, apps and settings as icon tiles. The one you are on
 is larger and glows; its description shows underneath, and who draws it:
@@ -48,6 +48,10 @@ picture: SuperTuxKart, the Nintendo 64 on a Pi). **Emulators** has
 one tile per system you have ROMs for, with its console's picture (the
 N64's controller, a Game Boy...), like the home screen's; cross on
 one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
+**PSP** holds your own PSP games kept on the board (ISO, CSO, or a zip
+holding one, in `roms/psp`), each with its own icon from the disc: the PSP
+runs them itself, not an emulator, and PSPExp comes back when you leave the
+game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
 
 ```
  12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
@@ -344,9 +348,10 @@ with a single option opens that option at once), circle comes back.
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Videos: your recordings and clips, in Files; PSPExp plugin: on for recording your own PSP games and starting the PSP shelf's ([Recording](recording.md), [the plugin](plugin.md)) |
-| Clock | Time zone, for the clock; PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
+| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Videos: your recordings and clips, in Files ([Recording](recording.md)) |
+| Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
+| This PSP | PSPExp plugin: on to start the PSP section's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
 | This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
 When there is something to do, it comes first, before the groups:

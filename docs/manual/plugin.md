@@ -8,7 +8,7 @@ game from PSPExp's PSP shelf) instead of PSPExp:
   **♪ + L** and **♪ + R** record it on the board
   ([Recording your PSP games](recording.md)).
 - **PSP games kept on the board**: a game started from PSPExp's PSP shelf
-  (Emulators > PSP) stays on the board, and the plugin reads its disc over the
+  (the **PSP** section of the launcher) stays on the board, and the plugin reads its disc over the
   cable while you play. Without the plugin those games cannot start: PSPExp
   says "Switch on the PSPExp plugin first".
 
@@ -27,7 +27,7 @@ itself), so it can stay on all the time.
 
 ## Switching it on, once
 
-In PSPExp: **Settings > Recording > PSPExp plugin**, and press cross. It
+In PSPExp: **Settings > This PSP > PSPExp plugin**, and press cross. It
 shows **On** on the right. Cross again switches it off. If the plugin is not
 on the memory stick yet ("Not on the PSP"), the same cross puts it there
 first.
@@ -47,13 +47,13 @@ lists it under Plugins too.
 ## If something does not work
 
 - **No dot when you press ♪ + R or ♪ + L in a game from the XMB**: check that
-  Settings > Recording > PSPExp plugin says On, the cable is in, and the
+  Settings > This PSP > PSPExp plugin says On, the cable is in, and the
   board's PSPExp is up to date (Apps > Packages).
 - **The red dot goes out by itself** while you record: the board stopped
   hearing the PSP. What was recorded until then is saved. After 5 seconds the
   plugin connects to the board again by itself; press ♪ + L to record again.
 - **"Switch on the PSPExp plugin first"** when you start a game from the PSP
-  shelf: Settings > Recording > PSPExp plugin is Off.
+  shelf: Settings > This PSP > PSPExp plugin is Off.
 - **A game from the shelf stays black**: its disc comes from the board, so the
   board must be on and plugged in. If it is not there when the game starts,
   the PSP waits a minute and a half, then goes back to PSPExp; if the cable

@@ -28,7 +28,7 @@
 #include "launcher_mac.h"
 #endif
 #include "launcher_gfx.h"
-#include "psp_plugin.h"   /* PSP_PLUGIN_*: Settings > Recording > PSPExp plugin */
+#include "psp_plugin.h"   /* PSP_PLUGIN_*: Settings > This PSP > PSPExp plugin */
 #include "pspexp_version.h"   /* PSPEXP_VERSION: generated at build time (cmake/pspexp_version.cmake) */
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,6 +178,7 @@ static void cats_free(void)
 static int ssh_available(void);
 
 static int psp_not_a_game(const LEntry *e);
+static int is_psp_sys(int s);
 
 static void cats_build(void)
 {
@@ -202,9 +203,10 @@ static void cats_build(void)
         g_builtin[i].type = LT_APP;
         for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
     }
-    /* the rail and the home screen: Favourites, Games, Emulators, Apps, Settings; each system's ROMs
-     * a section of its own off the rail, opened from Emulators (what was played last: the home
-     * screen's Play again) */
+    /* the rail and the home screen: Favourites, Games, Emulators, PSP, Apps, Settings; each system's
+     * ROMs a section of its own off the rail, opened from Emulators (what was played last: the home
+     * screen's Play again); the PSP's own games on the rail itself, being neither the board's games
+     * nor emulated (the PSP runs them: psp.system) */
     c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "favourite");
     for (i = 0; i < L.nfavs; i++) { LEntry *e = find_any(L.favs[i]); if (e) cat_push(c, e); }
     c = cat_add("Games", "gamepad-2", 0x818cf8, CK_GAMES, "game");
@@ -214,7 +216,7 @@ static void cats_build(void)
         int k = 0;
         for (s = 0; s < L.nsys && k < (int)(sizeof(g_sysent) / sizeof(g_sysent[0])); s++) {
             LEntry *e = &g_sysent[k];
-            if (!L.sys[s].nroms) continue;
+            if (!L.sys[s].nroms || is_psp_sys(s)) continue;
             memset(e, 0, sizeof(*e));
             snprintf(e->id, sizeof(e->id), "s:%s", L.sys[s].id);
             snprintf(e->title, sizeof(e->title), "%s", L.sys[s].name);
@@ -225,6 +227,12 @@ static void cats_build(void)
             cat_push(c, e);
             k++;
         }
+    }
+    for (s = 0; s < L.nsys; s++) if (is_psp_sys(s)) {   /* PSP: on the rail, there with no games too (where they go) */
+        c = cat_add("PSP", L.sys[s].icon[0] ? L.sys[s].icon : "disc-3", system_colour(L.sys[s].id), CK_SYSTEM, "game");
+        c->sys = s;
+        for (i = 0; i < L.sys[s].nroms; i++) if (!psp_not_a_game(&L.sys[s].roms_list[i])) cat_push(c, &L.sys[s].roms_list[i]);   /* (a PS1 disc in the PSP folder: left out) */
+        break;
     }
     c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
     for (i = 0; i < NBUILTIN; i++) cat_push(c, &g_builtin[i]);
@@ -242,7 +250,7 @@ static void cats_build(void)
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
     ACTION("clips", "Clips", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
     ACTION("videos", "Videos", "film", "The recordings and clips, in Files");
-    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: recording them, and the PSP shelf");
+    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP section's, and recording them");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp runtime for the PSP: put it in its spare slot");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
@@ -255,9 +263,10 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
             { "Sound", "headphones", { "a:sound", NULL } },
-            { "Recording", "film", { "a:clips", "a:videos", "a:plugin", NULL } },
-            { "Clock", "clock", { "a:tz", "a:pspclock", NULL } },
+            { "Recording", "film", { "a:clips", "a:videos", NULL } },
+            { "Clock", "clock", { "a:tz", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
+            { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP shelf's) */
             { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
         };
         Cat *top = c;
@@ -288,13 +297,10 @@ static void cats_build(void)
         }
     }
     for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])); s++) {
-        if (!L.sys[s].nroms) continue;
+        if (!L.sys[s].nroms || is_psp_sys(s)) continue;
         c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", system_colour(L.sys[s].id), CK_SYSTEM, "game");
         c->sys = s; c->hidden = 1;
-        for (i = 0; i < L.sys[s].nroms; i++) {
-            if (psp_not_a_game(&L.sys[s].roms_list[i])) continue;   /* (a PS1 disc in the PSP folder: the PSP shelf leaves it out) */
-            cat_push(c, &L.sys[s].roms_list[i]);
-        }
+        for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
     }
     /* back to where we were */
     g_cur = -1;
@@ -321,6 +327,18 @@ static LEntry *cur_entry(void)
 static int is_group_item(const LEntry *e) { return !strncmp(e->id, "g:", 2); }
 /* a section off the rail sits under Emulators (a system's ROMs) or Settings (a group) */
 static int parent_kind(const Cat *c) { return c->kind == CK_GROUP ? CK_SETTINGS : CK_EMU; }
+
+/* a section's icon: a system on the rail (PSP) its console's picture, as its Emulators tile had
+ * (assets/systems), else the font's */
+static void cat_icon(const Cat *c, int px, int x, int y, uint32_t rgb, int alpha)
+{
+    char p[600];
+    if (c->kind == CK_SYSTEM && c->sys >= 0 && L.sys[c->sys].thumbs[0]) {
+        snprintf(p, sizeof(p), "%s/systems/%s.png", g_assets, L.sys[c->sys].thumbs);
+        if (gfx_picon(p, px, x, y, rgb, alpha)) return;
+    }
+    gfx_icon(c->icon, px, x, y, rgb, alpha);
+}
 
 /* the rail's sections (the categories not hidden): how many, the k-th, and where a category
  * sits on it (a system's ROMs: where Emulators is) */
@@ -412,6 +430,7 @@ static void art_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m
 
 /* a PSP game's own icon (ICON0.PNG, read from its disc on the board), its shelf cover where
  * there is no box art; ".noicon": none could be read (a PS1 game in the folder, a damaged file) */
+static int is_psp_sys(int s) { return s >= 0 && !strcmp(L.sys[s].id, "psp"); }
 static int is_psp_rom(const LEntry *e) { return e->type == LT_ROM && e->sys >= 0 && !strcmp(L.sys[e->sys].id, "psp"); }
 static void icon_paths(const LEntry *e, char *png, size_t n, char *miss, size_t m)
 {
@@ -2203,8 +2222,8 @@ static void draw_rail(float dt)
             gfx_shadow(NINE_SHADOW10, x, y, size, size, 0x40a0ff, (int)(lift * 200));
             gfx_nine(NINE_R10, x, y, size, size, 0x14305c, (int)(lift * 255));
         }
-        gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220));
-        if (lift > 0.02f) gfx_icon(c->icon, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255));
+        cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220));
+        if (lift > 0.02f) cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255));
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     /* more above or below */
@@ -2253,8 +2272,8 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
         else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "♪ + R saves the last 30 seconds: the board records all the time"
                                                                               : "Turn on for ♪ + R: the last 30 seconds as a video");
-        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "PSP games record, and the PSP shelf's games start"
-                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to record PSP games and start the PSP shelf's games"
+        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "The PSP section's games start, and PSP games record"
+                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to start the PSP section's games and record PSP games"
                                                                   : "Not on the PSP's memory stick: cross puts it there and turns it on");
         else snprintf(s, n, "%s", e->tags);
         break;
@@ -2326,8 +2345,9 @@ static void draw_list(float dt)
     }
 
     if (!c->n) {
-        gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, c->kind == CK_GAMES ? "No games yet" : c->kind == CK_FAVS ? "No favourites yet" : "Nothing here yet", C_SUB, alpha, 0);
-        gfx_text(FONT_SMALL, DETAIL_X, SHELF_Y + 14 + dy, c->kind == CK_FAVS ? "Square on a game or ROM adds it here" : "Installed games and apps appear here", C_MUTED, alpha, 0);
+        int psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys);
+        gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, c->kind == CK_GAMES || psp ? (psp ? "No PSP games yet" : "No games yet") : c->kind == CK_FAVS ? "No favourites yet" : "Nothing here yet", C_SUB, alpha, 0);
+        gfx_text(FONT_SMALL, DETAIL_X, SHELF_Y + 14 + dy, psp ? "Your ISO, CSO and ZIP games go in roms/psp on the board" : c->kind == CK_FAVS ? "Square on a game or ROM adds it here" : "Installed games and apps appear here", C_MUTED, alpha, 0);
         return;
     }
 
@@ -2401,7 +2421,7 @@ static void draw_home(float dt)
         gfx_shadow(NINE_SHADOW10, x, y + 4, size, size, 0x000000, 110 * a / 255);
         gfx_nine(NINE_R14, x, y, size, size, 0x16223c, a);
         if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * a));
-        gfx_icon(c->icon, ip, cx - ip / 2, cy - ip / 2, lift > 0.5f ? 0xffffff : c->col, a);
+        cat_icon(c, ip, cx - ip / 2, cy - ip / 2, lift > 0.5f ? 0xffffff : c->col, a);
         {
             int f = i == g_home_sel ? FONT_TITLE : FONT_BODY, tw = gfx_text_width(f, c->name);
             gfx_text(f, cx - tw / 2, 150, c->name, i == g_home_sel ? C_TEXT : C_SUB, a, pitch);

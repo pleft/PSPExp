@@ -1296,7 +1296,7 @@ and HOME > Exit.
 "PSP" shelf, covers from their own icons (read in the background for the game selected; box
 art only without one), "Runs on the PSP"; choosing one hands it to the console
 (`launcher_take_native`), for now a "Not yet" notice (Launcher_and_Boards §6.2). Seen in
-PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are not; PS1
+PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are not (done 2026-10-25, before 1.3: a **PSP** section of its own on the rail, between Emulators and Apps, its icon the PSP's console picture its Emulators tile had; and the PSPExp plugin's switch with PSP clock in a Settings group **This PSP**, beside This board, not under Recording: the plugin serves the PSP section as much as recording; both settled so that 1.3 ships them where they stay); PS1
 games in the same folder listed (their covers generated).
 
 **Next:**
