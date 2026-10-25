@@ -14,7 +14,8 @@ always.
 
 ## What you need
 
-- A **board with PSPExp** (a Raspberry Pi, tested on a Pi 400), plugged into
+- A **board with PSPExp** (a Raspberry Pi, tested on a Pi 400; a GameShell
+  too, with less smooth videos: [its page](gameshell.md)), plugged into
   the PSP with the same USB cable. The board's PSPExp starts the recorder by
   itself; it needs ffmpeg, which the card images have.
 - For what you play in PSPExp: nothing more, once PSPExp on the PSP is up to

@@ -39,6 +39,9 @@ The `1` at the end switches it on; a `0` switches it off. PRO's recovery menu
 - **No dot when you press ♪ + R or ♪ + L in a game from the XMB**: check the
   line in `game.txt` ends with `1`, the cable is in, and the board's PSPExp is
   up to date (Apps > Packages).
+- **The red dot goes out by itself** while you record: the board stopped
+  hearing the PSP. What was recorded until then is saved. After 5 seconds the
+  plugin connects to the board again by itself; press ♪ + L to record again.
 - **"Switch on the PSPExp plugin first"** when you start a game from the PSP
   shelf: the line is missing from `game.txt`, or ends with `0`.
 - **A game from the shelf stays black**: its disc comes from the board, so the

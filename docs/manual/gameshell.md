@@ -108,4 +108,9 @@ the PSP itself.
   Films play too, but 720p is too much for the GameShell's processor: an
   H.264 film at 1280x720 shows about 13 pictures a second and runs slow
   (the Pi plays it at its full 30). Smaller films suit it better.
+- **Recording** ([Recording your PSP games](recording.md)) works on the
+  GameShell too, with the game at its full speed, but the videos are less
+  smooth than a Pi's: its USB brings in about 17 pictures a second (Bomberman),
+  and 3–9 in games that leave the plugin little memory (Burnout Legends'
+  races). The sound is whole.
 - Packages live in `/opt/pspexp`.

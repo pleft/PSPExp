@@ -1825,6 +1825,25 @@ static void home_check(void)
     }
 }
 
+/* the board gone with the cable in: a board's USB host can drop the PSP and never look for it
+ * again (the GameShell's, mid-recording in Burnout Legends, 2026-10-25: the dot went, and note+L
+ * did nothing until the game ended). A receiver gone for 5 s, after one was there in this game:
+ * the USB stopped and, through home_check, started again half a second later, which the board
+ * sees as the PSP plugged in anew. Then 15, 30, 60 s apart while it stays away (no board, the
+ * cable out): stopping the USB with nothing streaming has always gone well. */
+static void link_check(u32 now)
+{
+    static int had;
+    static u32 gone_at, wait_us = 5000000;
+    if (pspexpUsbConnected() && (int)g_generation != g_dead_gen) { had = 1; gone_at = 0; wait_us = 5000000; return; }
+    if (!had || g_home_paused || g_util_active || g_quit) { gone_at = 0; return; }
+    if (!gone_at) { gone_at = now | 1; return; }
+    if (now - gone_at < wait_us) return;
+    gone_at = 0;
+    wait_us = wait_us < 15000000 ? 15000000 : wait_us < 60000000 ? wait_us * 2 : 60000000;
+    usb_quiesce("no receiver for a while: started again, for the board to find the PSP");
+}
+
 
 /* the note button, each screen refresh (see event_put): the pairs, the buttons hidden from the
  * game, the mute put back (the dot on the screen: ov_tick). The note button pressed mutes the
@@ -1975,6 +1994,7 @@ static int capture_thread(SceSize args, void *argp)
         vd_umd_check();
         pace_check(now_us());
         home_check();
+        link_check(now_us());
         if (!back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
         if (g_vdisc && !g_vd_opened) {   /* the virtual disc not open yet: said every 5 s (no picture yet to carry the log), given up after 30 s */
             static u32 said;
