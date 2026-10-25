@@ -275,6 +275,7 @@ static volatile int g_dead_gen = -1;     /* the link the receiver stopped readin
 static volatile int g_paused;            /* pause: no frames copied (for comparing) */
 static int g_frames_on = 1;              /* the frames part (F, see read_parts) */
 static u32 g_last_hand;                  /* when the watcher last handed a frame on */
+static u32 g_hand_gap = 30000;           /* the least time between two frames handed on (pace_check) */
 static volatile u32 g_static;            /* frames not sent: the same as the last one sent */
 
 /* ---- on the PSP's screen: a red dot while recording, a green one for a second for a clip ----
@@ -1879,6 +1880,50 @@ static void note_check(int reading)
 
 /* the watcher: every screen refresh, the frame shown; a new one counted (the game's frame rate)
  * and, when none is on its way and a receiver is there, handed to the copier and the sender */
+/* The frames copied, paced by the game's own frame rate: while frames go out (Clips on, or a
+ * recording), a game falling below 85% of its peak has its frames copied less often, 30 a second
+ * stepping down to 15, 10 and 5 (one step each 3 s it stays down), and back up a step at a time
+ * once it is at its peak again (after a hold of 10 s, doubled to 60 s when it falls again within
+ * 10 s). Gran Turismo held 60 fps through a heavier stretch of a race with Clips off and fell to
+ * exactly 20 there with them on, from the stick and from the board alike; 15 a second gave 36,
+ * these steps ≈51 (5 a second there; a mean of 55 over the race against 47; 2026-10-25): each frame's copy (3-5 ms of DMA on the memory the game draws with) costs the game
+ * frames. The peak is kept while copies are slowed (else it decays to the slowed rate and a
+ * "recovery" there brought the 20 back), and lowered only after 30 s at 5 a second: that is the
+ * game's own rate there. A clip there is less smooth instead. Once a second, from the watcher. */
+static const u32 g_pace_gap[] = { 30000, 66666, 100000, 200000 }, g_pace_rate[] = { 30, 15, 10, 5 };
+static void pace_check(u32 now)
+{
+    static u32 t0, c0, peak, hold = 10000000, until, back_at, low_since, level;
+    u32 rate;
+    if (!t0) { t0 = now; c0 = g_changes; return; }
+    if (now - t0 < 1000000) return;
+    rate = (g_changes - c0) * 1000 / ((now - t0) / 1000);   /* (frames a second) */
+    t0 = now; c0 = g_changes;
+    if (rate > peak) peak = rate;
+    else if (peak && (!level || (level == 3 && now - low_since > 30000000))) peak--;   /* (see above) */
+    if (now - g_last_hand > 1000000) return;   /* (nothing being copied: nothing to slow) */
+    if (peak >= 20 && rate * 100 < peak * 85) {   /* below: a step down, at once from 30, then each 3 s */
+        if (!level || (level < 3 && now - low_since >= 3000000)) {
+            if (!level) {
+                if (back_at && now - back_at < 10000000) { hold *= 2; if (hold > 60000000) hold = 60000000; }
+                else hold = 10000000;
+            }
+            level++;
+            low_since = now;
+            until = now + hold;
+            g_hand_gap = g_pace_gap[level];
+            cap_log("frames copied %u a second: the game at %u fps of its %u", g_pace_rate[level], rate, peak);
+        }
+    } else if (level && (int)(now - until) >= 0 && rate * 100 >= peak * 95) {   /* at its peak again: a step up */
+        level--;
+        g_hand_gap = g_pace_gap[level];
+        until = now + 3000000;
+        low_since = now;
+        if (!level) back_at = now;
+        cap_log("frames copied %u a second again: the game at %u fps", g_pace_rate[level], rate);
+    }
+}
+
 static int capture_thread(SceSize args, void *argp)
 {
     void *top = NULL, *last = NULL;
@@ -1954,6 +1999,7 @@ static int capture_thread(SceSize args, void *argp)
         util_check();
         log_flush();
         vd_umd_check();
+        pace_check(now_us());
         home_check();
         if (!back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
         if (g_vdisc && !g_vd_opened) {   /* the virtual disc not open yet: said every 5 s (no picture yet to carry the log), given up after 30 s */
@@ -1982,7 +2028,7 @@ static int capture_thread(SceSize args, void *argp)
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
                 if (!g_frames_on || !g_mem_held || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen
                     || (!g_keep && !g_recording)) ;   /* (nobody reading, or no recording to take it: nothing copied) */
-                else if (now_us() - g_last_hand < 30000) ;
+                else if (now_us() - g_last_hand < g_hand_gap) ;
                 else if (frame_unchanged(top, bw, fmt) && now_us() - g_last_hand < 1000000) g_static++;   /* (30 a second at most: clips are 30 fps, and every frame sent costs the game processor time; Gran Turismo's black loading screens at 60 starved its loading, 2026-10-24) */
                 else if (!g_busy) {   /* to the copier and the sender */
                     g_last_hand = now_us();

@@ -87,8 +87,11 @@ it plays full screen in **Media**, like any film.
   Bomberman, Lunar: Silver Star Harmony, Phantasy Star Portable 2.
 - Games that run at 60 pictures a second are recorded at 30.
 - Recording costs the PSP a little: in the heaviest scenes a game can lose a
-  few pictures a second (Burnout Legends' races: 25 instead of 30). That is
-  while a recording runs, or all the time with Clips on.
+  few pictures a second. When a game starts to slow down, the PSP sends the
+  video fewer pictures (down to 5 a second) until the game is back to speed,
+  so the game keeps its pace and the video is less smooth for those seconds
+  (Gran Turismo's heaviest stretch: about 51 instead of 20). That is while a
+  recording runs, or all the time with Clips on.
 - The dot is only on the PSP's screen, never in the videos. It may flicker a
   little.
 - No dot? Check that the PSP is plugged into the board and that the board's
