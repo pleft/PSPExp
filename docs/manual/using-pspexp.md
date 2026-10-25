@@ -275,12 +275,12 @@ board when it has ffmpeg. The note button needs the PSP's PSPExp from
 **Films** (MP4, MKV, WebM, AVI, MOV, MPEG and more: whatever ffmpeg
 reads, H.264, H.265, VP9, AV1, with any sound) play full screen in
 **Now playing**. The board decodes them and fits the picture to the PSP's
-screen, up to 30 pictures a second (a 60 a second film shows every other
+screen, up to 30 frames a second (a 60 a second film shows every other
 one); the PSP draws each picture and plays the sound. A key brings the
 title, the time and the buttons over the picture for a few seconds (the
 first press only shows them); cross pauses, left / right jump 10 seconds,
 square stops. Closing Media pauses a film. A Raspberry Pi 400 shows a
-720p or 1080p H.264 film at 29–30 pictures a second; films need ffmpeg,
+720p or 1080p H.264 film at 29–30 frames a second; films need ffmpeg,
 which the card images have.
 
 **Tracker modules** (MOD, XM, S3M, IT) play as a tracker shows them: the

@@ -33,7 +33,7 @@ music).
 Into **Videos/PSPExp** in the board's home folder (on a Raspberry Pi,
 `/home/pi/Videos/PSPExp`), named by date and time, for example
 `recording-2026-10-25-20.24.26.mp4`. They are MP4 files with sound, at the
-PSP's 480x272, up to 30 pictures a second.
+PSP's 480x272, up to 30 frames a second.
 
 ![The new recording in Files, on the board](../images/record-saved.png)
 
@@ -48,7 +48,7 @@ PSP's 480x272, up to 30 pictures a second.
 For the moment you did not plan: turn on **Settings > Recording > Clips**,
 and **♪ + R** saves the last 30 seconds (a green dot for a second). The board
 then records all the time in the background, which costs a little (a game can
-run a few pictures a second slower, the board works harder), so it is off at
+run a few frames a second slower, the board works harder), so it is off at
 first.
 
 | Press | What happens | You see, bottom right |
@@ -60,9 +60,9 @@ first.
 ## Good to know
 
 - The dot is only on the PSP's screen, never in the videos.
-- In a game's heaviest scenes, the video gets fewer pictures for a moment so
+- In a game's heaviest scenes, the video gets fewer frames for a moment so
   that the game keeps its own speed.
-- Games that run at 60 pictures a second are recorded at 30.
+- Games that run at 60 frames a second are recorded at 30.
 - On a GameShell the videos are less smooth than on a Raspberry Pi (its USB
   is slower); the games run as fast.
 - Own PSP games recorded so far: Ace Combat X, Bomberman, Burnout Legends,
