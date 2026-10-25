@@ -1290,6 +1290,7 @@ PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are
 games in the same folder listed (their covers generated).
 
 **Next:**
+- **a clean round (2026-10-25 evening):** the Pi's 1.2.0 card image burned fresh and PSPExp removed from the PSP's stick, then upgraded as a user would (the new pspexp-core and pspexp-runtime, the emulators from Packages, Update the PSP, the plugin installed by hand from the PSP's zip as the manual's plugin page says): the games suite 32/32 (Clips off: Crazy Taxi 52 fps, Daytona USA 60), Bomberman from the shelf (unpacked, Inferno's buffer filled, set up 6.1 s, 28–30 fps, a ♪+L recording of 31 s, back to PSPExp) and Burnout Legends from the XMB (set up 8.6 s, a 56 s recording, 27.5 fps paced). Found: Update the PSP does not put the plugin on the stick (an upgrade needs the zip and copying by hand, and a Mac's Finder copy replaced the PSPExp folder whole, its slot b with it): the runtime package to carry the plugin and the update to install it, and a setting to switch it on (writing game.txt); recording inside PSPExp is not paced (Crazy Taxi 8 fps with Clips on against 52 off): pace.c in the runtime's capture too;
 - (B): a long session, CSO, the cable pulled mid-game; loading times measured, and a read-ahead
   (the next 64 KB asked while the game uses the last) if they lag the stick's; the GameShell; the shelf's own games on the stick (A)
   listed too;
