@@ -180,6 +180,17 @@ static int ssh_available(void);
 static int psp_not_a_game(const LEntry *e);
 static int is_psp_sys(int s);
 
+/* where the launcher opens: the PSP's own games (PSP, on the rail after Favourites), else Games */
+static int start_cat(void)
+{
+    int i, games = 0;
+    for (i = 0; i < g_ncat; i++) {
+        if (g_cat[i].kind == CK_SYSTEM && !g_cat[i].hidden) return i;
+        if (g_cat[i].kind == CK_GAMES) games = i;
+    }
+    return games;
+}
+
 static void cats_build(void)
 {
     char keep[64] = "", keep_id[160] = "";
@@ -203,12 +214,18 @@ static void cats_build(void)
         g_builtin[i].type = LT_APP;
         for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
     }
-    /* the rail and the home screen: Favourites, Games, Emulators, PSP, Apps, Settings; each system's
+    /* the rail and the home screen: Favourites, PSP, Games, Emulators, Apps, Settings; each system's
      * ROMs a section of its own off the rail, opened from Emulators (what was played last: the home
      * screen's Play again); the PSP's own games on the rail itself, being neither the board's games
      * nor emulated (the PSP runs them: psp.system) */
     c = cat_add("Favourites", "star", 0xf472b6, CK_FAVS, "favourite");
     for (i = 0; i < L.nfavs; i++) { LEntry *e = find_any(L.favs[i]); if (e) cat_push(c, e); }
+    for (s = 0; s < L.nsys; s++) if (is_psp_sys(s)) {   /* PSP: on the rail, there with no games too (where they go) */
+        c = cat_add("PSP", L.sys[s].icon[0] ? L.sys[s].icon : "disc-3", system_colour(L.sys[s].id), CK_SYSTEM, "game");
+        c->sys = s;
+        for (i = 0; i < L.sys[s].nroms; i++) if (!psp_not_a_game(&L.sys[s].roms_list[i])) cat_push(c, &L.sys[s].roms_list[i]);   /* (a PS1 disc in the PSP folder: left out) */
+        break;
+    }
     c = cat_add("Games", "gamepad-2", 0x818cf8, CK_GAMES, "game");
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME) cat_push(c, &L.e[i]);
     c = cat_add("Emulators", "joystick", 0x38bdf8, CK_EMU, "system");
@@ -227,12 +244,6 @@ static void cats_build(void)
             cat_push(c, e);
             k++;
         }
-    }
-    for (s = 0; s < L.nsys; s++) if (is_psp_sys(s)) {   /* PSP: on the rail, there with no games too (where they go) */
-        c = cat_add("PSP", L.sys[s].icon[0] ? L.sys[s].icon : "disc-3", system_colour(L.sys[s].id), CK_SYSTEM, "game");
-        c->sys = s;
-        for (i = 0; i < L.sys[s].nroms; i++) if (!psp_not_a_game(&L.sys[s].roms_list[i])) cat_push(c, &L.sys[s].roms_list[i]);   /* (a PS1 disc in the PSP folder: left out) */
-        break;
     }
     c = cat_add("Apps", "layout-grid", 0x2dd4bf, CK_APPS, "app");
     for (i = 0; i < NBUILTIN; i++) cat_push(c, &g_builtin[i]);
@@ -305,7 +316,7 @@ static void cats_build(void)
     /* back to where we were */
     g_cur = -1;
     for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
-    if (g_cur < 0) { g_cur = 0; for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i; keep_sel = 0; keep_scroll = 0; }
+    if (g_cur < 0) { g_cur = start_cat(); keep_sel = 0; keep_scroll = 0; }
     c = &g_cat[g_cur];
     c->sel = keep_sel < c->n ? keep_sel : (c->n ? c->n - 1 : 0);
     c->scroll = keep_scroll;
@@ -357,7 +368,7 @@ static int is_system_item(const LEntry *e) { return !strncmp(e->id, "s:", 2); }
 
 enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT, M_HOME };
 static int g_mode = M_HOME;
-static int g_home_sel = 1, g_home_row;   /* the home screen: the section in focus (Games), or its Play again row */
+static int g_home_sel = 1, g_home_row;   /* the home screen: the section in focus (PSP, after Favourites), or its Play again row */
 static int g_home_pill;                  /* on that row: 0 Now playing (the music), 1 Play again */
 static char g_np_title[160]; static int g_np_on, g_np_paused;   /* what Music plays, as last drawn */
 static float g_home_lift[8], g_home_anim;
@@ -3016,7 +3027,6 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
 
 int launcher_init(PspExpContext *ctx, const char *assets)
 {
-    int i;
     g_ctx = ctx;
     snprintf(g_assets, sizeof(g_assets), "%s", assets);
     g_wifi_cmd = getenv("PSPEXP_WIFI_MODE_CMD");
@@ -3027,7 +3037,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
     g_clips_keep = lib_setting_int(&L, "clips", 0);
     cats_build();
-    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GAMES) g_cur = i;   /* start on Games */
+    g_cur = start_cat();   /* start on PSP (Games without one) */
     /* screenshots and tests: open a page without replaying keys, which a slow
      * link can drop (a lost press in System could land on Power off) */
     {

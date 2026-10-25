@@ -18,8 +18,8 @@ buttons; the board needs no screen, keyboard or mouse.
 
 ## The launcher
 
-It opens on the **home screen**: six big tiles, **Favourites**, **Games**,
-**Emulators**, **PSP**, **Apps** and **Settings**, with what each holds underneath
+It opens on the **home screen**: six big tiles, **Favourites**, **PSP**,
+**Games**, **Emulators**, **Apps** and **Settings** (PSP in focus), with what each holds underneath
 and, below, **Play again** with what you played last (it starts afresh;
 the game's own saves are there as always) and, while music is loaded,
 **Now playing** (or **Paused**) with the song. A note at the top shows
@@ -27,9 +27,9 @@ music playing, a pause sign that it is paused.
 
 ```
  12:04 Sat 03 Oct (bell)2          PSP 76%  |  headphones 40%  wifi  plug  board
-   (star)   (GAMES)  (joystick)   (psp)   (apps)   (gear)
- Favourites  Games   Emulators    PSP     Apps   Settings
-                         34 games
+   (star)    (PSP)   (games)  (joystick)  (apps)   (gear)
+ Favourites   PSP     Games   Emulators   Apps   Settings
+                         10 games
                  (>) Play again  GoldenEye 007
  (X) Open                          SELECT Notifications  START Search
 ```

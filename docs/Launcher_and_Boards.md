@@ -895,9 +895,9 @@ does not wait for a PSP the launcher holds.
 **The PSP's own games (2026-10-25, being built: the architecture's §12c).**
 pspexp-core installs `/opt/pspexp/systems/psp.system`: the board's PSP games
 in `~/roms/psp` (ISO, CSO, or a zip holding an ISO, as collections keep them)
-in the rail's own **PSP** section (between Emulators and Apps, there with no
-games too, saying where they go; until 2026-10-25 a shelf under Emulators,
-which they are not), with no emulator: `exec=@psp-boot` asks
+in the rail's own **PSP** section (after Favourites, where the launcher
+opens; there with no games too, saying where they go; until 2026-10-25 a
+shelf under Emulators, which they are not), with no emulator: `exec=@psp-boot` asks
 the console to have the PSP start the game itself (`psp_native.c`: it checks
 the PSP's runtime offers BOOT_DISC and the PSPExp plugin is on in
 `seplugins/game.txt`, without which the PSP would wait for its disc for
