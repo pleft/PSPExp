@@ -1257,6 +1257,13 @@ than the stick reads); the cost is in loading: the 5 s around a load runs lower 
 a load being many reads of one USB round trip each, one at a time. Earlier the same day, with
 Clips on: Despicable Me (651 MB) 25–29 fps, PES 2014 (1.1 GB) menus 55–60, matches a steady 30,
 recorded at 30 alongside. Not measured: loading times themselves (a stopwatch), a read-ahead.
+With Clips on, Gran Turismo again from the stick and from the board, a clip saved with ♪+R at
+the race's end each time (both saved, 4 s later): the two runs match sample for sample (mean 47.3 /
+45.9, set up 11.7 / 9.8 s), the disc coming down the cable while the frames go up adding nothing.
+Both, though, fall to exactly 20 fps for 25 s in a heavier part of the race (the clip shows the
+car on the track) that held 60 with Clips off: a cost of Clips, not of the disc (each frame's
+copy, 3–5 ms of DMA 20–28 times a second, likely pushing the game's frames past 16 ms there, to
+the next vsync step). Next for Clips: fewer frames copied while the game's own rate falls.
 
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
