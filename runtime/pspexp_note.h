@@ -7,7 +7,9 @@
  * system toggles its mute as ♪ is pressed: for a pair it is put back, at once and for half a
  * second after; for ♪ alone it is applied when ♪ is let go, as it always was. Without a receiver
  * every button passes as read. With a receiver keeping recordings only (no last 30 seconds:
- * PSPEXP_CAPTURE_RECORDINGS), ♪+R is a pair that does nothing.
+ * PSPEXP_CAPTURE_RECORDINGS), ♪+R is a pair that does nothing. A pair is ♪ held, then R or L: ♪
+ * and R or L appearing in one reading is not one (the PSP-1000 read both, untouched, in the
+ * middle of a recording, which stopped it: 2026-10-25), and does nothing at all (no tap either).
  *
  * Plain C99, no PSP calls: the runtime reads the buttons and the mute, and does what comes out.
  */
@@ -48,6 +50,7 @@ typedef struct PspExpNoteOut {
     uint32_t events;         /* bit 1 << PSPEXP_NOTE_*: to send, in that order */
     int set_mute;            /* -1, or the mute to set */
     int dot;                 /* PSPEXP_NOTE_DOT_* */
+    uint32_t refused;        /* the buttons read when ♪ came with R or L at once (0: not this step), for the log */
 } PspExpNoteOut;
 
 void pspexp_note_init(PspExpNote *n);

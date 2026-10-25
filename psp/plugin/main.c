@@ -1866,14 +1866,23 @@ static void note_check(int reading)
     if (b & PSP_CTRL_NOTE) {
         u32 pressed = b & ~was;
         g_pad_mask = GAME_BUTTONS;
-        if (!(was & PSP_CTRL_NOTE)) { pair = 0; wanted = -1; }
+        if (!(was & PSP_CTRL_NOTE)) {
+            pair = 0; wanted = -1;
+            if (pressed & (PSP_CTRL_RTRIGGER | PSP_CTRL_LTRIGGER)) {   /* ♪ with R or L in one reading: not a pair, nor a press
+                * alone (a pair is ♪ held, then R or L: PSPExp's runtime read both, untouched, mid-recording, and stopped it,
+                * 2026-10-25; runtime/pspexp_note.c does the same) */
+                pair = 1;
+                cap_log("note: with L or R in one reading, not a pair (buttons %x)", b);
+                pressed &= ~(PSP_CTRL_RTRIGGER | PSP_CTRL_LTRIGGER);
+            }
+        }
         if (mute >= 0 && before >= 0 && mute != before) { wanted = mute; g_impose_set(IMPOSE_MUTE, before); }   /* (the system's toggle, kept for a press alone) */
         if (reading && !g_home_paused && !g_util_active) {
             /* (pairs still, the mute kept, but nothing done before the buffers are there: a
              * clip asked for in a game's first seconds had no picture, its green dot a lie) */
             if (pressed & PSP_CTRL_RTRIGGER) {
                 pair = 1;
-                if (g_keep && g_mem_held) { event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip"); }
+                if (g_keep && g_mem_held) { event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip (buttons %x)", b); }
                 else cap_log(g_keep ? "note+R: not capturing yet" : "note+R: no clip (the receiver keeps recordings only)");
             }
             if (pressed & PSP_CTRL_LTRIGGER) {
@@ -1881,7 +1890,7 @@ static void note_check(int reading)
                 if (g_mem_held || g_recording) {
                     g_recording = !g_recording;
                     event_put(g_recording ? EV_REC_START : EV_REC_STOP);
-                    cap_log("note+L: the recording %s", g_recording ? "starts" : "stops");
+                    cap_log("note+L: the recording %s (buttons %x)", g_recording ? "starts" : "stops", b);
                 } else cap_log("note+L: not capturing yet");
             }
         }

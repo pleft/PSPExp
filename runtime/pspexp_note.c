@@ -27,6 +27,7 @@ void pspexp_note_step(PspExpNote *n, uint32_t b, int mute, int capture, uint32_t
 {
     out->events = 0;
     out->set_mute = -1;
+    out->refused = 0;
     if (!capture) {   /* every button as read; a recording forgotten once the receiver has surely ended it */
         if (!n->off_since) n->off_since = stamp(now);
         else if (now - n->off_since >= FORGET_US) n->recording = 0;
@@ -37,7 +38,14 @@ void pspexp_note_step(PspExpNote *n, uint32_t b, int mute, int capture, uint32_t
         n->off_since = 0;
         if (b & PSPEXP_BUTTON_NOTE) {
             uint32_t pressed = b & ~n->was;
-            if (!(n->was & PSPEXP_BUTTON_NOTE)) { n->pair = 0; n->mute_wanted = -1; n->tap_until = 0; }
+            if (!(n->was & PSPEXP_BUTTON_NOTE)) {
+                n->pair = 0; n->mute_wanted = -1; n->tap_until = 0;
+                if (pressed & (PSPEXP_BUTTON_RTRIGGER | PSPEXP_BUTTON_LTRIGGER)) {   /* ♪ with R or L at once: not a pair, nor a tap */
+                    n->pair = 1;
+                    out->refused = b;
+                    pressed &= ~(PSPEXP_BUTTON_RTRIGGER | PSPEXP_BUTTON_LTRIGGER);
+                }
+            }
             n->hidden = GAME_BUTTONS | PSPEXP_BUTTON_NOTE;
             if (mute >= 0 && n->mute_before >= 0 && mute != n->mute_before) {   /* the system's toggle: kept for ♪ alone */
                 n->mute_wanted = mute;

@@ -74,6 +74,7 @@ int main(void)
     /* ♪+L twice: a recording starts, the red dot, then it stops; the volume buttons pass */
     pspexp_note_init(&n);
     step(0, 0, 1);
+    step(NOTE | VOL, 0, 1);
     step(NOTE | L | VOL, 0, 1);
     CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED); CHECK_EQ(o.buttons, VOL);
     step(0, 0, 1);
@@ -83,7 +84,7 @@ int main(void)
     step(NOTE | L, 0, 1);
     CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_STOP); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);
 
-    /* R and L in one reading: both */
+    /* R and L in one reading, ♪ already held: both */
     pspexp_note_init(&n);
     step(NOTE, 0, 1);
     step(NOTE | R | L, 0, 1);
@@ -112,6 +113,27 @@ int main(void)
     step(NOTE, 0, PSPEXP_CAPTURE_RECORDINGS);
     step(NOTE | L, 0, PSPEXP_CAPTURE_RECORDINGS);
     CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+
+    /* ♪ and L in one reading (the PSP-1000 read both, untouched, mid-recording): no event, L
+     * hidden, no tap for the board when it goes, the mute kept; said once for the log; a real ♪+L
+     * after it still counts */
+    pspexp_note_init(&n);
+    step(0, 0, 1);
+    step(NOTE | L, 1, 1);
+    CHECK_EQ(o.events, 0); CHECK_EQ(o.refused, NOTE | L); CHECK_EQ(o.buttons, 0); CHECK_EQ(o.set_mute, 0);
+    step(NOTE | L, 0, 1);
+    CHECK_EQ(o.events, 0); CHECK_EQ(o.refused, 0);
+    step(0, 0, 1);
+    CHECK_EQ(o.buttons, 0); CHECK_EQ(o.set_mute, -1); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);
+    for (i = 0; i < 10; i++) { step(0, 0, 1); CHECK_EQ(o.buttons & NOTE, 0); }
+    step(NOTE, 0, 1);
+    step(NOTE | L, 0, 1);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.refused, 0);
+    /* R the same */
+    pspexp_note_init(&n);
+    step(0, 0, 1);
+    step(NOTE | R, 0, 1);
+    CHECK_EQ(o.events, 0); CHECK_EQ(o.refused, NOTE | R);
 
     /* no mute setting known (-1): nothing set */
     pspexp_note_init(&n);
