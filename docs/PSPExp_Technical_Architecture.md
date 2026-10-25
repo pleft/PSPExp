@@ -1239,6 +1239,25 @@ brought PSPExp back (connected again 10 s after the game ended). Also kept from 
 hunt: the driver's other entries filled ("not supported"), reads handed to the disc thread,
 CPU-copied bytes written back from the cache, the drive status logged as it changes.
 
+**From the board against from the stick (2026-10-25, Pi 400, PSP-1000).** The same four games
+started from the XMB (their ISOs on the stick) and from the shelf (the board's disc), Clips off
+(nothing copied: only the disc's way differs), the same route (the menu, a race or level or mission,
+about a minute, HOME > Exit), the game's frame rate from the plugin every 5 s:
+
+| Game (its cap) | Set up, stick / board | Mean fps, stick / board | Lowest 5 s, stick / board |
+|---|---|---|---|
+| Burnout Legends (30) | 8.7 / 6.3 s | 28.5 / 27.2 | 17 / 5 (loading) |
+| Gran Turismo (60) | 11.6 / 10.0 s | 59.2 / 58.1 | 50 / 22 (the first 5 s) |
+| Ace Combat X (30) | 6.6 / 6.3 s | 29.2 / 29.3 | 24 / 2 (the first 5 s) |
+| Bomberman (30) | 6.7 / 6.1 s | 29.4 / 28.1 | 28 / 11 (the first 5 s) |
+
+In play every game holds its cap from the board as from the stick (Gran Turismo 60, the others
+30, the same dips in the same places); games set up as fast or faster (the board answers sooner
+than the stick reads); the cost is in loading: the 5 s around a load runs lower from the board,
+a load being many reads of one USB round trip each, one at a time. Earlier the same day, with
+Clips on: Despicable Me (651 MB) 25–29 fps, PES 2014 (1.1 GB) menus 55–60, matches a steady 30,
+recorded at 30 alongside. Not measured: loading times themselves (a stopwatch), a read-ahead.
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's
@@ -1259,8 +1278,8 @@ PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are
 games in the same folder listed (their covers generated).
 
 **Next:**
-- (B): a long session, more games (big ones, CSO, games that read a lot
-  while playing), the cable pulled mid-game; the GameShell; the shelf's own games on the stick (A)
+- (B): a long session, CSO, the cable pulled mid-game; loading times measured, and a read-ahead
+  (the next 64 KB asked while the game uses the last) if they lag the stick's; the GameShell; the shelf's own games on the stick (A)
   listed too;
 - PS1 games (the PSP's own player, POPS: an EBOOT.PBP made from BIN/CUE), later.
 
