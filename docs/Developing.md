@@ -196,7 +196,13 @@ PSPExp's own games (2026-10-24): the same receiver records them, with the same โ
 the PSP's runtime to capture (CAPTURE_SET) and passes what comes on (`PSPEXP_CAPTURE=0`: not).
 The PSP shelf's virtual disc (architecture ยง12c): the receiver answers the plugin's disc reads
 (`tests/run_disc_serve.sh`, a stand-in plugin over TCP: `pspexp-capture -T PORT`, with
-`PSPEXP_DISC_FILE` and `PSPEXP_CAPTURE_SOCKET` pointing at a test's own files).
+`PSPEXP_DISC_FILE` and `PSPEXP_CAPTURE_SOCKET` pointing at a test's own files). Test builds of
+the plugin for a start that goes wrong (`make -C psp/capture clean` between them):
+`TRACE=1` sends each step of a board's disc over the cable before going on (a quiet receiver
+keeps every line in `~/.cache/pspexp/psp-plugin.log`); `CRASH=1` shows an unhandled crash, or the
+system restarting (`sceKernelExitVSHKernel`, `ExitVSHVSH`: its caller and error), on the PSP's
+screen and holds it there (any exit then stops on that screen); `LOCAL=1` serves the virtual disc
+from the ISO named in `ms0:/seplugins/pxd-local.txt`, without USB.
 
 Without a PSP: `scripts/dev/run-ppsspp.sh`, then `build/host/pspexp-capture -k -s clips -c ctl`
 and `build/host/pspexp-term --tcp 127.0.0.1:3838 --launcher` (or a game with

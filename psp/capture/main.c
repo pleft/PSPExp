@@ -42,6 +42,7 @@
 #include <pspsysmem_kernel.h>
 #include <psputilsforkernel.h>
 #include <psppower.h>
+#include <pspthreadman_kernel.h>
 #include <pspaudio.h>
 #include <pspctrl.h>
 #include <pspge.h>
@@ -89,15 +90,15 @@ static volatile u32 g_mlog_head, g_mlog_sent;   /* bytes logged and sent so far 
 #ifdef PSPEXP_CAPTURE_DEV
 static char g_log_pend[2048];
 static int g_log_pend_n;
+static char g_log_defer[2048];   /* cap_log_mem's lines, written to the stick by the watcher (log_flush) */
+static volatile int g_log_defer_n;
 #endif
 
-static void cap_log(const char *fmt, ...)
+static void log_line(int to_stick, const char *fmt, va_list ap)
 {
     char line[240];
     int n = 0;
-    va_list ap;
     SceUID fd;
-    va_start(ap, fmt);
     for (; *fmt && n < (int)sizeof(line) - 14; fmt++) {
         if (*fmt != '%') { line[n++] = *fmt; continue; }
         switch (*++fmt) {
@@ -109,7 +110,6 @@ static void cap_log(const char *fmt, ...)
         }
         if (!*fmt) break;
     }
-    va_end(ap);
     line[n++] = '\n';
     {   /* into the ring for the receiver (the oldest dropped when it is full) */
         u32 intr = pspSdkDisableInterrupts(), i;
@@ -119,6 +119,12 @@ static void cap_log(const char *fmt, ...)
         pspSdkEnableInterrupts(intr);
     }
 #ifdef PSPEXP_CAPTURE_DEV
+    if (!to_stick) {   /* (the stick's copy later, from the watcher's own stack) */
+        u32 intr = pspSdkDisableInterrupts();
+        if (g_log_defer_n + n <= (int)sizeof(g_log_defer)) { memcpy(g_log_defer + g_log_defer_n, line, n); g_log_defer_n += n; }
+        pspSdkEnableInterrupts(intr);
+        return;
+    }
     if (!g_log_ready || g_log_hold) {   /* (kept in memory: see above) */
         if (g_log_pend_n + n <= (int)sizeof(g_log_pend)) { memcpy(g_log_pend + g_log_pend_n, line, n); g_log_pend_n += n; }
         return;
@@ -130,9 +136,76 @@ static void cap_log(const char *fmt, ...)
         sceIoClose(fd);
     }
 #else
-    (void)fd;
+    (void)fd; (void)to_stick;
 #endif
 }
+
+static void cap_log(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    log_line(1, fmt, ap);
+    va_end(ap);
+}
+
+#ifdef PSPEXP_CAPTURE_DEV
+/* the watcher's, each refresh: cap_log_mem's lines onto the stick (a developer build's) */
+static void log_flush(void)
+{
+    static char t[2048];
+    int n;
+    u32 intr;
+    SceUID fd;
+    if (!g_log_defer_n || !g_log_ready || g_log_hold) return;
+    intr = pspSdkDisableInterrupts();
+    n = g_log_defer_n;
+    memcpy(t, g_log_defer, n);
+    g_log_defer_n = 0;
+    pspSdkEnableInterrupts(intr);
+    fd = sceIoOpen(LOG_PATH, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0777);
+    if (fd >= 0) { sceIoWrite(fd, t, n); sceIoClose(fd); }
+}
+#endif
+
+/* the memory's log only, never the stick's: for calls made on another's small stack (the virtual
+ * disc's driver: see vd_call) */
+static void cap_log_mem(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    log_line(0, fmt, ap);
+    va_end(ap);
+}
+#ifndef PSPEXP_CAPTURE_DEV
+#define log_flush() ((void)0)
+#endif
+
+#ifdef PSPEXP_CAPTURE_TRACE
+/* make TRACE=1: a game from the board's disc logged step by step, each line sent over the cable
+ * before the step goes on (the receiver writes it to ~/.cache/pspexp/psp-plugin.log at once): the
+ * last line there is where a PSP that switched itself off stopped */
+static int log_send(void);
+static SceUID g_tx_lock;
+static int g_usb_up, g_vdisc;
+static void trace_flush(void)
+{
+    int k1 = pspSdkSetK1(0);
+    SceUInt t = 500000;
+    if (g_vdisc && g_usb_up && pspexpUsbConnected() && sceKernelWaitSema(g_tx_lock, 1, &t) >= 0) {
+        log_send();
+        sceKernelSignalSema(g_tx_lock, 1);
+    }
+    pspSdkSetK1(k1);
+}
+#define TRACE(...) do { cap_log_mem(__VA_ARGS__); trace_flush(); } while (0)
+#define VD_SAID_MAX 400
+#define VD_LOG TRACE
+#else
+#define trace_flush() ((void)0)
+#define TRACE(...) ((void)0)
+#define VD_SAID_MAX 40
+#define VD_LOG cap_log_mem
+#endif
 
 static u32 now_us(void)
 {
@@ -798,6 +871,7 @@ static SceUID h_loadmod(const char *path, int flags, void *opt)
 {
     SceUID r = o_loadmod(path, flags, opt);
     if (r < 0 && g_mem_held && !g_quit) { mem_release("the game loaded a module"); r = o_loadmod(path, flags, opt); }
+    if (g_vdisc) { cap_log_mem("the game loads %s: %x", path ? path : "?", (u32)r); trace_flush(); }   /* (a game from the board: what its start does) */
     return r;
 }
 
@@ -811,7 +885,13 @@ static int (*o_thread)(const char *, void *, int, int, int, void *);
 static int h_vpl(const char *n, int part, int attr, unsigned int size, void *o) { int r; RETRY(o_vpl(n, part, attr, size, o), "the game made a memory pool"); return r; }
 static int h_pipe(const char *n, int part, int attr, unsigned int size, void *o) { int r; RETRY(o_pipe(n, part, attr, size, o), "the game made a message pipe"); return r; }
 static int h_fpl(const char *n, int part, int attr, unsigned int bs, unsigned int nb, void *o) { int r; RETRY(o_fpl(n, part, attr, bs, nb, o), "the game made a memory pool"); return r; }
-static int h_thread(const char *n, void *e, int prio, int stack, int attr, void *o) { int r; RETRY(o_thread(n, e, prio, stack, attr, o), "the game made a thread"); return r; }
+static int h_thread(const char *n, void *e, int prio, int stack, int attr, void *o)
+{
+    int r;
+    RETRY(o_thread(n, e, prio, stack, attr, o), "the game made a thread");
+    TRACE("the game makes a thread %s: %x", n ? n : "?", (u32)r);
+    return r;
+}
 
 /* the game locking the volatile memory: the plugin's hold on it given back first */
 static int (*o_vlock)(int, void **, int *), (*o_vtry)(int, void **, int *), (*o_plock)(int, void **, int *), (*o_ptry)(int, void **, int *);
@@ -1112,6 +1192,7 @@ static u32 g_vd_seq;
 static u64 g_vd_size, g_vd_pos;
 static volatile u32 g_vd_reads, g_vd_waits, g_vd_opens, g_vd_fails;
 static volatile int g_vd_last;   /* the last ask's result */
+static u32 g_vd_said;            /* the first calls logged (which ones PRO makes after the open) */
 static char g_back_eboot[256];   /* PSPExp's EBOOT, started again at the game's exit (back_note_read) */
 
 /* one ask: n bytes at off into dst; the bytes got, -1 the link is not up (ask again), -2 the
@@ -1121,7 +1202,8 @@ static int vd_ask(u64 off, u32 n, void *dst)
     unsigned char h[32];
     SceUInt t = 1000000;
     int w;
-    if (!g_usb_up || !pspexpUsbConnected() || g_quit) return -1;
+    if (!g_usb_up || g_cmd_th < 0 || !pspexpUsbConnected() || g_quit) return -1;   /* (the command thread reads the answers: none before it runs) */
+    while (sceKernelPollSema(g_vd_done, 1) >= 0) ;   /* (a late answer's signal, left from an ask given up on) */
     memset(h, 0, 32);
     memcpy(h, "PXDQ", 4);
     g_vd_status = 0xFFFFFFFFu; g_vd_got = 0; g_vd_dst = dst; g_vd_cap = n;
@@ -1142,8 +1224,12 @@ static int vd_ask(u64 off, u32 n, void *dst)
 static void vd_answer(const unsigned char *hd, u32 len)
 {
     u32 seq = get32(hd), n = len - 16;
+    if (g_vd_said < VD_SAID_MAX) { cap_log("the virtual disc: answer %u, %u bytes (asked %u, cap %u)", seq, n, g_vd_want, g_vd_cap); trace_flush(); }
     if (seq == g_vd_want && seq && n <= g_vd_cap && (!n || g_vd_dst)) {
         if (n && cmd_read(g_vd_dst, (int)n) < 0) return;
+        if (n) sceKernelDcacheWritebackInvalidateRange(g_vd_dst, n);   /* (copied by the processor, unlike the stick's DMA: in memory too,
+                                                                         * for a reader that invalidates the range or hands it to the GE) */
+        if (n && g_vd_said < VD_SAID_MAX) { cap_log("the virtual disc: %u bytes in", n); trace_flush(); }
         g_vd_status = get32(hd + 4);
         g_vd_size = (u64)get32(hd + 8) | (u64)get32(hd + 12) << 32;
         g_vd_got = n;
@@ -1158,34 +1244,129 @@ static void vd_answer(const unsigned char *hd, u32 len)
     }
 }
 
-static int vd_nothing(PspIoDrvArg *a) { (void)a; return 0; }
-static int vd_open(PspIoDrvFileArg *a, char *file, int flags, SceMode mode)
+/* The driver's calls run on their caller's stack, and for the game's reads that is Inferno's
+ * sceKernelExtendKernelStack(0x2000): 8 KB for the I/O manager, Inferno and the driver together.
+ * The asking (the USB write, the waits) and its log (a developer build's onto the stick: the I/O
+ * manager and the stick's driver once more, inside) on it switched the PSP off at the game's first
+ * read (2026-10-25; the open and Inferno's own first reads, on its mount thread's stack, went
+ * well). So an open or a read is handed to the disc thread, with a stack of its own, and the
+ * driver only waits; its other calls log to memory only. */
+#define VD_OPEN 1
+#define VD_READ 2
+/* The disc's first sector (its primary volume descriptor, sector 16) fetched while the disc
+ * opens, and given from here. Inferno's iso_open marks the disc open (g_iso_opened) before its
+ * mount thread reads that sector into its buffer, and the game's start (sceUmdActivate, waiting
+ * on that mark only) mounts the disc at once: its ISO file system takes the sector from that
+ * buffer (devctl 0x01E28035 answers the buffer's address). From the stick the read takes about a
+ * millisecond; through the board (or the plugin's disc thread) it waited, the file system read
+ * an unfilled buffer and the PSP switched itself off, at that very read, every time but once
+ * (2026-10-25; from a disc on the stick through this device as well). Given from memory, the
+ * read never waits. */
+#define VD_PVD_AT 32768u
+static unsigned char g_vd_pvd[2048] __attribute__((aligned(64)));
+static volatile int g_vd_pvd_ok;
+static SceUID g_vd_go = -1, g_vd_fin = -1, g_vd_th = -1;
+static volatile int g_vd_op, g_vd_res, g_vd_qlen;
+static char *volatile g_vd_qdata;
+
+#if defined(PSPEXP_CAPTURE_DEV) || defined(PSPEXP_CAPTURE_LOCAL)
+/* A developer's test: ms0:/seplugins/pxd-local.txt naming an ISO on the stick serves the virtual
+ * disc from it, no USB in the way (make DEV=1 PARTS=SBUXF): the device alone, under Inferno */
+static SceUID g_vd_local = -1;
+static int vd_local_open(void)
+{
+    static int tried;
+    char path[200];
+    SceUID fd;
+    int n;
+    if (tried) return g_vd_local >= 0;
+    tried = 1;
+    if ((fd = sceIoOpen("ms0:/seplugins/pxd-local.txt", PSP_O_RDONLY, 0)) < 0) return 0;
+    n = sceIoRead(fd, path, sizeof(path) - 1);
+    sceIoClose(fd);
+    if (n <= 0) return 0;
+    path[n] = 0;
+    for (n = 0; path[n] && path[n] != '\r' && path[n] != '\n'; n++) ;   /* (the kernel's strcspn left the newline in) */
+    path[n] = 0;
+    g_vd_local = sceIoOpen(path, PSP_O_RDONLY, 0);
+    if (g_vd_local >= 0) g_vd_size = (u64)sceIoLseek(g_vd_local, 0, PSP_SEEK_END);
+    cap_log("the virtual disc from the stick: %s: %x, %u MB", path, (u32)g_vd_local, (u32)(g_vd_size >> 20));
+    return g_vd_local >= 0;
+}
+#else
+#define g_vd_local (-1)
+#define vd_local_open() 0
+#endif
+
+/* Inferno's buffer for the first sector filled from the kept copy, before the open succeeds. The
+ * system activates the disc (sceUmdActivate: disc0: assigned, the ISO file system mounted, reading
+ * that sector from Inferno's buffer, devctl 0x01E28035) as soon as Inferno marks its ISO open, and
+ * Inferno's mount thread reads the sector only after a sleep of 20 ms (inferno_mount: iso_open,
+ * then sceKernelDelayThread(20000)). From the stick the ISO opens before the system looks; through
+ * this device it opens later, while the system is polling every 10 ms: it mounted an empty buffer,
+ * found no ISO 9660 there, disc0: stayed empty and the game's EBOOT was "not found" (0x80010013),
+ * init restarted the system and the PSP switched itself off (2026-10-25: the order of the plugin's
+ * log lines showed the activation before the mount thread's read). */
+static void vd_fill_inferno_pvd(void)
+{
+    static int done;
+    u32 buf = 0;
+    int r;
+    if (done || !g_vd_pvd_ok) return;
+    r = sceIoDevctl("umd0:", 0x01E28035, NULL, 0, &buf, sizeof(buf));
+    if (r < 0 || buf < 0x88000000 || buf >= 0x8A000000) { cap_log("Inferno's first-sector buffer not found: %x", (u32)r); return; }
+    memcpy((void *)buf, g_vd_pvd, 2048);
+    sceKernelDcacheWritebackInvalidateRange((void *)buf, 2048);
+    done = 1;
+    cap_log("Inferno's first-sector buffer filled before the open (%x)", buf);
+}
+
+static int vd_do_open(void)
 {
     int r;
-    (void)a; (void)file; (void)mode;
-    if ((flags & PSP_O_WRONLY) && !(flags & PSP_O_RDONLY)) return 0x80010013;   /* (read only) */
-    if (!g_vd_opens++) cap_log("the virtual disc: Inferno opens it (flags %x)", (u32)flags);
-    sceKernelWaitSema(g_vd_lock, 1, NULL);
+    if (!g_vd_opens++) { cap_log("the virtual disc: Inferno opens it"); trace_flush(); }
+    if (vd_local_open()) {
+        if (!g_vd_pvd_ok && g_vd_size >= VD_PVD_AT + 2048) {
+            sceIoLseek(g_vd_local, VD_PVD_AT, PSP_SEEK_SET);
+            g_vd_pvd_ok = sceIoRead(g_vd_local, g_vd_pvd, 2048) == 2048;
+        }
+        vd_fill_inferno_pvd();
+        g_vd_pos = 0;
+        if (!g_vd_opened) { cap_log("the virtual disc: open (the stick's), after %u tries, its first sector %s", g_vd_opens, g_vd_pvd_ok ? "kept" : "not read"); g_started_at = now_us(); }
+        g_vd_opened = 1;
+        return 0;
+    }
     r = vd_ask(0, 0, NULL);   /* its size: the board answers once the link is up */
-    sceKernelSignalSema(g_vd_lock, 1);
     if (r < 0) { g_vd_fails++; return 0x80010002; }   /* (not yet: Inferno tries again in 20 ms) */
+    if (!g_vd_pvd_ok && g_vd_size >= VD_PVD_AT + 2048) {   /* (see VD_PVD_AT: not open without it) */
+        if (vd_ask(VD_PVD_AT, 2048, g_vd_pvd) != 2048) { g_vd_fails++; return 0x80010002; }
+        g_vd_pvd_ok = 1;
+    }
+    vd_fill_inferno_pvd();
     g_vd_pos = 0;
     if (!g_vd_opened) {
-        cap_log("the virtual disc: open, %u MB, after %u tries", (u32)(g_vd_size >> 20), g_vd_opens);
+        cap_log("the virtual disc: open, %u MB, after %u tries, its first sector kept", (u32)(g_vd_size >> 20), g_vd_opens);
         g_started_at = now_us();   /* the game starts only now (it waited for its disc): the 6-20 s before its memory is taken
                                     * count from here (from the plugin's load, the 20 s were over when a link came late: the
                                     * memory taken before the game had loaded, the PSP off at once, 2026-10-25) */
     }
     g_vd_opened = 1;
+    trace_flush();
     return 0;
 }
-static int vd_close(PspIoDrvFileArg *a) { (void)a; return 0; }
-static int vd_read(PspIoDrvFileArg *a, char *data, int len)
+
+static int vd_do_read(char *data, int len)
 {
     int done = 0, r = 0;
-    (void)a;
-    if (len <= 0) return 0;
-    sceKernelWaitSema(g_vd_lock, 1, NULL);
+    if (g_vd_said++ < VD_SAID_MAX) { cap_log("the virtual disc: read %d at %u to %x", len, (u32)g_vd_pos, (u32)data); sceKernelSetEventFlag(g_send_ev, SEND_AUDIO); trace_flush(); }
+    if (g_vd_local >= 0) {
+        sceIoLseek(g_vd_local, (SceOff)g_vd_pos, PSP_SEEK_SET);
+        r = sceIoRead(g_vd_local, data, len);
+        if (r > 0) g_vd_pos += (u64)r;
+        g_vd_reads++;
+        if (g_vd_said < VD_SAID_MAX) cap_log("the virtual disc: %d bytes from the stick", r);
+        return r;
+    }
     while (done < len && !g_quit) {
         u32 n = (u32)(len - done) > 65536 ? 65536 : (u32)(len - done);
         r = vd_ask(g_vd_pos, n, data + done);
@@ -1196,33 +1377,184 @@ static int vd_read(PspIoDrvFileArg *a, char *data, int len)
         g_vd_pos += (u64)r;
     }
     g_vd_reads++;
-    sceKernelSignalSema(g_vd_lock, 1);
+    if (g_vd_said < VD_SAID_MAX) TRACE("the virtual disc: %d bytes read (asked %d)", done, len);
     return done ? done : r == -2 ? (int)0x80010005 : 0;
 }
-static int vd_write(PspIoDrvFileArg *a, const char *data, int len) { (void)a; (void)data; (void)len; return 0x80010013; }
-static SceOff vd_lseek(PspIoDrvFileArg *a, SceOff ofs, int whence)
+
+static int vd_thread(SceSize args, void *argp)
+{
+    (void)args; (void)argp;
+    for (;;) {
+        if (sceKernelWaitSema(g_vd_go, 1, NULL) < 0) break;
+        g_vd_res = g_vd_op == VD_OPEN ? vd_do_open() : vd_do_read(g_vd_qdata, g_vd_qlen);
+        sceKernelSignalSema(g_vd_fin, 1);
+    }
+    return 0;
+}
+
+/* the driver's side: one open or read done by the disc thread, one at a time */
+static int vd_call(int op, char *data, int len)
+{
+    int r;
+    if (g_vd_th < 0) return op == VD_OPEN ? (int)0x80010002 : (int)0x80010005;
+    sceKernelWaitSema(g_vd_lock, 1, NULL);
+    g_vd_op = op; g_vd_qdata = data; g_vd_qlen = len;
+    sceKernelSignalSema(g_vd_go, 1);
+    sceKernelWaitSema(g_vd_fin, 1, NULL);
+    r = g_vd_res;
+    sceKernelSignalSema(g_vd_lock, 1);
+    return r;
+}
+
+/* Every call runs on a stack of its own (sceKernelExtendKernelStack), the caller's holding only
+ * the few words below. Inferno's mount thread, which opens the disc and reads its header and
+ * first sector, has a stack of 2 KB (sceKernelCreateThread("infernoMount", ..., 0x800)), the I/O
+ * manager's frames on it besides; the plugin's opens, seeks and reads with their logging ran
+ * there and overran it, and the PSP switched itself off as that thread ended, right after its
+ * last read, with no call of the game's after it (2026-10-25: a trace sending each step over the
+ * cable before going on; from a disc on the stick through this device as well). Inferno reads
+ * through 8 KB of its own the same way. */
+#define VD_STACK 0x4000
+enum { VX_OPEN, VX_CLOSE, VX_READ, VX_LSEEK, VX_IOCTL, VX_DEVCTL, VX_GETSTAT };
+typedef struct VdX {
+    int op, len, whence;
+    unsigned int cmd;
+    char *data;
+    SceIoStat *st;
+    SceOff ofs, res;
+} VdX;
+
+static SceOff vd_read_x(char *data, int len)
+{
+    u64 at = g_vd_pos;
+    if (len <= 0) return 0;
+    if (g_vd_pvd_ok && at >= VD_PVD_AT && at + (u64)len <= VD_PVD_AT + 2048) {   /* the first sector: at once (see VD_PVD_AT) */
+        memcpy(data, g_vd_pvd + (u32)(at - VD_PVD_AT), len);
+        sceKernelDcacheWritebackInvalidateRange(data, len);
+        g_vd_pos = at + (u64)len;
+        g_vd_reads++;
+        if (g_vd_said++ < VD_SAID_MAX) VD_LOG("the virtual disc: read %d at %u, the kept first sector, into %x: %x %x %x %x %x %x", len, (u32)at, (u32)data,
+                                              (u8)data[0], (u8)data[1], (u8)data[2], (u8)data[3], (u8)data[4], (u8)data[5]);
+        return len;
+    }
+    return vd_call(VD_READ, data, len);
+}
+
+static SceOff vd_lseek_x(SceOff ofs, int whence)
 {
     SceOff base = whence == PSP_SEEK_CUR ? (SceOff)g_vd_pos : whence == PSP_SEEK_END ? (SceOff)g_vd_size : 0;
-    (void)a;
-    if (base + ofs < 0) return 0x80010016;
+    if (g_vd_said++ < VD_SAID_MAX) VD_LOG("the virtual disc: seek %u from %d", (u32)ofs, whence);
+    if (base + ofs < 0) return (SceOff)(int)0x80010016;
     g_vd_pos = (u64)(base + ofs);
     return (SceOff)g_vd_pos;
 }
-static int vd_ioctl(PspIoDrvFileArg *a, unsigned int cmd, void *in, int inl, void *out, int outl) { (void)a; (void)cmd; (void)in; (void)inl; (void)out; (void)outl; return 0x80020325; }
-static int vd_devctl(PspIoDrvFileArg *a, const char *dev, unsigned int cmd, void *in, int inl, void *out, int outl) { (void)a; (void)dev; (void)cmd; (void)in; (void)inl; (void)out; (void)outl; return 0x80020325; }
-static int vd_getstat(PspIoDrvFileArg *a, const char *file, SceIoStat *st)
+
+static int vd_x(void *p)
 {
-    (void)a; (void)file;
-    memset(st, 0, sizeof(*st));
-    st->st_mode = 0x21FF;   /* (a file, readable) */
-    st->st_size = (SceOff)g_vd_size;
+    VdX *x = (VdX *)p;
+    switch (x->op) {
+    case VX_OPEN: x->res = vd_call(VD_OPEN, NULL, 0); break;
+    case VX_CLOSE: if (g_vd_said++ < VD_SAID_MAX) VD_LOG("the virtual disc: close"); x->res = 0; break;
+    case VX_READ: x->res = vd_read_x(x->data, x->len); break;
+    case VX_LSEEK: x->res = vd_lseek_x(x->ofs, x->whence); break;
+    case VX_IOCTL: VD_LOG("the virtual disc: ioctl %x", x->cmd); x->res = (int)0x80020325; break;
+    case VX_DEVCTL: VD_LOG("the virtual disc: devctl %x", x->cmd); x->res = (int)0x80020325; break;
+    case VX_GETSTAT:
+        VD_LOG("the virtual disc: getstat");
+        memset(x->st, 0, sizeof(*x->st));
+        x->st->st_mode = 0x21FF;   /* (a file, readable) */
+        x->st->st_size = (SceOff)g_vd_size;
+        x->res = 0;
+        break;
+    }
     return 0;
 }
+static SceOff vd_run(VdX *x) { sceKernelExtendKernelStack(VD_STACK, (void (*)(void *))vd_x, x); return x->res; }
+
+static int vd_nothing(PspIoDrvArg *a) { (void)a; return 0; }
+static int vd_open(PspIoDrvFileArg *a, char *file, int flags, SceMode mode)
+{
+    VdX x = { VX_OPEN };
+    (void)a; (void)file; (void)mode;
+    if ((flags & PSP_O_WRONLY) && !(flags & PSP_O_RDONLY)) return 0x80010013;   /* (read only) */
+    return (int)vd_run(&x);
+}
+static int vd_close(PspIoDrvFileArg *a) { VdX x = { VX_CLOSE }; (void)a; return (int)vd_run(&x); }
+static int vd_read(PspIoDrvFileArg *a, char *data, int len) { VdX x = { VX_READ }; (void)a; x.data = data; x.len = len; return (int)vd_run(&x); }
+static int vd_write(PspIoDrvFileArg *a, const char *data, int len) { (void)a; (void)data; (void)len; return 0x80010013; }
+static SceOff vd_lseek(PspIoDrvFileArg *a, SceOff ofs, int whence) { VdX x = { VX_LSEEK }; (void)a; x.ofs = ofs; x.whence = whence; return vd_run(&x); }
+static int vd_ioctl(PspIoDrvFileArg *a, unsigned int cmd, void *in, int inl, void *out, int outl)
+{
+    VdX x = { VX_IOCTL };
+    (void)a; (void)in; (void)inl; (void)out; (void)outl;
+    x.cmd = cmd;
+    return (int)vd_run(&x);
+}
+static int vd_devctl(PspIoDrvFileArg *a, const char *dev, unsigned int cmd, void *in, int inl, void *out, int outl)
+{
+    VdX x = { VX_DEVCTL };
+    (void)a; (void)dev; (void)in; (void)inl; (void)out; (void)outl;
+    x.cmd = cmd;
+    return (int)vd_run(&x);
+}
+static int vd_getstat(PspIoDrvFileArg *a, const char *file, SceIoStat *st) { VdX x = { VX_GETSTAT }; (void)a; (void)file; x.st = st; return (int)vd_run(&x); }
+/* every other entry answered "not supported" (nothing else done: no stack used) rather than left NULL */
+#define VD_NO 0x80020325
+static int vd_remove(PspIoDrvFileArg *a, const char *n) { (void)a; (void)n; return VD_NO; }
+static int vd_mkdir(PspIoDrvFileArg *a, const char *n, SceMode m) { (void)a; (void)n; (void)m; return VD_NO; }
+static int vd_rmdir(PspIoDrvFileArg *a, const char *n) { (void)a; (void)n; return VD_NO; }
+static int vd_dopen(PspIoDrvFileArg *a, const char *n) { (void)a; (void)n; return VD_NO; }
+static int vd_dclose(PspIoDrvFileArg *a) { (void)a; return VD_NO; }
+static int vd_dread(PspIoDrvFileArg *a, SceIoDirent *d) { (void)a; (void)d; return VD_NO; }
+static int vd_chstat(PspIoDrvFileArg *a, const char *n, SceIoStat *s, int b) { (void)a; (void)n; (void)s; (void)b; return VD_NO; }
+static int vd_rename(PspIoDrvFileArg *a, const char *o, const char *n) { (void)a; (void)o; (void)n; return VD_NO; }
+static int vd_chdir(PspIoDrvFileArg *a, const char *n) { (void)a; (void)n; return VD_NO; }
+static int vd_mount(PspIoDrvFileArg *a) { (void)a; return 0; }
+static int vd_umount(PspIoDrvFileArg *a) { (void)a; return 0; }
+static int vd_unk21(PspIoDrvFileArg *a) { (void)a; return VD_NO; }
 static PspIoDrvFuncs g_vd_funcs = {
     vd_nothing, vd_nothing, vd_open, vd_close, vd_read, vd_write, vd_lseek, vd_ioctl,
-    NULL, NULL, NULL, NULL, NULL, NULL, vd_getstat, NULL, NULL, NULL, NULL, NULL, vd_devctl, NULL,
+    vd_remove, vd_mkdir, vd_rmdir, vd_dopen, vd_dclose, vd_dread, vd_getstat, vd_chstat, vd_rename, vd_chdir,
+    vd_mount, vd_umount, vd_devctl, vd_unk21,
 };
 static PspIoDrv g_vd_drv = { "pxd", 0x10, 0x800, "PXD", &g_vd_funcs };
+
+/* The disc's drive status logged as it changes (Inferno's mount: PRESENT|INITED; the system's
+ * activation: READY), and in a CRASH build what the ISO file system then finds (see
+ * vd_fill_inferno_pvd for why it found nothing, 2026-10-25) */
+#define UMD_READY 0x20
+static int (*g_umd_stat)(void);
+static void vd_umd_check(void)
+{
+    static int last = -1, done;
+    int st;
+    if (!g_vdisc || !g_vd_opened || done || !g_umd_stat) return;
+    st = g_umd_stat();
+    if (st != last) { cap_log("the disc's drive status %x", (u32)st); last = st; trace_flush(); }
+    if (st & UMD_READY) {   /* (activated by the system) */
+#ifdef PSPEXP_CAPTURE_CRASH
+        u32 n = 0, sz = 0, pvd = 0;
+        int r1, r2, r3, g, d;
+        SceIoStat ss;
+        r1 = sceIoDevctl("umd0:", 0x01F20002, NULL, 0, &n, 4);      /* (what isofs asks Inferno: the sectors, */
+        r2 = sceIoDevctl("umd0:", 0x01E280A9, NULL, 0, &sz, 4);     /* the sector's size, */
+        r3 = sceIoDevctl("umd0:", 0x01E28035, NULL, 0, &pvd, 4);    /* the first sector's buffer) */
+        cap_log("the kept copy now: %x %x %x %x", g_vd_pvd[0], g_vd_pvd[1], g_vd_pvd[2], g_vd_pvd[3]);
+        cap_log("Inferno says: %x sectors (%x), sector size %x (%x), first sector at %x (%x)", n, (u32)r1, sz, (u32)r2, pvd, (u32)r3);
+        if (r3 >= 0 && pvd >= 0x88000000 && pvd < 0x8A000000) {
+            const unsigned char *b = (const unsigned char *)pvd;
+            cap_log("its first sector: %x %x %x %x %x %x, volume sectors %u", b[0], b[1], b[2], b[3], b[4], b[5], (u32)b[80] | b[81] << 8 | b[82] << 16 | (u32)b[83] << 24);
+        }
+        g = sceIoGetstat("disc0:/PSP_GAME/SYSDIR/EBOOT.BIN", &ss);
+        d = sceIoDopen("disc0:/");
+        cap_log("disc0: the EBOOT %x (%u bytes), the root %x", (u32)g, g >= 0 ? (u32)ss.st_size : 0, (u32)d);
+        if (d >= 0) sceIoDclose(d);
+        trace_flush();
+#endif
+        done = 1;
+        return;
+    }
+}
 
 /* at module_start: "pxd0:" the game's ISO? its device then (nothing else of the plugin's changes) */
 static void vd_setup(void)
@@ -1232,8 +1564,14 @@ static void vd_setup(void)
     if (!iso || strncmp(iso, "pxd0:", 5) != 0) return;
     g_vd_lock = sceKernelCreateSema("PSPExpDiscLock", 0, 1, 1, NULL);
     g_vd_done = sceKernelCreateSema("PSPExpDiscDone", 0, 0, 1, NULL);
+    g_vd_go = sceKernelCreateSema("PSPExpDiscGo", 0, 0, 1, NULL);
+    g_vd_fin = sceKernelCreateSema("PSPExpDiscFin", 0, 0, 1, NULL);
+    g_vd_th = sceKernelCreateThread("PSPExpDisc", vd_thread, 0x20, 0x4000, 0, NULL);   /* (the stick's log inside: room) */
+    if (g_vd_th >= 0) sceKernelStartThread(g_vd_th, 0, NULL);
     r = sceIoAddDrv(&g_vd_drv);
     g_vdisc = r >= 0;
+    g_umd_stat = (void *)sctrlHENFindFunction((char *)"PRO_Inferno_Driver", (char *)"sceUmdUser", 0x6B4A146C);       /* sceUmdGetDriveStat */
+    cap_log("Inferno's drive status %x", (u32)g_umd_stat);
     cap_log("the virtual disc %s: device added %x", iso, (u32)r);
 }
 
@@ -1586,6 +1924,7 @@ static int capture_thread(SceSize args, void *argp)
         t0 = now_us();
         while (!g_quit) {
             sceDisplayWaitVblankStart();
+            vd_umd_check();
             if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) >= 0 && top != last) { g_changes++; last = top; }
             if (now_us() - t0 >= 5000000) { cap_log("game %u frames in 5 s (no link)", g_changes - c0); c0 = g_changes; t0 = now_us(); }
         }
@@ -1613,6 +1952,8 @@ static int capture_thread(SceSize args, void *argp)
         static int back_looked;
         sceDisplayWaitVblankStart();
         util_check();
+        log_flush();
+        vd_umd_check();
         home_check();
         if (!back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
         if (g_vdisc && !g_vd_opened) {   /* the virtual disc not open yet: said every 5 s (no picture yet to carry the log), given up after 30 s */
@@ -1699,11 +2040,109 @@ static int capture_thread(SceSize args, void *argp)
 static char g_parts[16] = PSPEXP_CAPTURE_PARTS;
 static int part_on(char c) { int i; for (i = 0; g_parts[i]; i++) if (g_parts[i] == c) return 1; return 0; }
 
+#ifdef PSPEXP_CAPTURE_CRASH
+/* make CRASH=1: a crash of the PSP's (an exception nobody handles) shown on its screen, where it
+ * happened and what called it, the PSP then held there instead of switching itself off: the
+ * virtual disc's starts ended inside the system's code, after the plugin's last step, where no
+ * log of the plugin's could see (2026-10-25) */
+#include <pspdebug.h>
+int vsnprintf(char *b, size_t n, const char *f, va_list ap) { (void)f; (void)ap; if (n) b[0] = 0; return 0; }   /* (the kernel's libc has none; only the
+                                                                                                             * debug screen's printf wants it, unused) */
+static void *(*g_mod_by_addr)(u32);   /* sceKernelFindModuleByAddress: its name at +8, its code at +0x6C */
+static void crash_hex(const char *label, u32 v)
+{
+    char b[64];
+    int n = 0;
+    while (*label && n < 40) b[n++] = *label++;
+    n += fmt_num(b + n, v, 16, 8);
+    b[n++] = '\n'; b[n] = 0;
+    pspDebugScreenPuts(b);
+}
+static void crash_where(const char *label, u32 addr)
+{
+    char b[96];
+    int n = 0, i;
+    unsigned char *m = g_mod_by_addr && addr >= 0x08000000 ? (unsigned char *)g_mod_by_addr(addr) : NULL;
+    while (*label && n < 20) b[n++] = *label++;
+    if (m) {
+        for (i = 0; i < 27 && m[8 + i]; i++) b[n++] = m[8 + i];
+        b[n++] = ' '; b[n++] = '+'; b[n++] = '0'; b[n++] = 'x';
+        n += fmt_num(b + n, addr - *(u32 *)(m + 0x6C), 16, 1);
+    } else { b[n++] = '?'; }
+    b[n++] = '\n'; b[n] = 0;
+    pspDebugScreenPuts(b);
+}
+static void crash_handler(PspDebugRegBlock *r)
+{
+    int i;
+    pspDebugScreenInit();
+    pspDebugScreenPuts("PSPExp Capture: the PSP crashed. Please take a photo of this screen.\n\n");
+    crash_hex("epc      ", r->epc); crash_where("  in ", r->epc);
+    crash_hex("ra       ", r->r[31]); crash_where("  in ", r->r[31]);
+    crash_hex("cause    ", r->cause);
+    crash_hex("badvaddr ", r->badvaddr);
+    crash_hex("sp       ", r->r[29]);
+    crash_hex("k1       ", r->r[27]);
+    crash_hex("a0       ", r->r[4]); crash_hex("a1       ", r->r[5]); crash_hex("v0       ", r->r[2]);
+    crash_hex("disc reads ", g_vd_reads); crash_hex("disc calls ", g_vd_said);
+    pspDebugScreenPuts("\nthe stack's return addresses:\n");
+    for (i = 0; i < 64; i++) {   /* (words on the stack that point into a module's code) */
+        u32 w, sp = r->r[29] + (u32)i * 4;
+        if (sp < 0x08000000 || (sp & 0x1FFFFFFF) >= 0x0A000000) break;
+        w = *(u32 *)sp;
+        if (w >= 0x88000000 && w < 0x8A000000 && g_mod_by_addr && g_mod_by_addr(w)) crash_where("  ", w);
+    }
+    for (;;) ;
+}
+
+/* The system's restart caught: init, failing to load a game, calls sceKernelExitVSHKernel with the
+ * error in its argument block (+24; uOFW init.c, ExitInit); a restart with the plugin running
+ * switched the PSP off. Shown and sent, then the PSP held: no restart. */
+static void show_restart(const char *what, u32 ra, const u32 *p)
+{
+    int i;
+    const u32 *blk = p && (p[2] & 0x1FFFFFFF) < 0x0A000000 && p[2] >= 0x08000000 ? (const u32 *)p[2] : NULL;
+    pspDebugScreenInit();
+    pspDebugScreenPuts("PSPExp Capture: the system is restarting. Please take a photo of this screen.\n\n");
+    pspDebugScreenPuts(what); pspDebugScreenPuts("\n");
+    crash_hex("called from ", ra); crash_where("  in ", ra);
+    if (p) for (i = 0; i < 8; i++) crash_hex("param ", p[i]);
+    if (blk) { crash_hex("error (block+24) ", blk[6]); for (i = 0; i < 8; i++) crash_hex("block ", blk[i]); }
+    crash_hex("disc reads ", g_vd_reads); crash_hex("disc calls ", g_vd_said);
+    cap_log("%s from %x: error %x", what, ra, blk ? blk[6] : 0);
+    trace_flush();
+    for (;;) sceKernelDelayThread(1000000);
+}
+static int h_exit_vsh_kernel(u32 *p) { u32 ra; __asm__ volatile("move %0, $ra" : "=r"(ra)); show_restart("sceKernelExitVSHKernel", ra, p); return 0; }
+static int h_exit_vsh_vsh(u32 *p) { u32 ra; __asm__ volatile("move %0, $ra" : "=r"(ra)); show_restart("sceKernelExitVSHVSH", ra, p); return 0; }
+#ifndef _sw
+#define _sw(v, a) (*(volatile u32 *)(a) = (v))
+#endif
+static void hook_jump(u32 f, void *h)   /* (f's first instructions: a jump to h, never coming back) */
+{
+    if (!f) return;
+    _sw(0x08000000 | (((u32)h & 0x0FFFFFFC) >> 2), f);
+    _sw(0, f + 4);
+    sceKernelDcacheWritebackInvalidateRange((void *)f, 8);
+    sceKernelIcacheInvalidateAll();
+}
+#endif
+
 int module_start(SceSize args, void *argp)
 {
     g_started_at = now_us();
     cap_log("PSPExp Capture: stage 2 (picture and sound; a DMA ring, 32-bit as the game draws; control from the receiver); parts: %s", g_parts[0] ? g_parts : "none");
     if (part_on('Z')) return 0;   /* (loaded, nothing else) */
+#ifdef PSPEXP_CAPTURE_CRASH
+    g_mod_by_addr = (void *)sctrlHENFindFunction("sceLoaderCore", "LoadCoreForKernel", 0xDD303D79);   /* sceKernelFindModuleByAddress */
+    pspDebugInstallErrorHandler(crash_handler);
+    {
+        u32 f1 = sctrlHENFindFunction((char *)"sceLoadExec", (char *)"LoadExecForKernel", 0xC3474C2A), f2 = sctrlHENFindFunction((char *)"sceLoadExec", (char *)"LoadExecForKernel", 0x08F7166C);
+        cap_log("restarts caught: ExitVSHKernel %x, ExitVSHVSH %x", f1, f2);
+        hook_jump(f1, h_exit_vsh_kernel);
+        hook_jump(f2, h_exit_vsh_vsh);
+    }
+#endif
     vd_setup();   /* (a game from PSPExp's shelf: its disc on the board) */
     g_send_ev = sceKernelCreateEventFlag("PSPExpCaptureSend", 0, 0, NULL);
     g_tx_lock = sceKernelCreateSema("PSPExpCaptureTx", 0, 1, 1, NULL);

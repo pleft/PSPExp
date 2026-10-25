@@ -1210,6 +1210,34 @@ Core crashed when taken 2 s in), and in the 8 s start the game was judged set up
 disc opened, still loading (the switch-off at 35 s). Now, on the virtual disc, those seconds count
 from the disc's opening, and nothing is judged set up before it.
 
+**(B) works (2026-10-25 midday): the first sector came too late.** After the fixes above, every
+start from the board still went black and switched the PSP off about 0.5 s after Inferno's first
+reads, with no read of the game's after them. Ruled out one PSP start each: the USB and the board
+(a developer build serving `pxd0:` from an ISO on the stick, `make LOCAL=1`, no USB, no log: the
+same), Clips, the stick log, the open's timing, the caller's stack (infernoMount's is 0x800: every
+driver call now runs on 16 KB of its own, `sceKernelExtendKernelStack`, the work on a disc thread),
+the unpacking (the stick's own Bomberman through the device: the same). Bust-A-Move Ghost, the game
+of the first tries, switches the PSP off at its save screen from the stick and the XMB too, plugin
+off: a bad test game (and the 35 s of the first start). What showed it: a trace sending each step
+over the cable before going on (`make TRACE=1`; the receiver keeps every line), then the system's
+restart caught (`make CRASH=1`: `sceKernelExitVSHKernel` and `ExitVSHVSH` jumped to a screen of
+the plugin's that shows the caller and the error, the PSP held there; an unhandled exception would
+show there too, none came). The screen: `sceInit +0x3d8` (uOFW's ExitInit), error 0x80010013,
+"device not found", from the ISO file system (isofs: `g_isofsMounted == 0`); asked as isofs asks,
+Inferno had the sector count right but its buffer for the first sector (the PVD, devctl
+0x01E28035) held zeros, and the order of the plugin's lines showed why: the system activated the
+disc (drive status 0x32: `disc0:` assigned, isofs mounted, reading that buffer) before Inferno's
+mount thread had read the sector into it. `inferno_mount` sleeps 20 ms after `iso_open` succeeds,
+then reads it; `sceUmdActivate` waits only for the open. From the stick the open succeeds at the
+very start, before the system looks; through the plugin's device it can only succeed once the
+plugin has loaded (and the board answered), while the system polls every 10 ms. The plugin now
+fetches the first sector while answering the open and writes it into Inferno's buffer (its address
+from the same devctl) before the open succeeds; Inferno's own read of it later is answered from
+the kept copy at once. Bomberman from the shelf then loaded and played from the board's disc
+(set up after 6.1 s, as from the stick; ≈30 fps, Clips recording alongside). Also kept from the
+hunt: the driver's other entries filled ("not supported"), reads handed to the disc thread,
+CPU-copied bytes written back from the cache, the drive status logged as it changes.
+
 **Plan.** (A) Boot from the shelf, the ISO on the memory stick (the board copying it there),
 back to PSPExp after; (B) the virtual disc: the ISO's path `pxd0:/<id>.iso`; the plugin, seeing
 it, starts its USB link at once (not 6–20 s later) and answers Inferno's reads with the board's
@@ -1230,7 +1258,9 @@ PPSSPP at 1:1. Open for the UX review: PSP games under Emulators, which they are
 games in the same folder listed (their covers generated).
 
 **Next:**
-- (A) and (B) above, with the PSP;
+- (B): a long session, HOME > Exit back to PSPExp, more games (big ones, CSO, games that read a lot
+  while playing), the cable pulled mid-game; the GameShell; the shelf's own games on the stick (A)
+  listed too;
 - PS1 games (the PSP's own player, POPS: an EBOOT.PBP made from BIN/CUE), later.
 
 ## 13. Host Independence
