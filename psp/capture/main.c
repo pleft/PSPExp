@@ -1880,76 +1880,20 @@ static void note_check(int reading)
 
 /* the watcher: every screen refresh, the frame shown; a new one counted (the game's frame rate)
  * and, when none is on its way and a receiver is there, handed to the copier and the sender */
-/* The frames copied, paced by the game's own frame rate: while frames go out (Clips on, or a
- * recording), a game falling below 85% of its peak has its frames copied less often, 30 a second
- * stepping down to 15, 10 and 5 (a step each 3 s while it stays down). The first step is kept only
- * if it helps: when the game's rate over the 3 s after it has not risen by over 2 fps, its fall was
- * its own (Burnout Legends: menus at 60, races at 30), that rate becomes its peak and the copies go
- * back to 30. Slowed, the copies are probed back up a step when a hold ends (10 s, doubled up to
- * 60 s each time a probe costs the game over 3 fps and is undone): a scene's change, a load or a
- * menu at 60 may mislead the steps down, so speeding up again does not trust the peak (Burnout's
- * second race recorded at 5 a second after a load and a menu, 2026-10-25). Gran Turismo held 60 fps
- * through a heavier stretch of a race with Clips off and fell to exactly 20 there with them on,
- * from the stick and from the board alike; 15 a second gave 36, 5 a second ≈51 (a mean of 55 over
- * the race against 47; 2026-10-25): each frame's copy (3-5 ms of DMA on the memory the game draws
- * with) costs the game frames. A clip there is less smooth instead. Once a second, from the watcher. */
-static const u32 g_pace_gap[] = { 30000, 66666, 100000, 200000 }, g_pace_rate[] = { 30, 15, 10, 5 };
+/* The frames copied, paced by what they cost the game (pace.c, tested on the host: tests/test_pace.c):
+ * once a second, from the watcher, with the frames the game showed in it */
+#include "pace.c"
+static Pace g_pace;
 static void pace_check(u32 now)
 {
-    static u32 t0, c0, peak, hold, until, level, before, sum, n, probing, base;
-    u32 rate, avg;
-    if (!t0) { t0 = now; c0 = g_changes; return; }
+    static u32 t0, c0;
+    u32 rate;
+    if (!t0) { t0 = now; c0 = g_changes; pace_init(&g_pace); return; }
     if (now - t0 < 1000000) return;
     rate = (g_changes - c0) * 1000 / ((now - t0) / 1000);   /* (frames a second) */
     t0 = now; c0 = g_changes;
-    if (probing) {   /* a step up tried: kept, or undone and the next try later */
-        sum += rate; n++;
-        if (n < 3) return;
-        avg = sum / n;
-        probing = 0;
-        sum = n = 0;
-        if (avg + 3 < base) {
-            level++;
-            hold = hold * 2 > 60000000 ? 60000000 : hold * 2;
-            until = now + hold;
-            cap_log("frames copied %u a second: faster cost the game %u fps", g_pace_rate[level], base - avg);
-        } else if (!level) {
-            peak = avg;
-            cap_log("frames copied 30 a second again: the game at %u fps", avg);
-        } else until = now;   /* (kept: the next step up in 3 s) */
-        g_hand_gap = g_pace_gap[level];
-        return;
-    }
-    if (!level) {   /* at the full rate: the peak followed, a fall looked for */
-        if (rate > peak) peak = rate; else if (peak) peak--;
-        if (now - g_last_hand > 1000000 || peak < 20 || rate * 100 >= peak * 85) return;   /* (nothing copied, or at its pace) */
-        level = 1; before = rate; sum = n = 0; probing = 0; hold = 10000000; until = now + hold;
-        g_hand_gap = g_pace_gap[level];
-        cap_log("frames copied %u a second: the game at %u fps of its %u", g_pace_rate[level], rate, peak);
-        return;
-    }
-    sum += rate; n++;
-    if (n < 3) return;
-    avg = sum / n;
-    if (level == 1 && avg <= before + 2 && until - now > hold - 4000000) {   /* the first step, no help: its own pace */
-        peak = avg; level = 0;
-        g_hand_gap = g_pace_gap[0];
-        cap_log("frames copied 30 a second again: the game's own pace now %u fps", avg);
-        return;
-    }
-    if (level < 3 && avg * 100 < peak * 85 && avg > before + 2) {   /* helping, still down: a step further */
-        before = avg; level++; sum = n = 0;
-        g_hand_gap = g_pace_gap[level];
-        cap_log("frames copied %u a second: the game at %u fps of its %u", g_pace_rate[level], avg, peak);
-        return;
-    }
-    if ((int)(now - until) >= 0) {   /* the hold over: a step up tried */
-        base = avg; level--; probing = 1; sum = n = 0;
-        g_hand_gap = g_pace_gap[level];
-        cap_log("frames copied %u a second: trying (the game at %u fps)", g_pace_rate[level], avg);
-        return;
-    }
-    sum = n = 0;   /* (a fresh 3 s) */
+    g_hand_gap = pace_second(&g_pace, rate, now - g_last_hand < 1500000);
+    if (g_pace.said) cap_log(pace_note(g_pace.said), g_pace_per_s[g_pace.level], g_pace.a, g_pace.b);
 }
 
 static int capture_thread(SceSize args, void *argp)

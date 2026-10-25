@@ -202,7 +202,9 @@ the plugin for a start that goes wrong (`make -C psp/capture clean` between them
 keeps every line in `~/.cache/pspexp/psp-plugin.log`); `CRASH=1` shows an unhandled crash, or the
 system restarting (`sceKernelExitVSHKernel`, `ExitVSHVSH`: its caller and error), on the PSP's
 screen and holds it there (any exit then stops on that screen); `LOCAL=1` serves the virtual disc
-from the ISO named in `ms0:/seplugins/pxd-local.txt`, without USB.
+from the ISO named in `ms0:/seplugins/pxd-local.txt`, without USB. The plugin's pacing of the frames it
+copies (`psp/capture/pace.c`) is tested on the host against games modelled on the PSP's measurements:
+`tests/test_pace.c` (`build/host/test_pace v` prints each decision).
 
 Without a PSP: `scripts/dev/run-ppsspp.sh`, then `build/host/pspexp-capture -k -s clips -c ctl`
 and `build/host/pspexp-term --tcp 127.0.0.1:3838 --launcher` (or a game with

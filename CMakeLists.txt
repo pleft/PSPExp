@@ -283,6 +283,8 @@ if(PSPEXP_BUILD_TESTS)
   add_executable(test_note tests/test_note.c)
   target_link_libraries(test_note PRIVATE pspexp_runtime)
   add_test(NAME note COMMAND test_note)
+  add_executable(test_pace tests/test_pace.c)   # the capture plugin's pacing (psp/capture/pace.c), against modelled games
+  add_test(NAME pace COMMAND test_pace)
   add_executable(test_fs tests/test_fs.c)
   target_link_libraries(test_fs PRIVATE pspexp pspexp_null)
   add_test(NAME fs COMMAND test_fs)
