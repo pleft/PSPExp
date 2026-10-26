@@ -21,7 +21,8 @@ REPO = "https://github.com/pleft/PSPExp"
 RELEASES = REPO + "/releases/latest"
 VIDEOS = [("https://www.youtube-nocookie.com/embed/CQm_w-4Oqfw", "Part I: the tour"),   # youtu.be/CQm_w-4Oqfw
           ("https://www.youtube-nocookie.com/embed/_rBYBBLUeNc", "Part II: the games"),   # youtu.be/_rBYBBLUeNc
-          ("https://www.youtube-nocookie.com/embed/ex6nnDBRzHU", "Dreamcast on the PSP")]   # youtu.be/ex6nnDBRzHU
+          ("https://www.youtube-nocookie.com/embed/ex6nnDBRzHU", "Dreamcast on the PSP"),   # youtu.be/ex6nnDBRzHU
+          ("https://www.youtube-nocookie.com/embed/BWAscQBuE3A", "PSP games and recording")]   # youtu.be/BWAscQBuE3A (1.3)
 LAUNCHED = True    # until launch day: every page says "do not index" (Cloudflare Pages' _headers);
                    # then True, with pspexp.dev attached: pspexp.dev is indexed, pages.dev never is
 HOSTS = ["pspexp.pages.dev", "www.pspexp.dev"]   # always "do not index": one address in search results
