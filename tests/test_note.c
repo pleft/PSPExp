@@ -22,6 +22,15 @@ static void step(uint32_t b, int mute, int capture)
     pspexp_note_step(&n, b, mute, capture, t, &o);
 }
 
+/* readings of b until an event comes (a single ♪ + L acts once the double-tap time has passed):
+ * the events; 0 if none came within 0.6 s */
+static uint32_t until_event(uint32_t b, int capture)
+{
+    int k;
+    for (k = 0; k < 38; k++) { step(b, 0, capture); if (o.events) return o.events; }
+    return 0;
+}
+
 int main(void)
 {
     int i, seen;
@@ -76,19 +85,58 @@ int main(void)
     step(0, 0, 1);
     step(NOTE | VOL, 0, 1);
     step(NOTE | L | VOL, 0, 1);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED); CHECK_EQ(o.buttons, VOL);
+    CHECK_EQ(o.events, 0); CHECK_EQ(o.buttons, VOL);   /* (waiting for a second L) */
+    {
+        uint32_t pressed = t;
+        CHECK_EQ(until_event(NOTE | VOL, 1), 1u << PSPEXP_NOTE_REC_START);
+        CHECK_EQ(o.rec_at, pressed);                      /* stamped with the press, not the decision */
+        CHECK(t - pressed >= PSPEXP_NOTE_DOUBLE_US && t - pressed < PSPEXP_NOTE_DOUBLE_US + 20 * MS);
+    }
+    CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED); CHECK_EQ(o.buttons, VOL);
     step(0, 0, 1);
     step(X, 0, 1);
     CHECK_EQ(o.buttons, X); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
     step(NOTE, 0, 1);
     step(NOTE | L, 0, 1);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_STOP); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);
+    CHECK_EQ(until_event(0, 1), 1u << PSPEXP_NOTE_REC_STOP); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);   /* (♪ let go meanwhile: still decided) */
+
+    /* ♪ + L twice: a screenshot, the white dot for 0.6 s, no recording; while recording, it goes on */
+    pspexp_note_init(&n);
+    step(0, 0, 1);
+    step(NOTE, 0, 1);
+    step(NOTE | L, 0, 1);
+    step(NOTE, 0, 1);
+    step(NOTE | L, 0, 1);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_WHITE); CHECK_EQ(o.buttons, 0);
+    CHECK_EQ(until_event(NOTE, 1), 0);                   /* no recording afterwards */
+    CHECK_EQ(n.recording, 0);
+    for (i = 0; i < 10; i++) step(0, 0, 1);
+    CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE); CHECK_EQ(o.buttons, 0);   /* (past 0.6 s; no tap: it was a pair) */
+    step(NOTE, 0, 1); step(NOTE | L, 0, 1);
+    CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_START);
+    step(NOTE, 0, 1); step(NOTE | L, 0, 1); step(NOTE, 0, 1); step(NOTE | L, 0, 1);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_WHITE);
+    for (i = 0; i < 45; i++) step(0, 0, 1);
+    CHECK_EQ(n.recording, 1); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+    /* two L presses farther apart than the double-tap time: two recording toggles, no screenshot */
+    pspexp_note_init(&n);
+    step(0, 0, 1);
+    step(NOTE, 0, 1); step(NOTE | L, 0, 1);
+    CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_START);
+    step(NOTE | L, 0, 1);
+    CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_STOP);
+    /* a ♪ + L waiting when the receiver goes: dropped */
+    pspexp_note_init(&n);
+    step(0, 0, 1); step(NOTE, 0, 1); step(NOTE | L, 0, 1);
+    step(0, 0, 0);
+    CHECK_EQ(until_event(0, 1), 0); CHECK_EQ(n.recording, 0);
 
     /* R and L in one reading, ♪ already held: both */
     pspexp_note_init(&n);
     step(NOTE, 0, 1);
     step(NOTE | R | L, 0, 1);
-    CHECK_EQ(o.events, (1u << PSPEXP_NOTE_CLIP) | (1u << PSPEXP_NOTE_REC_START));
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_CLIP);          /* the clip at once */
+    CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_START);   /* the recording once no second L came */
 
     /* the receiver gone: buttons as read; the recording kept over a hand-over (under 8 s), forgotten after */
     step(0, 0, 0);
@@ -99,7 +147,7 @@ int main(void)
     CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);
     step(NOTE, 0, 1);
     step(NOTE | L, 0, 1);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START);
+    CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_START);
 
     /* recordings only: ♪+R a pair doing nothing (R hidden, no event, no dot, no ♪ for the board);
      * ♪+L records as before */
@@ -112,7 +160,11 @@ int main(void)
     CHECK_EQ(o.buttons, 0);
     step(NOTE, 0, PSPEXP_CAPTURE_RECORDINGS);
     step(NOTE | L, 0, PSPEXP_CAPTURE_RECORDINGS);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+    CHECK_EQ(until_event(NOTE, PSPEXP_CAPTURE_RECORDINGS), 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+    /* and screenshots: recordings only or not */
+    step(NOTE, 0, PSPEXP_CAPTURE_RECORDINGS); step(NOTE | L, 0, PSPEXP_CAPTURE_RECORDINGS);
+    step(NOTE, 0, PSPEXP_CAPTURE_RECORDINGS); step(NOTE | L, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT);
 
     /* ♪ and L in one reading (the PSP-1000 read both, untouched, mid-recording): no event, L
      * hidden, no tap for the board when it goes, the mute kept; said once for the log; a real ♪+L
@@ -128,7 +180,7 @@ int main(void)
     for (i = 0; i < 10; i++) { step(0, 0, 1); CHECK_EQ(o.buttons & NOTE, 0); }
     step(NOTE, 0, 1);
     step(NOTE | L, 0, 1);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.refused, 0);
+    CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_START); CHECK_EQ(o.refused, 0);
     /* R the same */
     pspexp_note_init(&n);
     step(0, 0, 1);

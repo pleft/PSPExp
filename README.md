@@ -27,7 +27,8 @@ What you get on the PSP:
   launcher's PSP section, run by the PSP itself with no copying to the memory
   stick ([how](docs/manual/psp-games.md)).
 - **Recording what you play**: ♪ + L records a video with its sound on the
-  board, in PSPExp or your own PSP games ([how](docs/manual/recording.md)).
+  board, in PSPExp or your own PSP games, and ♪ + L twice takes a screenshot
+  ([how](docs/manual/recording.md)).
 
 | | |
 |---|---|

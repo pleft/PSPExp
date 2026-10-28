@@ -14,7 +14,7 @@ buttons; the board needs no screen, keyboard or mouse.
 | START | search, refresh or rescan, options |
 | SELECT, held | home: the launcher, from any app (from the launcher: the terminal) |
 | L / R | the other tab, panel or page |
-| ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
+| ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + L twice a screenshot, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
 
 ## The launcher
 
@@ -348,7 +348,7 @@ with a single option opens that option at once), circle comes back.
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Videos: your recordings and clips, in Files ([Recording](recording.md)) |
+| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size; Captures: your recordings, clips and screenshots, a folder for each game, in Files ([Recording](recording.md)) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
 | This PSP | PSPExp plugin: on to start the PSP section's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |

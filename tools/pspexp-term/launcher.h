@@ -86,6 +86,11 @@ int  launcher_take_clock_request(void);
 /* Settings > Recording > Clips: the recorder keeps the last 30 seconds (♪ + R) and so records all the time (0, the
  * default: ♪ + L recordings only, nothing sent or encoded otherwise); 1 once when it changed */
 int  launcher_clips_keep(void);
+/* the clip's length in seconds (15, 30, 60) and x264's quality for the videos (18, 23, 28) */
+int  launcher_clip_secs(void);
+int  launcher_clip_crf(void);
+/* the captures' folder (~/Captures; a Mac: ~/Movies/PSPExp), made if not there */
+void launcher_captures_dir(char *out, size_t n);
 int  launcher_take_clips_change(void);
 /* a message at the bottom of the launcher, as its own ones */
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),

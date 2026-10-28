@@ -261,6 +261,8 @@ static volatile int g_busy;            /* a frame on its way (copied by the copi
 static const unsigned char *g_frame_src;
 static int g_frame_bw, g_frame_fmt;
 static u32 g_frame_seq, g_frame_changes, g_frame_time;
+static u32 g_frame_flags;                /* the frame header's word at 28: bit 0 a screenshot */
+static u32 g_shot_at;                    /* when the screenshot was asked for */
 static SceUID g_send_ev = -1;          /* wakes the sender */
 static SceUID g_tx_lock = -1;          /* one packet at a time on the link: the sender's, a reply */
 #define SEND_FRAME 1
@@ -292,10 +294,13 @@ static volatile u32 g_static;            /* frames not sent: the same as the las
 #define OV_N 16
 #define OV_RED 0xE02020
 #define OV_GREEN 0x30C040
+#define OV_WHITE 0xF0F0F0
 static volatile int g_recording;         /* note+L: a recording under way */
 static volatile int g_keep = 1;          /* the receiver keeps the last seconds (note+R); 0: recordings only, the frames
                                           * and the sound sent only while one runs (CMD_KEEP: a board's setting) */
 static volatile u32 g_clip_dot_until;    /* note+R: the green dot until then (0: none) */
+static volatile u32 g_shot_dot_until;    /* note+L twice: the white dot until then (0: none) */
+static volatile int g_shot_req;          /* a screenshot asked for: the next frame handed on, marked as one */
 static volatile u32 g_ov_copying;        /* a frame handed to the copier: its dot drawn once copied */
 static volatile u32 g_ov_shown;          /* the frame shown now */
 static unsigned char g_ov_mask[OV_N * OV_N];   /* 0 nothing, 1 the dark ring, 2 the colour */
@@ -339,6 +344,7 @@ static int ov_in(u32 x, u32 y) { return y >= OV_Y && y < OV_Y + OV_N && x + 1 >=
 
 static u32 ov_wanted(void)
 {
+    if (g_shot_dot_until && (int)(now_us() - g_shot_dot_until) < 0) return OV_WHITE;
     if (g_clip_dot_until && (int)(now_us() - g_clip_dot_until) < 0) return OV_GREEN;
     return g_recording ? OV_RED : 0;
 }
@@ -393,6 +399,7 @@ static void ov_tick(int bw, int fmt)
     u32 key = g_ov_shown, want = ov_wanted();
     int i;
     if (g_clip_dot_until && (int)(now_us() - g_clip_dot_until) >= 0) g_clip_dot_until = 0;
+    if (g_shot_dot_until && (int)(now_us() - g_shot_dot_until) >= 0) g_shot_dot_until = 0;
     if (!key || key == g_ov_copying || bw < OV_X + OV_N) return;
     i = ov_find(key);
     if (!want) { if (i >= 0) ov_restore(i); return; }
@@ -1676,14 +1683,63 @@ static int log_send(void)
 #define EV_REC_STOP 3
 static volatile u32 g_ev_type[4], g_ev_time[4], g_ev_head, g_ev_sent;   /* (the watcher's, sent by the sender) */
 
-static void event_put(u32 type)
+static void event_put_at(u32 type, u32 at)
 {
     u32 i = g_ev_head;
     if (i - g_ev_sent >= 4) return;
     g_ev_type[i % 4] = type;
-    g_ev_time[i % 4] = now_us();
+    g_ev_time[i % 4] = at;
     g_ev_head = i + 1;
     sceKernelSetEventFlag(g_send_ev, SEND_AUDIO);
+}
+static void event_put(u32 type) { event_put_at(type, now_us()); }
+
+/* The game's name, for the board's capture folders (~/Captures/<the game>): its disc's PARAM.SFO,
+ * TITLE (else DISC_ID), read once the game is set up (a game's start leaves the disc alone);
+ * sent as an event of its own, EV_TITLE with the name after the header, to every receiver
+ * that connects. */
+#define EV_TITLE 5
+static char g_title[128] __attribute__((aligned(64)));
+static int g_title_tried, g_title_gen = -1;
+static void title_read(void)
+{
+    static unsigned char sfo[4096] __attribute__((aligned(64)));
+    SceUID fd = sceIoOpen("disc0:/PSP_GAME/PARAM.SFO", PSP_O_RDONLY, 0);
+    int n, i, count, keys, data;
+    char id[16] = "";
+    if (fd < 0) { cap_log("the game's name: no PARAM.SFO (%x)", (u32)fd); return; }
+    n = sceIoRead(fd, sfo, sizeof(sfo));
+    sceIoClose(fd);
+    if (n < 20 || memcmp(sfo, "\0PSF", 4) != 0) { cap_log("the game's name: PARAM.SFO not read (%d)", n); return; }
+    keys = (int)get32(sfo + 8); data = (int)get32(sfo + 12); count = (int)get32(sfo + 16);
+    for (i = 0; i < count && 20 + i * 16 + 16 <= n; i++) {
+        const unsigned char *e = sfo + 20 + i * 16;
+        int ko = keys + (e[0] | e[1] << 8), len = (int)get32(e + 4), off = data + (int)get32(e + 12);
+        char *dst = NULL; int max = 0;
+        if (ko >= n || off >= n) continue;
+        if (!strcmp((const char *)sfo + ko, "TITLE")) { dst = g_title; max = sizeof(g_title) - 1; }
+        else if (!strcmp((const char *)sfo + ko, "DISC_ID")) { dst = id; max = sizeof(id) - 1; }
+        if (!dst) continue;
+        if (len > max) len = max;
+        if (off + len > n) len = n - off;
+        memcpy(dst, sfo + off, len); dst[len] = 0;
+    }
+    if (!g_title[0]) strcpy(g_title, id);
+    cap_log("the game's name: %s (%s)", g_title, id);
+}
+
+/* the name to a receiver that has not had it (the sender's, under g_tx_lock) */
+static int title_send(int gen)
+{
+    static unsigned char h[32] __attribute__((aligned(64)));
+    u32 n = strlen(g_title);
+    if (!g_title[0] || g_title_gen == gen) return 0;
+    memset(h, 0, 32);
+    memcpy(h, "PXCE", 4);
+    put32(h + 4, EV_TITLE); put32(h + 20, now_us()); put32(h + 24, n);
+    if (pspexpUsbWrite(h, 32) < 0 || pspexpUsbWrite(g_title, (int)n) < 0) return -1;
+    g_title_gen = gen;
+    return 0;
 }
 
 /* the events to the receiver ("PXCE": the type at 4, the time at 20; the sender's, under g_tx_lock) */
@@ -1719,6 +1775,7 @@ static int send_thread(SceSize args, void *argp)
         sceKernelWaitSema(g_tx_lock, 1, NULL);
         r = audio_send();
         if (r >= 0) r = log_send();
+        if (r >= 0) r = title_send(gen);
         if (r >= 0) r = event_send();
         sceKernelSignalSema(g_tx_lock, 1);
         if (r < 0) { g_dead_gen = gen; cap_log("receiver not reading: paused until one connects"); g_busy = 0; continue; }
@@ -1732,7 +1789,7 @@ static int send_thread(SceSize args, void *argp)
             memcpy(h, "PXCF", 4);
             put16(h + 4, g_frame_bw); put16(h + 6, CAP_H); put16(h + 8, g_frame_fmt);   /* (width: the stride) */
             put32(h + 12, g_frame_seq); put32(h + 16, g_frame_changes); put32(h + 20, g_frame_time);
-            put32(h + 24, bytes);
+            put32(h + 24, bytes); put32(h + 28, g_frame_flags);   /* (bit 0: a screenshot) */
             sceKernelWaitSema(g_tx_lock, 1, NULL);   /* (a command's reply never inside a frame) */
             if (g_frame_mode == 2) {   /* the fallback: each band as the copier fills it, then its slot freed */
                 u32 rows = BAND / ((u32)g_frame_bw * bpp), y, k = 0;
@@ -1853,9 +1910,10 @@ static void link_check(u32 now)
 #define GAME_BUTTONS 0xF3F9   /* select, start, the pad, L, R, the four shapes */
 #define IMPOSE_MUTE 0x8
 static int (*g_impose_get)(int), (*g_impose_set)(int, int);
+#define NOTE_DOUBLE_US 350000   /* ♪ + L twice within this: a screenshot (runtime/pspexp_note.h's PSPEXP_NOTE_DOUBLE_US) */
 static void note_check(int reading)
 {
-    static u32 was, keep_until;
+    static u32 was, keep_until, l_first;   /* (l_first: a ♪ + L waiting for a second L; 0 none) */
     static int before = -1, wanted = -1, pair;
     SceCtrlData pad;
     u32 b;
@@ -1885,13 +1943,15 @@ static void note_check(int reading)
                 if (g_keep && g_mem_held) { event_put(EV_CLIP); g_clip_dot_until = now_us() + 1200000; cap_log("note+R: a clip (buttons %x)", b); }
                 else cap_log(g_keep ? "note+R: not capturing yet" : "note+R: no clip (the receiver keeps recordings only)");
             }
-            if (pressed & PSP_CTRL_LTRIGGER) {
+            if (pressed & PSP_CTRL_LTRIGGER) {   /* the first L waits for a second (a screenshot) */
                 pair = 1;
-                if (g_mem_held || g_recording) {
-                    g_recording = !g_recording;
-                    event_put(g_recording ? EV_REC_START : EV_REC_STOP);
-                    cap_log("note+L: the recording %s (buttons %x)", g_recording ? "starts" : "stops", b);
-                } else cap_log("note+L: not capturing yet");
+                if (l_first && now_us() - l_first < NOTE_DOUBLE_US) {
+                    l_first = 0;
+                    if (g_mem_held) {
+                        g_shot_at = now_us(); g_shot_req = 1; g_shot_dot_until = now_us() + 600000;
+                        cap_log("note+L twice: a screenshot (buttons %x)", b);
+                    } else cap_log("note+L twice: not capturing yet");
+                } else l_first = now_us() | 1;
             }
         }
     } else {
@@ -1905,6 +1965,15 @@ static void note_check(int reading)
         else { keep_until = 0; before = mute; }
     }
     was = b;
+    if (l_first && now_us() - l_first >= NOTE_DOUBLE_US) {   /* no second L: the recording, stamped with the press */
+        u32 at = l_first;
+        l_first = 0;
+        if (reading && (g_mem_held || g_recording)) {
+            g_recording = !g_recording;
+            event_put_at(g_recording ? EV_REC_START : EV_REC_STOP, at);
+            cap_log("note+L: the recording %s (buttons %x)", g_recording ? "starts" : "stops", b);
+        } else cap_log("note+L: not capturing yet");
+    }
     if (!reading) g_recording = 0;
 }
 
@@ -2024,16 +2093,22 @@ static int capture_thread(SceSize args, void *argp)
             mem_acquire();
         }
         if (sceDisplayGetFrameBuf(&top, &bw, &fmt, 0) < 0 || !top) continue;
+        if (g_settled && !g_title_tried && !g_home_paused && !g_util_active) { g_title_tried = 1; title_read(); sceKernelSetEventFlag(g_send_ev, SEND_AUDIO); }
+        /* a screenshot and no new frame for 0.15 s (a still screen): the one shown, its dot taken off first */
+        if (top == last && g_shot_req && now_us() - g_shot_at > 150000 && !g_busy) { ov_new_frame((u32)top & 0x1FFFFFFF); last = 0; g_changes--; }
         if (top != last) {
+            int shot = g_shot_req;
             g_changes++; last = top; g_top = top;
             ov_new_frame((u32)top & 0x1FFFFFFF);   /* (a dot from an earlier showing off it first) */
             if (pspexpUsbConnected()) {
                 if (!was_connected) { cap_log("receiver connected"); was_connected = 1; }
                 if (!g_frames_on || !g_mem_held || g_paused || g_util_active || g_home_paused || (int)g_generation == g_dead_gen
-                    || (!g_keep && !g_recording)) ;   /* (nobody reading, or no recording to take it: nothing copied) */
-                else if (now_us() - g_last_hand < g_hand_gap) ;
-                else if (frame_unchanged(top, bw, fmt) && now_us() - g_last_hand < 1000000) g_static++;   /* (30 a second at most: clips are 30 fps, and every frame sent costs the game processor time; Gran Turismo's black loading screens at 60 starved its loading, 2026-10-24) */
+                    || (!g_keep && !g_recording && !shot)) ;   /* (nobody reading, or no recording to take it: nothing copied) */
+                else if (!shot && now_us() - g_last_hand < g_hand_gap) ;
+                else if (!shot && frame_unchanged(top, bw, fmt) && now_us() - g_last_hand < 1000000) g_static++;   /* (30 a second at most: clips are 30 fps, and every frame sent costs the game processor time; Gran Turismo's black loading screens at 60 starved its loading, 2026-10-24) */
                 else if (!g_busy) {   /* to the copier and the sender */
+                    g_frame_flags = shot ? 1 : 0;
+                    if (shot) { g_shot_req = 0; cap_log("note+L twice: the screenshot handed on"); }
                     g_last_hand = now_us();
                     g_frame_src = (const unsigned char *)((u32)top & ~0x40000000u);
                     g_frame_bw = bw; g_frame_fmt = fmt;

@@ -9,7 +9,9 @@ from the launcher's PSP section) instead of PSPExp:
   Without it they cannot start: PSPExp says "Switch on the PSPExp plugin
   first".
 - **Recording them**: it sends the game's picture and sound to the board, so
-  **♪ + L** and **♪ + R** work there too ([Recording your games](recording.md)).
+  **♪ + L**, **♪ + R** and the screenshot (♪ + L twice) work there too, the
+  captures kept in a folder named after the game's own title
+  ([Recording your games](recording.md)).
 
 Inside PSPExp itself it does nothing (PSPExp records its own games), so it
 can stay on all the time.

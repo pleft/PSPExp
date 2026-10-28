@@ -12,7 +12,9 @@
  * whole. A frame's bytes never have others inside them: the receiver reads whole packets.
  * A receiver keeping recordings only (PSPEXP_CAPTURE_RECORDINGS: the last 30 seconds off in the
  * board's settings) gets the frames and the sound only while a ♪+L recording runs: nothing is
- * copied or sent otherwise, the events aside.
+ * copied or sent otherwise, the events aside. A screenshot (♪ + L twice, either mode) is one frame
+ * marked as such (the frame header's word at 28, bit 0): the next one the GE finishes, or, when
+ * nothing new is drawn within 0.15 s (the launcher), the one on screen.
  */
 #include <pspkernel.h>
 #include <pspthreadman.h>
@@ -35,6 +37,9 @@ static volatile int g_rec;                 /* a ♪+L recording under way */
 static unsigned char *g_frame[2];          /* (64-byte aligned, taken the first time it is on) */
 static volatile int g_state[2];            /* 0 free, 1 the GE copying into it, 2 to send, 3 sending */
 static volatile uint32_t g_ftime[2];
+static volatile uint32_t g_fflag[2];        /* the frame header's flags: 1 a screenshot */
+static volatile int g_shot;                 /* a screenshot asked for, not yet taken */
+static uint32_t g_shot_at;
 static volatile int g_copying = -1;
 static uint32_t g_last_frame, g_fseq, g_out_seq;
 static unsigned char g_ring[RING] __attribute__((aligned(64)));
@@ -99,7 +104,7 @@ static int send_frame(int k)
     memset(h, 0, sizeof(h));
     memcpy(h, "PXCF", 4);
     put16(h + 4, PSPEXP_DISPLAY_WIDTH); put16(h + 6, PSPEXP_DISPLAY_HEIGHT); put16(h + 8, 0);   /* (RGB 5650, the receiver's format 0) */
-    put32(h + 12, g_fseq); put32(h + 16, g_fseq); put32(h + 20, g_ftime[k]); put32(h + 24, FRAME_BYTES);
+    put32(h + 12, g_fseq); put32(h + 16, g_fseq); put32(h + 20, g_ftime[k]); put32(h + 24, FRAME_BYTES); put32(h + 28, g_fflag[k]);
     g_fseq++;
     if (send_msg(h, 32, g_frame[k], PIECE) < 0) return -1;
     for (off = PIECE; off < FRAME_BYTES && g_on; off += PIECE)
@@ -137,9 +142,10 @@ static void *cap_target(void *u)
     uint32_t now = sceKernelGetSystemTimeLow();
     int k;
     (void)u;
-    if (!streaming() || now - g_last_frame < FRAME_GAP_US) return NULL;
+    if (!g_shot && (!streaming() || now - g_last_frame < FRAME_GAP_US)) return NULL;
+    if (!g_frame[0]) return NULL;
     for (k = 0; k < 2; k++)
-        if (g_state[k] == 0) { g_state[k] = 1; g_copying = k; return g_frame[k]; }
+        if (g_state[k] == 0) { g_state[k] = 1; g_copying = k; g_fflag[k] = g_shot ? 1 : 0; g_shot = 0; return g_frame[k]; }
     return NULL;
 }
 static void cap_done(void *u, uint32_t t)
@@ -178,13 +184,15 @@ void pspexp_capture_psp_audio(const short *pcm, int frames)
     ring_put(h, pcm, (uint32_t)frames * 4);
 }
 
-void pspexp_capture_psp_event(int type)
+void pspexp_capture_psp_event(int type) { pspexp_capture_psp_event_at(type, sceKernelGetSystemTimeLow()); }
+
+void pspexp_capture_psp_event_at(int type, uint32_t at)
 {
     unsigned char h[32];
     if (!g_on) return;
     memset(h, 0, sizeof(h));
     memcpy(h, "PXCE", 4);
-    put32(h + 4, (uint32_t)type); put32(h + 20, sceKernelGetSystemTimeLow());
+    put32(h + 4, (uint32_t)type); put32(h + 20, at);
     ring_put(h, NULL, 0);
     sceKernelSignalSema(g_wake, 1);
 }
@@ -192,17 +200,32 @@ void pspexp_capture_psp_event(int type)
 /* the frame on screen, now: a recording starting while nothing new is drawn (the launcher may draw
  * nothing for seconds; recordings only, no earlier frame went), copied by the GE as a screenshot
  * is, before the dot goes on it */
-void pspexp_capture_psp_grab(void)
+static int grab(uint32_t flags)
 {
     int k;
-    if (!g_on || !g_frame[0] || g_ge->in_frame || g_ge->keyboard) return;   /* (a frame on its way comes anyway) */
+    if (!g_on || !g_frame[0] || g_ge->in_frame || g_ge->keyboard) return -1;   /* (a frame on its way comes anyway) */
     for (k = 0; k < 2 && g_state[k] != 0; k++) ;
-    if (k == 2) return;
+    if (k == 2) return -1;
     g_state[k] = 1;
+    g_fflag[k] = flags;
     pspexp_ge_read_display(g_ge, (uint16_t *)g_frame[k]);
     g_ftime[k] = g_last_frame = sceKernelGetSystemTimeLow();
     g_state[k] = 2;
     sceKernelSignalSema(g_wake, 1);
+    return 0;
+}
+void pspexp_capture_psp_grab(void) { grab(0); }
+
+void pspexp_capture_psp_shot(void)
+{
+    if (!g_on || !g_frame[0]) return;
+    g_shot_at = sceKernelGetSystemTimeLow();
+    g_shot = 1;
+}
+
+void pspexp_capture_psp_tick(void)
+{
+    if (g_shot && sceKernelGetSystemTimeLow() - g_shot_at > 150000 && grab(1) == 0) g_shot = 0;   /* (nothing new drawn: the screen as it is) */
 }
 
 int pspexp_capture_psp_on(void) { return g_on; }

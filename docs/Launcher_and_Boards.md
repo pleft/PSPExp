@@ -673,8 +673,9 @@ architecture's §12b) reaches the board under the plugin's own USB product,
 0x01CB, which the console's link (0x01CA) leaves alone. The console runs
 the PSPExp plugin host beside itself: started with the launcher over USB
 when `pspexp-plugin-host` and ffmpeg are on the PATH (both are on the card
-images), as `pspexp-plugin-host -k -q -s ~/Videos/PSPExp` (`~/Movies/PSPExp` on
-a Mac), again 10 s after it ends, and stopped with the console, a clip under
+images), as `pspexp-plugin-host -k -q -s ~/Captures` (`~/Movies/PSPExp` on
+a Mac; before 1.4 `~/Videos/PSPExp`, whose videos the console moves once into
+`~/Captures/Earlier`), again 10 s after it ends, and stopped with the console, a clip under
 way finished first. `PSPEXP_CAPTURE=0` keeps it from starting. In the game,
 ♪+L starts and stops a recording and ♪+R saves the last 30 s; a dot in the
 PSP screen's corner confirms it (green for a clip, red while recording).
@@ -682,8 +683,17 @@ Keeping the last 30 s means recording all the time, so it is a setting,
 off at first: Settings > Recording > Clips (`clips` in the
 library's settings). Off, the receiver runs with `-b 0` (recordings only:
 the PSP sends nothing until ♪+L); on, with `-b 30`; a change starts it
-again. The Recording page also has Videos, which opens Files on that
-folder. (Its first version was a group of one, and a group of one acts at
+again. **Clip length** (`clip_secs`: 15, 30, 60) sets `-b` when Clips is on,
+and **Quality** (`clip_quality`: High, Standard, Small) the encoder's CRF,
+`-Q 18`, `23` or `28` (about 17, 10 and 5 MB a minute in a busy game;
+measured 2026-10-28 with OpenTyrian, a calm Bomberman about 5 MB a minute at
+High); either change starts the receiver again. The Recording page also has
+**Captures**, which opens Files on that folder (before 1.4: Videos). Each
+capture goes into a folder for its game: the plugin reads the game's
+`PARAM.SFO` title, and the console gives its children `PSPEXP_TITLE`, the
+launcher's name for what it runs, which the link holder hands the receiver
+(§12b of the architecture); the launcher itself is `PSPExp`. ♪+L twice
+saves a screenshot there. (Its first version was a group of one, and a group of one acts at
 once: cross flipped the switch with only a toast. A switch alone now shows
 its group's page, its state on the right.)
 **The PSPExp plugin's switch** is in Settings > **This PSP** (with PSP

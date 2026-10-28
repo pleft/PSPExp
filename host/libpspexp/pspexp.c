@@ -180,6 +180,25 @@ static void capture_hello(PspExpContext *ctx)
     ctx->cap_got += (int)r;
     if (ctx->cap_got < (int)sizeof(ctx->cap_hello)) return;
     if (memcmp(ctx->cap_hello, "PXCH", 4) != 0) { capture_close(ctx); return; }
+    {   /* the game's name first, for its captures' folder: PSPEXP_TITLE (the console sets it for what it
+         * starts), PSPExp for the console itself; an event of type 5 with the name after it, before
+         * anything of the PSP's can come (CAPTURE_SET below), so never inside a frame */
+        const char *title = getenv("PSPEXP_TITLE");
+        unsigned char h[32 + 128];
+        size_t n;
+        if (!title || !*title) title = "PSPExp";
+        n = strlen(title) > 128 ? 128 : strlen(title);
+        memset(h, 0, 32);
+        memcpy(h, "PXCE", 4);
+        h[4] = 5;                                          /* (the type, little-endian) */
+        h[24] = (unsigned char)n;                          /* (the length) */
+        memcpy(h + 32, title, n);
+#ifdef MSG_NOSIGNAL
+        if (send(ctx->cap_fd, h, 32 + n, MSG_NOSIGNAL) != (ssize_t)(32 + n)) { capture_close(ctx); return; }
+#else
+        if (send(ctx->cap_fd, h, 32 + n, 0) != (ssize_t)(32 + n)) { capture_close(ctx); return; }
+#endif
+    }
     memset(&c, 0, sizeof(c));
     c.on = ctx->cap_hello[4] == PSPEXP_CAPTURE_RECORDINGS ? PSPEXP_CAPTURE_RECORDINGS : PSPEXP_CAPTURE_ALL;
     ctx->cap_mode = (int)c.on;

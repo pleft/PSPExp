@@ -12,6 +12,12 @@ void pspexp_capture_psp_ops(PspExpRuntimeOps *ops);
 void pspexp_capture_psp_audio(const short *pcm, int frames);
 /* a note-button event into the stream (1 a clip, 2 a recording starts, 3 it stops) */
 void pspexp_capture_psp_event(int type);
+/* the same, stamped with the PSP's time at (µs): a ♪ + L decided after the double-tap time */
+void pspexp_capture_psp_event_at(int type, uint32_t at);
+/* a screenshot: the next frame the GE finishes, marked as one (sent in either mode) */
+void pspexp_capture_psp_shot(void);
+/* each turn of the main loop: a screenshot still waiting after 0.15 s takes the screen as it is */
+void pspexp_capture_psp_tick(void);
 /* the receiver's PSPEXP_CAPTURE_* (0: none) */
 int pspexp_capture_psp_on(void);
 /* a ♪+L recording under way (after its start event; before its stop event goes, 0) */

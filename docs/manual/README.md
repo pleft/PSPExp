@@ -24,8 +24,9 @@ What you get on the PSP:
   launcher's PSP section, run by the PSP itself, no copying to the memory
   stick ([Your PSP games](psp-games.md)).
 - **Recording**: ♪ + L records what you play as a video on the board, in
-  PSPExp or your own PSP games, and ♪ + R saves the last 30 seconds when that
-  is turned on ([Recording your games](recording.md)).
+  PSPExp or your own PSP games, ♪ + L twice a screenshot, and ♪ + R saves the
+  last 30 seconds when that is turned on; each game gets its own folder
+  ([Recording your games](recording.md)).
 
 It runs on the original PSP-1000 (tested) and needs custom firmware, since
 it uses a small kernel driver for the USB link.

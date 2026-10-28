@@ -2649,6 +2649,9 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
             setenv("PSPEXP", v, 1);
         } else if (g_want_usb) setenv("PSPEXP", "usb", 1);
         setenv("PSPEXP_MESSAGE", msg, 1);
+        if (g_launcher_on && launcher_running_title() && *launcher_running_title())
+            setenv("PSPEXP_TITLE", launcher_running_title(), 1);   /* (its captures' folder: the recorder's ~/Captures/<it>) */
+        else unsetenv("PSPEXP_TITLE");
         setsid();
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);
@@ -3328,13 +3331,15 @@ static void ctl_step(uint64_t now, int connected)
 /* ---- the PSPExp plugin host (tools/pspexp-plugin-host) beside the console ----
  * A native PSP game with the PSPExp plugin on (psp/plugin) reaches the board under the plugin's
  * own USB product, which the console's link leaves alone; the receiver keeps the note button's
- * clips (note+R the last 30 s, note+L a recording) in ~/Videos/PSPExp (~/Movies/PSPExp on a Mac).
+ * clips (note+R the last 15-60 s, note+L a recording, note+L twice a screenshot) in ~/Captures,
+ * a folder for each game (~/Movies/PSPExp on a Mac).
  * Started with the launcher over USB when it and ffmpeg are on the PATH, again 10 s after it ends;
  * PSPEXP_CAPTURE=0: not at all. Its own process group; stopped with the console, its clips under
  * way finished first. Settings > Recording > Clips (off by default) keeps the last 30 s for note+R, the PSP
  * then sending everything all the time; off, -b 0: note+L recordings only, nothing sent or encoded
  * otherwise. */
 static pid_t g_capture_pid;
+static int g_capture_restart;   /* a setting changed: the receiver started again once it has ended */
 static uint64_t g_capture_next;
 
 static int in_path(const char *name)
@@ -3354,15 +3359,49 @@ static int in_path(const char *name)
 
 static void capture_stop(void);
 
+/* once: the videos of the versions before 1.4 (~/Videos/PSPExp, no game's name on them) into
+ * ~/Captures/Earlier, the folder left behind removed when empty (a board's; a Mac keeps ~/Movies/PSPExp) */
+static void capture_move_earlier(void)
+{
+#ifndef __APPLE__
+    char old[1024], dir[1024], from[1400], to[1400];
+    const char *h = getenv("HOME");
+    DIR *d;
+    struct dirent *e;
+    int moved = 0;
+    if (!h || !*h) return;
+    snprintf(old, sizeof(old), "%s/Videos/PSPExp", h);
+    if (!(d = opendir(old))) return;
+    launcher_captures_dir(dir, sizeof(dir));
+    snprintf(dir + strlen(dir), sizeof(dir) - strlen(dir), "/Earlier");
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+        if (!moved) mkdir(dir, 0755);
+        snprintf(from, sizeof(from), "%s/%s", old, e->d_name);
+        snprintf(to, sizeof(to), "%s/%s", dir, e->d_name);
+        if (rename(from, to) == 0) moved++;
+        else fprintf(stderr, "[pspexp-term] captures: %s not moved (%s)\n", from, strerror(errno));
+    }
+    closedir(d);
+    if (rmdir(old) == 0 || moved) fprintf(stderr, "[pspexp-term] captures: %d earlier videos moved from %s to %s\n", moved, old, dir);
+#endif
+}
+
 static void capture_tick(uint64_t now)
 {
     static int off = -1;
     pid_t pid;
-    if (off < 0) { const char *e = getenv("PSPEXP_CAPTURE"); off = (e && !strcmp(e, "0")) || !g_launcher_on || g_mode != MODE_USB; }
+    if (off < 0) {
+        const char *e = getenv("PSPEXP_CAPTURE");
+        off = (e && !strcmp(e, "0")) || !g_launcher_on || g_mode != MODE_USB;
+        if (!off) capture_move_earlier();
+    }
     if (off) return;
-    if (launcher_take_clips_change() && g_capture_pid > 0) {   /* Settings > Recording > Clips: started again, keeping what it says */
-        capture_stop();
-        g_capture_next = 0;
+    if (launcher_take_clips_change()) {   /* Settings > Recording: started again, keeping what it says, once the one
+                                          * running has ended (asked here, not waited for: the launcher goes on; a second
+                                          * started before then found the first's lock, and the first was never reaped) */
+        if (g_capture_pid > 0 && !g_capture_restart) kill(g_capture_pid, SIGTERM);
+        g_capture_restart = 1;
     }
     if (g_capture_pid > 0) {
         int st;
@@ -3371,24 +3410,22 @@ static void capture_tick(uint64_t now)
         g_capture_pid = 0;
         g_capture_next = now + 10000000u;
     }
+    if (g_capture_restart) { g_capture_restart = 0; g_capture_next = 0; }
     if (now < g_capture_next) return;
     g_capture_next = now + 60000000u;   /* (missing: looked for again in a minute) */
     if (!in_path("pspexp-plugin-host") || !in_path("ffmpeg")) return;
     pid = fork();
     if (pid == 0) {
-        char dir[1024];
-        const char *h = getenv("HOME");
+        char dir[1024], secs[16], crf[16];
         int fd;
-#ifdef __APPLE__
-        snprintf(dir, sizeof(dir), "%s/Movies/PSPExp", h && *h ? h : "/tmp");
-#else
-        snprintf(dir, sizeof(dir), "%s/Videos/PSPExp", h && *h ? h : "/tmp");
-#endif
+        launcher_captures_dir(dir, sizeof(dir));
+        snprintf(secs, sizeof(secs), "%d", launcher_clips_keep() ? launcher_clip_secs() : 0);
+        snprintf(crf, sizeof(crf), "%d", launcher_clip_crf());
         setsid();
         for (fd = 3; fd < 1024; fd++) close(fd);   /* (none of the console's: the PSP's link, the shells' terminals) */
         fd = open("/dev/null", O_RDONLY);
         if (fd >= 0) dup2(fd, 0);
-        execlp("pspexp-plugin-host", "pspexp-plugin-host", "-k", "-q", "-s", dir, "-b", launcher_clips_keep() ? "30" : "0", (char *)NULL);
+        execlp("pspexp-plugin-host", "pspexp-plugin-host", "-k", "-q", "-s", dir, "-b", secs, "-Q", crf, (char *)NULL);
         _exit(127);
     }
     if (pid > 0) { g_capture_pid = pid; fprintf(stderr, "[pspexp-term] capture: the receiver started (pid %d)\n", (int)pid); }

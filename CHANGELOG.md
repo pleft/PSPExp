@@ -1,5 +1,23 @@
 # Release notes
 
+## Since 1.3.0
+
+- **Screenshots**: hold ♪ and tap **L twice**, quickly: a white dot flashes
+  and the board saves the screen as a PNG. In PSPExp and in your own PSP
+  games, while recording too. ♪ + L on its own now starts or stops a
+  recording a third of a second after the press (once a second L is not
+  coming), the recording counting from the press.
+- **A Captures folder, a folder for each game**: recordings, clips and
+  screenshots go to `Captures` in the board's home folder, in a folder named
+  after the game (a PSP game's own title, the launcher's name for PSPExp's
+  games). Videos from before, in `Videos/PSPExp`, move once into
+  `Captures/Earlier`. Settings > Recording > Captures opens it.
+- **Clip length and quality**: Settings > Recording > Clip length makes ♪ + R
+  save 15, 30 or 60 seconds; Quality (High, Standard, Small) makes the videos
+  smaller, down to about a third.
+- A recording's first moment, before the PSP's first picture arrives, shows
+  that picture instead of black.
+
 ## 1.3.0 (2026-10-25)
 
 Two big additions: recording what you play, and your own PSP games kept on

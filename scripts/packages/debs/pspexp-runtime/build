@@ -8,6 +8,13 @@
 # Usage: build OUTDIR
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+# dist/ as psp/ last built it: a make in psp/ alone left dist/ at the release before, and the
+# package then carried the old runtime and plugin (2026-10-28, a PSP test of new code on old)
+for f in runtime/pspexp_runtime.prx plugin/pspexp_plugin.prx; do
+	if [ -f "$ROOT/psp/$f" ] && ! cmp -s "$ROOT/psp/$f" "$ROOT/dist/PSPExp/${f#runtime/}"; then
+		echo "dist/PSPExp is older than psp/$f: run scripts/build.sh first" >&2; exit 1
+	fi
+done
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 R="$W/root/usr/share/pspexp/runtime"
 mkdir -p "$R" "$W/root/usr/share/doc/pspexp-runtime"

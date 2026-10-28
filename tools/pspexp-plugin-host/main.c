@@ -181,8 +181,52 @@ static void mix_drop(int64_t from)
  * need are dropped. */
 typedef struct { int first, last; volatile int state; char name[1200]; char seg[1100]; pthread_t th; } Job;   /* state: 1 waiting for its last piece, 2 being made, 3 made */
 static Job g_jobs[8];
-static const char *g_clips;          /* -s */
+static const char *g_clips;          /* -s: the captures' folder, a folder per game in it */
 static int g_clip_len = 30;          /* -b */
+static int g_crf = 18;               /* -Q: x264's quality (18 high, 23 standard, 28 small) */
+static char g_title[128];            /* the game playing (its folder): the plugin's or PSPExp's EV_TITLE */
+static char g_rec_title[128];        /* the game a recording under way started in */
+
+/* a game's name as a folder's: no slashes or the like, no dots in front, trimmed; none: PSP game */
+static void folder_name(const char *in, size_t len, char *out, size_t n)
+{
+    size_t o = 0, i;
+    for (i = 0; i < len && in[i] && o + 1 < n; i++) {
+        unsigned char c = (unsigned char)in[i];
+        if (c < 32 || strchr("/\\:*?\"<>|", c)) c = ' ';
+        if (c == ' ' && (o == 0 || out[o - 1] == ' ')) continue;
+        if (c == '.' && o == 0) continue;
+        out[o++] = (char)c;
+    }
+    while (o && (out[o - 1] == ' ' || out[o - 1] == '.')) o--;
+    out[o] = 0;
+    if (!o) snprintf(out, n, "PSP game");
+}
+
+/* the game's folder in the captures' folder, made if not there: into out */
+static void game_dir(const char *title, char *out, size_t n)
+{
+    snprintf(out, n, "%s/%s", g_clips, title[0] ? title : "PSP game");
+    mkdir(g_clips, 0755);
+    mkdir(out, 0755);
+}
+
+/* a screenshot: the frame as PNG in the game's folder (ffmpeg's encoder: the boards have it) */
+static void shot_save(const uint8_t *rgb)
+{
+    char dir[1100], name[1300], cmd[1500], when[64];
+    time_t tt = time(NULL);
+    FILE *f;
+    if (!g_clips) return;
+    strftime(when, sizeof(when), "%Y-%m-%d-%H.%M.%S", localtime(&tt));
+    game_dir(g_title, dir, sizeof(dir));
+    snprintf(name, sizeof(name), "%s/screenshot-%s.png", dir, when);
+    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -i - -frames:v 1 '%s'", W, H, name);
+    if (!(f = popen(cmd, "w"))) { fprintf(stderr, "pspexp-plugin-host: no ffmpeg for the screenshot\n"); return; }
+    fwrite(rgb, 1, (size_t)W * H * 3, f);
+    if (pclose(f) == 0) fprintf(stderr, "pspexp-plugin-host: saved %s\n", name);
+    else fprintf(stderr, "pspexp-plugin-host: the screenshot %s was not made\n", name);
+}
 static char g_segdir[1100];
 static int g_rec_first = -1;         /* the recording under way: its first piece */
 static volatile int g_req_clip, g_req_rec;   /* the FIFO's clip and record */
@@ -215,10 +259,10 @@ static void *job_run(void *arg)
     return NULL;
 }
 
-/* a clip or a recording of pieces first..last, named for now */
-static void job_add(int first, int last, const char *kind)
+/* a clip or a recording of pieces first..last, named for now, in the game's folder */
+static void job_add(int first, int last, const char *kind, const char *title)
 {
-    char when[64];
+    char when[64], dir[1100];
     time_t tt = time(NULL);
     strftime(when, sizeof(when), "%Y-%m-%d-%H.%M.%S", localtime(&tt));
     for (int i = 0; i < 8; i++) {
@@ -227,7 +271,8 @@ static void job_add(int first, int last, const char *kind)
         if (j->state) continue;
         j->first = first < g_seg_dropped ? g_seg_dropped : first;
         j->last = last;
-        snprintf(j->name, sizeof(j->name), "%s/%s-%s.mp4", g_clips, kind, when);
+        game_dir(title, dir, sizeof(dir));
+        snprintf(j->name, sizeof(j->name), "%s/%s-%s.mp4", dir, kind, when);
         snprintf(j->seg, sizeof(j->seg), "%s/job-%d", g_segdir, i);
         j->state = 1;
         fprintf(stderr, "pspexp-plugin-host: %s of %d s to come: %s\n", kind, j->last - j->first + 1, j->name);
@@ -274,9 +319,9 @@ static void note_event(int type, uint64_t idx)
     int k = (int)(idx / 30);
     if (!g_clips) return;
     if (type == 1 && !g_have_pic) fprintf(stderr, "pspexp-plugin-host: no picture yet: no clip\n");
-    else if (type == 1) job_add(k - g_clip_len + 1, k, "clip");
-    else if (type == 2 && g_rec_first < 0) { g_rec_first = k; fprintf(stderr, "pspexp-plugin-host: recording\n"); }
-    else if (type == 3 && g_rec_first >= 0) { job_add(g_rec_first, k, "recording"); g_rec_first = -1; }
+    else if (type == 1) job_add(k - g_clip_len + 1, k, "clip", g_title);
+    else if (type == 2 && g_rec_first < 0) { g_rec_first = k; snprintf(g_rec_title, sizeof(g_rec_title), "%s", g_title); fprintf(stderr, "pspexp-plugin-host: recording\n"); }
+    else if (type == 3 && g_rec_first >= 0) { job_add(g_rec_first, k, "recording", g_rec_title); g_rec_first = -1; }
 }
 
 /* ---- control: commands for the plugin (psp/plugin), from a FIFO ---- */
@@ -529,8 +574,8 @@ static FILE *seg_open(void)
     mkdir(g_segdir, 0700);
     g_rec_first = -1; g_frames_out = 0; g_seg_closed = 0; g_seg_final = -1; g_seg_dropped = 0;
     snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-             "-c:v libx264 -preset " X264_PRESET " -crf 18 -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
-             "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
+             "-c:v libx264 -preset " X264_PRESET " -crf %d -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
+             "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_crf, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
     ff = popen(cmd, "w");
     if (!ff) perror("ffmpeg");
     return ff;
@@ -543,7 +588,7 @@ static void seg_close(FILE *ff, uint64_t written)
     pclose(ff);
     g_seg_closed = 1;
     g_seg_final = written ? (int)((written - 1) / 30) : -1;
-    if (g_rec_first >= 0) { job_add(g_rec_first, g_seg_final, "recording"); g_rec_first = -1; }
+    if (g_rec_first >= 0) { job_add(g_rec_first, g_seg_final, "recording", g_rec_title); g_rec_first = -1; }
     jobs_step();
     for (int i = 0; i < 8; i++)
         if (g_jobs[i].state >= 2) { pthread_join(g_jobs[i].th, NULL); g_jobs[i].state = 0; }
@@ -565,6 +610,8 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     FILE *ff = NULL;
     int rec_only = recordings_only(), pic = 0;   /* (pic: a frame of the game in this picture, not only black) */
     g_have_pic = 0;
+    /* the game's folder until a name comes: PSPExp's own (its socket), else a game the PSP runs */
+    snprintf(g_title, sizeof(g_title), "%s", t->name && !strcmp(t->name, "pspexp") ? "PSPExp" : "PSP game");
     mix_reset();
     memset(prev, 0, sizeof(prev));
     if (g_clips && !rec_only) {   /* (recordings only: the pieces start with each recording) */
@@ -576,7 +623,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
          * is held, so a clip plays at the game's own speed */
         snprintf(video, sizeof(video), "%s.picture.mp4", out);
         snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-                 "-c:v libx264 -preset " X264_PRESET " -crf 18 -pix_fmt yuv420p '%s'", W, H, video);
+                 "-c:v libx264 -preset " X264_PRESET " -crf %d -pix_fmt yuv420p '%s'", W, H, g_crf, video);
         ff = popen(cmd, "w");
         if (!ff) { perror("ffmpeg"); return -1; }
     }
@@ -643,6 +690,15 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             } else fprintf(stderr, "control: command %u: %d\n", get32(hdr + 4), (int)get32(hdr + 8));
             continue;
         }
+        if (ev && get32(hdr + 4) == 5) {   /* the game playing now (the plugin's, from its disc; PSPExp's, the program holding
+                                            * the PSP, which has no PSP time to put on it: 0, so it never sets the clip's start) */
+            char was[sizeof(g_title)];
+            if (len > sizeof(reply) || (len && need(t, reply, len) < 0)) break;
+            snprintf(was, sizeof(was), "%s", g_title);
+            folder_name((const char *)reply, len, g_title, sizeof(g_title));
+            if (strcmp(was, g_title)) fprintf(stderr, "pspexp-plugin-host: the game: %s\n", g_title);
+            continue;
+        }
         if (!have_base) { base = when; have_base = 1; }   /* the clip's start: the first thing to arrive */
         double at = (double)(int32_t)(when - base);       /* us into the clip (the PSP's 32-bit clock) */
         if (ev) {   /* the note button: 1 a clip, 2 a recording starts, 3 it stops (at the PSP's time of the press) */
@@ -655,11 +711,12 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
                 base = when; written = 0; pic = 0;
                 memset(prev, 0, sizeof(prev));
                 g_rec_first = 0;
+                snprintf(g_rec_title, sizeof(g_rec_title), "%s", g_title);   /* (its folder: the game it started in) */
                 fprintf(stderr, "pspexp-plugin-host: recording\n");
             } else if (type == 3 && ff) {   /* the picture held up to the press, then the recording saved */
                 uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
                 int bad = 0;
-                while (pic && written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
+                while (pic && written < due && !bad && !g_stop) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
                 g_frames_out = written;
                 if (!written) fprintf(stderr, "pspexp-plugin-host: nothing recorded (no picture came)\n");
                 seg_close(ff, written); ff = NULL;
@@ -677,7 +734,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
                                                   * held up to the sound's time, less half a second for a frame on its way */
                 uint64_t due = (uint64_t)((at - 500000) * 30 / 1e6);
                 int bad = 0;
-                while (written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
+                while (written < due && !bad && !g_stop) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
                 g_frames_out = written;
             }
             continue;
@@ -688,11 +745,15 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (!frames) { ch_first = changes; ch_at = changes; }
         frames++; bytes += 32 + len; ch_last = changes;
         double n = now();
-        if (ff || dir) to_rgb(px, (int)fmt, (int)w, rgb);
-        if (ff) {   /* the previous frame (black before the first) held until this one's time, then this one */
+        int shot = (get32(hdr + 28) & 1) != 0;   /* (a screenshot: ♪ + L twice on the PSP) */
+        if (ff || dir || shot) to_rgb(px, (int)fmt, (int)w, rgb);
+        if (shot && g_clips) shot_save(rgb);
+        if (ff) {   /* the previous frame held until this one's time, then this one */
             uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
             int bad = 0;
-            while (written < due && !bad) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
+            if (!pic) memcpy(prev, rgb, sizeof(rgb));   /* (before the first picture: the first, not black; a recording is
+                                                         * stamped with the ♪ + L, its first frame a third of a second later) */
+            while (written < due && !bad && !g_stop) { bad = fwrite(prev, 1, sizeof(prev), ff) != sizeof(prev); written++; }
             if (!bad && written <= due) { bad = fwrite(rgb, 1, sizeof(rgb), ff) != sizeof(rgb); written++; pic = g_have_pic = 1; }
             if (bad) { fprintf(stderr, "ffmpeg stopped\n"); break; }
             memcpy(prev, rgb, sizeof(rgb));
@@ -751,10 +812,11 @@ int main(int argc, char **argv)
     double limit = 0;
     int c, keep = 0;
     int test_port = 0;
-    while ((c = getopt(argc, argv, "o:s:b:d:t:c:kqT:")) != -1) {
+    while ((c = getopt(argc, argv, "o:s:b:d:t:c:kqT:Q:")) != -1) {
         if (c == 'o') out = optarg;
         else if (c == 's') g_clips = optarg;
         else if (c == 'b') g_clip_len = atoi(optarg) >= 0 ? atoi(optarg) : 30;   /* (0: recordings only) */
+        else if (c == 'Q') g_crf = atoi(optarg) >= 0 && atoi(optarg) <= 51 ? atoi(optarg) : 18;
         else if (c == 'd') dir = optarg;
         else if (c == 't') limit = atof(optarg);
         else if (c == 'c') fifo = optarg;

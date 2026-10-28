@@ -104,7 +104,10 @@ static int g_nactions;
 static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
 static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board; asked for now */
-static int g_clips_keep, g_clips_change;   /* the recorder keeps the last 30 seconds (off by default: it costs); just changed */
+static int g_clips_keep, g_clips_change;   /* the recorder keeps the last seconds (off by default: it costs); just changed */
+static int g_clip_secs = 30, g_clip_quality;   /* Settings > Recording: the clip's length (15, 30, 60), the quality (0 high, 1 standard, 2 small) */
+static const int CLIP_CRF[3] = { 18, 23, 28 };
+static const char *const CLIP_QUALITY[3] = { "High", "Standard", "Small" };
 static int g_core_updated, g_console_restart_req;   /* PSPExp's own files were upgraded; the user asked to restart it */
 static int g_psp_update, g_psp_update_req;          /* a newer PSP runtime is on the board; the user asked to install it */
 static int g_psp_plugin = PSP_PLUGIN_UNKNOWN, g_plugin_req = -1;   /* the PSPExp plugin on the PSP's stick; on (1) or off (0) asked for */
@@ -259,8 +262,10 @@ static void cats_build(void)
     ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
-    ACTION("clips", "Clips", "history", "♪ + R saves the last 30 seconds as a video: the board records all the time");
-    ACTION("videos", "Videos", "film", "The recordings and clips, in Files");
+    ACTION("clips", "Clips", "history", "♪ + R saves the last seconds as a video: the board records all the time");
+    ACTION("cliplen", "Clip length", "clock", "How much ♪ + R saves");
+    ACTION("quality", "Quality", "gauge", "The videos' quality, and so their size");
+    ACTION("captures", "Captures", "film", "Your recordings, clips and screenshots, a folder for each game, in Files");
     if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP section's, and recording them");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp for the PSP, or its plugin: put it on its memory stick");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
@@ -274,7 +279,7 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
             { "Sound", "headphones", { "a:sound", NULL } },
-            { "Recording", "film", { "a:clips", "a:videos", NULL } },
+            { "Recording", "film", { "a:clips", "a:cliplen", "a:quality", "a:captures", NULL } },
             { "Clock", "clock", { "a:tz", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
             { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP shelf's) */
@@ -397,7 +402,7 @@ static uint64_t g_last_frame, g_sel_since;
 static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
-static char g_files_path[512];   /* the folder Files opens on (Settings > Recording > Videos), else its own */
+static char g_files_path[512];   /* the folder Files opens on (Settings > Recording > Captures), else its own */
 static char g_native_path[700];  /* a PSP game chosen on the shelf, for the console to start on the PSP */
 static int g_spin_x, g_spin_y, g_spin_drawn;   /* the "Starting" frame's spinner square (draw_running) */
 static LEntry g_running_e;
@@ -804,6 +809,8 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "wifi")) return wifi_mode_psp() ? "PSP direct" : "Home network";
     if (!strcmp(a, "boxart")) return g_nofetch ? "Off" : "On";
     if (!strcmp(a, "clips")) return g_clips_keep ? "On" : "Off";
+    if (!strcmp(a, "cliplen")) { static char v[16]; snprintf(v, sizeof(v), "%d seconds", g_clip_secs); return v; }
+    if (!strcmp(a, "quality")) return CLIP_QUALITY[g_clip_quality];
     if (!strcmp(a, "plugin")) return g_psp_plugin == PSP_PLUGIN_ON ? "On" : g_psp_plugin == PSP_PLUGIN_OFF ? "Off" : "Not on the PSP";
     if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
@@ -836,18 +843,8 @@ static void run_action(LEntry *e, uint64_t now)
         g_console_req = 1;
     } else if (!strcmp(a, "files")) {
         g_files_req = 1;
-    } else if (!strcmp(a, "videos")) {   /* where the recorder keeps them (the console's capture_tick), made if not there yet */
-        const char *h = getenv("HOME");
-#ifdef __APPLE__
-        snprintf(g_files_path, sizeof(g_files_path), "%s/Movies", h && *h ? h : "/tmp");
-        mkdir(g_files_path, 0755);
-        snprintf(g_files_path, sizeof(g_files_path), "%s/Movies/PSPExp", h && *h ? h : "/tmp");
-#else
-        snprintf(g_files_path, sizeof(g_files_path), "%s/Videos", h && *h ? h : "/tmp");
-        mkdir(g_files_path, 0755);
-        snprintf(g_files_path, sizeof(g_files_path), "%s/Videos/PSPExp", h && *h ? h : "/tmp");
-#endif
-        mkdir(g_files_path, 0755);
+    } else if (!strcmp(a, "captures")) {   /* where the recorder keeps them (the console's capture_tick), made if not there yet */
+        launcher_captures_dir(g_files_path, sizeof(g_files_path));
         g_files_req = 1;
     } else if (!strcmp(a, "monitor") || !strcmp(a, "store") || !strcmp(a, "music")) {
         snprintf(g_app_req, sizeof(g_app_req), "%s", a);
@@ -864,7 +861,25 @@ static void run_action(LEntry *e, uint64_t now)
         g_clips_keep = !g_clips_keep;
         g_clips_change = 1;
         lib_setting_set(&L, "clips", g_clips_keep);
-        toast("history", g_clips_keep ? "Clips on: ♪ + R saves the last 30 seconds" : "Clips off: ♪ + L recordings only", now);
+        {
+            char m[80];
+            snprintf(m, sizeof(m), g_clips_keep ? "Clips on: ♪ + R saves the last %d seconds" : "Clips off: ♪ + L recordings only", g_clip_secs);
+            toast("history", m, now);
+        }
+    } else if (!strcmp(a, "cliplen")) {   /* 15, 30, 60, round */
+        char m[80];
+        g_clip_secs = g_clip_secs == 15 ? 30 : g_clip_secs == 30 ? 60 : 15;
+        g_clips_change = 1;
+        lib_setting_set(&L, "clip_secs", g_clip_secs);
+        snprintf(m, sizeof(m), "♪ + R saves the last %d seconds", g_clip_secs);
+        toast("clock", m, now);
+    } else if (!strcmp(a, "quality")) {
+        char m[80];
+        g_clip_quality = (g_clip_quality + 1) % 3;
+        g_clips_change = 1;
+        lib_setting_set(&L, "clip_quality", g_clip_quality);
+        snprintf(m, sizeof(m), "Quality: %s", CLIP_QUALITY[g_clip_quality]);
+        toast("gauge", m, now);
     } else if (!strcmp(a, "plugin")) {   /* the console writes game.txt (and puts the plugin there first when missing) */
         g_plugin_req = g_psp_plugin != PSP_PLUGIN_ON;
         toast("puzzle", g_plugin_req ? "Switching the PSPExp plugin on" : "Switching the PSPExp plugin off", now);
@@ -1056,6 +1071,23 @@ void launcher_set_psp_plugin(int state)
 int  launcher_take_plugin_switch(void) { int r = g_plugin_req; g_plugin_req = -1; return r; }
 int  launcher_take_clock_request(void) { int r = g_clock_req; g_clock_req = 0; return r; }
 int  launcher_clips_keep(void) { return g_clips_keep; }
+int  launcher_clip_secs(void) { return g_clip_secs; }
+int  launcher_clip_crf(void) { return CLIP_CRF[g_clip_quality]; }
+
+/* the captures' folder (the recorder's -s, Settings > Recording > Captures), made if not there:
+ * ~/Captures (a Mac: ~/Movies/PSPExp, the Movies folder's) */
+void launcher_captures_dir(char *out, size_t n)
+{
+    const char *h = getenv("HOME");
+#ifdef __APPLE__
+    snprintf(out, n, "%s/Movies", h && *h ? h : "/tmp");
+    mkdir(out, 0755);
+    snprintf(out, n, "%s/Movies/PSPExp", h && *h ? h : "/tmp");
+#else
+    snprintf(out, n, "%s/Captures", h && *h ? h : "/tmp");
+#endif
+    mkdir(out, 0755);
+}
 int  launcher_take_clips_change(void) { int r = g_clips_change; g_clips_change = 0; return r; }
 
 void launcher_state(char *out, size_t n)
@@ -1812,7 +1844,8 @@ static void open_system(const LEntry *e, uint64_t now)
 }
 
 /* settings switched on and off where they are (cross), their state on the right */
-static int is_switch(const LEntry *e) { return !strcmp(e->id, "a:clips") || !strcmp(e->id, "a:boxart") || !strcmp(e->id, "a:pspclock") || !strcmp(e->id, "a:plugin"); }
+static int is_switch(const LEntry *e) { return !strcmp(e->id, "a:clips") || !strcmp(e->id, "a:boxart") || !strcmp(e->id, "a:pspclock") || !strcmp(e->id, "a:plugin")
+                                              || !strcmp(e->id, "a:cliplen") || !strcmp(e->id, "a:quality"); }
 
 /* a Settings group: its settings; a group of one, that setting at once when it opens a page of its
  * own (Sound's list): a switch alone shows its group, else cross flipped it with only a toast */
@@ -2298,8 +2331,12 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
         else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
-        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, "%s", g_clips_keep ? "♪ + R saves the last 30 seconds: the board records all the time"
-                                                                              : "Turn on for ♪ + R: the last 30 seconds as a video");
+        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, g_clips_keep ? "♪ + R saves the last %d seconds: the board records all the time"
+                                                                     : "Turn on for ♪ + R: the last %d seconds as a video", g_clip_secs);
+        else if (!strcmp(e->id, "a:cliplen")) snprintf(s, n, "♪ + R saves the last %d seconds%s", g_clip_secs, g_clips_keep ? "" : " (with Clips on)");
+        else if (!strcmp(e->id, "a:quality")) snprintf(s, n, "%s", g_clip_quality == 0 ? "The sharpest: up to 17 MB a minute in a busy game"
+                                                                   : g_clip_quality == 1 ? "Nearly as sharp: up to 10 MB a minute in a busy game"
+                                                                   : "Softer: up to 5 MB a minute in a busy game");
         else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "The PSP section's games start, and PSP games record"
                                                                   : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to start the PSP section's games and record PSP games"
                                                                   : "Not on the PSP's memory stick: cross puts it there and turns it on");
@@ -3053,6 +3090,10 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     g_nofetch = getenv("PSPEXP_LAUNCHER_NO_FETCH") != NULL || !lib_setting_int(&L, "boxart", 1);
     g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
     g_clips_keep = lib_setting_int(&L, "clips", 0);
+    g_clip_secs = lib_setting_int(&L, "clip_secs", 30);
+    if (g_clip_secs != 15 && g_clip_secs != 60) g_clip_secs = 30;
+    g_clip_quality = lib_setting_int(&L, "clip_quality", 0);
+    if (g_clip_quality < 0 || g_clip_quality > 2) g_clip_quality = 0;
     cats_build();
     g_cur = start_cat();   /* start on PSP (Games without one) */
     /* screenshots and tests: open a page without replaying keys, which a slow

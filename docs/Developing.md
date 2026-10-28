@@ -82,7 +82,9 @@ skip). **Making a release** (as 1.1.0 and 1.2.0 were made):
 4. From it, the packages that carry the name: `pspexp-core` for both boards
    (the arm64 build in the `pspexp-arm64-dev` container's `/tmp/b`, the
    GameShell's with `scripts/gameshell/build.sh`) and `pspexp-runtime`
-   (`scripts/packages/debs/pspexp-runtime/build build/debs`); then
+   (`scripts/packages/debs/pspexp-runtime/build build/debs`, from
+   `dist/PSPExp`: run `scripts/build.sh` first; it refuses a `dist/` older
+   than what `psp/` last built); then
    `apt-repo build build/debs`, `apt-repo push r2`, `apt-repo push`.
 5. Optional dry run: `gh workflow run release.yml -f tag=vX.Y.Z -f
    publish=false` makes a draft with both images (about 20 minutes; `gh run
@@ -167,10 +169,12 @@ Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/plugin/pspexp
    `ms0:/seplugins/game.txt` (`0` switches it off). It can stay on: it keeps out of PSPExp itself.
 2. Plug the PSP into the computer and run `build/host/pspexp-plugin-host -o clip.mp4 -d frames -t 90`
    (the whole game as one clip), or `build/host/pspexp-plugin-host -k -s ~/Movies/clips` for the
-   note button: on the PSP, ♪+R saves the last 30 s (`-b` changes it) and ♪+L starts and stops a
-   recording; a dot in the screen's corner confirms (green for a clip, red while recording). On a board the console runs the receiver beside itself
-   (`pspexp-plugin-host -k -q -s ~/Videos/PSPExp -b 0`, or `-b 30` with Settings > Recording >
-   Clips on, when it and ffmpeg are installed; `-b 0`: ♪+L recordings only, nothing sent otherwise;
+   note button: on the PSP, ♪+R saves the last 30 s (`-b` changes it), ♪+L starts and stops a
+   recording and ♪+L twice saves a screenshot (PNG), each in a folder named after the game (its
+   PARAM.SFO title); a dot in the screen's corner confirms (green for a clip, red while recording,
+   white for a screenshot). On a board the console runs the receiver beside itself
+   (`pspexp-plugin-host -k -q -s ~/Captures -b 0 -Q 18`, or `-b 30` with Settings > Recording >
+   Clips on; Clip length and Quality set `-b` and `-Q`, when it and ffmpeg are installed; `-b 0`: ♪+L recordings only, nothing sent otherwise;
    `PSPEXP_CAPTURE=0` turns it off): the plugin has a USB product of its own (0x01CB), which the
    console's link leaves alone.
 3. Start a game from the XMB: the receiver connects, prints the frames and sound received and the

@@ -10,6 +10,9 @@
  * PSPEXP_CAPTURE_RECORDINGS), ♪+R is a pair that does nothing. A pair is ♪ held, then R or L: ♪
  * and R or L appearing in one reading is not one (the PSP-1000 read both, untouched, in the
  * middle of a recording, which stopped it: 2026-10-25), and does nothing at all (no tap either).
+ * ♪ + L twice within PSPEXP_NOTE_DOUBLE_US is a screenshot; so a single ♪ + L acts once that time has
+ * passed without a second L, its event stamped with the first press's time (the recording still
+ * starts there: the receiver places it by that time).
  *
  * Plain C99, no PSP calls: the runtime reads the buttons and the mute, and does what comes out.
  */
@@ -26,11 +29,15 @@ extern "C" {
 #define PSPEXP_NOTE_CLIP       1
 #define PSPEXP_NOTE_REC_START  2
 #define PSPEXP_NOTE_REC_STOP   3
+#define PSPEXP_NOTE_SHOT       4   /* ♪ + L twice: a screenshot */
+
+#define PSPEXP_NOTE_DOUBLE_US  350000u   /* a second L within this: a screenshot, not the recording */
 
 /* the dot that confirms a press, in the screen's bottom-right corner */
 #define PSPEXP_NOTE_DOT_NONE   0
 #define PSPEXP_NOTE_DOT_GREEN  1   /* a clip: for 1.2 s */
 #define PSPEXP_NOTE_DOT_RED    2   /* recording */
+#define PSPEXP_NOTE_DOT_WHITE  3   /* a screenshot: for 0.6 s */
 
 typedef struct PspExpNote {
     uint32_t was;            /* the buttons at the last step */
@@ -43,6 +50,8 @@ typedef struct PspExpNote {
     int recording;
     uint32_t green_until;    /* the clip's dot until then (0: none) */
     uint32_t off_since;      /* the receiver gone since then (0: there); a recording forgotten after 8 s */
+    uint32_t l_first;        /* a ♪ + L waiting for a second L (its time; 0: none) */
+    uint32_t white_until;    /* the screenshot's dot until then (0: none) */
 } PspExpNote;
 
 typedef struct PspExpNoteOut {
@@ -51,6 +60,7 @@ typedef struct PspExpNoteOut {
     int set_mute;            /* -1, or the mute to set */
     int dot;                 /* PSPEXP_NOTE_DOT_* */
     uint32_t refused;        /* the buttons read when ♪ came with R or L at once (0: not this step), for the log */
+    uint32_t rec_at;         /* with REC_START / REC_STOP: the press's time (the first L's), to stamp the event with */
 } PspExpNoteOut;
 
 void pspexp_note_init(PspExpNote *n);
