@@ -1476,7 +1476,7 @@ Apps now holds four built-in apps: Terminal, Files, **System Monitor** and
 file manager, and share one small interface (`appview.h`: open, input, frame,
 render, exit, state). The console shows them in place of the launcher; HOME
 twice closes them (circle did until 2026-10-29, now only steps back inside
-them; held select: the launcher; a select tap also closed them until
+them; held select went to the launcher until 2026-10-29, SELECT now theirs; a select tap also closed them until
 2026-10-06).
 
 ### 10.1 System Monitor

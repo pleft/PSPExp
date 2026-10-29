@@ -25,7 +25,8 @@
   that picture instead of black.
 - **Circle never closes an app** any more: it steps back (the folder above,
   Media's Browse) and does nothing at an app's top; HOME closes. Media's
-  Now playing and Queue go back to Browse on circle.
+  Now playing and Queue go back to Browse on circle. Holding SELECT no
+  longer jumps from an app or Files to the launcher: SELECT is the app's.
 - **Game Boy Advance**: no more dark one-pixel line near the right edge of
   every game (the picture's pieces now meet exactly).
 - **Saturn**: leaving a game no longer ends with a "Stopped with status 138"

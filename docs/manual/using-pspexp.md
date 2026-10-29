@@ -13,7 +13,7 @@ buttons; the board needs no screen, keyboard or mouse.
 | triangle | show more: details, the actions menu, a hidden password (in the terminal: Space) |
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
 | START | search, refresh or rescan, options |
-| SELECT, held | home: the launcher, from any app (from the launcher: the terminal) |
+| SELECT, held | in the launcher: the terminal (and back) |
 | L / R | the other tab, panel or page |
 | ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + L twice a screenshot, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
 
@@ -217,7 +217,6 @@ Only use ROMs of games you own.
 | square | mark several files |
 | triangle | copy or move to the other panel, delete, rename, new folder, details, compress to a .zip |
 | START | options: hidden files, sorting, the same folder in both panels, a terminal here |
-| SELECT, held | the launcher |
 
 The drives include the board's storage, any USB stick plugged into it, and
 **the PSP's own memory stick** (drive **PSP**), while PSPExp runs. Copying
