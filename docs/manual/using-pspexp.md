@@ -67,7 +67,7 @@ game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
 
 | Button | In the launcher |
 |---|---|
-| up / down | the previous / next section on the rail |
+| up / down | the previous / next section on the rail; inside a Settings group or a system's ROMs nothing (the rail is dimmed there: circle goes back first) |
 | left / right | move along the shelf (L / R: five at a time) |
 | circle | back: from a system's ROMs to Emulators, else to the home screen |
 | cross | play, or open |

@@ -348,7 +348,14 @@ catalogue, which was START itself; triangle the whole description and
 versions), the System Monitor (End the program, Sort by; on the overview
 Show the programs; triangle the program's details), Notifications (Go
 there, Remove, Clear all, which was START pressed twice) and the pickers
-(Join / Use / Set, New password or Forget, Scan again, which was START). A game holding the PSP gives
+(Join / Use / Set, New password or Forget, Scan again, which was START).
+
+**The rail on a sub-page (2026-10-29).** In a Settings group or a system's
+ROMs, up / down jumped to the parent's neighbour on the rail, the sub-page
+gone. They now do nothing there, and the rail shows when it answers: lit (a
+faint panel behind it, the section's tile at full) on a section's page,
+dimmed to about a third on a sub-page, easing between; circle goes back to
+the section and lights it again. A game holding the PSP gives
 HOME to itself the same way (the SDL layer): HOME asks it to quit, as START +
 SELECT held did, which now works only with a PSP runtime from before
 HOME_MODE. The "Starting" screen, the controls sheet and the Details card say

@@ -2040,9 +2040,11 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     }
     if (pressed & PSPEXP_BUTTON_START) { menu_open(now); return; }
     if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* the notification centre (also in START's menu) */
-    /* up and down the rail of categories, left and right along the shelf */
-    if (up) select_cat(rail_pos(g_cur) - 1, -1, now);
-    if (down) select_cat(rail_pos(g_cur) + 1, 1, now);
+    /* up and down the rail of categories, left and right along the shelf; on a sub-page (a Settings
+     * group, a system's ROMs) not the rail: up / down jumped to the parent's neighbour, the page
+     * gone (2026-10-29); circle goes back, and the rail, dimmed meanwhile, works again */
+    if (up && !g_cat[g_cur].hidden) select_cat(rail_pos(g_cur) - 1, -1, now);
+    if (down && !g_cat[g_cur].hidden) select_cat(rail_pos(g_cur) + 1, 1, now);
     if (left) move_sel(-1, (pressed & PSPEXP_BUTTON_LEFT) != 0, now);   /* wraps on a fresh press, stops while repeating */
     if (right) move_sel(1, (pressed & PSPEXP_BUTTON_RIGHT) != 0, now);
     if (pressed & PSPEXP_BUTTON_LTRIGGER) move_sel(-5, 0, now);
@@ -2354,12 +2356,18 @@ static void draw_status(void)
 
 static void draw_rail(float dt)
 {
+    static float on = 1.0f;   /* 1: up / down move along it (a section's page), lit; 0: a sub-page, dimmed */
     int i, k, first, n = rail_n(), here = rail_pos(g_cur);
+    float dim;
     first = here - RAIL_SHOWN / 2;
     if (first > n - RAIL_SHOWN) first = n - RAIL_SHOWN;
     if (first < 0) first = 0;
     g_rail_top = ease(g_rail_top, (float)first, 14.0f, dt, 0.01f);
-    gfx_rect(RAIL_W, RAIL_TOP, 1, RAIL_SHOWN * RAIL_PITCH, 0xffffff, 22);
+    on = ease(on, g_cat[g_cur].hidden ? 0.0f : 1.0f, 12.0f, dt, 0.01f);
+    if (on > 0.01f && on < 0.99f) g_dirty = 1;   /* (still easing) */
+    dim = 0.35f + 0.65f * on;
+    if (on > 0.02f) gfx_nine(NINE_R10, 3, RAIL_TOP - 4, RAIL_W - 6, RAIL_SHOWN * RAIL_PITCH + 6, 0xffffff, (int)(on * 12));   /* (lit: a faint panel) */
+    gfx_rect(RAIL_W, RAIL_TOP, 1, RAIL_SHOWN * RAIL_PITCH, 0xffffff, (int)(8 + 14 * on));
     gfx_set_clip(0, RAIL_TOP - 4, RAIL_W, RAIL_SHOWN * RAIL_PITCH + 6);
     for (i = 0, k = 0; i < g_ncat; i++) {
         Cat *c = &g_cat[i];
@@ -2373,11 +2381,11 @@ static void draw_rail(float dt)
         k++;
         if (cy < RAIL_TOP - RAIL_PITCH || cy > RAIL_TOP + (RAIL_SHOWN + 1) * RAIL_PITCH) continue;
         if (lift > 0.02f) {
-            gfx_shadow(NINE_SHADOW10, x, y, size, size, 0x40a0ff, (int)(lift * 200));
-            gfx_nine(NINE_R10, x, y, size, size, 0x14305c, (int)(lift * 255));
+            gfx_shadow(NINE_SHADOW10, x, y, size, size, 0x40a0ff, (int)(lift * 200 * on));
+            gfx_nine(NINE_R10, x, y, size, size, 0x14305c, (int)(lift * 255 * dim));
         }
-        cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220));
-        if (lift > 0.02f) cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255));
+        cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220 * dim));
+        if (lift > 0.02f) cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255 * dim));
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     /* more above or below */
