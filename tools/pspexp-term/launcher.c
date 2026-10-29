@@ -1526,8 +1526,10 @@ static void search_update(void)
     free(h);
 }
 
+static int g_search_from = M_BROWSE;   /* where Search was opened: circle goes back there (it went to the section) */
 static void search_open(uint64_t now)
 {
+    if (g_mode != M_SEARCH) g_search_from = g_mode == M_HOME ? M_HOME : M_BROWSE;
     g_mode = M_SEARCH; g_overlay_a = 0;
     g_sfocus = 0;
     (void)now;
@@ -1564,7 +1566,7 @@ static void search_input(uint32_t pressed, int up, int down, int left, int right
         }
         if (pressed & PSPEXP_BUTTON_SQUARE) search_type("DEL");
         if ((pressed & PSPEXP_BUTTON_START) && g_nres) g_sfocus = 1;
-        if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; }
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = g_search_from; }
     } else {
         if ((up || down) && g_nres) g_sel_since = now;
         if (up && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_UP) ? (g_ssel + g_nres - 1) % g_nres : (g_ssel > 0 ? g_ssel - 1 : 0);
@@ -1800,7 +1802,7 @@ static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
         }
     }
     /* square: a (new) password for a secured network, saved or not */
-    if (g_pick_kind == PICK_WIFI && (pressed & PSPEXP_BUTTON_SQUARE) && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure) {
+    if (g_pick_kind == PICK_WIFI && (pressed & PSPEXP_BUTTON_SQUARE) && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved) {   /* (not saved: cross asks anyway) */
         g_join = g_nets[g_pick_sel];
         ui_kbd_reset(&g_kbd, NULL, 1, "Join"); g_mode = M_TEXT; g_overlay_a = 0;
     }
@@ -2554,11 +2556,12 @@ static void draw_hints(void)
     int x = 16;
     LEntry *e = cur_entry();
     const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
-    gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14;
-    if (e && e->type != LT_ACTION && !is_system_item(e) && !is_group_item(e)) {
+    if (e) { gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14; }   /* (an empty section: nothing to open) */
+    if (e && e->type != LT_ACTION && !is_system_item(e) && !is_group_item(e)) {   /* a game, a ROM, an app: favourites and the Details card
+        * (on a setting, a system or a built-in app triangle only says what it is: no hint) */
         gfx_button('s', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, 255, 0) + 14;
+        gfx_button('t', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0) + 14;
     }
-    gfx_button('t', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0) + 14;
     gfx_button('o', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, g_cat[g_cur].hidden ? (parent_kind(&g_cat[g_cur]) == CK_SETTINGS ? "Settings" : "Emulators") : "Home", C_SUB, 255, 0);
     {   /* SELECT's hint where there is room (a long left side: "Unfavourite", "Emulators"); the button works anyway */
         int left_end = x, r = hint_right(SCREEN_W - 16, "START", "Search");
@@ -2935,7 +2938,7 @@ static void draw_pick(float dt)
         gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     }
     x = 16;
-    x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : g_pick_kind == PICK_BT ? "Use" : "Join");
+    if (!g_scanning || g_pick_kind == PICK_TZ) x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : g_pick_kind == PICK_BT ? "Use" : "Join");   /* (cross waits for the scan) */
     if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired && !g_scanning) x = hint_btn(x, 's', "Forget");
     if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
         x = hint_btn(x, 's', "New password");

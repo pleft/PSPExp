@@ -326,7 +326,7 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
     else draw_programs();
     x = 12;
     if (g_msg[0]) gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, g_msg, 0xffc766, 255, UI_SCREEN_W - 24);
-    else {
+    else if (!g_confirm) {   /* (the End dialog's buttons are in it) */
         x = ui_hint_cap(x, "L/R", g_page == PAGE_OVERVIEW ? "Programs" : "Overview", UI_SUB);
         if (g_page == PAGE_PROGRAMS) {
             x = ui_hint_btn(x, 'x', "End");

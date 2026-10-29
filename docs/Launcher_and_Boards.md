@@ -310,7 +310,20 @@ launcher. In the launcher HOME is the
 PSP's again: its "Quit?" dialog, to the XMB. Elsewhere it asks first: the
 library holds back a first press and the PSP shows "HOME again to quit" for
 3 s; a second press meanwhile goes through (the test port's `hint home`
-shows the bar). A game holding the PSP gives
+shows the bar).
+
+**Hints that say what the buttons do (2026-10-29, from the button audit).**
+Footers no longer show the screen's hints under a menu or a dialog: Files'
+menus show "cross Choose, circle Close", its dialogs, Packages' (Remove,
+terms, working) and the System Monitor's End dialog none (their buttons
+are in them); the drive list lost START and L/R, which it ignores. The
+launcher's "triangle Details" (and the favourite's) only where triangle
+opens the Details card, nothing for cross or triangle in an empty section.
+Search's circle goes back to where it was opened (the home screen or a
+section; it went to the section). The Wi-Fi picker's square is a new
+password only for a saved network, as hinted (for another, cross asks
+anyway), and "cross Join" is not shown while a scan runs. Files' Compress
+keyboard is titled Compress (it said Rename). A game holding the PSP gives
 HOME to itself the same way (the SDL layer): HOME asks it to quit, as START +
 SELECT held did, which now works only with a PSP runtime from before
 HOME_MODE. The "Starting" screen, the controls sheet and the Details card say

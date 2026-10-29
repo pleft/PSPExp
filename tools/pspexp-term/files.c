@@ -1107,7 +1107,8 @@ void files_render(PspExpContext *ctx, uint64_t now)
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_backdrop();
     if (g_over == O_KBD) {
-        ui_kbd_draw(&g_kbd, g_kmode == K_MKDIR ? "folder-plus" : "pencil", g_kmode == K_MKDIR ? "New folder" : "Rename", "Type a name", g_caret, 255);
+        ui_kbd_draw(&g_kbd, g_kmode == K_MKDIR ? "folder-plus" : g_kmode == K_ZIP ? "file-archive" : "pencil",
+                    g_kmode == K_MKDIR ? "New folder" : g_kmode == K_ZIP ? "Compress" : "Rename", g_kmode == K_ZIP ? "The archive's name" : "Type a name", g_caret, 255);
         notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
@@ -1172,9 +1173,15 @@ void files_render(PspExpContext *ctx, uint64_t now)
             else if (is_image(e)) go = "View";
             else go = "Read";
         }
-        if (!p->on_drives && g_over != O_DRIVES) x = ui_hint_btn(x, 'x', go);
+        if (!p->on_drives && g_over == O_NONE) x = ui_hint_btn(x, 'x', go);
     }
-    if (g_over == O_DRIVES) {
+    /* the footer is the screen's under it: a menu its own two, a dialog none (its buttons are in it) */
+    if (g_over == O_ACTIONS || g_over == O_OPTIONS || g_over == O_ARCHIVE) {
+        x = ui_hint_btn(x, 'x', "Choose");
+        x = ui_hint_btn(x, 'o', "Close");
+    } else if (g_over != O_NONE && g_over != O_DRIVES) {
+        /* (none) */
+    } else if (g_over == O_DRIVES) {
         x = ui_hint_btn(x, 'x', "Switch");
         x = ui_hint_btn(x, 'o', "Close");
     } else if (act()->on_drives) {
@@ -1185,8 +1192,10 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 's', "Mark");
         x = ui_hint_btn(x, 't', "Actions");
     }
-    x = ui_hint_cap(x, "START", "Options", UI_SUB);
-    x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
+    if (g_over == O_NONE) {
+        x = ui_hint_cap(x, "START", "Options", UI_SUB);
+        x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
+    }
     switch (g_over) {
     case O_DRIVES: draw_drives(); break;
     case O_ACTIONS: draw_menu(ACTIONS, NACT, "Actions"); break;

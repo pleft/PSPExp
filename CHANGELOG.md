@@ -32,6 +32,10 @@
   Media's Browse) and does nothing at an app's top; HOME closes. Media's
   Now playing and Queue go back to Browse on circle. Holding SELECT no
   longer jumps from an app or Files to the launcher: SELECT is the app's.
+- **Hints that match the buttons**: menus and dialogs no longer show the
+  screen's hints under them; "Details" only where triangle opens them;
+  Search's circle goes back to where you opened it; smaller fixes (Files'
+  Compress keyboard's title, the Wi-Fi picker).
 - **Game Boy Advance**: no more dark one-pixel line near the right edge of
   every game (the picture's pieces now meet exactly).
 - **Saturn**: leaving a game no longer ends with a "Stopped with status 138"

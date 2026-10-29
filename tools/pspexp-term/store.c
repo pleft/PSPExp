@@ -579,8 +579,10 @@ static void st_render(PspExpContext *ctx, uint64_t now)
             x = ui_hint_btn(x, 'x', st == ST_NEW ? "Install" : st == ST_UPDATE ? "Update" : "Reinstall");
         if (p->inst[0] || st == ST_BROKEN || st == ST_LOCAL) x = ui_hint_btn(x, 's', "Remove");
     }
-    x = ui_hint_cap(x, "L/R", "Section", UI_SUB);
-    x = ui_hint_cap(x, "START", "Refresh", UI_SUB);
+    if (g_mode == S_LIST) {   /* (a dialog's buttons are in it: the list's are not shown under it) */
+        x = ui_hint_cap(x, "L/R", "Section", UI_SUB);
+        x = ui_hint_cap(x, "START", "Refresh", UI_SUB);
+    }
     if (g_mode == S_CONFIRM && p) {
         snprintf(s, sizeof(s), "Remove %s from this board? Its saves and settings in your home folder stay.", p->title);
         box("Remove", s, 96);   /* the buttons sit below two lines of text */
