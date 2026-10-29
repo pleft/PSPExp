@@ -1599,6 +1599,7 @@ static int g_view_files, g_files_from_launcher;   /* the file manager (files.c),
 static int g_launch_from_files;                   /* the running program was opened in the file manager */
 static const AppView *g_app;                      /* a built-in app shown instead of the launcher (appview.h) */
 static int g_app_from_files;                      /* it was opened by Files (a song): closing it goes back there */
+static const AppView *g_app_back;                 /* it was opened by another app (the Gallery a video): closing it goes back there */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself (a PSPExp program) */
@@ -1619,10 +1620,18 @@ static void view_cycle(void)
  * dialog (HOME_MODE SYSTEM, home_mode_tick); everywhere else HOME is the console's: an app closes
  * as on its own exit (Media opened from Files back there), Files and the terminal go to the
  * launcher */
+static void app_back(void);
+
 static void home_leave(void)
 {
     swallow();
+    if (g_app && g_app_back) {   /* (the Gallery's video: it ends, the Gallery comes back) */
+        if (g_app == &MUSIC_APP) music_stop();
+        app_back();
+        return;
+    }
     if (g_app) {
+        if (g_app->leave) g_app->leave();
         if (g_app == &MUSIC_APP) music_leave();
         if (g_app_from_files) { g_app = NULL; g_app_from_files = 0; g_view_files = 1; files_invalidate(); }
         else view_cycle();
@@ -1646,10 +1655,20 @@ static void home_mode_tick(void)
 static void app_show(const AppView *a)
 {
     if (!g_launcher_on || !a) return;   /* it draws with the launcher's graphics */
+    if (g_app_back) { g_app_back = NULL; music_set_back(0); }   /* (an app over another one left some other way) */
     g_app = a; g_app_from_files = 0;
     g_view_files = 0; g_view_launcher = 0;
     swallow();
     a->open();
+}
+
+/* the app that opened this one, as it was left (its open not called again) */
+static void app_back(void)
+{
+    g_app = g_app_back; g_app_back = NULL;
+    music_set_back(0);
+    g_redraw_app = 1;
+    swallow();
 }
 
 /* the file manager at path (NULL: home), over the launcher or the terminal */
@@ -2212,7 +2231,7 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
         } else if (g_want_usb) setenv("PSPEXP", "usb", 1);
         setenv("PSPEXP_MESSAGE", msg, 1);
         if (g_launcher_on && launcher_running_title() && *launcher_running_title())
-            setenv("PSPEXP_TITLE", launcher_running_title(), 1);   /* (its captures' folder: the recorder's ~/Captures/<it>) */
+            setenv("PSPEXP_TITLE", launcher_running_title(), 1);   /* (its captures' folder: the recorder's ~/Gallery/<it>) */
         else unsetenv("PSPEXP_TITLE");
         setsid();
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
@@ -2810,7 +2829,7 @@ static void ctl_step(uint64_t now, int connected)
         else if (!strcmp(w, "launcher")) { if (!g_launcher_on) { ctl_reply("error not started with --launcher"); return; } g_app = NULL; g_view_files = 0; g_view_launcher = 1; launcher_invalidate(); }
         else if (!strcmp(w, "terminal")) { g_app = NULL; g_view_files = 0; g_view_launcher = 0; T.dirty = 1; }
         else if (app_find(w)) { if (!g_launcher_on) { ctl_reply("error the apps need --launcher"); return; } app_show(app_find(w)); }
-        else { ctl_reply("error open launcher|terminal|files [PATH]|monitor|store|music"); return; }
+        else { ctl_reply("error open launcher|terminal|files [PATH]|monitor|store|music|gallery|notifications"); return; }
         swallow();
         C.st = CS_SETTLE; C.until = now + 150000u;
     } else if (!strncmp(cmd, "volume-bar ", 11)) {   /* the PSP's volume bar, as a volume button shows it (tests) */
@@ -2896,7 +2915,7 @@ static void ctl_step(uint64_t now, int connected)
 /* ---- the PSPExp plugin host (tools/pspexp-plugin-host) beside the console ----
  * A native PSP game with the PSPExp plugin on (psp/plugin) reaches the board under the plugin's
  * own USB product, which the console's link leaves alone; the receiver keeps the note button's
- * clips (note+R the last 15-60 s, note+L a recording, note+L twice a screenshot) in ~/Captures,
+ * clips (note+R the last 15-60 s, note+L a recording, note+L twice a screenshot) in ~/Gallery,
  * a folder for each game (~/Movies/PSPExp on a Mac).
  * Started with the launcher over USB when it and ffmpeg are on the PATH, again 10 s after it ends;
  * PSPEXP_CAPTURE=0: not at all. Its own process group; stopped with the console, its clips under
@@ -2925,7 +2944,7 @@ static int in_path(const char *name)
 static void capture_stop(void);
 
 /* once: the videos of the versions before 1.4 (~/Videos/PSPExp, no game's name on them) into
- * ~/Captures/Earlier, the folder left behind removed when empty (a board's; a Mac keeps ~/Movies/PSPExp) */
+ * ~/Gallery/Earlier, the folder left behind removed when empty (a board's; a Mac keeps ~/Movies/PSPExp) */
 static void capture_move_earlier(void)
 {
 #ifndef __APPLE__
@@ -2937,7 +2956,7 @@ static void capture_move_earlier(void)
     if (!h || !*h) return;
     snprintf(old, sizeof(old), "%s/Videos/PSPExp", h);
     if (!(d = opendir(old))) return;
-    launcher_captures_dir(dir, sizeof(dir));
+    launcher_gallery_dir(dir, sizeof(dir));
     snprintf(dir + strlen(dir), sizeof(dir) - strlen(dir), "/Earlier");
     while ((e = readdir(d))) {
         if (e->d_name[0] == '.') continue;
@@ -2983,7 +3002,7 @@ static void capture_tick(uint64_t now)
     if (pid == 0) {
         char dir[1024], secs[16], crf[16];
         int fd;
-        launcher_captures_dir(dir, sizeof(dir));
+        launcher_gallery_dir(dir, sizeof(dir));
         snprintf(secs, sizeof(secs), "%d", launcher_clips_keep() ? launcher_clip_secs() : 0);
         snprintf(crf, sizeof(crf), "%d", launcher_clip_crf());
         setsid();
@@ -3321,8 +3340,14 @@ int main(int argc, char **argv)
             }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
         }
+        if (g_app && g_app->take_app) {   /* another app for it (the Gallery a video: Media), then back */
+            char id[16];
+            const AppView *from = g_app, *to;
+            if (g_app->take_app(id, sizeof(id)) && (to = app_find(id))) { app_show(to); g_app_back = from; }
+        }
         if (g_app && g_app->take_exit()) {
-            if (g_app_from_files) { g_app = NULL; g_app_from_files = 0; g_view_files = 1; files_invalidate(); swallow(); }   /* Files as it was left */
+            if (g_app_back) app_back();
+            else if (g_app_from_files) { g_app = NULL; g_app_from_files = 0; g_view_files = 1; files_invalidate(); swallow(); }   /* Files as it was left */
             else view_cycle();
         }
         if (g_launcher_on) {   /* notifications: held while a program has the PSP; the board watched; the banner's frames */

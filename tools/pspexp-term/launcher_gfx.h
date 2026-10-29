@@ -12,6 +12,7 @@
  *   covers    128x128 8888 per entry: box art when there is some, else a
  *             generated one (gradient, watermark icon, badge, title); an LRU
  *             keeps the last few on the PSP
+ *   thumbs    the Gallery's pictures, cropped to their tile, an LRU of them too
  */
 #ifndef PSPEXP_LAUNCHER_GFX_H
 #define PSPEXP_LAUNCHER_GFX_H
@@ -77,6 +78,12 @@ void gfx_cover_forget(const char *key);
 #define DISC_TEX   128
 int  gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha);
 void gfx_disc_forget(const char *key);
+/* the Gallery's thumbnails: the picture at path (PNG, JPEG) filling w x h (at most 256 a side), cropped
+ * to it, the corners rounded. 1 drawn; 0 not yet (a few new ones a frame: draw again next frame);
+ * -1 not a picture. Forget one deleted or changed; free them all when the Gallery closes */
+int  gfx_thumb(const char *path, int x, int y, int w, int h, int alpha);
+void gfx_thumb_forget(const char *path);
+void gfx_thumb_free(void);
 /* for the tests: 1 when every cached cover and disc holds a texture id of its own */
 int  gfx_cache_ids_distinct(void);
 

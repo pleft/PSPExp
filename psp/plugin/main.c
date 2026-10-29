@@ -1695,7 +1695,7 @@ static void event_put_at(u32 type, u32 at)
 }
 static void event_put(u32 type) { event_put_at(type, now_us()); }
 
-/* The game's name, for the board's capture folders (~/Captures/<the game>): its disc's PARAM.SFO,
+/* The game's name, for the board's capture folders (~/Gallery/<the game>): its disc's PARAM.SFO,
  * TITLE (else DISC_ID), read once the game is set up (a game's start leaves the disc alone);
  * sent as an event of its own, EV_TITLE with the name after the header, to every receiver
  * that connects. */

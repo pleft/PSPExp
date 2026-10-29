@@ -573,8 +573,9 @@ static FILE *seg_open(void)
     snprintf(g_segdir, sizeof(g_segdir), "%s/pspexp-plugin-host-%d", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
     mkdir(g_segdir, 0700);
     g_rec_first = -1; g_frames_out = 0; g_seg_closed = 0; g_seg_final = -1; g_seg_dropped = 0;
+    /* (Main profile, level 3.0: what the PSP's own Video menu plays, the Gallery's copies there; High it does not) */
     snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-             "-c:v libx264 -preset " X264_PRESET " -crf %d -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
+             "-c:v libx264 -preset " X264_PRESET " -profile:v main -level 3.0 -crf %d -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
              "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_crf, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
     ff = popen(cmd, "w");
     if (!ff) perror("ffmpeg");
@@ -623,7 +624,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
          * is held, so a clip plays at the game's own speed */
         snprintf(video, sizeof(video), "%s.picture.mp4", out);
         snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-                 "-c:v libx264 -preset " X264_PRESET " -crf %d -pix_fmt yuv420p '%s'", W, H, g_crf, video);
+                 "-c:v libx264 -preset " X264_PRESET " -profile:v main -level 3.0 -crf %d -pix_fmt yuv420p '%s'", W, H, g_crf, video);
         ff = popen(cmd, "w");
         if (!ff) { perror("ffmpeg"); return -1; }
     }

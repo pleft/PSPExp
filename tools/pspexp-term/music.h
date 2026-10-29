@@ -34,6 +34,9 @@ void music_tick(uint64_t now);
 /* the note button and the launcher: pause or resume (a track that ended: from its start) */
 void music_toggle(void);
 void music_stop(void);
+/* a film from another app (the Gallery): circle, or its end, stops it and closes Media (main.c
+ * shows that app again); 0 when it is back */
+void music_set_back(int on);
 /* Media left (circle, HOME): the music goes on, a film waits, paused */
 void music_leave(void);
 /* 1 while a track is loaded; its title (or file name) and whether it is paused */

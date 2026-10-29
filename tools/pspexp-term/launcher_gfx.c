@@ -45,6 +45,10 @@
 #define DISC_SLOTS    14
 #define DISC_IDS      40
 #define COVER_IDS     32
+#define ID_THUMB      4400 /* + pool index: the Gallery's thumbnails */
+#define THUMB_SLOTS   16
+#define THUMB_IDS     40
+#define THUMB_LOADS   3    /* new thumbnails decoded a frame: the rest the frames after */
 
 #define SCREEN_W 480
 #define SCREEN_H 272
@@ -472,6 +476,7 @@ static const IconName ICONS[] = {
     { "corner-left-up", 0xe0a4 }, { "copy", 0xe09e }, { "trash-2", 0xe18e }, { "pencil", 0xe1f9 }, { "folder-plus", 0xe0d9 },
     { "folder-input", 0xe334 }, { "folder-output", 0xe337 }, { "folder-down", 0xe332 }, { "package-open", 0xe2cc }, { "arrow-right-left", 0xe417 }, { "columns-2", 0xe098 }, { "list-checks", 0xe1d0 },
     { "folder-symlink", 0xe33b }, { "arrow-up-down", 0xe37d }, { "file-box", 0xe310 },
+    { "images", 0xe5c4 }, { "camera", 0xe064 }, { "video", 0xe1a5 }, { "calendar", 0xe063 }, { "image-play", 0xe5df },   /* the Gallery */
 };
 
 static int icon_cp(const char *name)
@@ -1348,6 +1353,103 @@ draw:
     return dslot[best].from_art;
 }
 
+/* ---- thumbnails (the Gallery) --------------------------------------------------------------------- */
+
+/* A picture filling w x h, cropped to it (its middle), box-filtered, the corners rounded; kept in
+ * an LRU like the covers, each with a fresh id (cover_fresh_id). A few new ones a frame: a folder
+ * of screenshots shows at once, its pictures filling in over the next frames. */
+typedef struct ThumbSlot { char key[300]; uint16_t id; int w, h, failed; uint64_t used; } ThumbSlot;
+static ThumbSlot tslot[THUMB_SLOTS];
+static int next_thumb_id;
+static unsigned thumb_frame, thumb_loads;
+
+static uint16_t thumb_fresh_id(void)
+{
+    for (;;) {
+        uint16_t id = (uint16_t)(ID_THUMB + (next_thumb_id++ % THUMB_IDS));
+        int i;
+        for (i = 0; i < THUMB_SLOTS; i++) if (tslot[i].key[0] && !tslot[i].failed && tslot[i].id == id) break;
+        if (i == THUMB_SLOTS) return id;
+    }
+}
+
+static int thumb_render(const char *path, uint8_t *out, int w, int h)
+{
+    uint8_t *file, *img;
+    size_t len;
+    int iw, ih, n, x, y;
+    float sc, sx0, sy0;
+    if (read_file(path, &file, &len) < 0) return -1;
+    img = stbi_load_from_memory(file, (int)len, &iw, &ih, &n, 4);
+    free(file);
+    if (!img) return -1;
+    sc = (float)iw / w < (float)ih / h ? (float)iw / w : (float)ih / h;   /* source pixels per thumbnail pixel: the side that fills */
+    sx0 = (iw - w * sc) / 2; sy0 = (ih - h * sc) / 2;
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            int i0 = (int)(sx0 + x * sc), i1 = (int)(sx0 + (x + 1) * sc), j0 = (int)(sy0 + y * sc), j1 = (int)(sy0 + (y + 1) * sc), i, j, cnt = 0;
+            float acc[3] = { 0, 0, 0 };
+            uint8_t *p = out + ((size_t)y * w + x) * 4;
+            if (i1 <= i0) i1 = i0 + 1;
+            if (j1 <= j0) j1 = j0 + 1;
+            if (i1 > iw) i1 = iw;
+            if (j1 > ih) j1 = ih;
+            for (j = j0; j < j1; j++) for (i = i0; i < i1; i++) { const uint8_t *q = img + ((size_t)j * iw + i) * 4; acc[0] += q[0]; acc[1] += q[1]; acc[2] += q[2]; cnt++; }
+            if (!cnt) cnt = 1;
+            {
+                float d = sd_rbox(x + 0.5f, y + 0.5f, w / 2.0f, h / 2.0f, w / 2.0f, h / 2.0f, 6.0f);
+                p[0] = (uint8_t)(acc[0] / cnt); p[1] = (uint8_t)(acc[1] / cnt); p[2] = (uint8_t)(acc[2] / cnt);
+                p[3] = (uint8_t)lroundf(255 * cover_of(d));
+                blend_px(p, 1, 1, 1, cover_of(fabsf(d + 0.5f) - 0.5f) * 0.10f);   /* (the covers' faint light edge) */
+            }
+        }
+    stbi_image_free(img);
+    return 0;
+}
+
+int gfx_thumb(const char *path, int x, int y, int w, int h, int alpha)
+{
+    char key[300];
+    int i, best = 0;
+    if (!path || !*path || w <= 0 || h <= 0 || w > 256 || h > 256) return -1;
+    snprintf(key, sizeof(key), "%dx%d:%s", w, h, path);
+    for (i = 0; i < THUMB_SLOTS; i++) if (tslot[i].key[0] && !strcmp(tslot[i].key, key)) break;
+    if (i == THUMB_SLOTS) {
+        uint8_t *px;
+        if (thumb_frame != g_frame_no) { thumb_frame = g_frame_no; thumb_loads = 0; }
+        if (thumb_loads >= THUMB_LOADS) return 0;
+        thumb_loads++;
+        for (i = 1; i < THUMB_SLOTS; i++) if (!tslot[i].key[0] || tslot[i].used < tslot[best].used) best = i;
+        i = best;
+        if (tslot[i].key[0] && !tslot[i].failed) pspexp_release(G, tslot[i].id);
+        px = (uint8_t *)calloc((size_t)w * h, 4);
+        tslot[i].failed = !px || thumb_render(path, px, w, h) < 0;
+        if (!tslot[i].failed) { tslot[i].id = thumb_fresh_id(); tslot[i].failed = upload_rgba(tslot[i].id, px, w, h) < 0; }
+        free(px);
+        snprintf(tslot[i].key, sizeof(tslot[i].key), "%s", key);
+        tslot[i].w = w; tslot[i].h = h;
+    }
+    tslot[i].used = ++cover_clock;
+    if (tslot[i].failed) return -1;
+    if (alpha > 0) quad(tslot[i].id, x, y, w, h, 0, 0, w, h, c4444(0xffffff, alpha));
+    return 1;
+}
+
+void gfx_thumb_forget(const char *path)
+{
+    int i;
+    for (i = 0; i < THUMB_SLOTS; i++) {
+        const char *k = strchr(tslot[i].key, ':');
+        if (tslot[i].key[0] && k && !strcmp(k + 1, path)) { if (!tslot[i].failed) pspexp_release(G, tslot[i].id); tslot[i].key[0] = 0; }
+    }
+}
+
+void gfx_thumb_free(void)
+{
+    int i;
+    for (i = 0; i < THUMB_SLOTS; i++) if (tslot[i].key[0]) { if (!tslot[i].failed) pspexp_release(G, tslot[i].id); tslot[i].key[0] = 0; }
+}
+
 int gfx_cache_ids_distinct(void)
 {
     int i, j;
@@ -1355,6 +1457,8 @@ int gfx_cache_ids_distinct(void)
         if (cslot[i].key[0] && cslot[j].key[0] && cslot[i].id == cslot[j].id) return 0;
     for (i = 0; i < DISC_SLOTS; i++) for (j = i + 1; j < DISC_SLOTS; j++)
         if (dslot[i].key[0] && dslot[j].key[0] && dslot[i].id == dslot[j].id) return 0;
+    for (i = 0; i < THUMB_SLOTS; i++) for (j = i + 1; j < THUMB_SLOTS; j++)
+        if (tslot[i].key[0] && tslot[j].key[0] && !tslot[i].failed && !tslot[j].failed && tslot[i].id == tslot[j].id) return 0;
     return 1;
 }
 

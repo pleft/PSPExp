@@ -41,6 +41,8 @@
 #include <sys/sysmacros.h>
 #endif
 #include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
 #include "../../host/libpspexp/pspexp_disc.h"
 #include <sys/wait.h>
 #include <unistd.h>
@@ -123,7 +125,7 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
 }
 
 /* apps built into the console, first in Apps: the terminal and the file manager */
-#define NBUILTIN 5
+#define NBUILTIN 6
 static LEntry g_builtin[NBUILTIN];
 static LEntry g_sysent[32];
 static LEntry g_grpent[8];    /* Settings' items: one per group of settings (id "g:<name>") */
@@ -211,7 +213,8 @@ static void cats_build(void)
     action(&g_builtin[1], "files", "Files", "folder-open", "The board's drives and the PSP's memory stick: copy, move, view");
     action(&g_builtin[2], "monitor", "System Monitor", "activity", "This board's CPU, memory, temperature, storage, network and programs");
     action(&g_builtin[3], "store", "Packages", "package", "Games, emulators and apps for this board: install, update, remove");
-    action(&g_builtin[4], "music", "Media", "clapperboard", "Your music, films and captures; music plays on behind everything");
+    action(&g_builtin[4], "music", "Media", "clapperboard", "Your music and films; music plays on behind everything");
+    action(&g_builtin[5], "gallery", "Gallery", "images", "Your screenshots, recordings and clips, a page for each game");
     for (i = 0; i < NBUILTIN; i++) {
         int k;
         g_builtin[i].type = LT_APP;
@@ -265,7 +268,7 @@ static void cats_build(void)
     ACTION("clips", "Clips", "history", "♪ + R saves the last seconds as a video: the board records all the time");
     ACTION("cliplen", "Clip length", "clock", "How much ♪ + R saves");
     ACTION("quality", "Quality", "gauge", "The videos' quality, and so their size");
-    ACTION("captures", "Captures", "film", "Your recordings, clips and screenshots, a folder for each game, in Files");
+    ACTION("gallery", "Gallery", "images", "Your screenshots, recordings and clips, a page for each game");
     if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP section's, and recording them");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp for the PSP, or its plugin: put it on its memory stick");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
@@ -279,7 +282,7 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
             { "Sound", "headphones", { "a:sound", NULL } },
-            { "Recording", "film", { "a:clips", "a:cliplen", "a:quality", "a:captures", NULL } },
+            { "Recording", "film", { "a:clips", "a:cliplen", "a:quality", "a:gallery", NULL } },
             { "Clock", "clock", { "a:tz", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
             { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP shelf's) */
@@ -402,7 +405,7 @@ static uint64_t g_last_frame, g_sel_since;
 static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
-static char g_files_path[512];   /* the folder Files opens on (Settings > Recording > Captures), else its own */
+static char g_files_path[512];   /* the folder Files opens on (Settings, a path asked for), else its own */
 static char g_native_path[700];  /* a PSP game chosen on the shelf, for the console to start on the PSP */
 static int g_spin_x, g_spin_y, g_spin_drawn;   /* the "Starting" frame's spinner square (draw_running) */
 static LEntry g_running_e;
@@ -846,10 +849,7 @@ static void run_action(LEntry *e, uint64_t now)
         g_console_req = 1;
     } else if (!strcmp(a, "files")) {
         g_files_req = 1;
-    } else if (!strcmp(a, "captures")) {   /* where the recorder keeps them (the console's capture_tick), made if not there yet */
-        launcher_captures_dir(g_files_path, sizeof(g_files_path));
-        g_files_req = 1;
-    } else if (!strcmp(a, "monitor") || !strcmp(a, "store") || !strcmp(a, "music")) {
+    } else if (!strcmp(a, "monitor") || !strcmp(a, "store") || !strcmp(a, "music") || !strcmp(a, "gallery")) {
         snprintf(g_app_req, sizeof(g_app_req), "%s", a);
     } else if (!strcmp(a, "psp-update")) {
         g_psp_update_req = 1;
@@ -1077,9 +1077,31 @@ int  launcher_clips_keep(void) { return g_clips_keep; }
 int  launcher_clip_secs(void) { return g_clip_secs; }
 int  launcher_clip_crf(void) { return CLIP_CRF[g_clip_quality]; }
 
-/* the captures' folder (the recorder's -s, Settings > Recording > Captures), made if not there:
- * ~/Captures (a Mac: ~/Movies/PSPExp, the Movies folder's) */
-void launcher_captures_dir(char *out, size_t n)
+#ifndef __APPLE__
+/* from into to, what to has already left where it is (a folder in both: merged in turn) */
+static void merge_into(const char *from, const char *to)
+{
+    DIR *d = opendir(from);
+    struct dirent *e;
+    char a[1024], b[1024];
+    struct stat st;
+    if (!d) return;
+    mkdir(to, 0755);
+    while ((e = readdir(d))) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+        snprintf(a, sizeof(a), "%s/%s", from, e->d_name);
+        snprintf(b, sizeof(b), "%s/%s", to, e->d_name);
+        if (lstat(b, &st) < 0) { if (rename(a, b) < 0) fprintf(stderr, "[launcher] gallery: %s not moved (%s)\n", a, strerror(errno)); }
+        else if (S_ISDIR(st.st_mode) && stat(a, &st) == 0 && S_ISDIR(st.st_mode)) merge_into(a, b);
+    }
+    closedir(d);
+    rmdir(from);   /* (only when all of it went) */
+}
+#endif
+
+/* the Gallery's folder (the recorder's -s, the Gallery app's), made if not there: ~/Gallery (a Mac:
+ * ~/Movies/PSPExp, the Movies folder's). Before 2026-10-29 it was ~/Captures: moved here once */
+void launcher_gallery_dir(char *out, size_t n)
 {
     const char *h = getenv("HOME");
 #ifdef __APPLE__
@@ -1087,7 +1109,18 @@ void launcher_captures_dir(char *out, size_t n)
     mkdir(out, 0755);
     snprintf(out, n, "%s/Movies/PSPExp", h && *h ? h : "/tmp");
 #else
-    snprintf(out, n, "%s/Captures", h && *h ? h : "/tmp");
+    static int moved;
+    snprintf(out, n, "%s/Gallery", h && *h ? h : "/tmp");
+    if (!moved) {
+        char old[1024];
+        struct stat st;
+        moved = 1;
+        snprintf(old, sizeof(old), "%s/Captures", h && *h ? h : "/tmp");
+        if (stat(old, &st) == 0 && S_ISDIR(st.st_mode)) {
+            if (stat(out, &st) < 0 && rename(old, out) == 0) fprintf(stderr, "[launcher] gallery: %s is now %s\n", old, out);
+            else merge_into(old, out);
+        }
+    }
 #endif
     mkdir(out, 0755);
 }

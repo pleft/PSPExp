@@ -664,4 +664,4 @@ static void st_state(char *out, size_t n)
     if (l < n) snprintf(out + l, n - l, "\n");
 }
 
-const AppView STORE_APP = { "store", st_open, st_input, st_needs_frame, st_render, st_take_exit, st_state };
+const AppView STORE_APP = { "store", st_open, st_input, st_needs_frame, st_render, st_take_exit, st_state, NULL, NULL };

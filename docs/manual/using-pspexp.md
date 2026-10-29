@@ -243,7 +243,7 @@ the **Library**:
 
 - **Now playing**: the song, artist, album and cover, the time, and
   what comes next;
-- **Library**: **Music**, **Videos**, **Captures** (your recordings, clips
+- **Library**: **Music**, **Videos**, **Gallery** (your recordings, clips
   and screenshots, a folder for each game), the drives, the **PSP**'s
   memory stick, and **Media servers**: the ones on your network (Plex,
   Jellyfin, Kodi, MiniDLNA, a NAS or a router with DLNA on), found when you
@@ -305,6 +305,15 @@ From a media server, songs and films play
 straight from it (nothing is copied to the board); the server's folders
 look as it arranges them.
 
+## Gallery
+
+**Apps > Gallery** shows your screenshots, recordings and clips, a tile for
+each game, then a game's pictures newest first. Cross shows a screenshot
+full screen or plays a video; L / R show all, only the screenshots or only
+the videos; square deletes; START's menu copies them to the PSP's memory
+stick, for the PSP's own Photo and Video menus. More in
+[Recording and screenshots](recording.md#the-gallery).
+
 ## Bluetooth headphones
 
 On a board with Bluetooth (the Raspberry Pi, the GameShell), **Settings > Sound** sends
@@ -359,7 +368,7 @@ with a single option opens that option at once), circle comes back.
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size; Captures: your recordings, clips and screenshots, a folder for each game, in Files ([Recording](recording.md)) |
+| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size; Gallery: your recordings, clips and screenshots ([Recording](recording.md)) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
 | This PSP | PSPExp plugin: on to start the PSP section's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |

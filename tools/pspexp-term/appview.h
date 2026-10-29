@@ -1,6 +1,7 @@
 /*
  * A built-in app of the console, shown instead of the launcher (Apps > ...):
- * the system monitor (monitor.c) and the package manager (store.c). The file
+ * the system monitor (monitor.c), the package manager (store.c), Media (music.c), the
+ * notifications (notify.c) and the Gallery (gallery.c). The file
  * manager came first and is wired in on its own (files.c); these share this.
  * They draw with the launcher's graphics (launcher_gfx), which must be up.
  */
@@ -20,9 +21,13 @@ typedef struct AppView {
     void (*render)(PspExpContext *ctx, uint64_t now);
     int  (*take_exit)(void);         /* 1 once when the user closed it */
     void (*state)(char *out, size_t n);   /* "<id>.key=value" lines for the control port */
+    /* optional: another app to show for it, once (the Gallery a video: Media's player), its id;
+     * closing that one comes back here (main.c, g_app_back) */
+    int  (*take_app)(char *id, size_t n);
+    void (*leave)(void);             /* optional: closed (HOME): what it keeps on the PSP let go */
 } AppView;
 
-extern const AppView MONITOR_APP, STORE_APP, MUSIC_APP, NOTIFY_APP;
+extern const AppView MONITOR_APP, STORE_APP, MUSIC_APP, NOTIFY_APP, GALLERY_APP;
 const AppView *app_find(const char *id);
 /* Packages opens on this package (its section, it selected) the next time it reads its list */
 void store_focus(const char *id);

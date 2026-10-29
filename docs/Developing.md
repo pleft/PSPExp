@@ -173,7 +173,7 @@ Custom firmware (PRO / ARK) needed. `scripts/build.sh` builds `psp/plugin/pspexp
    recording and ♪+L twice saves a screenshot (PNG), each in a folder named after the game (its
    PARAM.SFO title); a dot in the screen's corner confirms (green for a clip, red while recording,
    white for a screenshot). On a board the console runs the receiver beside itself
-   (`pspexp-plugin-host -k -q -s ~/Captures -b 0 -Q 18`, or `-b 30` with Settings > Recording >
+   (`pspexp-plugin-host -k -q -s ~/Gallery -b 0 -Q 18`, or `-b 30` with Settings > Recording >
    Clips on; Clip length and Quality set `-b` and `-Q`, when it and ffmpeg are installed; `-b 0`: ♪+L recordings only, nothing sent otherwise;
    `PSPEXP_CAPTURE=0` turns it off): the plugin has a USB product of its own (0x01CB), which the
    console's link leaves alone.

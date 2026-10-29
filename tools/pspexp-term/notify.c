@@ -502,4 +502,4 @@ static void c_state(char *out, size_t n)
                         c_sel < g_nn ? g_n[c_sel].title : "", c_sel < g_nn ? g_n[c_sel].action : "");
 }
 
-const AppView NOTIFY_APP = { "notifications", c_open, c_input, c_needs_frame, c_render, c_take_exit, c_state };
+const AppView NOTIFY_APP = { "notifications", c_open, c_input, c_needs_frame, c_render, c_take_exit, c_state, NULL, NULL };

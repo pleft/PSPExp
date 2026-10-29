@@ -13,11 +13,19 @@
   games, while recording too. ♪ + L on its own now starts or stops a
   recording a third of a second after the press (once a second L is not
   coming), the recording counting from the press.
-- **A Captures folder, a folder for each game**: recordings, clips and
-  screenshots go to `Captures` in the board's home folder, in a folder named
-  after the game (a PSP game's own title, the launcher's name for PSPExp's
-  games). Videos from before, in `Videos/PSPExp`, move once into
-  `Captures/Earlier`. Settings > Recording > Captures opens it.
+- **The Gallery, a page for each game**: recordings, clips and screenshots
+  go to `Gallery` in the board's home folder, in a folder named after the
+  game (a PSP game's own title, the launcher's name for PSPExp's games).
+  Videos from before, in `Videos/PSPExp`, move once into `Gallery/Earlier`.
+  **Apps > Gallery** (also Settings > Recording > Gallery) shows them: the
+  games, each with its latest picture, then a game's pictures newest first,
+  a video's length on it; L / R show all, the screenshots or the videos.
+  Cross shows a screenshot full screen (left / right the next) or plays a
+  video, back in the Gallery when it ends; square deletes; START's menu
+  copies them to the PSP's memory stick, where the PSP's own Photo and Video
+  menus show them (videos made ready for its player on the way).
+- **Videos the PSP itself plays**: recordings and clips are now made in
+  H.264 Main profile (High before), which the PSP's own Video menu plays.
 - **Clip length and quality**: Settings > Recording > Clip length makes ♪ + R
   save 15, 30 or 60 seconds; Quality (High, Standard, Small) makes the videos
   smaller, down to about a third.
@@ -26,7 +34,7 @@
 - **Media, made simpler**: L / R switch its tabs (Now playing, Library,
   Queue); left / right change song (held: seek); a folder starts with
   **Play all** and **Shuffle**, and choosing one song plays only that one (in Files too); songs show their titles and artists, the one
-  playing marked; a **Captures** place with your recordings; the play-order
+  playing marked; a **Gallery** place with your recordings; the play-order
   menu can clear the queue. It opens on the Library unless something plays.
 - **Circle never closes an app** any more: it steps back (the folder above,
   Media's Browse) and does nothing at an app's top; HOME closes. Media's

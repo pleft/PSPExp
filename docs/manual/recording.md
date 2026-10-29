@@ -38,10 +38,10 @@ the PSP's 480x272. It works while recording too: the recording goes on.
 
 ## Where they go
 
-Into **Captures** in the board's home folder (on a Raspberry Pi,
-`/home/pi/Captures`), in a folder for each game, named after it: the PSP
-game's own title for your PSP games (`Captures/Ace Combat X Skies of
-Deception`), the name in the launcher for PSPExp's (`Captures/OpenTyrian`),
+Into **Gallery** in the board's home folder (on a Raspberry Pi,
+`/home/pi/Gallery`), in a folder for each game, named after it: the PSP
+game's own title for your PSP games (`Gallery/Ace Combat X Skies of
+Deception`), the name in the launcher for PSPExp's (`Gallery/OpenTyrian`),
 and **PSPExp** for the launcher itself. The files are named by kind, date and
 time, for example `recording-2026-10-25-20.24.26.mp4`,
 `clip-2026-10-25-20.30.02.mp4` and `screenshot-2026-10-25-20.31.15.png`.
@@ -49,16 +49,38 @@ Videos are MP4 files with sound, at the PSP's 480x272, up to 30 frames a
 second.
 
 Videos made before this version, in **Videos/PSPExp**, are moved once into
-**Captures/Earlier**.
+**Gallery/Earlier** (and a **Captures** folder of the first test versions
+into **Gallery**).
 
 ![The new recording in Files, on the board](../images/record-saved.png)
 
-- **Watch one on the PSP:** **Settings > Recording > Captures** opens the
-  folder in Files; open a game's folder and choose a video (it plays full
-  screen) or a picture. Media has them too: **Library > Captures**.
-- **Copy one to a computer:** in Files, show the PSP's memory stick in the
-  other panel, select the video and choose **triangle > Copy**. Then connect
-  the PSP to the computer in USB mode as usual.
+## The Gallery
+
+**Apps > Gallery** (or **Settings > Recording > Gallery**) shows what you
+captured. Its first page has a tile for each game, with its latest picture
+and how many screenshots and videos it holds; cross opens a game, with its
+pictures newest first, four to a row. A video shows its length in the
+corner (a clock for a clip, a camera for a recording).
+
+| Button | |
+|---|---|
+| L / R | All, Screenshots, Videos |
+| Cross | open a game; show a screenshot full screen (left / right: the previous and next), or play a video (back in the Gallery when it ends, or on circle) |
+| Square | delete (it asks first): the one highlighted, or on the first page a game's (what the tab shows) |
+| Triangle | details: when, how big, how long, where the file is |
+| START | the menu: copy to the PSP, delete, newest or oldest first |
+| Circle | back to the games |
+
+**Copy to the PSP** puts screenshots in the memory stick's **PICTURE**
+folder and videos in **VIDEO**, in a folder named after the game, so the
+PSP's own **Photo** and **Video** menus show them, PSPExp closed. Videos
+the PSP's player cannot play (recordings made before this version) are
+turned into ones it can on the way, which takes a few seconds each.
+
+- **Media has them too:** **Library > Gallery**, and Files on the board.
+- **Copy one to a computer:** copy it to the PSP as above, then connect the
+  PSP to the computer in USB mode as usual; or in Files, show the PSP's
+  memory stick in the other panel and choose **START > Copy**.
 
 ## The last 30 seconds (Clips)
 

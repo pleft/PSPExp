@@ -32,6 +32,7 @@ static int g_qn, g_qcap, g_at = -1;   /* how many (room for); the place in g_ord
 static int g_shuffle, g_repeat;
 static int g_ended_seen;           /* the end of the track loaded was acted on */
 static int g_view, g_dirty = 1, g_exit;
+static int g_back;   /* music_set_back */
 static UiMenu g_menu;              /* START's: the highlighted song's or folder's, then the play order */
 static int g_info;                 /* triangle's box: what the highlighted (or playing) song is */
 static char g_info_t[160], g_info_a[160], g_info_1[FOPS_PATH], g_info_2[200];
@@ -411,8 +412,8 @@ static void places_load(void)
         snprintf(p, sizeof(p), "%s/Videos", home);
         if (is_dir(p)) PLACE(p, "Videos", "clapperboard");
     }
-    launcher_captures_dir(p, sizeof(p));   /* the recordings, clips and screenshots, a folder a game */
-    if (is_dir(p)) PLACE(p, "Captures", "film");
+    launcher_gallery_dir(p, sizeof(p));   /* the recordings, clips and screenshots, a folder a game (the Gallery's) */
+    if (is_dir(p)) PLACE(p, "Gallery", "images");
     for (i = 1; i < nd && g_npl < FOPS_DRIVES + 2; i++) PLACE(d[i].root, d[i].name, "hard-drive");   /* (d[0] is "/") */
     if (files_psp_available()) PLACE("ms0:/", "PSP", "smartphone");
     PLACE(UPNP_PLACE, "Media servers", "server");   /* on the network: Plex, Jellyfin, MiniDLNA, a NAS... */
@@ -698,7 +699,8 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (up && g_mod_ch0 > 0) g_mod_ch0--;   /* a module: its channels, when they do not all fit */
         if (down) g_mod_ch0++;                   /* (draw_module keeps it in range) */
         if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
-        if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_view = V_BROWSE; if (!g_dir[0]) places_load(); }   /* back to the Library (a film paused) */
+        if ((pressed & PSPEXP_BUTTON_CIRCLE) && g_back) { music_stop(); g_exit = 1; }   /* back to the Gallery */
+        else if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_view = V_BROWSE; if (!g_dir[0]) places_load(); }   /* back to the Library (a film paused) */
         break;
     case V_BROWSE: {
         int n = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : g_dir[0] ? lib_rows() : g_npl;
@@ -757,6 +759,10 @@ static int mu_needs_frame(uint64_t now)
     }
     hud = now < g_hud_until;
     if (hud != hud_was) { hud_was = hud; g_dirty = 1; }
+    if (g_back && !g_exit) {   /* the Gallery's video at its end: back there */
+        PlayerInfo pi;
+        if (player_info(&pi) && pi.ended) { music_stop(); g_exit = 1; }
+    }
     return g_dirty;
 }
 
@@ -1054,7 +1060,7 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 'x', !pi.paused && !pi.ended ? "Pause" : "Play");
         x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Film, held: seek" : "Held: seek", UI_SUB);
         x = ui_hint_btn(x, 's', "Stop");
-        x = ui_hint_btn(x, 'o', "Library");
+        x = ui_hint_btn(x, 'o', g_back ? "Gallery" : "Library");
     }
     notify_draw(now);
     pspexp_present(ctx);
@@ -1156,10 +1162,16 @@ static void mu_state(char *out, size_t n)
     }
 }
 
+void music_set_back(int on)
+{
+    if (!on && g_back && g_vid_loaded) { gfx_frame(g_ctx); gfx_video_free(); g_vid_loaded = 0; }   /* (the film's pictures leave the PSP with it) */
+    g_back = on;
+}
+
 void music_leave(void)
 {
     PlayerInfo pi;
     if (player_info(&pi) && pi.video && !pi.paused && !pi.ended) player_toggle_pause();
 }
 
-const AppView MUSIC_APP = { "music", mu_open, mu_input, mu_needs_frame, mu_render, mu_take_exit, mu_state };
+const AppView MUSIC_APP = { "music", mu_open, mu_input, mu_needs_frame, mu_render, mu_take_exit, mu_state, NULL, NULL };

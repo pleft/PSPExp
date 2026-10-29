@@ -733,9 +733,10 @@ architecture's §12b) reaches the board under the plugin's own USB product,
 0x01CB, which the console's link (0x01CA) leaves alone. The console runs
 the PSPExp plugin host beside itself: started with the launcher over USB
 when `pspexp-plugin-host` and ffmpeg are on the PATH (both are on the card
-images), as `pspexp-plugin-host -k -q -s ~/Captures` (`~/Movies/PSPExp` on
+images), as `pspexp-plugin-host -k -q -s ~/Gallery` (`~/Movies/PSPExp` on
 a Mac; before 1.4 `~/Videos/PSPExp`, whose videos the console moves once into
-`~/Captures/Earlier`), again 10 s after it ends, and stopped with the console, a clip under
+`~/Gallery/Earlier`; the test versions' `~/Captures` moves into `~/Gallery`
+the first time the console asks for the folder, `launcher_gallery_dir`), again 10 s after it ends, and stopped with the console, a clip under
 way finished first. `PSPEXP_CAPTURE=0` keeps it from starting. In the game,
 ♪+L starts and stops a recording and ♪+R saves the last 30 s; a dot in the
 PSP screen's corner confirms it (green for a clip, red while recording).
@@ -748,7 +749,7 @@ and **Quality** (`clip_quality`: High, Standard, Small) the encoder's CRF,
 `-Q 18`, `23` or `28` (about 17, 10 and 5 MB a minute in a busy game;
 measured 2026-10-28 with OpenTyrian, a calm Bomberman about 5 MB a minute at
 High); either change starts the receiver again. The Recording page also has
-**Captures**, which opens Files on that folder (before 1.4: Videos). Each
+**Gallery**, which opens the Gallery app (§10.5; before 1.4: Videos in Files). Each
 capture goes into a folder for its game: the plugin reads the game's
 `PARAM.SFO` title, and the console gives its children `PSPEXP_TITLE`, the
 launcher's name for what it runs, which the link holder hands the receiver
@@ -1671,7 +1672,7 @@ Queue); START no longer cycles them, and START and SELECT are free. In Now
 playing and a film, left / right are the previous / next track, held a seek
 (5 s each 0.25 s after 0.4 s). Square stays Stop there. Media opens on the
 Library unless something plays, so a paused film is no longer what it
-opens on. The Library's places: Music, Videos, Captures (the recorder's
+opens on. The Library's places: Music, Videos, Gallery (the recorder's
 folder), the drives, the PSP's memory stick as one place, Media servers
 (Home went: Files is for the board; PSP: MUSIC and VIDEO went into PSP). A
 folder has no ".." row (circle goes up, onto the folder come from) and,
@@ -1755,6 +1756,61 @@ browse to the folder and play, auto-advance through the three, the queue
 and play order, the launcher's pill and top-bar icon, cross on the pill,
 Apps > Music, Files handing a song over, the note button through the
 control port. Not yet on the real PSP.
+
+### 10.5 Gallery (2026-10-29)
+
+`gallery.c` (`GALLERY_APP`, Apps > Gallery and Settings > Recording >
+Gallery) shows the recorder's folder, `launcher_gallery_dir`: `~/Gallery`
+(Captures until the same day, renamed with it; `~/Movies/PSPExp` on a Mac).
+Its first page is a tile for each game's folder (3 x 2, 144 x 72: the
+latest picture of what the tab shows, its name, the counts), newest first;
+a game's page is its screenshots and videos, 4 x 3 at 104 x 58, newest
+first (the date from the recorder's file name, else the file's time; START
+> Order turns it round), a video's length and kind (clip, recording) on it.
+L / R are the tabs All, Screenshots, Videos. Cross shows a screenshot full
+screen through `gfx_image_load` (left / right the previous and next
+screenshot, the name and date over it for 3 s after a key) or plays a video:
+the Gallery hands it to Media (`music_play_one`, then `music_set_back`) and
+asks main.c for Media through the AppView's new `take_app`; main.c keeps
+the Gallery in `g_app_back`, and Media's circle, the film's end or HOME
+stop the film and show the Gallery again as it was left (its `open` not
+called). Square deletes (asks; on the first page what the tab shows of
+that game, the folder removed when empty); triangle shows the details; HOME
+closes it, and its `leave` lets its thumbnails go from the PSP.
+
+**Thumbnails:** `gfx_thumb` in `launcher_gfx.c`, an LRU of 16 like the
+covers (ids 4400–4439, a fresh one each time), the picture cropped to fill
+its tile, box-filtered, the corners rounded; three new ones decoded a frame,
+the rest the frames after (a page shows at once and fills in). A
+screenshot is its own thumbnail; a video's is a frame ffmpeg takes at 1 s
+(at 0 when shorter), 256 wide, with ffprobe's length beside it, in
+`~/.cache/pspexp/gallery/<hash of the path, size and time>.png` and `.len`,
+one ffmpeg at a time (`nice -n 10`), started when a video without one is on
+the screen.
+
+**Copy to the PSP** (START): screenshots to `ms0:/PICTURE/<game>`, videos to
+`ms0:/VIDEO/<game>` (the name made safe for FAT), with Files' copy jobs
+(`fjob_start`, on a thread through `files_psp`). The PSP-1000's own player
+takes H.264 Main or Baseline up to level 3.0, not High, which the recorder
+made until the same day (`-profile:v main -level 3.0` since, about the same
+size): a child first runs ffprobe on each video and links it into
+`~/.cache/pspexp/gallery/to-psp`, or converts it there with x264 (veryfast,
+CRF 20, AAC 128k), while the pictures are copied; the videos then go from
+there, and the folder is emptied after. Circle cancels (the conversion's
+process group ended). Tried on the PSP-1000 (the Pi 400): BOMBERMAN's
+High-profile clip converted and copied, read back from the stick as Main,
+level 3.0. Not tried yet: playing it in the PSP's own Video menu.
+
+Tried on the PSP-1000 through the test port, each screen at 1:1: the first
+page with six games (thumbnails of screenshots and of videos), the tabs,
+a game's page, the details, a screenshot full screen and its menu (its
+hints on a dark band), the delete question (kept), a 15 s clip played and
+back on circle, a 1 s one back at its end, HOME from a film (the Gallery)
+and from the Gallery (the launcher), the empty page, the Apps tile and
+Settings > Recording > Gallery.
+
+**Next:** the copy played in the PSP's Video menu; a phone downloading a
+capture by a QR code (a START entry); the PSP's own pictures and videos in it.
 
 ---
 

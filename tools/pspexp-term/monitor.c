@@ -391,4 +391,4 @@ static void mon_state(char *out, size_t n)
                                      g_s.temp_mc, g_s.nproc, g_s.nproc ? g_s.proc[g_sel].name : "", g_confirm, g_msg);
 }
 
-const AppView MONITOR_APP = { "monitor", mon_open, mon_input, mon_needs_frame, mon_render, mon_take_exit, mon_state };
+const AppView MONITOR_APP = { "monitor", mon_open, mon_input, mon_needs_frame, mon_render, mon_take_exit, mon_state, NULL, NULL };
