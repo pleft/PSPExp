@@ -2,6 +2,15 @@
 
 ## Since 1.3.0
 
+- **A simpler launcher: no home screen, one Games section.** PSPExp opens
+  on Games, ready to play. The rail is three sections, Games, Apps and
+  Settings, each in its own colour. Games has every game and ROM on one
+  shelf, with tabs on **L / R**: All, PSP, your board's own games (named
+  after the board, "Raspberry Pi 400") and one per system you have ROMs
+  for; it replaces the Favourites, PSP, Games and Emulators sections and the
+  consoles' pages. In All your favourites come first, marked by a yellow star
+  before the name, then what you played last. Restart PSPExp and Power off
+  are in START's menu everywhere.
 - **HOME leaves what is on screen**: in an app (Files, Media, Packages,
   the terminal...) or a game, press it twice ("HOME again to quit" shows
   for 3 seconds after the first) to go back to the launcher; in the

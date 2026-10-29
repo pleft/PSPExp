@@ -23,8 +23,8 @@ back in PSPExp.
 1. Copy your games into the **`roms/psp`** folder of the board's home folder
    (on a Raspberry Pi, `/home/pi/roms/psp`): with **Apps > Files** from a USB
    stick plugged into the board, for example.
-2. Open the **PSP** section, the first after Favourites on the home screen
-   (the launcher opens on it).
+2. In **Games**, press **R** for the **PSP** tab (your PSP games are in
+   **All** too).
 3. Choose a game and press cross. PSPExp hands the PSP over and the game
    starts as from the XMB.
 4. To come back, press **HOME** and choose **Exit Game**: PSPExp starts again

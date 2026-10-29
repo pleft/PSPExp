@@ -19,61 +19,54 @@ buttons; the board needs no screen, keyboard or mouse.
 
 ## The launcher
 
-It opens on the **home screen**: six big tiles, **Favourites**, **PSP**,
-**Games**, **Emulators**, **Apps** and **Settings** (PSP in focus), with what each holds underneath
-and, below, **Play again** with what you played last (it starts afresh;
-the game's own saves are there as always) and, while music is loaded,
-**Now playing** (or **Paused**) with the song. A note at the top shows
-music playing, a pause sign that it is paused.
+It opens on **Games**, ready to play: what you play first. Three sections
+run down the left as the **rail**, each in its own colour: **Games**
+(purple), **Apps** (teal) and **Settings** (blue); up and down move between
+them. Each section's **shelf** runs to its right: games and ROMs as discs
+with their cover in the window, apps and settings as icon tiles. The one
+you are on is larger and glows; its description shows underneath, and who
+draws it: **PSP renderer** (the PSP's graphics chip, most games) or **Board
+GPU renderer** (the board's own graphics chip, each frame sent to the PSP
+as a picture: SuperTuxKart, the Nintendo 64 on a Pi).
+
+**Games** holds everything you play, on one shelf, with **tabs** across the
+top that **L and R** step through (round from the last to the first):
+
+- **All**: every game and ROM. Your **favourites** come first, each with a
+  yellow star before its name, then what you played last, then the rest
+  from A to Z. So when you switch on, cross plays your first favourite, or,
+  with none, the game you were playing;
+- **PSP**: your own PSP games kept on the board (ISO, CSO, or a zip holding
+  one, in `roms/psp`), each with its own icon from the disc. The PSP runs
+  them itself, not an emulator, and PSPExp comes back when you leave the
+  game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP);
+- **your board's own games**, the tab named after it (Raspberry Pi 400,
+  GameShell): the games installed from Packages;
+- then one tab for each system you have ROMs for (Mega Drive, SNES, Game Boy
+  Advance...).
 
 ```
  12:04 Sat 03 Oct (bell)2          PSP 76%  |  headphones 40%  wifi  plug  board
-   (star)    (PSP)   (games)  (joystick)  (apps)   (gear)
- Favourites   PSP     Games   Emulators   Apps   Settings
-                         10 games
-                 (>) Play again  GoldenEye 007
- (X) Open                            SELECT Notifications  START Menu
+ [GAMES] | L  [All]  PSP  Raspberry Pi 400  Mega Drive  >  R      56 games
+ [apps]  |   (DISC)   (disc)   (disc)   (disc)   (disc)  >
+ [gear]  | * Chrono Tr. * Super Ma.  Hurrican  SuperTuxKart  OpenTyrian
+         | * Chrono Trigger
+         | SNES  /  U  /  4.0 MB  /  PSP renderer
+ (X) Play  ([]) Unfavourite  (/\) Details     SELECT Notifications  START Menu
 ```
 
-Left and right pick a tile, cross opens it; down then cross plays what
-you were playing (or opens Media, on Now playing; left / right between
-the two).
-
-Inside a section, the same six run down the left as the **rail**, and the
-section's **shelf** runs to its right: games and ROMs as discs with their
-cover in the window, apps and settings as icon tiles. The one you are on
-is larger and glows; its description shows underneath, and who draws it:
-**PSP renderer** (the PSP's graphics chip, most games) or **Board GPU
-renderer** (the board's own graphics chip, each frame sent to the PSP as a
-picture: SuperTuxKart, the Nintendo 64 on a Pi). **Emulators** has
-one tile per system you have ROMs for, with its console's picture (the
-N64's controller, a Game Boy...), like the home screen's; cross on
-one opens its ROMs ("Emulators > Nintendo 64"), circle goes back.
-**PSP** holds your own PSP games kept on the board (ISO, CSO, or a zip
-holding one, in `roms/psp`), each with its own icon from the disc: the PSP
-runs them itself, not an emulator, and PSPExp comes back when you leave the
-game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
-
-```
- 12:04 Sat 03 Oct                  PSP 76%  |  headphones 40%  wifi  plug  board
- [star]   | Games                                                 12 games
- [GAMES]  |   (disc)   (DISC)   (disc)   (disc)   (disc)  >
- [joy]    |   Quake  Cave Story OpenTyrian  ...
- [apps]   | Cave Story
- [gear]   | a short description of the game
-          | Game  /  PSP renderer
- (X) Play  ([]) Favourite  (/\) Details  (O) Home  SELECT Notifications  START Menu
-```
+Coming back to Games from Apps or Settings, it is on the tab you left.
 
 | Button | In the launcher |
 |---|---|
-| up / down | the previous / next section on the rail; inside a Settings group or a system's ROMs nothing (the rail is dimmed there: circle goes back first) |
-| left / right | move along the shelf (L / R: five at a time) |
-| circle | back: from a system's ROMs to Emulators, else to the home screen |
+| up / down | the previous / next section on the rail; inside a Settings group nothing (the rail is dimmed there: circle goes back first) |
+| left / right | move along the shelf |
+| L / R | Games: the previous / next tab; Apps and Settings: five at a time along the shelf |
+| circle | in a Settings group, back to Settings; elsewhere nothing |
 | cross | play, or open |
-| square | add to / remove from Favourites |
+| square | a game or ROM: make it a favourite, or no longer one |
 | triangle | details: description, how it draws, size, when last played |
-| START | the menu: Play, Add to favourites, Details, **Search** (everything: games, apps and every ROM, by name), Notifications; on the home screen also Restart PSPExp and Power off the board (each asked again) |
+| START | the menu: Play, Add to favourites, Details, **Search** (everything: games, apps and every ROM, by name), Notifications, Restart PSPExp and Power off the board (each asked again) |
 | SELECT | the notifications |
 | SELECT, held | the terminal (and back) |
 
@@ -88,8 +81,7 @@ storage nearly full, an install or a Wi-Fi join that finished.
 
 Nothing is lost when you look away: the **bell** next to the date in the
 top bar counts what you have not seen. In the launcher press **SELECT**
-to open the list (or, on the home screen, **up** from the tiles to the
-bell and **cross**), the last 50, newest first:
+to open the list (or START > Notifications), the last 50, newest first:
 
 - **cross**: go where it is about (Packages for updates, Settings for the
   network or Bluetooth), when there is somewhere to go;
@@ -268,7 +260,7 @@ the **Library**:
 | ♪ (note) | pause / play, from anywhere |
 
 The music goes on while you use the launcher, Files or the other apps;
-**Now playing** on the home screen, or Apps > Media, brings it back. In
+**Apps > Media** brings it back. In
 **Files** the song playing has a note beside it and its title shows at the
 foot of the panel; cross on it (or START > Folder and view > Media) brings Media back
 without starting the song over. Files' START menu has **Add to the
@@ -371,7 +363,7 @@ with a single option opens that option at once), circle comes back.
 | Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size; Gallery: your recordings, clips and screenshots ([Recording](recording.md)) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
-| This PSP | PSPExp plugin: on to start the PSP section's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
+| This PSP | PSPExp plugin: on to start the PSP tab's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
 | This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
 When there is something to do, it comes first, before the groups:

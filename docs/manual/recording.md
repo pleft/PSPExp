@@ -3,7 +3,7 @@
 **Press ♪ + L to record what you play, with its sound, and ♪ + L twice
 quickly for a screenshot.** It works in everything PSPExp runs (its games,
 emulators, apps, the launcher) and in your own PSP games, from a UMD, an ISO
-on the memory stick or the launcher's [PSP section](psp-games.md). The videos
+on the memory stick or the launcher's [PSP tab](psp-games.md). The videos
 and pictures are saved on the board, in a folder for each game, ready to
 watch on the PSP or copy anywhere.
 
@@ -17,7 +17,7 @@ watch on the PSP or copy anywhere.
 2. Play.
 3. Press **♪ + L** again: the dot goes and the video is saved.
 
-**In your own PSP games** (UMD, ISO, the PSP section), the same, with two
+**In your own PSP games** (UMD, ISO, the PSP tab), the same, with two
 things first:
 
 - Once: switch on the PSPExp plugin in **Settings > This PSP > PSPExp

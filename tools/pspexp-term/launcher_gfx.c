@@ -49,6 +49,8 @@
 #define THUMB_SLOTS   16
 #define THUMB_IDS     40
 #define THUMB_LOADS   3    /* new thumbnails decoded a frame: the rest the frames after */
+#define ID_STAR       4460 /* + size slot: the favourites' solid star */
+#define STAR_SLOTS    4
 
 #define SCREEN_W 480
 #define SCREEN_H 272
@@ -1265,7 +1267,7 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
             float in = cover_of(d), dl, a;
             /* shadow, and the glow of the selection */
             over_px(p, 0, 0, 0.03f, 0.55f * (1 - smooth(-2.0f, 6.0f, ds)));
-            if (big) over_px(p, 0.25f, 0.63f, 1.0f, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0));
+            if (big) over_px(p, 0.506f, 0.549f, 0.973f, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0));   /* (the Games section's purple, 0x818cf8) */
             if (in <= 0) continue;
             /* the shell: silver, lit from above, a darker rim */
             {
@@ -1299,7 +1301,7 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
                     if (g > 0) over_px(p, 1, 1, 1, 0.16f * g * a);
                 }
             }
-            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) over_px(p, 150 / 255.0f, 205 / 255.0f, 1, a); }
+            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) over_px(p, 196 / 255.0f, 181 / 255.0f, 253 / 255.0f, a); }
         }
     for (y = 0; y < T * T; y++) {
         out[y * 4 + 0] = (uint8_t)lroundf(clampf(f[y * 4 + 0], 0, 1) * 255);
@@ -1351,6 +1353,50 @@ draw:
     dslot[best].used = ++cover_clock;
     quad(dslot[best].id, cx - T / 2, cy - T / 2 + 2, T, T, 0, 0, T, T, c4444(0xffffff, alpha));
     return dslot[best].from_art;
+}
+
+/* ---- the favourites' star: solid, five points (the icon font's is an outline) ---------------------- */
+
+static int star_px[STAR_SLOTS];
+
+static int in_star(float x, float y, float cx, float cy, float r)
+{
+    float vx[10], vy[10];
+    int k, j, in = 0;
+    for (k = 0; k < 10; k++) {
+        float a = -3.14159265f / 2 + k * 3.14159265f / 5, rr = k % 2 ? r * 0.45f : r;
+        vx[k] = cx + rr * cosf(a); vy[k] = cy + rr * sinf(a);
+    }
+    for (k = 0, j = 9; k < 10; j = k++)   /* (even-odd) */
+        if ((vy[k] > y) != (vy[j] > y) && x < (vx[j] - vx[k]) * (y - vy[k]) / (vy[j] - vy[k]) + vx[k]) in = !in;
+    return in;
+}
+
+int gfx_star(int px, int x, int y, uint32_t rgb, int alpha)
+{
+    int i;
+    if (px < 4 || px > 32 || alpha <= 0) return px;
+    for (i = 0; i < STAR_SLOTS && star_px[i] && star_px[i] != px; i++) {}
+    if (i == STAR_SLOTS) i = 0;
+    if (star_px[i] != px) {   /* white, its edge from 4 x 4 samples a pixel; tinted when drawn */
+        uint8_t *buf = calloc((size_t)px * px, 4);
+        int xx, yy, sx, sy;
+        if (!buf) return px;
+        if (star_px[i]) pspexp_release(G, (uint16_t)(ID_STAR + i));
+        for (yy = 0; yy < px; yy++)
+            for (xx = 0; xx < px; xx++) {
+                int n = 0;
+                for (sy = 0; sy < 4; sy++) for (sx = 0; sx < 4; sx++)
+                    n += in_star(xx + (sx + 0.5f) / 4, yy + (sy + 0.5f) / 4 + px * 0.04f, px / 2.0f, px / 2.0f, px / 2.0f);
+                buf[(yy * px + xx) * 4 + 0] = buf[(yy * px + xx) * 4 + 1] = buf[(yy * px + xx) * 4 + 2] = 255;
+                buf[(yy * px + xx) * 4 + 3] = (uint8_t)(n * 255 / 16);
+            }
+        upload_rgba((uint16_t)(ID_STAR + i), buf, px, px);
+        free(buf);
+        star_px[i] = px;
+    }
+    quad((uint16_t)(ID_STAR + i), x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
+    return px;
 }
 
 /* ---- thumbnails (the Gallery) --------------------------------------------------------------------- */

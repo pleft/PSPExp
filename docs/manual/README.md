@@ -21,7 +21,7 @@ What you get on the PSP:
 - **A real terminal**: the board's Linux shell on the PSP, typed on an
   on-screen keyboard.
 - **Your PSP games, kept on the board**: ISO, CSO or zipped games in the
-  launcher's PSP section, run by the PSP itself, no copying to the memory
+  launcher's PSP tab, run by the PSP itself, no copying to the memory
   stick ([Your PSP games](psp-games.md)).
 - **Recording**: ♪ + L records what you play as a video on the board, in
   PSPExp or your own PSP games, ♪ + L twice a screenshot, and ♪ + R saves the

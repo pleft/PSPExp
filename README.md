@@ -24,7 +24,7 @@ What you get on the PSP:
 - **A media player for music and films, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
 - **Your PSP games, kept on the board**: ISO, CSO or zipped games in the
-  launcher's PSP section, run by the PSP itself with no copying to the memory
+  launcher's PSP tab, run by the PSP itself with no copying to the memory
   stick ([how](docs/manual/psp-games.md)).
 - **Recording what you play**: ♪ + L records a video with its sound on the
   board, in PSPExp or your own PSP games, and ♪ + L twice takes a screenshot;

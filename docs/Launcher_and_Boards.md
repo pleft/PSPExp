@@ -555,6 +555,38 @@ battery. A line wider than its card scrolls
 (marquee: still, to its end, still, back) instead of ending in "...", and
 so do long titles in the list.
 
+**The revisit (2026-10-30, from three rounds of mockups).** The launcher had
+grown to six sections plus a home screen that only repeated them. Step 1:
+**no home screen**; the launcher opens on Games. The rail is three
+sections, each with a colour carried into its highlights (`COL_GAMES`
+purple 0x818cf8, `COL_APPS` teal, `COL_SETTINGS` blue; the rail's selected
+tile and the tiles' glow in that colour, `dark_of` for their fill; the
+big disc's glow and ring in `launcher_gfx.c` are purple now, discs being
+only Games'). **Games** merges Favourites, PSP, Games and Emulators into one
+shelf with tabs on L / R (`Cat.tab`, `tab_step`, `draw_tabs`; the strip
+scrolls to keep the shown tab in view and wraps round): All (`CK_ALL`:
+every game and ROM, `cmp_all`: favourites first, then by `recent_rank`,
+then A to Z; favourites among themselves by when last played), PSP, the
+board's own games (named after the board: `g_board.name`, "Raspberry Pi
+400" from the device tree without " Rev 1.0", "GameShell", "Omega2+",
+"Mac"), and one tab per system with ROMs only (a long name shows its short
+one: NES). The Emulators section's console tiles and the system pages went:
+every ROM is on the same shelf. Tabs after All are `hidden` (the rail shows
+Games for them, `rail_pos`) but not sub-pages: up / down move along the
+rail, and coming back to Games returns to the tab left (`g_games_tab`).
+Favourites are games and ROMs only; a favourite shows a **solid yellow
+star before its name** (`gfx_star`, a five-pointed star rasterised per
+size, ids 4460+; the icon font's star is an outline), under the disc and
+in the info panel, instead of the faint badge on the disc's corner. Playing
+something re-sorts All (`cats_build` after `lib_recent_push`). Circle does
+nothing outside a Settings group; START's menu always has Restart PSPExp
+and Power off (they were the home screen's). `category Games`, `Favourites`
+and `Emulators` on the control port go to All. Tried on the Mac's stand-in
+PSP driven from the Pi's library (the PSP was off): All, favourites added
+and taken out, each tab and the wrap, Apps, Settings, a group (rail
+dimmed, circle back), back to the tab left, START's menu. Steps 2 and 3
+(Settings as one list; calmer bars and wording) follow.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

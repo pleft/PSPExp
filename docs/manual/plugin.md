@@ -2,7 +2,7 @@
 
 **A small plugin for the PSP's custom firmware, switched on once.** PSPExp
 needs it whenever the PSP runs one of your own games (a UMD, an ISO, or a game
-from the launcher's PSP section) instead of PSPExp:
+from the launcher's PSP tab) instead of PSPExp:
 
 - **Your PSP games kept on the board**: the plugin reads the game's disc from
   the board over the cable while you play ([Your PSP games](psp-games.md)).
@@ -54,7 +54,7 @@ lists it under Plugins too.
   plugin connects to the board again by itself; press ♪ + L to record again.
 - **"Switch on the PSPExp plugin first"** when you start a game from the PSP
   section: Settings > This PSP > PSPExp plugin is Off.
-- **A game from the PSP section stays black**: its disc comes from the board, so the
+- **A game from the PSP tab stays black**: its disc comes from the board, so the
   board must be on and plugged in. If it is not there when the game starts,
   the PSP waits a minute and a half, then goes back to PSPExp; if the cable
   comes out while you play, the game waits until it is back.
