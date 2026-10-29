@@ -86,7 +86,7 @@
 
 /* CK_ALL: Games' first tab (every game); CK_GAMES: the board's own games; CK_SYSTEM: a system's ROMs
  * (the PSP's too) */
-enum { CK_ALL, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS, CK_GROUP };
+enum { CK_ALL, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
 
 /* the rail's sections, each its colour on the rail and in its highlights (2026-10-30) */
 #define COL_GAMES    0x818cf8
@@ -97,7 +97,7 @@ typedef struct Cat {
     char name[64], icon[32], noun[16];
     uint32_t col;
     int kind, sys;
-    int hidden;             /* not on the rail itself: Games' tabs after All, a Settings group */
+    int hidden;             /* not on the rail itself: Games' tabs after All */
     int tab;                /* one of Games' tabs (L / R): the rail shows Games for it, and up / down move along the rail */
     LEntry **it; int n;
     int sel; float scroll;
@@ -135,7 +135,7 @@ static void action(LEntry *e, const char *id, const char *title, const char *ico
 /* apps built into the console, first in Apps: the terminal and the file manager */
 #define NBUILTIN 6
 static LEntry g_builtin[NBUILTIN];
-static LEntry g_grpent[8];    /* Settings' items: one per group of settings (id "g:<name>") */
+static LEntry g_heads[10];    /* Settings' headings (id "h:<group>"): rows of the list that are not chosen */
 static char g_assets[400];   /* the launcher's assets (fonts, icons, assets/systems) */
 static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] = { 0xf59e0b, 0xdb2777 },
                       GRAD_MONITOR[2] = { 0x0f766e, 0x2563eb }, GRAD_STORE[2] = { 0x7c3aed, 0xe11d48 }, GRAD_MUSIC[2] = { 0xdb2777, 0xf59e0b };
@@ -211,6 +211,17 @@ static int cmp_all(const void *a, const void *b)
     return strcasecmp(x->title, y->title);
 }
 
+static int is_heading(const LEntry *e) { return !strncmp(e->id, "h:", 2); }
+
+/* Settings' selection off a heading: the next row (d 1) or the one before (-1), else the other way */
+static void settings_fix_sel(Cat *c, int d)
+{
+    int k;
+    if (c->kind != CK_SETTINGS || !c->n || !is_heading(c->it[c->sel])) return;
+    for (k = c->sel; k >= 0 && k < c->n; k += d) if (!is_heading(c->it[k])) { c->sel = k; return; }
+    for (k = c->sel; k >= 0 && k < c->n; k -= d) if (!is_heading(c->it[k])) { c->sel = k; return; }
+}
+
 static void cats_build(void)
 {
     char keep[64] = "", keep_id[160] = "";
@@ -281,8 +292,8 @@ static void cats_build(void)
     ACTION("poweroff", "Power off", "power", "Shut this board down");
     if (ssh_available()) ACTION("ssh", "SSH", "terminal", "Log in to this board from a computer");
     ACTION("about", "About", "info", "This board, the PSP and the connection");
-    /* Settings: what needs doing now first (an update waiting, a restart), then the rest in
-     * groups, each opening its own settings (a group of one opens that setting at once) */
+    /* Settings: one list (2026-10-30; groups opened pages of their own before): what needs doing
+     * now first, under Ready (an update waiting, a restart), then each group under its heading */
     {
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
@@ -290,34 +301,27 @@ static void cats_build(void)
             { "Recording", "film", { "a:clips", "a:cliplen", "a:quality", "a:gallery", NULL } },
             { "Clock", "clock", { "a:tz", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
-            { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP shelf's) */
+            { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP tab's) */
             { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
         };
         Cat *top = c;
-        int g, k, ng = 0;
-        for (i = 0; i < g_nactions; i++)
-            if (!strcmp(g_actions[i].id, "a:psp-update") || !strcmp(g_actions[i].id, "a:console-restart")) cat_push(top, &g_actions[i]);
-        for (g = 0; g < (int)(sizeof(GROUPS) / sizeof(GROUPS[0])); g++) {
-            LEntry *e = &g_grpent[ng];
-            Cat *gc = NULL;
-            for (k = 0; GROUPS[g].ids[k]; k++)
-                for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, GROUPS[g].ids[k])) {
-                    if (!gc) { gc = cat_add(GROUPS[g].name, GROUPS[g].icon, COL_SETTINGS, CK_GROUP, "setting"); gc->hidden = 1; }
-                    cat_push(gc, &g_actions[i]);
-                }
-            if (!gc) continue;
-            memset(e, 0, sizeof(*e));
-            snprintf(e->id, sizeof(e->id), "g:%s", GROUPS[g].name);
-            snprintf(e->title, sizeof(e->title), "%s", GROUPS[g].name);
-            snprintf(e->icon, sizeof(e->icon), "%s", GROUPS[g].icon);
-            {   /* what is in it, as it is on this board */
-                size_t l = 0;
-                for (k = 0; k < gc->n && l < sizeof(e->desc) - 2; k++)
-                    l += (size_t)snprintf(e->desc + l, sizeof(e->desc) - l, "%s%s", k ? ", " : "", gc->it[k]->title);
+        int g, k, nh = 0;
+        for (g = -1; g < (int)(sizeof(GROUPS) / sizeof(GROUPS[0])) && nh < (int)(sizeof(g_heads) / sizeof(g_heads[0])); g++) {
+            LEntry *h = &g_heads[nh];
+            int any = 0;
+            memset(h, 0, sizeof(*h));
+            snprintf(h->id, sizeof(h->id), "h:%s", g < 0 ? "Ready" : GROUPS[g].name);
+            snprintf(h->title, sizeof(h->title), "%s", g < 0 ? "Ready" : GROUPS[g].name);
+            h->type = LT_TOOL; h->sys = -1;
+            {   /* the group's rows in its own order (those this board has) */
+                static const char *const READY[] = { "a:psp-update", "a:console-restart", NULL };
+                const char *const *ids = g < 0 ? READY : GROUPS[g].ids;
+                for (k = 0; ids[k]; k++)
+                    for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, ids[k])) {
+                        if (!any++) { cat_push(top, h); nh++; }   /* (a heading only over something) */
+                        cat_push(top, &g_actions[i]);
+                    }
             }
-            e->type = LT_TOOL; e->sys = -1;
-            cat_push(top, e);
-            ng++;
         }
     }
     for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])); s++) {
@@ -338,6 +342,7 @@ static void cats_build(void)
         for (i = 0; i < c->n; i++) if (!strcmp(c->it[i]->id, keep_id)) { c->sel = i; found = 1; }
         if (!found && keep_sel > 0 && keep_sel - 1 < c->n) c->sel = keep_sel - 1;
     }
+    for (i = 0; i < g_ncat; i++) settings_fix_sel(&g_cat[i], 1);
 }
 
 static LEntry *cur_entry(void)
@@ -348,9 +353,7 @@ static LEntry *cur_entry(void)
     return c->n ? c->it[c->sel] : NULL;
 }
 
-static int is_group_item(const LEntry *e) { return !strncmp(e->id, "g:", 2); }
-/* a section off the rail sits under Games (its tabs) or Settings (a group) */
-static int parent_kind(const Cat *c) { return c->kind == CK_GROUP ? CK_SETTINGS : CK_ALL; }
+
 
 /* a section's icon: a system on the rail (PSP) its console's picture, as its Emulators tile had
  * (assets/systems), else the font's */
@@ -371,7 +374,7 @@ static int rail_cat(int k) { int i; for (i = 0; i < g_ncat; i++) if (!g_cat[i].h
 static int rail_pos(int cat)
 {
     int i, k = 0;
-    if (g_cat[cat].hidden) { int pk = parent_kind(&g_cat[cat]); for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == pk) { cat = i; break; } }
+    if (g_cat[cat].hidden) { for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_ALL) { cat = i; break; } }   /* (a Games tab: where Games is) */
     for (i = 0; i < cat; i++) if (!g_cat[i].hidden) k++;
     return k;
 }
@@ -942,12 +945,11 @@ static void run_action(LEntry *e, uint64_t now)
     }
 }
 
-static void open_group(LEntry *e, uint64_t now);
 
 static void start_entry(LEntry *e, uint64_t now);
 static void launch(LEntry *e, uint64_t now)
 {
-    if (is_group_item(e)) { open_group(e, now); return; }
+    if (is_heading(e)) return;
     if (e->type == LT_ACTION) { run_action(e, now); return; }
     if (is_builtin(e)) { lib_recent_push(&L, e->id); run_action(e, now); cats_build(); return; }
     if ((g_sheet_n = lib_controls(&L, e, g_sheet_ctl, sizeof(g_sheet_ctl))) > 0) {   /* its controls first */
@@ -1045,6 +1047,13 @@ int launcher_category(const char *name)
         if (!strcmp(g_cat[i].name, name)) { g_cur = i; if (g_cat[i].tab) g_games_tab = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
     if (!strcmp(name, "Games") || !strcmp(name, "Favourites") || !strcmp(name, "Emulators"))   /* (the sections before 2026-10-30: tests, notifications) */
         return launcher_category("All");
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SETTINGS) {   /* a Settings group (a page of its own before 2026-10-30): Settings, on its first row */
+        int k;
+        for (k = 0; k + 1 < g_cat[i].n; k++) if (is_heading(g_cat[i].it[k]) && !strcmp(g_cat[i].it[k]->title, name)) {
+            g_cur = i; g_cat[i].sel = k + 1; g_sel_since = pspexp_time_us(); g_dirty = 1;
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -1902,35 +1911,59 @@ static void tab_step(int d, uint64_t now)
     }
 }
 
-/* settings switched on and off where they are (cross), their state on the right */
-static int is_switch(const LEntry *e) { return !strcmp(e->id, "a:clips") || !strcmp(e->id, "a:boxart") || !strcmp(e->id, "a:pspclock") || !strcmp(e->id, "a:plugin")
-                                              || !strcmp(e->id, "a:cliplen") || !strcmp(e->id, "a:quality"); }
-
-/* a Settings group: its settings; a group of one, that setting at once when it opens a page of its
- * own (Sound's list): a switch alone shows its group, else cross flipped it with only a toast */
-static void open_group(LEntry *e, uint64_t now)
+/* Settings' rows (2026-10-30): a switch (cross flips it, drawn as one), a choice (left / right
+ * change it in place, cross the next one round), a page (cross opens it: a list, an app), or a
+ * thing done (cross; asked again where it matters) */
+enum { ROW_DO, ROW_SWITCH, ROW_CHOICE, ROW_PAGE };
+static int row_kind(const LEntry *e)
 {
+    static const char *const SW[] = { "a:clips", "a:boxart", "a:pspclock", "a:plugin", "a:ssh", NULL },
+                             *const CH[] = { "a:cliplen", "a:quality", NULL },
+                             *const PG[] = { "a:wifinet", "a:sound", "a:tz", "a:gallery", "a:about", NULL };
     int i;
-    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GROUP && !strcmp(g_cat[i].name, e->title)) {
-        if (g_cat[i].n == 1 && !is_switch(g_cat[i].it[0])) launch(g_cat[i].it[0], now);
-        else show_cat(i, 1, now);
-        return;
-    }
+    for (i = 0; SW[i]; i++) if (!strcmp(e->id, SW[i])) return ROW_SWITCH;
+    for (i = 0; CH[i]; i++) if (!strcmp(e->id, CH[i])) return ROW_CHOICE;
+    for (i = 0; PG[i]; i++) if (!strcmp(e->id, PG[i])) return ROW_PAGE;
+    return ROW_DO;
+}
+static int switch_on(const LEntry *e)
+{
+    const char *v = action_value(e);
+    return v && strcmp(v, "Off") && strcmp(v, "Not on the PSP");
 }
 
-/* circle: from a Settings group back to Settings (on that group); elsewhere nothing (no home
- * screen since 2026-10-30; HOME's is the PSP's own) */
-static void go_back(uint64_t now)
+/* a choice one step along (d 1 or -1), stopping at its ends; 1 when it changed */
+static int choice_step(const LEntry *e, int d)
+{
+    static const int SECS[3] = { 15, 30, 60 };
+    if (!strcmp(e->id, "a:cliplen")) {
+        int k = g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1;
+        if (k + d < 0 || k + d > 2) return 0;
+        g_clip_secs = SECS[k + d];
+        lib_setting_set(&L, "clip_secs", g_clip_secs);
+    } else if (!strcmp(e->id, "a:quality")) {
+        if (g_clip_quality + d < 0 || g_clip_quality + d > 2) return 0;
+        g_clip_quality += d;
+        lib_setting_set(&L, "clip_quality", g_clip_quality);
+    } else return 0;
+    g_clips_change = 1;   /* (the recorder starts again with it) */
+    g_dirty = 1;
+    return 1;
+}
+
+/* Settings' up / down: the next row that is not a heading; past the first, the rail's section
+ * above (the list has the rail's up and down: up from its top leaves it) */
+static int settings_step(int d, uint64_t now)
 {
     Cat *c = &g_cat[g_cur];
-    if (c->hidden && !c->tab) {
-        int i, k;
-        for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SETTINGS) {
-            for (k = 0; k < g_cat[i].n; k++) if (!strcmp(g_cat[i].it[k]->title, c->name)) g_cat[i].sel = k;
-            show_cat(i, -1, now);
-            return;
-        }
-    }
+    int k;
+    for (k = c->sel + d; k >= 0 && k < c->n; k += d)
+        if (!is_heading(c->it[k])) { c->sel = k; g_sel_since = now; g_dirty = 1; return 1; }
+    return 0;
+}
+static void settings_move(int d, uint64_t now)
+{
+    if (!settings_step(d, now) && d < 0) select_cat(rail_pos(g_cur) - 1, -1, now);
 }
 
 static void move_sel(int d, int wrap, uint64_t now)
@@ -1960,7 +1993,7 @@ static void fav_toggle(LEntry *e, uint64_t now)
 /* triangle: a game's, a ROM's, an app's Details card; what a setting, a system or a built-in app is, in a toast */
 static void show_more(LEntry *e, uint64_t now)
 {
-    if (is_group_item(e)) toast(e->icon, e->desc, now);
+    if (is_heading(e)) return;
     else if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
     else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
 }
@@ -2047,21 +2080,33 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     }
     if (pressed & PSPEXP_BUTTON_START) { menu_open(now); return; }
     if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* the notification centre (also in START's menu) */
+    if (g_cat[g_cur].kind == CK_SETTINGS) {   /* the list: up / down its rows, left / right a choice */
+        int i;
+        e = cur_entry();
+        if (up) settings_move(-1, now);
+        if (down) settings_move(1, now);
+        for (i = 0; i < 5 && (pressed & (PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER)); i++)   /* L / R: five rows (never off the list) */
+            if (!settings_step((pressed & PSPEXP_BUTTON_LTRIGGER) ? -1 : 1, now)) break;
+        if (e && (left || right) && row_kind(e) == ROW_CHOICE) choice_step(e, left ? -1 : 1);
+        if (g_cat[g_cur].kind != CK_SETTINGS) return;   /* (up from the top: it left) */
+        e = cur_entry();
+        if (!e || is_heading(e)) return;
+        if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
+        if (pressed & PSPEXP_BUTTON_TRIANGLE) show_more(e, now);
+        return;
+    }
     /* up and down the rail (Games, Apps, Settings), left and right along the shelf; L / R Games'
-     * tabs (elsewhere five along). On a Settings group not the rail: up / down jumped to the
-     * parent's neighbour, the page gone (2026-10-29); circle goes back, and the rail, dimmed
-     * meanwhile, works again */
+     * tabs (elsewhere five along) */
     {
         const Cat *c = &g_cat[g_cur];
-        int rail = !c->hidden || c->tab;
-        if (up && rail) select_cat(rail_pos(g_cur) - 1, -1, now);
-        if (down && rail) select_cat(rail_pos(g_cur) + 1, 1, now);
+        if (up) select_cat(rail_pos(g_cur) - 1, -1, now);
+        if (down) select_cat(rail_pos(g_cur) + 1, 1, now);
         if (left) move_sel(-1, (pressed & PSPEXP_BUTTON_LEFT) != 0, now);   /* wraps on a fresh press, stops while repeating */
         if (right) move_sel(1, (pressed & PSPEXP_BUTTON_RIGHT) != 0, now);
         if (pressed & PSPEXP_BUTTON_LTRIGGER) { if (c->tab) tab_step(-1, now); else move_sel(-5, 0, now); }
         if (pressed & PSPEXP_BUTTON_RTRIGGER) { if (c->tab) tab_step(1, now); else move_sel(5, 0, now); }
     }
-    if (pressed & PSPEXP_BUTTON_CIRCLE) { go_back(now); return; }
+    /* (circle: nothing; it went back from a Settings group's page or to the home screen) */
     e = cur_entry();
     if (!e) return;
     if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
@@ -2440,11 +2485,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         else snprintf(s, n, "App%s%s", e->pspexp ? "  /  " : "", e->pspexp ? renderer(e) : "");
         break;
     case LT_TOOL:
-        if (is_group_item(e)) {
-            int i, k = 0;
-            for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_GROUP && !strcmp(g_cat[i].name, e->title)) k = g_cat[i].n;
-            snprintf(s, n, "Settings  /  %d setting%s", k, k == 1 ? "" : "s");
-        } else snprintf(s, n, "Tool");
+        snprintf(s, n, "Tool");
         break;
     case LT_ACTION:
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
@@ -2538,6 +2579,79 @@ static void draw_tabs(const Cat *cur, int y, int alpha)
     gfx_text(FONT_BADGE, x + 7, y + 3, "R", C_SUB, alpha, 0);
 }
 
+/* Settings as one list (2026-10-30): headings, then rows with the value on the right (a switch
+ * drawn as one, a choice with its arrows while highlighted, a page's chevron); the highlighted
+ * row's line under the list. c->scroll is in pixels here */
+#define SET_Y0   52
+#define SET_Y1   228
+#define SET_ROW  21
+#define SET_HEAD 17
+static void draw_settings(Cat *c, float dt, int alpha)
+{
+    int i, y, total = 0, sel_y = 0, sel_h = SET_ROW, x0 = DETAIL_X - 4, x1 = SCREEN_W - 12, view = SET_Y1 - SET_Y0;
+    float target;
+    LEntry *e = cur_entry();
+    char s[200];
+    for (i = 0; i < c->n; i++) {
+        int h = is_heading(c->it[i]) ? SET_HEAD : SET_ROW;
+        if (i == c->sel) { sel_y = total; sel_h = h; }
+        total += h;
+    }
+    target = c->scroll;   /* the highlighted row in view, with the heading over it */
+    if (sel_y - SET_HEAD < target) target = (float)(sel_y - SET_HEAD);
+    if (sel_y + sel_h > target + view) target = (float)(sel_y + sel_h - view);
+    if (target > (float)(total - view)) target = (float)(total - view);
+    if (target < 0) target = 0;
+    c->scroll = ease(c->scroll, target, 16.0f, dt, 0.5f);
+    gfx_set_clip(RAIL_W + 1, SET_Y0 - 2, SCREEN_W - RAIL_W - 1, view + 4);
+    y = SET_Y0 - (int)lroundf(c->scroll);
+    for (i = 0; i < c->n; i++) {
+        LEntry *r = c->it[i];
+        int h = is_heading(r) ? SET_HEAD : SET_ROW;
+        if (y + h < SET_Y0 - 2 || y > SET_Y1 + 2) { y += h; continue; }
+        if (is_heading(r)) {   /* small capitals, muted */
+            char up[64];
+            size_t k;
+            for (k = 0; r->title[k] && k < sizeof(up) - 1; k++) up[k] = (char)toupper((unsigned char)r->title[k]);
+            up[k] = 0;
+            gfx_text(FONT_BADGE, x0 + 8, y + 5, up, C_MUTED, alpha, 0);
+        } else {
+            int sel = i == c->sel, kind = row_kind(r), vx = x1 - 8, rh = SET_ROW - 2, ty = y + (rh - gfx_line_height(FONT_BODY)) / 2;
+            const char *v = action_value(r);
+            if (sel) {
+                gfx_shadow(NINE_SHADOW10, x0, y, x1 - x0, rh, COL_SETTINGS, 110 * alpha / 255);
+                gfx_nine(NINE_R6, x0, y, x1 - x0, rh, 0x1e3a6e, alpha);   /* (blue: dark_of's looked green over the waves) */
+            } else if (!strcmp(r->id, "a:psp-update") || !strcmp(r->id, "a:console-restart"))
+                gfx_nine(NINE_R6, x0, y, x1 - x0, rh, 0x1d3b2c, alpha * 220 / 255);   /* (Ready: something to do) */
+            gfx_text(FONT_BODY, x0 + 8, ty, r->title, sel ? 0xffffff : C_TEXT, alpha, 200);
+            if (kind == ROW_PAGE) { gfx_icon("chevron-right", 12, vx - 12, y + (rh - 12) / 2, sel ? 0xffffff : C_SUB, alpha); vx -= 18; }
+            if (kind == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {
+                int on = switch_on(r), tx = vx - 24, tyy = y + (rh - 12) / 2;
+                gfx_nine(NINE_R6, tx, tyy, 24, 12, on ? COL_SETTINGS : 0x3a4660, alpha);
+                gfx_dot(8, on ? tx + 14 : tx + 2, tyy + 2, 0xffffff, alpha);
+                vx -= 30;
+                v = NULL;   /* (the switch says it) */
+            }
+            if (v) {
+                int vw = gfx_text_width(FONT_SMALL, v), vy = y + (rh - gfx_line_height(FONT_SMALL)) / 2;
+                if (kind == ROW_CHOICE && sel) {   /* its arrows: left / right change it */
+                    gfx_icon("chevron-right", 10, vx - 10, y + (rh - 10) / 2, 0xffffff, alpha); vx -= 14;
+                    gfx_text(FONT_SMALL, vx - vw, vy, v, 0xffffff, alpha, 0); vx -= vw + 4;
+                    gfx_icon("chevron-left", 10, vx - 10, y + (rh - 10) / 2, 0xffffff, alpha);
+                } else gfx_text(FONT_SMALL, vx - (vw > 180 ? 180 : vw), vy, v, sel ? 0xffffff : C_SUB, alpha, 180);
+            }
+        }
+        y += h;
+    }
+    gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    if (c->scroll > 0.5f) gfx_icon("chevron-up", 10, (x0 + x1) / 2 - 5, SET_Y0 - 12, C_MUTED, 200);
+    if (c->scroll < (float)(total - view) - 0.5f) gfx_icon("chevron-down", 10, (x0 + x1) / 2 - 5, SET_Y1 + 1, C_MUTED, 200);
+    if (e && !is_heading(e)) {   /* what the highlighted row does, or is set to */
+        detail_line(e, s, sizeof(s));
+        mtext(FONT_SMALL, x0 + 8, SET_Y1 + 10, s, C_MUTED, alpha, x1 - x0 - 16, g_sel_since);
+    }
+}
+
 static void draw_list(float dt)
 {
     Cat *c = &g_cat[g_cur];
@@ -2561,6 +2675,7 @@ static void draw_list(float dt)
         gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), 34 + dy / 2, s, C_MUTED, alpha, 0);
     }
 
+    if (c->kind == CK_SETTINGS) { draw_settings(c, dt, alpha); return; }
     if (!c->n) {
         int psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys);
         gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, psp ? "No PSP games yet" : c->tab ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
@@ -2634,17 +2749,27 @@ static int hint_right(int x, const char *badge, const char *label)
     return x;
 }
 
+static int hint_cap(int x, const char *cap, const char *label, uint32_t col);
+static int hint_btn(int x, char b, const char *label);
+
 static void draw_hints(void)
 {
     int x = 16;
     LEntry *e = cur_entry();
     if (g_menu.open) return;   /* (START's menu draws its own) */
+    if (g_cat[g_cur].kind == CK_SETTINGS) {   /* the list: what cross or left / right do to the row */
+        int k = e && !is_heading(e) ? row_kind(e) : -1;
+        if (k == ROW_CHOICE) x = hint_cap(x, "LEFT/RIGHT", "Change", C_SUB);
+        else if (k >= 0) x = hint_btn(x, 'x', k == ROW_SWITCH ? "Change" : k == ROW_PAGE ? "Open" : "Select");
+        hint_right(SCREEN_W - 16, "START", "Menu");
+        return;
+    }
     const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
     if (e) { gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14; }   /* (an empty section: nothing to open) */
     if (e && can_fav(e)) {   /* a game, a ROM: favourites */
         gfx_button('s', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, 255, 0) + 14;
     }
-    if (e && e->type != LT_ACTION && !is_group_item(e)) {   /* a game, a ROM, an app: the Details card (on a setting or a built-in app
+    if (e && e->type != LT_ACTION) {   /* a game, a ROM, an app: the Details card (on a setting or a built-in app
         * triangle only says what it is: no hint) */
         gfx_button('t', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0) + 14;
     }

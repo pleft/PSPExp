@@ -50,7 +50,7 @@
 #define THUMB_IDS     40
 #define THUMB_LOADS   3    /* new thumbnails decoded a frame: the rest the frames after */
 #define ID_STAR       4460 /* + size slot: the favourites' solid star */
-#define STAR_SLOTS    4
+#define STAR_SLOTS    8
 
 #define SCREEN_W 480
 #define SCREEN_H 272
@@ -1355,9 +1355,9 @@ draw:
     return dslot[best].from_art;
 }
 
-/* ---- the favourites' star: solid, five points (the icon font's is an outline) ---------------------- */
+/* ---- solid shapes the icon font has only as outlines: the favourites' star, a switch's knob ------ */
 
-static int star_px[STAR_SLOTS];
+static int star_px[STAR_SLOTS], star_shape[STAR_SLOTS];   /* each slot: its size and shape (0 star, 1 dot) */
 
 static int in_star(float x, float y, float cx, float cy, float r)
 {
@@ -1372,13 +1372,13 @@ static int in_star(float x, float y, float cx, float cy, float r)
     return in;
 }
 
-int gfx_star(int px, int x, int y, uint32_t rgb, int alpha)
+static int shape_draw(int shape, int px, int x, int y, uint32_t rgb, int alpha)
 {
     int i;
     if (px < 4 || px > 32 || alpha <= 0) return px;
-    for (i = 0; i < STAR_SLOTS && star_px[i] && star_px[i] != px; i++) {}
+    for (i = 0; i < STAR_SLOTS && star_px[i] && !(star_px[i] == px && star_shape[i] == shape); i++) {}
     if (i == STAR_SLOTS) i = 0;
-    if (star_px[i] != px) {   /* white, its edge from 4 x 4 samples a pixel; tinted when drawn */
+    if (star_px[i] != px || star_shape[i] != shape) {   /* white, its edge from 4 x 4 samples a pixel; tinted when drawn */
         uint8_t *buf = calloc((size_t)px * px, 4);
         int xx, yy, sx, sy;
         if (!buf) return px;
@@ -1386,18 +1386,23 @@ int gfx_star(int px, int x, int y, uint32_t rgb, int alpha)
         for (yy = 0; yy < px; yy++)
             for (xx = 0; xx < px; xx++) {
                 int n = 0;
-                for (sy = 0; sy < 4; sy++) for (sx = 0; sx < 4; sx++)
-                    n += in_star(xx + (sx + 0.5f) / 4, yy + (sy + 0.5f) / 4 + px * 0.04f, px / 2.0f, px / 2.0f, px / 2.0f);
+                for (sy = 0; sy < 4; sy++) for (sx = 0; sx < 4; sx++) {
+                    float fx = xx + (sx + 0.5f) / 4, fy = yy + (sy + 0.5f) / 4, r = px / 2.0f;
+                    n += shape ? (fx - r) * (fx - r) + (fy - r) * (fy - r) <= r * r : in_star(fx, fy + px * 0.04f, r, r, r);
+                }
                 buf[(yy * px + xx) * 4 + 0] = buf[(yy * px + xx) * 4 + 1] = buf[(yy * px + xx) * 4 + 2] = 255;
                 buf[(yy * px + xx) * 4 + 3] = (uint8_t)(n * 255 / 16);
             }
         upload_rgba((uint16_t)(ID_STAR + i), buf, px, px);
         free(buf);
-        star_px[i] = px;
+        star_px[i] = px; star_shape[i] = shape;
     }
     quad((uint16_t)(ID_STAR + i), x, y, px, px, 0, 0, px, px, c4444(rgb, alpha));
     return px;
 }
+
+int gfx_star(int px, int x, int y, uint32_t rgb, int alpha) { return shape_draw(0, px, x, y, rgb, alpha); }
+int gfx_dot(int px, int x, int y, uint32_t rgb, int alpha) { return shape_draw(1, px, x, y, rgb, alpha); }
 
 /* ---- thumbnails (the Gallery) --------------------------------------------------------------------- */
 

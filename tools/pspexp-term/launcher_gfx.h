@@ -80,6 +80,8 @@ int  gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha);
 void gfx_disc_forget(const char *key);
 /* a solid five-pointed star px across (the favourites'), tinted rgb; px */
 int  gfx_star(int px, int x, int y, uint32_t rgb, int alpha);
+/* a solid round dot px across (a switch's knob), tinted rgb; px */
+int  gfx_dot(int px, int x, int y, uint32_t rgb, int alpha);
 /* the Gallery's thumbnails: the picture at path (PNG, JPEG) filling w x h (at most 256 a side), cropped
  * to it, the corners rounded. 1 drawn; 0 not yet (a few new ones a frame: draw again next frame);
  * -1 not a picture. Forget one deleted or changed; free them all when the Gallery closes */

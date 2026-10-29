@@ -584,8 +584,24 @@ and Power off (they were the home screen's). `category Games`, `Favourites`
 and `Emulators` on the control port go to All. Tried on the Mac's stand-in
 PSP driven from the Pi's library (the PSP was off): All, favourites added
 and taken out, each tab and the wrap, Apps, Settings, a group (rail
-dimmed, circle back), back to the tab left, START's menu. Steps 2 and 3
-(Settings as one list; calmer bars and wording) follow.
+dimmed, circle back), back to the tab left, START's menu.
+
+Step 2, the same day: **Settings is one list** (`draw_settings`), the groups'
+pages gone. Its rows are the actions under headings (`g_heads`, id "h:...",
+never selected: `settings_fix_sel`), "Ready" first when an update or a
+restart waits, each group in its own order. A row is a switch (`row_kind`:
+clips, boxart, pspclock, plugin, ssh; drawn as a track and a knob,
+`gfx_dot`; cross flips it as before), a choice (cliplen, quality: left /
+right step it in place, `choice_step`, stopping at the ends; cross still
+cycles), a page (wifinet, sound, tz, gallery, about: a chevron) or a thing
+done. Up and down move along the rows; up from the first goes to the rail's
+section above (the list has the rail's up / down: `settings_move`); L / R
+five rows. The list scrolls in pixels (`c->scroll`) keeping the highlighted
+row with the heading above it in view; the highlighted row's `detail_line`
+shows under it. `category <group>` (notifications, the control port) opens
+Settings on that group's first row. Tried on the Mac's stand-in: the list,
+a switch, a choice stepped and back, the end of the list, up from the top.
+Step 3 (calmer bars and wording) follows.
 
 ### 3.4 Status (2026-09-26)
 

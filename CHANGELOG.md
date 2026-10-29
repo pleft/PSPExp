@@ -11,6 +11,10 @@
   consoles' pages. In All your favourites come first, marked by a yellow star
   before the name, then what you played last. Restart PSPExp and Power off
   are in START's menu everywhere.
+- **Settings is one list**: every option under its group's heading, its value
+  on the right; switches change with cross, choices (Clip length, Quality)
+  with left / right, in place; what is waiting (an update for the PSP)
+  comes first.
 - **HOME leaves what is on screen**: in an app (Files, Media, Packages,
   the terminal...) or a game, press it twice ("HOME again to quit" shows
   for 3 seconds after the first) to go back to the launcher; in the

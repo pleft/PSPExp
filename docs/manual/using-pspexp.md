@@ -59,10 +59,9 @@ Coming back to Games from Apps or Settings, it is on the tab you left.
 
 | Button | In the launcher |
 |---|---|
-| up / down | the previous / next section on the rail; inside a Settings group nothing (the rail is dimmed there: circle goes back first) |
+| up / down | the previous / next section on the rail; in Settings, its options (up from the first: the rail) |
 | left / right | move along the shelf |
 | L / R | Games: the previous / next tab; Apps and Settings: five at a time along the shelf |
-| circle | in a Settings group, back to Settings; elsewhere nothing |
 | cross | play, or open |
 | square | a game or ROM: make it a favourite, or no longer one |
 | triangle | details: description, how it draws, size, when last played |
@@ -353,8 +352,14 @@ keyboard types into it too.
 
 ## Settings
 
-Settings shows its options in groups; cross on a group opens it (a group
-with a single option opens that option at once), circle comes back.
+Settings is one list, its options under group headings, each with its
+value on the right. **Up and down** move along it (up from the first one goes
+back to the rail); a **switch** (Clips, Box art...) changes with **cross**; a
+**choice** (Clip length, Quality) changes with **left / right**, its arrows
+showing while it is highlighted; an option with **›** opens its own page (a
+list of networks, the time zones, the Gallery); the line under the list says
+what the highlighted option does. When something is waiting, an update for
+the PSP or a restart for a new PSPExp, it comes first, under **Ready**.
 
 | Group | |
 |---|---|
