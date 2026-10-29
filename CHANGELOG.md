@@ -24,6 +24,9 @@
   video, back in the Gallery when it ends; square deletes; START's menu
   copies them to the PSP's memory stick, where the PSP's own Photo and Video
   menus show them (videos made ready for its player on the way).
+- **Recordings and clips no longer vanish after PSPExp has been on for 36
+  minutes**: from then on every ♪ + L recording and ♪ + R clip was dropped
+  (screenshots were kept), however short; the PSP's clock was misread.
 - **Videos the PSP itself plays**: recordings and clips are now made in
   H.264 Main profile (High before), which the PSP's own Video menu plays.
 - **Clip length and quality**: Settings > Recording > Clip length makes ♪ + R

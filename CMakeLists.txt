@@ -290,6 +290,8 @@ if(PSPEXP_BUILD_TESTS)
   add_test(NAME note COMMAND test_note)
   add_executable(test_pace tests/test_pace.c)   # the PSPExp plugin's pacing (psp/plugin/pace.c), against modelled games
   add_test(NAME pace COMMAND test_pace)
+  add_executable(test_clock64 tests/test_clock64.c)   # the receiver's PSP clock past 35.8 minutes (tools/pspexp-plugin-host/clock64.h)
+  add_test(NAME clock64 COMMAND test_clock64)
   add_executable(test_psp_plugin tests/test_psp_plugin.c tools/pspexp-term/psp_plugin.c)   # the PSPExp plugin's game.txt line (Settings > Recording)
   target_link_libraries(test_psp_plugin PRIVATE pspexp)
   add_test(NAME psp_plugin COMMAND test_psp_plugin)

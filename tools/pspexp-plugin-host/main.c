@@ -36,6 +36,7 @@
 #include "../../host/libpspexp/pspexp_capture.h"
 #include "../../protocol/pspexp_protocol.h"
 #include "../../host/libpspexp/pspexp_disc.h"
+#include "clock64.h"   /* the PSP's 32-bit clock, made 64 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -629,7 +630,9 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (!ff) { perror("ffmpeg"); return -1; }
     }
     double t0 = now(), tl = t0, last_shot = 0, last_latest = 0, last_jobs = 0;
-    uint32_t frames = 0, f_last = 0, ch_first = 0, ch_last = 0, ch_at = 0, base = 0;
+    uint32_t frames = 0, f_last = 0, ch_first = 0, ch_last = 0, ch_at = 0;
+    int64_t base = 0;
+    Clock64 clk = { 0, 0, 0 };
     uint64_t bytes = 0, b_last = 0, written = 0, a_last = 0;
     int have_base = 0;
     while (!g_stop) {
@@ -700,8 +703,9 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             if (strcmp(was, g_title)) fprintf(stderr, "pspexp-plugin-host: the game: %s\n", g_title);
             continue;
         }
-        if (!have_base) { base = when; have_base = 1; }   /* the clip's start: the first thing to arrive */
-        double at = (double)(int32_t)(when - base);       /* us into the clip (the PSP's 32-bit clock) */
+        int64_t when64 = clock64(&clk, when);
+        if (!have_base) { base = when64; have_base = 1; }   /* the clip's start: the first thing to arrive */
+        double at = (double)(when64 - base);               /* us into the clip (clock64) */
         if (ev) {   /* the note button: 1 a clip, 2 a recording starts, 3 it stops (at the PSP's time of the press) */
             int type = (int)get32(hdr + 4);
             if (len > sizeof(reply) || (len && need(t, reply, len) < 0)) break;
@@ -709,7 +713,7 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
             else if (type == 2 && !ff) {   /* recordings only: pieces of its own, its time from the press */
                 mix_reset();
                 if (!(ff = seg_open())) break;
-                base = when; written = 0; pic = 0;
+                base = when64; written = 0; pic = 0;
                 memset(prev, 0, sizeof(prev));
                 g_rec_first = 0;
                 snprintf(g_rec_title, sizeof(g_rec_title), "%s", g_title);   /* (its folder: the game it started in) */
