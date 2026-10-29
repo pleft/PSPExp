@@ -14,6 +14,9 @@
 #     Panzer Dragoon's textures) were drawn as one colour; Mesa's software renderer drew them right;
 #   - its menu's button the controller's "select" in keymapv2.json (it was read only from an
 #     EmulationStation input file, so only the Escape key opened the menu).
+#   - its SIGUSR1 handler set (thr-linux.cpp had it commented out, the signal's default action
+#     ending the process): leaving a game (HOME, SDL_QUIT) woke its threads with SIGUSR1 and
+#     killed it, status 138, a notice in the launcher (2026-10-29).
 # The toolchain file is its rp64.cmake for a 64-bit board, with the processor named aarch64 (its
 # "arm" picked the 32-bit recompiler) and GCC 14's errors on old C (libchdr's FLAC) relaxed.
 # Writes build/<arch>/yabasanshiro/ (yabasanshiro, depends.txt, LICENSE) for

@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/yabasanshiro"
 [ -x "$B/yabasanshiro" ] && [ -s "$B/depends.txt" ] || { echo "no $B/yabasanshiro: scripts/packages/build-yabasanshiro.sh $ARCH first" >&2; exit 1; }
-V=3.5.0+git20260823-pspexp2
+V=3.5.0+git20260823-pspexp3
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 L=/usr/lib/pspexp/yabasanshiro
 S=/usr/share/pspexp-yabasanshiro

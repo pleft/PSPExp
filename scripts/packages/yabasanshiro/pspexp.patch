@@ -220,3 +220,16 @@ index 98eda6b5c..467cd7668 100644
  "    fragColor = (txcolc * (1.0-lncol.a))+(lncol*lncol.a)+u_color_offset;\n"
  "    fragColor.a =txcol.a;\n";
  
+diff --git a/yabause/src/thr-linux.cpp b/yabause/src/thr-linux.cpp
+--- a/yabause/src/thr-linux.cpp
++++ b/yabause/src/thr-linux.cpp
+@@ -86,6 +86,9 @@
+    // Set up a dummy signal handler for SIGUSR1 so we can return from pause()
+    // in YabThreadSleep()
+    static struct sigaction sa; // = {.sa_handler = dummy_sighandler};
++   /* PSPExp: the handler set (its initialiser commented out left SIGUSR1's default action, which
++      ends the process: the first YabThreadWake, in YabauseDeInit, killed it with status 138) */
++   sa.sa_handler = dummy_sighandler;
+    if (sigaction(SIGUSR1, &sa, NULL) != 0)
+    {
+       perror("sigaction(SIGUSR1)");

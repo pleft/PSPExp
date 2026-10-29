@@ -876,7 +876,8 @@ itself (on the Mac it plays in a window).
   every game (START + SELECT held, with a PSP runtime from before HOME_MODE).
 - **Battery saves.** The cartridge's SRAM in
   `~/.local/share/pspexp-retro/saves/<rom>.srm`, written every 10 s when it
-  changed and at exit. BIOS files for systems that need them go in
+  changed and at exit, also when the SDL layer ends the player (an exit
+  handler: HOME's 2 s way out, 2026-10-29). BIOS files for systems that need them go in
   `~/.config/pspexp-retro/system/`.
 - **Core options.** The core's defaults, overridden by `KEY=value` lines in
   `~/.config/pspexp-retro/<core>.opt` or `PSPEXP_RETRO_OPT="k=v;k=v"`.

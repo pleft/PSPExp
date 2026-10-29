@@ -713,6 +713,12 @@ static void srm_save(void)
     else remove(tmp);
 }
 
+/* the battery save however the program ends: the SDL layer's way out (HOME) ends a program still
+ * running 2 s after it asked it to quit with exit(), and this loop sometimes did not get to its
+ * end in that time (2026-10-29), so up to 10 s of a save went; only while the game is loaded */
+static int g_game_loaded;
+static void srm_save_at_exit(void) { if (g_game_loaded) srm_save(); }
+
 /* ---- main --------------------------------------------------------------------- */
 
 /* ---- the core on a worker thread ------------------------------------------------ */
@@ -862,6 +868,8 @@ int main(int argc, char **argv)
     audio_open(P.av.timing.sample_rate > 0 ? P.av.timing.sample_rate : 44100);
     pad_open();
     srm_load();
+    g_game_loaded = 1;
+    atexit(srm_save_at_exit);
 
     /* One core frame per tick of the core's clock. Presenting may wait (the
      * SDL layer paces on the PSP's display, or vsync); the resampling ratio
@@ -1013,6 +1021,7 @@ int main(int argc, char **argv)
     }
 
     srm_save();
+    g_game_loaded = 0;
     if (P.adev) SDL_CloseAudioDevice(P.adev);
     C.unload_game();
     C.deinit();

@@ -1632,7 +1632,13 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
         fx = dx + ((flip & SDL_FLIP_HORIZONTAL) ? dw * (float)(s.x + s.w - ix1) / (float)s.w : dw * (float)(ix0 - s.x) / (float)s.w);
         fy = dy + ((flip & SDL_FLIP_VERTICAL) ? dh * (float)(s.y + s.h - iy1) / (float)s.h : dh * (float)(iy0 - s.y) / (float)s.h);
         memset(&q, 0, sizeof(q));
-        q.x = X(fx); q.y = Y(fy); q.w = W(fw); q.h = H(fh);
+        /* (each edge rounded once, a page's right edge the next one's left: rounded apart, a 240-wide
+         * frame in pages of 128, 64, 32 and 16 at 1.7 left column 416 undrawn, a black line through
+         * every Game Boy Advance game, 2026-10-29) */
+        q.x = X(fx); q.y = Y(fy);
+        q.w = (int16_t)(X(fx + fw) - q.x); q.h = (int16_t)(Y(fy + fh) - q.y);
+        if (q.w < 1) q.w = 1;
+        if (q.h < 1) q.h = 1;
         q.u0 = (uint16_t)(ix0 - p->x0); q.u1 = (uint16_t)(ix1 - p->x0);
         q.v0 = (uint16_t)(iy0 - p->y0); q.v1 = (uint16_t)(iy1 - p->y0);
         if (flip & SDL_FLIP_HORIZONTAL) { uint16_t tmp = q.u0; q.u0 = q.u1; q.u1 = tmp; }
@@ -2199,11 +2205,12 @@ static void feed_input(void)
         SDL_Event ev;
         pthread_t t;
         static int watching;
+        int pushed;
         SDL_zero(ev);
         ev.type = SDL_QUIT;
-        SDL_PushEvent(&ev);
+        pushed = SDL_PushEvent(&ev);
         S.home_at = SDL_GetTicks() | 1;
-        logf_("HOME: asking the game to quit");
+        logf_("HOME: asking the game to quit (queued %d%s%s)", pushed, pushed < 0 ? ": " : "", pushed < 0 ? SDL_GetError() : "");
         if (!watching && pthread_create(&t, NULL, quit_request_watchdog, NULL) == 0) { pthread_detach(t); watching = 1; }
     }
     if (S.home_at && SDL_GetTicks() - S.home_at >= 2000) {
@@ -3804,6 +3811,16 @@ HOOK(int, SDL_PollEvent, (SDL_Event *ev))
     fake_focus_once();
     while ((rc = REAL(SDL_PollEvent)(ev)) == 1 && ev && drop_event(ev)) ;
     if (rc == 1 && ev) log_event(ev);
+    if (rc == 1 && ev && ev->type == SDL_QUIT && S.home_at) logf_("HOME: the game took the quit, %u ms after", SDL_GetTicks() - S.home_at);
+    if (S.home_at) {   /* (diagnosis, 2026-10-29: a quit queued that the game never took) */
+        static unsigned polls; static int told;
+        polls++;
+        if (!told && SDL_GetTicks() - S.home_at > 1000) {
+            told = 1;
+            logf_("HOME + 1 s: %u polls, %d quit events still queued, %d events in all", polls,
+                  SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, SDL_QUIT, SDL_QUIT), SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT));
+        }
+    }
     return rc;
 }
 
