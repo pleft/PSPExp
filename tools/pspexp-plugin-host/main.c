@@ -247,7 +247,10 @@ static int seg_complete(int k)
 static void *job_run(void *arg)
 {
     Job *j = arg;
-    char cmd[4000];
+    char cmd[4000], dir[sizeof(j->name)], *slash;
+    /* the game's folder again, in case it went since the clip was named (the Gallery emptied in Files) */
+    snprintf(dir, sizeof(dir), "%s", j->name);
+    if ((slash = strrchr(dir, '/'))) { *slash = 0; mkdir(g_clips, 0755); mkdir(dir, 0755); }
     snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f concat -safe 0 -i '%s.txt' -f s16le -ar %d -ac 2 -i '%s.raw' "
              "-c:v copy -c:a aac -b:a 160k -shortest -movflags +faststart '%s'", j->seg, RATE, j->seg, j->name);
     int r = system(cmd);
