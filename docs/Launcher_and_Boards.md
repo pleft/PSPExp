@@ -338,7 +338,17 @@ the same folder in both panels, swap, hidden files, sorting, Media), which
 was START's Options menu; its "Close the file manager" went (HOME). Triangle
 is Details, as in the launcher (it opened the actions). The footers say
 "START Menu", and none is drawn under an open menu. Keyboards keep START as
-done, the terminal as Enter, games their own. A game holding the PSP gives
+done, the terminal as Enter, games their own.
+Then the rest: Media (the song's or folder's Play / Open, Add to the queue,
+Remove, Stop, then Shuffle and Repeat changed in place, the menu staying,
+and in the Queue Clear the queue; its play-order popup went, and triangle
+shows what the song is: title, artist, the file, its size or format),
+Packages (Install / Update / Reinstall / Retry, Remove, Refresh the
+catalogue, which was START itself; triangle the whole description and
+versions), the System Monitor (End the program, Sort by; on the overview
+Show the programs; triangle the program's details), Notifications (Go
+there, Remove, Clear all, which was START pressed twice) and the pickers
+(Join / Use / Set, New password or Forget, Scan again, which was START). A game holding the PSP gives
 HOME to itself the same way (the SDL layer): HOME asks it to quit, as START +
 SELECT held did, which now works only with a PSP runtime from before
 HOME_MODE. The "Starting" screen, the controls sheet and the Details card say

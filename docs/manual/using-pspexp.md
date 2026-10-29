@@ -93,7 +93,7 @@ bell and **cross**), the last 50, newest first:
 
 - **cross**: go where it is about (Packages for updates, Settings for the
   network or Bluetooth), when there is somewhere to go;
-- **square**: remove it; **START** twice: clear them all;
+- **square**: remove it; **START**: the menu (go there, remove, clear them all);
 - **circle**: close.
 
 While you play, nothing interrupts the game: what came meanwhile is
@@ -149,7 +149,8 @@ how many next to its name. It opens with
 | up / down | a package |
 | cross | install it (or update it, when a newer version is there) |
 | square | remove it (asks first) |
-| START | look for new packages |
+| triangle | its whole description, the versions |
+| START | the menu: install, update or remove it; look for new packages |
 | HOME, twice | close Packages |
 
 Each game's entry says its **renderer**: **PSP** (SDL or OpenGL games, drawn
@@ -260,7 +261,8 @@ the **Library**:
 | cross | pause / play (Library: open, play; Queue: play that one) |
 | left / right | Now playing: the previous / next song; held: back / on in it |
 | square | Now playing: stop; Library: add to the queue; Queue: take out |
-| triangle | play order: shuffle, repeat (off, all, one song); in the Queue also clear it |
+| triangle | what the song is: title, artist, where the file is, its size or format |
+| START | the menu: play, add to the queue, remove, stop; shuffle and repeat (off, all, one song); in the Queue also clear it |
 | circle | Library: the folder above; Now playing and Queue: back to the Library (a film pauses) |
 | HOME, twice | close Media (back to Files, if you came from there); the music goes on, a film pauses |
 | ♪ (note) | pause / play, from anywhere |
@@ -325,7 +327,7 @@ From then on:
   headphones go, so your phone or tablet can have them.
 - **Other headphones** chosen in Sound output take over: the ones before are
   let go first, as with The PSP. One device plays at a time.
-- Square on a device in the list forgets it; START scans again.
+- Square on a device in the list forgets it; START's menu scans again.
 
 Bluetooth always adds a little delay. PSPExp keeps its own part small;
 what remains depends on the headphones.
@@ -369,4 +371,4 @@ PSPExp** (after PSPExp was updated).
 
 **Apps > System Monitor** shows the board's processor, memory, temperature,
 storage and network, and its programs (one can be ended from there if it
-hangs).
+hangs: cross, or START's menu; triangle shows a program's details).

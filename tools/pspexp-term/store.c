@@ -365,6 +365,18 @@ static void open_terms_hook(void)
 
 static int st_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
 
+/* START's menu: the package's (install, update, reinstall, retry; remove), then Refresh; triangle:
+ * its whole description (2026-10-29: START is the menu everywhere, triangle "more") */
+static UiMenu g_menu;
+static int g_more;
+enum { PM_INSTALL = 1, PM_REMOVE, PM_REFRESH };
+static int can_install(const Pkg *p) { return p && (p->avail[0] || !strcmp(p->st, "broken")) && strcmp(p->st, "local") && (strcmp(p->id, "pspexp") || !strcmp(p->st, "update")); }
+static int can_remove(const Pkg *p) { return p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local")); }
+static const char *install_word(const Pkg *p)   /* (as the list's chips: status_of) */
+{
+    return !strcmp(p->st, "broken") ? "Retry" : !strcmp(p->st, "update") ? "Update" : p->inst[0] ? "Reinstall" : "Install";
+}
+
 static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
     Pkg *p = g_sel < g_nvis ? &g_pk[g_vis[g_sel]] : NULL;
@@ -372,6 +384,14 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     if (!pressed && !up && !down && !left && !right) return;
     g_dirty = 1;
     if (g_load_pid > 0) return;   /* reading the list (HOME leaves meanwhile) */
+    if (g_more) { if (pressed) g_more = 0; return; }
+    if (g_menu.open) {
+        int id = ui_menu_input(&g_menu, pressed, up, down);
+        if (id == PM_INSTALL && can_install(p)) start_install(p);
+        else if (id == PM_REMOVE && can_remove(p)) g_mode = S_CONFIRM;
+        else if (id == PM_REFRESH) { if (g_local) load_catalogue(); else catalogue_job("update", NULL); }
+        return;
+    }
     switch (g_mode) {
     case S_WORKING: return;   /* it finishes by itself */
     case S_RESULT: if (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE)) g_mode = S_LIST; return;
@@ -394,11 +414,16 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         return;
     }
     /* (PSPExp itself, "pspexp": only an update; installed is current, nothing to reinstall) */
-    if ((pressed & PSPEXP_BUTTON_CROSS) && p && (p->avail[0] || !strcmp(p->st, "broken")) && strcmp(p->st, "local") &&
-        (strcmp(p->id, "pspexp") || !strcmp(p->st, "update"))) start_install(p);
-    /* square removes (square deletes everywhere: a letter, a Bluetooth pairing); triangle stays for showing more */
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local"))) g_mode = S_CONFIRM;
-    if (pressed & PSPEXP_BUTTON_START) { if (g_local) load_catalogue(); else catalogue_job("update", NULL); }
+    if ((pressed & PSPEXP_BUTTON_CROSS) && can_install(p)) start_install(p);
+    /* square removes (square deletes everywhere: a letter, a Bluetooth pairing); triangle shows more */
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && can_remove(p)) g_mode = S_CONFIRM;
+    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && p) g_more = 1;
+    if (pressed & PSPEXP_BUTTON_START) {
+        ui_menu_begin(&g_menu, p ? p->title : "Packages");
+        if (can_install(p)) ui_menu_add(&g_menu, PM_INSTALL, "download", install_word(p), NULL, 0, 0);
+        if (can_remove(p)) ui_menu_add(&g_menu, PM_REMOVE, "trash-2", "Remove", NULL, 0, 0);
+        ui_menu_add(&g_menu, PM_REFRESH, "refresh-cw", "Refresh the catalogue", NULL, g_menu.n > 0, 0);
+    }
     /* (circle at the top: nothing, it never leaves an app: HOME does) */
 }
 
@@ -572,16 +597,29 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     }
     if (g_err[0]) gfx_text(FONT_BADGE, 16, 238, g_err, 0xff9a9a, 255, UI_SCREEN_W - 32);
     x = 12;
-    if (p && g_mode == S_LIST) {
+    if (p && g_mode == S_LIST && !g_menu.open && !g_more) {
         int st = status_of(p);
         if (st == ST_BROKEN) x = ui_hint_btn(x, 'x', "Retry");
         else if (st != ST_LOCAL && p->avail[0] && (strcmp(p->id, "pspexp") || st == ST_UPDATE))
             x = ui_hint_btn(x, 'x', st == ST_NEW ? "Install" : st == ST_UPDATE ? "Update" : "Reinstall");
         if (p->inst[0] || st == ST_BROKEN || st == ST_LOCAL) x = ui_hint_btn(x, 's', "Remove");
     }
-    if (g_mode == S_LIST) {   /* (a dialog's buttons are in it: the list's are not shown under it) */
+    if (g_mode == S_LIST && !g_menu.open && !g_more) {   /* (a dialog's buttons are in it: the list's are not shown under it) */
+        if (p) x = ui_hint_btn(x, 't', "More");
         x = ui_hint_cap(x, "L/R", "Section", UI_SUB);
-        x = ui_hint_cap(x, "START", "Refresh", UI_SUB);
+        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+    }
+    if (g_more && p && g_mode == S_LIST) {   /* triangle: the whole description, its version, where it comes from */
+        int w = 380, h = 150, bx = (UI_SCREEN_W - w) / 2, by = (UI_SCREEN_H - h) / 2 - 8;
+        char v[160];
+        gfx_shadow(NINE_SHADOW14, bx, by, w, h, 0x000000, 160);
+        gfx_nine(NINE_R14, bx, by, w, h, 0x1b2a46, 250);
+        gfx_text(FONT_BODY, bx + 16, by + 12, p->title, UI_TEXT, 255, w - 32);
+        snprintf(v, sizeof(v), "%s%s%s%s%s", p->inst[0] ? "installed " : "", p->inst, p->inst[0] && p->avail[0] ? ",  " : "", p->avail[0] ? "offered " : "", p->avail);
+        gfx_text(FONT_BADGE, bx + 16, by + 32, v, UI_MUTED, 255, w - 32);
+        gfx_text_wrapped(FONT_SMALL, bx + 16, by + 50, p->desc, UI_SUB, 255, w - 32, 14, 5);
+        if (p->terms[0]) gfx_text(FONT_BADGE, bx + 16, by + h - 38, "Terms to accept when installing", 0xffc766, 255, w - 32);
+        gfx_button('o', bx + w - 64, by + h - 22); gfx_text(FONT_SMALL, bx + w - 46, by + h - 23, "Close", UI_TEXT, 255, 0);
     }
     if (g_mode == S_CONFIRM && p) {
         snprintf(s, sizeof(s), "Remove %s from this board? Its saves and settings in your home folder stay.", p->title);
@@ -606,6 +644,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         box(g_result_title, g_result, 90);
         gfx_button('x', (UI_SCREEN_W + 320) / 2 - 60, (UI_SCREEN_H - 90) / 2 - 8 + 68); gfx_text(FONT_SMALL, (UI_SCREEN_W + 320) / 2 - 42, (UI_SCREEN_H - 90) / 2 - 8 + 67, "OK", UI_TEXT, 255, 0);
     }
+    if (g_menu.open && g_mode == S_LIST) ui_menu_draw(&g_menu);
     notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;

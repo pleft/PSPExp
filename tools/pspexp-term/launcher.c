@@ -412,6 +412,9 @@ static LEntry g_sheet_e;
 static char g_sheet_ctl[1200];
 static uint64_t g_confirm_until;
 static char g_confirm[32];
+static UiMenu g_menu;   /* START's (menu_open, pick_menu_open) */
+enum { MN_GO = 1, MN_FAV, MN_DETAILS, MN_SEARCH, MN_NOTIFY, MN_RESTART, MN_POWER, MN_RESTART_YES, MN_POWER_YES, MN_CANCEL,
+       MN_PICK_GO, MN_PICK_SQUARE, MN_PICK_SCAN };
 static int g_bat = -2, g_chg, g_wifi = -2, g_minute = -1;
 static int g_snd_on, g_snd_vol = -1;   /* the sound on Bluetooth, its volume (btaudio.h) */
 static int g_wired;   /* the default route goes over a cable (Ethernet, USB networking) */
@@ -1750,6 +1753,20 @@ static void wifi_join(int with_password, uint64_t now)
     g_dirty = 1;
 }
 
+/* START in a picker: the row's (join, use, set; a new password, forget), then Scan again */
+static void pick_menu_open(void)
+{
+    ui_menu_begin(&g_menu, g_pick_kind == PICK_TZ ? "Time zone" : g_pick_kind == PICK_BT ? "Sound" : "Wi-Fi");
+    if (g_pick_n && !g_scanning) {
+        ui_menu_add(&g_menu, MN_PICK_GO, "check", g_pick_kind == PICK_TZ ? "Set" : g_pick_kind == PICK_BT ? "Use" : "Join", NULL, 0, 0);
+        if (g_pick_kind == PICK_WIFI && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved) ui_menu_add(&g_menu, MN_PICK_SQUARE, "pencil", "New password", NULL, 0, 0);
+        if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired) ui_menu_add(&g_menu, MN_PICK_SQUARE, "trash-2", "Forget", NULL, 0, 0);
+    }
+    if (g_pick_kind != PICK_TZ) ui_menu_add(&g_menu, MN_PICK_SCAN, "refresh-cw", "Scan again", NULL, g_menu.n > 0, 0);
+    if (!g_menu.n) g_menu.open = 0;
+    g_dirty = 1;
+}
+
 static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
 {
     if (up && g_pick_n) { g_pick_sel = (pressed & PSPEXP_BUTTON_UP) ? (g_pick_sel + g_pick_n - 1) % g_pick_n : (g_pick_sel > 0 ? g_pick_sel - 1 : 0); g_sel_since = now; }
@@ -1757,7 +1774,7 @@ static void pick_input(uint32_t pressed, int up, int down, uint64_t now)
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_pick_sel = g_pick_sel > 6 ? g_pick_sel - 6 : 0;
     if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_pick_n) g_pick_sel = g_pick_sel + 6 < g_pick_n ? g_pick_sel + 6 : g_pick_n - 1;
     if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; g_dirty = 1; return; }
-    if ((g_pick_kind == PICK_WIFI || g_pick_kind == PICK_BT) && (pressed & PSPEXP_BUTTON_START)) scan_start();   /* START refreshes, as in Packages */
+    if (pressed & PSPEXP_BUTTON_START) { pick_menu_open(); return; }   /* the menu: the row's, then Scan again */
     if (g_pick_kind == PICK_BT && g_pick_n && !g_scanning && (pressed & (PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_SQUARE))) {
         char cmd[160], ok[128], fail[160];
         if (g_pick_sel == 0) {   /* the PSP */
@@ -1899,8 +1916,6 @@ static LEntry *home_continue(void)
 
 /* ---- START: the menu (the highlighted entry's actions, then Search and Notifications; on the home
  * screen also Restart PSPExp and Power off, each asked again) ---- */
-static UiMenu g_menu;
-enum { MN_GO = 1, MN_FAV, MN_DETAILS, MN_SEARCH, MN_NOTIFY, MN_RESTART, MN_POWER, MN_RESTART_YES, MN_POWER_YES, MN_CANCEL };
 
 static int can_fav(const LEntry *e) { return e && e->type != LT_ACTION && !is_system_item(e) && !is_group_item(e); }
 static void fav_toggle(LEntry *e, uint64_t now)
@@ -1962,6 +1977,9 @@ static void menu_choose(int id, uint64_t now)
         ui_menu_add(&g_menu, MN_POWER_YES, "power", "Power off", NULL, 0, 0);
         ui_menu_add(&g_menu, MN_CANCEL, "x", "Cancel", NULL, 0, 0);
         break;
+    case MN_PICK_GO: pick_input(PSPEXP_BUTTON_CROSS, 0, 0, now); break;
+    case MN_PICK_SQUARE: pick_input(PSPEXP_BUTTON_SQUARE, 0, 0, now); break;
+    case MN_PICK_SCAN: scan_start(); break;
     case MN_RESTART_YES: g_console_restart_req = 1; toast("refresh-cw", "Restarting PSPExp...", now); break;
     case MN_POWER_YES: {   /* the Settings action, its "again" already given */
         int i;
@@ -3012,11 +3030,12 @@ static void draw_pick(float dt)
         gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     }
     x = 16;
+    if (g_menu.open) return;   /* (the menu draws its own hints) */
     if (!g_scanning || g_pick_kind == PICK_TZ) x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : g_pick_kind == PICK_BT ? "Use" : "Join");   /* (cross waits for the scan) */
     if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired && !g_scanning) x = hint_btn(x, 's', "Forget");
     if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
         x = hint_btn(x, 's', "New password");
-    if (g_pick_kind != PICK_TZ) x = hint_cap(x, "START", "Scan again", C_SUB);
+    x = hint_cap(x, "START", "Menu", C_SUB);
     x = hint_btn(x, 'o', "Back");
     (void)x;
 }
@@ -3149,7 +3168,7 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
         draw_hints();
         if (g_mode == M_DETAILS) draw_details(dt);
     }
-    if (g_menu.open && (g_mode == M_HOME || g_mode == M_BROWSE)) ui_menu_draw(&g_menu);   /* START's menu, with its own hints */
+    if (g_menu.open && (g_mode == M_HOME || g_mode == M_BROWSE || g_mode == M_PICK)) ui_menu_draw(&g_menu);   /* START's menu, with its own hints */
     notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;

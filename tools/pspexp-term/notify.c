@@ -366,8 +366,8 @@ void notify_state(char *out, size_t n)
 
 /* ---- the notification centre --------------------------------------------------------------- */
 
-static int c_sel, c_top, c_exit, c_dirty = 1, c_clear;
-static uint64_t c_clear_until;
+static int c_sel, c_top, c_exit, c_dirty = 1;
+static UiMenu c_menu;   /* START's (c_input) */
 #define ROWS 5
 #define ROW_H 40
 #define LIST_Y 34
@@ -379,12 +379,31 @@ static void c_open(void)
     g_save_due = 1;
     g_qn = 0;   /* the banners waiting or shown are all in the list below: gone */
     if (g_cur_on) g_cur_until = 0;
-    c_sel = 0; c_top = 0; c_exit = 0; c_clear = 0; c_dirty = 1;
+    c_sel = 0; c_top = 0; c_exit = 0; c_menu.open = 0; c_dirty = 1;
+}
+
+/* START's menu (2026-10-29: START is the menu everywhere): the notification's Go there and Remove,
+ * then Clear all (it was START pressed twice) */
+enum { CM_GO = 1, CM_REMOVE, CM_CLEAR };
+static void c_remove(void)
+{
+    remove_at(c_sel);
+    if (c_sel >= g_nn && c_sel > 0) c_sel--;
+    if (c_top > 0 && c_top + ROWS > g_nn) c_top = g_nn > ROWS ? g_nn - ROWS : 0;
+    c_dirty = 1;
 }
 
 static void c_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
-    (void)b; (void)left; (void)right;
+    (void)b; (void)left; (void)right; (void)now;
+    if (c_menu.open) {
+        int id = ui_menu_input(&c_menu, pressed, up, down);
+        c_dirty = 1;
+        if (id == CM_GO && c_sel < g_nn && g_n[c_sel].action[0]) { snprintf(g_action, sizeof(g_action), "%s", g_n[c_sel].action); c_exit = 1; }
+        else if (id == CM_REMOVE && c_sel < g_nn) c_remove();
+        else if (id == CM_CLEAR) { g_nn = 0; g_save_due = 1; c_sel = c_top = 0; }
+        return;
+    }
     if (up && c_sel > 0) { c_sel--; c_dirty = 1; }
     if (down && c_sel < g_nn - 1) { c_sel++; c_dirty = 1; }
     if (c_sel < c_top) c_top = c_sel;
@@ -395,15 +414,12 @@ static void c_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         c_exit = 1;
         return;
     }
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && c_sel < g_nn) {
-        remove_at(c_sel);
-        if (c_sel >= g_nn && c_sel > 0) c_sel--;
-        if (c_top > 0 && c_top + ROWS > g_nn) c_top = g_nn > ROWS ? g_nn - ROWS : 0;
-        c_dirty = 1;
-    }
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && c_sel < g_nn) c_remove();
     if ((pressed & PSPEXP_BUTTON_START) && g_nn) {
-        if (c_clear && now < c_clear_until) { g_nn = 0; g_save_due = 1; c_sel = c_top = 0; c_clear = 0; }
-        else { c_clear = 1; c_clear_until = now + 3000000u; notify_hint("bell-off", "Press START again to clear them all"); }
+        ui_menu_begin(&c_menu, c_sel < g_nn ? g_n[c_sel].title : "Notifications");
+        if (c_sel < g_nn && g_n[c_sel].action[0]) ui_menu_add(&c_menu, CM_GO, "chevron-right", "Go there", NULL, 0, 0);
+        if (c_sel < g_nn) ui_menu_add(&c_menu, CM_REMOVE, "trash-2", "Remove", NULL, 0, 0);
+        ui_menu_add(&c_menu, CM_CLEAR, "bell-off", "Clear all", NULL, c_menu.n > 0, 0);
         c_dirty = 1;
     }
 }
@@ -466,9 +482,12 @@ static void c_render(PspExpContext *ctx, uint64_t now)
         gfx_rect(UI_SCREEN_W - 6, LIST_Y + pos, 2, len, 0xffffff, 60);
     }
     x = 12;
-    if (c_sel < g_nn && g_n[c_sel].action[0]) x = ui_hint_btn(x, 'x', "Go there");
-    if (g_nn) { x = ui_hint_btn(x, 's', "Remove"); x = ui_hint_cap(x, "START", "Clear all", UI_SUB); }
-    ui_hint_btn(x, 'o', "Close");
+    if (c_menu.open) ui_menu_draw(&c_menu);
+    else {
+        if (c_sel < g_nn && g_n[c_sel].action[0]) x = ui_hint_btn(x, 'x', "Go there");
+        if (g_nn) { x = ui_hint_btn(x, 's', "Remove"); x = ui_hint_cap(x, "START", "Menu", UI_SUB); }
+        ui_hint_btn(x, 'o', "Close");
+    }
     notify_draw(now);
     pspexp_present(ctx);
     c_dirty = g_moving;

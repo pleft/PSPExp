@@ -36,7 +36,9 @@
   (Play, favourites, Details...), then the screen's (Search and Notifications
   in the launcher, Restart PSPExp and Power off on the home screen). In
   Files it holds the file's actions and "Folder and view"; triangle shows a
-  file's details there, as Details elsewhere.
+  file's details there, as Details elsewhere. Media, Packages, the System
+  Monitor, Notifications and the Wi-Fi and Bluetooth lists have it too, and
+  triangle shows a song's, a package's or a program's details.
 - **Hints that match the buttons**: menus and dialogs no longer show the
   screen's hints under them; "Details" only where triangle opens them;
   Search's circle goes back to where you opened it; smaller fixes (Files'

@@ -83,11 +83,32 @@ static void mon_open(void)
 
 static int mon_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
 
+/* START's menu (2026-10-29: START is the menu everywhere): the program's End, then the sorting;
+ * on the overview its one row; triangle: the program's details */
+static UiMenu g_menu;
+static int g_more;
+enum { OM_END = 1, OM_SORT, OM_PROGRAMS };
+
+static void end_ask(uint64_t now)
+{
+    if (!g_s.nproc || g_sel >= g_s.nproc) return;
+    if (endable(&g_s.proc[g_sel])) g_confirm = 1;
+    else { snprintf(g_msg, sizeof(g_msg), "%s is the system's: not ended from here", g_s.proc[g_sel].name); g_msg_until = now + 4000000u; }
+}
+
 static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
     (void)b; (void)left; (void)right;
     if (!pressed && !up && !down) return;
     g_dirty = 1;
+    if (g_more) { if (pressed) g_more = 0; return; }
+    if (g_menu.open) {
+        int id = ui_menu_input(&g_menu, pressed, up, down);
+        if (id == OM_END) end_ask(now);
+        else if (id == OM_SORT) { g_sort_mem = !g_sort_mem; g_at = 0; }
+        else if (id == OM_PROGRAMS) g_page = PAGE_PROGRAMS;
+        return;
+    }
     if (g_confirm) {
         if (pressed & PSPEXP_BUTTON_CROSS) {
             const SysProc *p = &g_s.proc[g_sel];
@@ -102,15 +123,22 @@ static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, 
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_page = PAGE_OVERVIEW;
     if (pressed & PSPEXP_BUTTON_RTRIGGER) g_page = PAGE_PROGRAMS;
     /* (circle: nothing here, it never leaves an app: HOME does) */
+    if (pressed & PSPEXP_BUTTON_START) {
+        if (g_page != PAGE_PROGRAMS) { ui_menu_begin(&g_menu, "System Monitor"); ui_menu_add(&g_menu, OM_PROGRAMS, "list", "Show the programs", NULL, 0, 0); }
+        else {
+            ui_menu_begin(&g_menu, g_s.nproc && g_sel < g_s.nproc ? g_s.proc[g_sel].name : "Programs");
+            if (g_s.nproc && g_sel < g_s.nproc) ui_menu_add(&g_menu, OM_END, "circle-x", "End the program", NULL, 0, 0);
+            ui_menu_add(&g_menu, OM_SORT, "arrow-up-down", "Sort by", g_sort_mem ? "memory" : "CPU", g_menu.n > 0, 0);
+        }
+        return;
+    }
     if (g_page != PAGE_PROGRAMS) return;
+    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && g_s.nproc && g_sel < g_s.nproc) { g_more = 1; return; }
     if (up && g_sel > 0) g_sel--;
     if (down && g_sel < g_s.nproc - 1) g_sel++;
     if (g_s.nproc) g_sel_pid = g_s.proc[g_sel].pid;
     if (pressed & PSPEXP_BUTTON_SQUARE) { g_sort_mem = !g_sort_mem; g_at = 0; }
-    if ((pressed & PSPEXP_BUTTON_CROSS) && g_s.nproc) {
-        if (endable(&g_s.proc[g_sel])) g_confirm = 1;
-        else { snprintf(g_msg, sizeof(g_msg), "%s is the system's: not ended from here", g_s.proc[g_sel].name); g_msg_until = now + 4000000u; }
-    }
+    if (pressed & PSPEXP_BUTTON_CROSS) end_ask(now);
 }
 
 static int mon_needs_frame(uint64_t now)
@@ -326,13 +354,30 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
     else draw_programs();
     x = 12;
     if (g_msg[0]) gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, g_msg, 0xffc766, 255, UI_SCREEN_W - 24);
-    else if (!g_confirm) {   /* (the End dialog's buttons are in it) */
+    else if (!g_confirm && !g_menu.open && !g_more) {   /* (the End dialog's buttons are in it; the menu draws its own) */
         x = ui_hint_cap(x, "L/R", g_page == PAGE_OVERVIEW ? "Programs" : "Overview", UI_SUB);
         if (g_page == PAGE_PROGRAMS) {
             x = ui_hint_btn(x, 'x', "End");
             x = ui_hint_btn(x, 's', g_sort_mem ? "By CPU" : "By memory");
+            x = ui_hint_btn(x, 't', "More");
         }
+        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
     }
+    if (g_more && g_s.nproc && g_sel < g_s.nproc) {   /* triangle: the program's details */
+        const SysProc *pr = &g_s.proc[g_sel];
+        int w = 300, h = 96, bx = (UI_SCREEN_W - w) / 2, by = 90;
+        char mem[32], line[120];
+        gfx_shadow(NINE_SHADOW14, bx, by, w, h, 0x000000, 160);
+        gfx_nine(NINE_R14, bx, by, w, h, 0x1b2a46, 250);
+        gfx_text(FONT_BODY, bx + 16, by + 12, pr->name, UI_TEXT, 255, w - 32);
+        bytes(pr->rss, mem, sizeof(mem));
+        snprintf(line, sizeof(line), "program %d, user %d%s", pr->pid, pr->uid, endable(pr) ? "" : " (the system's)");
+        gfx_text(FONT_SMALL, bx + 16, by + 34, line, UI_SUB, 255, w - 32);
+        snprintf(line, sizeof(line), "processor %.1f%% of a core   memory %s", pr->cpu, mem);
+        gfx_text(FONT_SMALL, bx + 16, by + 52, line, UI_SUB, 255, w - 32);
+        gfx_button('o', bx + w - 64, by + h - 22); gfx_text(FONT_SMALL, bx + w - 46, by + h - 23, "Close", UI_TEXT, 255, 0);
+    }
+    if (g_menu.open) ui_menu_draw(&g_menu);
     notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;
