@@ -215,6 +215,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
 #define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
 #define PSPEXP_FEATURE_BOOT_DISC  0x00020000u  /* answers BOOT_DISC: a PSP game started natively (PRO's ISO driver; architecture §12c) */
+#define PSPEXP_FEATURE_OSD_HINT   0x00080000u  /* OSD_HINT: the PSP draws a hint bar ("HOME again to quit") over the frames */
 #define PSPEXP_FEATURE_HOME       0x00040000u  /* answers HOME_MODE: HOME can be the host's (PSPEXP_BUTTON_HOME in INPUT) */
 #define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: Recording inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
@@ -342,6 +343,16 @@ typedef struct PspExpOsdVolume {
     uint8_t  reserved[15];
 } PspExpOsdVolume;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpOsdVolume) == 16, osd_volume_size);
+
+/* Host -> PSP (OSD_HINT): a bar the PSP draws at the top of the frames it presents, as the volume
+ * bar, for `ms` (0: gone). Its pictures are the PSP's own (one per kind), in the launcher's look */
+#define PSPEXP_HINT_HOME 1   /* "HOME again to quit": a first HOME in an app or a game */
+typedef struct PspExpOsdHint {
+    uint32_t kind;               /* PSPEXP_HINT_* */
+    uint32_t ms;
+    uint32_t reserved[2];
+} PspExpOsdHint;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpOsdHint) == 16, osd_hint_size);
 
 /* Host -> PSP, reply to HELLO. */
 typedef struct PspExpHelloAck {

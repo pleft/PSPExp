@@ -306,7 +306,10 @@ press, so holding SELECT in them for the terminal closed them too.
 than the launcher is shown: an app closes as on its own exit (Media opened
 from Files goes back there, a film paused), Files and the terminal go to the
 launcher, a program shown in the mirror is ended. In the launcher HOME is the
-PSP's again: its "Quit?" dialog, to the XMB. A game holding the PSP gives
+PSP's again: its "Quit?" dialog, to the XMB. Elsewhere it asks first: the
+library holds back a first press and the PSP shows "HOME again to quit" for
+3 s; a second press meanwhile goes through (the test port's `hint home`
+shows the bar). A game holding the PSP gives
 HOME to itself the same way (the SDL layer): HOME asks it to quit, as START +
 SELECT held did, which now works only with a PSP runtime from before
 HOME_MODE. The "Starting" screen, the controls sheet and the Details card say

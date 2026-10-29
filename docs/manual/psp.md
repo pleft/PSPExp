@@ -39,8 +39,8 @@ first, see its guide) and the launcher appears within a few seconds.
 You can start PSPExp before or after plugging the cable in, and unplug and
 plug it again at any time: the launcher comes back by itself.
 
-**HOME** leaves what is on screen: in an app or a game it takes you back to
-the launcher; in the launcher it asks, as on any PSP, whether to quit
+**HOME** leaves what is on screen: in an app or a game, press it twice
+("HOME again to quit" shows after the first) to go back to the launcher; in the launcher it asks, as on any PSP, whether to quit
 PSPExp. Holding **HOME** for 2 seconds quits PSPExp from anywhere.
 
 ## For your own PSP games: the PSPExp plugin

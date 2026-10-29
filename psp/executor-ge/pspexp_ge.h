@@ -28,6 +28,7 @@ typedef struct PspExpGeExecutor {
     uint32_t ring_used;
     int in_frame;
     int osd_percent; uint32_t osd_until;   /* the volume bar (OSD_VOLUME) */
+    int hint_kind; uint32_t hint_until;    /* a hint bar (OSD_HINT) */
     int keyboard;                          /* the PSP's keyboard owns the screen: frames drawn, not shown */
     int tex_enabled;
     PspExpCacheEntry *cur_atlas;

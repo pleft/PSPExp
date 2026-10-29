@@ -147,6 +147,9 @@ int pspexp_boot_disc(PspExpContext *ctx, const char *path);
  * the PSP's own dialog off); 0, the PSP's dialog (quit PSPExp). Back to 0 at every disconnect. */
 int pspexp_home_supported(const PspExpContext *ctx);
 int pspexp_home_mode(PspExpContext *ctx, int host);
+/* OSD_HINT (PSPEXP_FEATURE_OSD_HINT): the PSP's hint bar (PSPEXP_HINT_*) over its frames for ms (0:
+ * gone). The library shows "HOME again to quit" itself at a first HOME in HOST mode. */
+int pspexp_osd_hint(PspExpContext *ctx, uint32_t kind, uint32_t ms);
 /* when the bar last sent goes away (pspexp_time_us), 0 none: the PSP draws it at
  * each PRESENT, so a program that draws only on change should draw once after */
 uint64_t pspexp_osd_until(const PspExpContext *ctx);

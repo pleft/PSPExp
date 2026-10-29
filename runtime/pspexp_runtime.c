@@ -144,7 +144,7 @@ static void send_hello(PspExpRuntime *rt)
     h.features = rt->cfg.features | (rt->ops.fs_list ? PSPEXP_FEATURE_FILES : 0) |
                  (rt->ops.clock_get && rt->ops.clock_set ? PSPEXP_FEATURE_CLOCK : 0) |
                  (rt->ops.power_get ? PSPEXP_FEATURE_POWER : 0) |
-                 (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) | (rt->ops.osd_volume ? PSPEXP_FEATURE_OSD : 0) |
+                 (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) | (rt->ops.osd_volume ? PSPEXP_FEATURE_OSD : 0) | (rt->ops.osd_hint ? PSPEXP_FEATURE_OSD_HINT : 0) |
                  (rt->ops.text_begin ? PSPEXP_FEATURE_TEXT : 0) | (rt->ops.restart ? PSPEXP_FEATURE_RESTART : 0) | (rt->ops.boot_disc ? PSPEXP_FEATURE_BOOT_DISC : 0) |
                  (rt->ops.home_mode ? PSPEXP_FEATURE_HOME : 0) |
                  (rt->ops.capture_set ? PSPEXP_FEATURE_CAPTURE : 0) |
@@ -958,6 +958,14 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (pspexp_message_expect(m, sizeof(*v)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         v = (const PspExpOsdVolume *)m->payload;
         if (rt->ops.osd_volume) rt->ops.osd_volume(rt->ops.user, v->percent);
+        return;
+    }
+    case PSPEXP_OP_OSD_HINT: {
+        const PspExpOsdHint *h;
+        if (!rt->ops.osd_hint) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }   /* (not advertised) */
+        if (pspexp_message_expect(m, sizeof(*h)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        h = (const PspExpOsdHint *)m->payload;
+        rt->ops.osd_hint(rt->ops.user, (int)h->kind, h->ms);
         return;
     }
     case PSPEXP_OP_RESTART:

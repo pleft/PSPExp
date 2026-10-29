@@ -3,7 +3,8 @@
 ## Since 1.3.0
 
 - **HOME leaves what is on screen**: in an app (Files, Media, Packages,
-  the terminal...) or a game it takes you back to the launcher; in the
+  the terminal...) or a game, press it twice ("HOME again to quit" shows
+  for 3 seconds after the first) to go back to the launcher; in the
   launcher it is the PSP's own "Quit?" as before. **START + SELECT no longer
   quits a game** (it still does until Settings > Update the PSP). Holding
   HOME 2 s still quits PSPExp from anywhere.

@@ -6,6 +6,7 @@
 #include <pspkernel.h>
 #include <malloc.h>
 #include <string.h>
+#include "home_hint.h"   /* (scripts/dev/make-home-hint.py) */
 
 #define FB_BYTES        ((uint32_t)PSPEXP_DISPLAY_STRIDE * PSPEXP_DISPLAY_HEIGHT * 2u)
 #define VRAM_TEX_SIZE   (PSPEXP_VRAM_BYTES - ge->tex_base)
@@ -610,6 +611,36 @@ static void draw_osd(PspExpGeExecutor *ge)
     ge->state_dirty = 1;
 }
 
+/* ---- a hint bar (OSD_HINT): a picture of the PSP's own, in the launcher's look, at the top ---- */
+
+static void op_osd_hint(void *u, int kind, uint32_t ms)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    ge->hint_kind = kind;
+    ge->hint_until = ms ? sceKernelGetSystemTimeLow() + ms * 1000u : 0;
+}
+
+typedef struct HintVertex { uint16_t u, v; int16_t x, y, z; } HintVertex;
+static void draw_hint(PspExpGeExecutor *ge, int y)
+{
+    HintVertex *v = (HintVertex *)sceGuGetMemory(2 * sizeof(HintVertex));
+    int x = (PSPEXP_DISPLAY_WIDTH - HOME_HINT_W) / 2;
+    if (!v || ge->hint_kind != PSPEXP_HINT_HOME) return;
+    leave_3d(ge);
+    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexMode(GU_PSM_4444, 0, 0, 0);
+    sceGuTexImage(0, HOME_HINT_TW, HOME_HINT_TH, HOME_HINT_TW, g_home_hint);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFlush();
+    v[0].u = 0; v[0].v = 0; v[0].x = (int16_t)x; v[0].y = (int16_t)y; v[0].z = 0;
+    v[1].u = HOME_HINT_W; v[1].v = HOME_HINT_H; v[1].x = (int16_t)(x + HOME_HINT_W); v[1].y = (int16_t)(y + HOME_HINT_H); v[1].z = 0;
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);   /* (the executor's own, and its textures bound again) */
+    ge->tex_enabled = 1; ge->cur_atlas = NULL; ge->cur_palette = NULL;
+    ge->state_dirty = 1;
+}
+
 /* the recording dot: bottom right, as the plugin's in a native game, a 12-pixel
  * dot in a dark ring, row by row. The GE keeps the 16x16 pixels under it first (a copy into RAM)
  * and puts them back when it goes, in the frame shown (pspexp_ge_dot_tick) or before a frame is
@@ -662,6 +693,8 @@ static uint32_t op_present(void *u)
     }
     if (ge->osd_until && (int32_t)(ge->osd_until - sceKernelGetSystemTimeLow()) > 0) draw_osd(ge);
     else ge->osd_until = 0;
+    if (ge->hint_until && (int32_t)(ge->hint_until - sceKernelGetSystemTimeLow()) > 0) draw_hint(ge, ge->osd_until ? 42 : 10);
+    else ge->hint_until = 0;
     if (ge->rec_dot) { dot_keep(draw_offset(ge)); draw_rec_dot(ge); }
     ge->dot_col[buf_index(draw_offset(ge))] = ge->rec_dot;
     sceKernelDcacheWritebackAll();
@@ -860,6 +893,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->draw_sprites = op_draw_sprites;
     ops->draw_rect = op_draw_rect;
     ops->osd_volume = op_osd_volume;
+    ops->osd_hint = op_osd_hint;
     ops->draw_line = op_draw_line;
     ops->present = op_present;
     ops->frame_ge_us = op_frame_ge_us;

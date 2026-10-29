@@ -65,6 +65,8 @@ struct PspExpContext {
     PspExpLocalAudio la;                /* sound on the board's output (Bluetooth): pspexp_local_audio.c */
     int la_was;
     uint64_t osd_until;                 /* the PSP's volume bar shows until then */
+    uint64_t home_armed_until;          /* a first HOME: a second before then goes through (home_twice) */
+    int home_was, home_pass;
     PspExpStats stats;
     PspExpLogFn log; void *log_user;
     PspExpMessageHook hook; void *hook_user;
@@ -580,6 +582,37 @@ int pspexp_send_raw(PspExpContext *ctx, uint8_t channel, uint16_t opcode, const 
     return send_bytes(ctx, ctx->msg.buf, ctx->msg.len);
 }
 
+/* HOME in an app or a game (the PSP's dialog off there, HOME_MODE): pressed once, the PSP shows "HOME
+ * again to quit" for 3 s and the press is held back; pressed again meanwhile, it goes through and the
+ * program leaves. A single press had left at once, without asking (2026-10-29). A PSP that cannot
+ * show the bar (no PSPEXP_FEATURE_OSD_HINT) passes the first press. */
+#define HOME_AGAIN_US 3000000u
+int pspexp_osd_hint(PspExpContext *ctx, uint32_t kind, uint32_t ms)
+{
+    PspExpOsdHint h;
+    memset(&h, 0, sizeof(h));
+    h.kind = kind; h.ms = ms;
+    ctx->osd_until = pspexp_time_us() + (uint64_t)ms * 1000u;   /* (a program that draws only on change shows it: pspexp_osd_until) */
+    return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_OSD_HINT, &h, sizeof(h));
+}
+static void home_twice(PspExpContext *ctx)
+{
+    uint64_t now = pspexp_time_us();
+    int down = (ctx->input.buttons & PSPEXP_BUTTON_HOME) != 0;
+    if (down && !ctx->home_was) {   /* a press */
+        if (!(ctx->hello.features & PSPEXP_FEATURE_OSD_HINT) || (ctx->home_armed_until && now < ctx->home_armed_until)) {
+            if (ctx->home_armed_until) pspexp_osd_hint(ctx, PSPEXP_HINT_HOME, 0);   /* (its bar gone at once) */
+            ctx->home_pass = 1; ctx->home_armed_until = 0;
+        } else {
+            ctx->home_pass = 0; ctx->home_armed_until = now + HOME_AGAIN_US;
+            pspexp_osd_hint(ctx, PSPEXP_HINT_HOME, HOME_AGAIN_US / 1000u);
+        }
+    }
+    ctx->home_was = down;
+    if (!down) ctx->home_pass = 0;
+    else if (!ctx->home_pass) ctx->input.buttons &= ~(uint32_t)PSPEXP_BUTTON_HOME;
+}
+
 static Resource *find_res(PspExpContext *ctx, uint16_t id)
 {
     size_t i;
@@ -744,6 +777,7 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
     case PSPEXP_OP_INPUT_SAMPLE:
         if (pspexp_message_expect(m, sizeof(PspExpInput)) < 0) break;
         memcpy(&ctx->input, m->payload, sizeof(ctx->input));
+        home_twice(ctx);
         ctx->have_input = 1;
         pspexp_la_buttons(&ctx->la, ctx->input.buttons, pspexp_time_us());   /* volume, while the sound is on Bluetooth */
         if (ctx->la.vol_report) { ctx->la.vol_report = 0; pspexp_osd_volume(ctx, ctx->la.vol_now); }   /* the PSP shows it over the frames */

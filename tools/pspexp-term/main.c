@@ -3331,6 +3331,8 @@ static void ctl_step(uint64_t now, int connected)
         ctl_reply(reply);
     } else if (!strncmp(cmd, "psp-boot ", 9)) {   /* a PSP game's disc, started natively by the PSP (BOOT_DISC; tests: the shelf's next step) */
         ctl_reply(pspexp_boot_disc(ctx, cmd + 9) == 0 ? "ok starting it: PSPExp leaves" : "error the PSP's runtime cannot start a game (an older one, no PRO, or not connected)");
+    } else if (!strcmp(cmd, "hint home")) {   /* the PSP's "HOME again to quit" bar, 3 s (tests: its look) */
+        ctl_reply(pspexp_osd_hint(ctx, PSPEXP_HINT_HOME, 3000) == 0 ? "ok" : "error not connected");
     } else if (!strcmp(cmd, "home board") || !strcmp(cmd, "home system")) {   /* who HOME belongs to (HOME_MODE; tests) */
         ctl_reply(pspexp_home_mode(ctx, cmd[5] == 'b') == 0 ? "ok sent" : "error the PSP's runtime cannot (an older one, no PRO, or not connected)");
     } else if (!strcmp(cmd, "psp-restart")) {   /* PSPExp on the PSP starts again (a runtime with RESTART) */

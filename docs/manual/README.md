@@ -68,7 +68,7 @@ the setup and the list of packages differ.
 |---|---|
 | The PSP says "waiting for host" | Check the USB cable (a data cable, not a charge-only one) and that the board is on. The board's console starts by itself at boot; give it a minute after power-on. |
 | PSPExp does not start from the XMB | Custom firmware is not running (on many PSPs it must be re-enabled after a full power-off). |
-| A game froze or will not quit | Press **HOME**: the game is asked to quit, ended two seconds later if it is still there, and the launcher comes back. |
+| A game froze or will not quit | Press **HOME** twice: the game is asked to quit, ended two seconds later if it is still there, and the launcher comes back. |
 | The PSP itself is stuck | Hold **HOME** for 2 seconds to leave PSPExp. |
 | No sound | Settings > Sound: is it on Bluetooth headphones that are not with you? Choose The PSP. |
 | The launcher offers "Update the PSP" or "Restart PSPExp" | A newer version was installed: choose it, it takes seconds. |
