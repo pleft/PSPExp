@@ -8,6 +8,8 @@
 #include "files_psp.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "launcher.h"
+#include "tags.h"
 #include "upnp.h"
 #include "modplay.h"
 #include <pthread.h>
@@ -19,8 +21,9 @@
 enum { V_NOW, V_BROWSE, V_QUEUE, NVIEWS };
 enum { R_OFF, R_ALL, R_ONE };
 
-/* a file (dir and entry), or a media server's item (url; e.name its title) */
-typedef struct Track { char dir[FOPS_PATH]; FEntry e; char url[1024]; int video; } Track;
+/* a file (dir and entry), or a media server's item (url; e.name its title); title: what lists show
+ * (its tag, else the name without its extension) */
+typedef struct Track { char dir[FOPS_PATH]; FEntry e; char url[1024]; int video; char title[160]; } Track;
 
 static PspExpContext *g_ctx;
 static Track *g_q;                 /* the queue: a folder's tracks, in the folder's order */
@@ -38,6 +41,21 @@ static int g_vid_loaded;           /* the film's textures are on the PSP */
 static uint64_t g_hud_until;       /* a film's controls shown until then (a key brings them) */
 static uint64_t g_now;
 static int g_mod_ch0;              /* a module: the first channel shown (up / down: more when they do not all fit) */
+
+/* what a song is called in the lists: its tag's title (a local file, not the PSP's memory stick:
+ * each read crosses the cable), else its name without the extension */
+static void display_title(const char *dir, const char *name, char *out, size_t n, char *artist, size_t an)
+{
+    char p[FOPS_PATH];
+    const char *dot = strrchr(name, '.');
+    if (artist && an) artist[0] = 0;
+    if (dir[0] == '/') {
+        char a[96];
+        fops_join(p, sizeof(p), dir, name);
+        if (tags_peek(p, out, n, a, sizeof(a))) { if (artist && an) snprintf(artist, an, "%s", a); return; }
+    }
+    snprintf(out, n, "%.*s", dot && dot > name ? (int)(dot - name) : (int)strlen(name), name);
+}
 
 /* ---- the queue -------------------------------------------------------------------------------- */
 
@@ -119,6 +137,7 @@ static int add_tree(const char *dir, const FEntry *e, int depth)
         snprintf(g_q[g_qn].dir, sizeof(g_q[g_qn].dir), "%s", dir);
         g_q[g_qn].e = *e;
         g_q[g_qn].url[0] = 0; g_q[g_qn].video = 0;
+        display_title(g_qn < 500 ? dir : "", e->name, g_q[g_qn].title, sizeof(g_q[g_qn].title), NULL, 0);   /* (a big add: names) */
         g_order[g_qn] = g_qn;
         g_qn++;
         return 1;
@@ -173,6 +192,7 @@ int music_play_list(const char *dir, const FEntry *entries, int n, int start)
         snprintf(g_q[g_qn].dir, sizeof(g_q[g_qn].dir), "%s", dir);
         g_q[g_qn].e = *f;
         g_q[g_qn].url[0] = 0; g_q[g_qn].video = 0;
+        display_title(g_qn < 500 ? dir : "", f->name, g_q[g_qn].title, sizeof(g_q[g_qn].title), NULL, 0);
         g_qn++;
     }
     if (!g_qn) return -1;
@@ -226,7 +246,10 @@ static Place g_pl[FOPS_DRIVES + 4];
 static int g_npl;
 static char g_dir[FOPS_PATH];      /* the folder shown; "" the places */
 static char g_root[FOPS_PATH];     /* the place it is in (circle there goes back to the places) */
-static FList g_list;               /* its folders and songs */
+static char g_root_name[48];       /* its name, for the line on top ("Music / Album") */
+static FList g_list;               /* its folders and songs (no "..": circle goes up) */
+static struct LTitle { char title[160], artist[96]; } *g_lt;   /* what each song is called (tags) */
+static int g_nspec;                /* rows before them: Play all, Shuffle (2 when there are songs) */
 static int g_bsel, g_btop, g_qsel, g_qtop;
 
 /* ---- media servers (upnp.c), asked on a thread: a search takes seconds, a big folder too ---------- */
@@ -329,6 +352,7 @@ static void up_track(Track *t, int i)
     snprintf(t->dir, sizeof(t->dir), "%s%s", UPNP_PLACE, g_srv[g_srv_at].name);
     snprintf(t->e.name, sizeof(t->e.name), "%s", g_upl[i].title);
     snprintf(t->url, sizeof(t->url), "%s", g_upl[i].url);
+    snprintf(t->title, sizeof(t->title), "%s", g_upl[i].title);
     t->video = g_upl[i].kind == UPNP_VIDEO;
 }
 
@@ -374,15 +398,17 @@ static void places_load(void)
     int i, nd = fops_board_drives(d, FOPS_DRIVES, NULL);
     g_npl = 0;
 #define PLACE(P, N, I) do { snprintf(g_pl[g_npl].path, FOPS_PATH, "%s", (P)); snprintf(g_pl[g_npl].name, 48, "%s", (N)); g_pl[g_npl].icon = (I); g_npl++; } while (0)
+    /* (Home went, 2026-10-29: Files is for the whole board; the PSP's MUSIC and VIDEO are in PSP) */
     if (home) {
         snprintf(p, sizeof(p), "%s/Music", home);
         if (is_dir(p)) PLACE(p, "Music", "music");
         snprintf(p, sizeof(p), "%s/Videos", home);
         if (is_dir(p)) PLACE(p, "Videos", "clapperboard");
-        PLACE(home, "Home", "house");
     }
+    launcher_captures_dir(p, sizeof(p));   /* the recordings, clips and screenshots, a folder a game */
+    if (is_dir(p)) PLACE(p, "Captures", "film");
     for (i = 1; i < nd && g_npl < FOPS_DRIVES + 2; i++) PLACE(d[i].root, d[i].name, "hard-drive");   /* (d[0] is "/") */
-    if (files_psp_available()) { PLACE("ms0:/MUSIC", "PSP: MUSIC", "smartphone"); PLACE("ms0:/VIDEO", "PSP: VIDEO", "smartphone"); PLACE("ms0:/", "PSP", "smartphone"); }
+    if (files_psp_available()) PLACE("ms0:/", "PSP", "smartphone");
     PLACE(UPNP_PLACE, "Media servers", "server");   /* on the network: Plex, Jellyfin, MiniDLNA, a NAS... */
 #undef PLACE
 }
@@ -391,29 +417,53 @@ static void dir_load(const char *dir)
 {
     FList all = { 0 };
     int i;
+    int songs = 0;
     fops_free(&g_list);
     memset(&g_list, 0, sizeof(g_list));
+    free(g_lt); g_lt = NULL;
+    g_nspec = 0;
     snprintf(g_dir, sizeof(g_dir), "%s", dir);
     g_bsel = g_btop = 0;
     if (fops_list(dir, 0, 0, &all) < 0) { snprintf(g_msg, sizeof(g_msg), "%s cannot be read", dir); return; }
     g_list.e = (FEntry *)malloc(sizeof(FEntry) * (size_t)(all.n ? all.n : 1));
-    for (i = 0; g_list.e && i < all.n; i++) {   /* folders and what plays; ".." only below the place */
+    g_lt = (struct LTitle *)calloc((size_t)(all.n ? all.n : 1), sizeof(*g_lt));
+    for (i = 0; g_list.e && g_lt && i < all.n; i++) {   /* folders and what plays (no "..": circle goes up) */
         const FEntry *f = &all.e[i];
-        if (f->is_up && !strcmp(dir, g_root)) continue;
-        if (f->is_dir || f->is_up || player_handles(f->name)) g_list.e[g_list.n++] = *f;
+        if (f->is_up) continue;
+        if (f->is_dir || player_handles(f->name)) {
+            if (!f->is_dir) {
+                display_title(songs < 300 ? dir : "", f->name, g_lt[g_list.n].title, sizeof(g_lt[0].title), g_lt[g_list.n].artist, sizeof(g_lt[0].artist));
+                songs++;
+            }
+            g_list.e[g_list.n++] = *f;
+        }
     }
     g_list.cap = g_list.n;
+    g_nspec = songs ? 2 : 0;
     fops_free(&all);
 }
 
+/* the Library's rows: Play all and Shuffle first (when the folder has songs), then its entries */
+static int lib_rows(void) { return g_nspec + g_list.n; }
+static const FEntry *lib_entry(int row) { return row >= g_nspec && row - g_nspec < g_list.n ? &g_list.e[row - g_nspec] : NULL; }
+
 static void browse_up(void)
 {
-    char p[FOPS_PATH];
+    char p[FOPS_PATH], child[FOPS_PATH];
+    const char *sl;
+    int i;
     if (!g_dir[0]) return;                                       /* the places: the top (circle never leaves an app: HOME does) */
-    if (!strcmp(g_dir, g_root)) { g_dir[0] = 0; places_load(); g_bsel = g_btop = 0; return; }
+    if (!strcmp(g_dir, g_root)) {   /* back to the places, on the one left */
+        g_dir[0] = 0; places_load(); g_bsel = g_btop = 0;
+        for (i = 0; i < g_npl; i++) if (!strcmp(g_pl[i].path, g_root)) g_bsel = i;
+        return;
+    }
+    sl = strrchr(g_dir, '/');
+    snprintf(child, sizeof(child), "%s", sl && sl[1] ? sl + 1 : g_dir);
     snprintf(p, sizeof(p), "%s", g_dir);
     fops_parent(p);
     dir_load(p);
+    for (i = 0; i < g_list.n; i++) if (g_list.e[i].is_dir && !strcmp(g_list.e[i].name, child)) g_bsel = g_nspec + i;   /* (on the folder come from) */
 }
 
 static void browse_choose(void)
@@ -421,13 +471,29 @@ static void browse_choose(void)
     char p[FOPS_PATH];
     if (!g_dir[0]) {
         if (g_bsel < g_npl && !strcmp(g_pl[g_bsel].path, UPNP_PLACE)) { up_start(UP_SERVERS, NULL); return; }   /* a search: the servers when it ends */
-        if (g_bsel < g_npl) { snprintf(g_root, sizeof(g_root), "%s", g_pl[g_bsel].path); dir_load(g_root); }
+        if (g_bsel < g_npl) {
+            snprintf(g_root, sizeof(g_root), "%s", g_pl[g_bsel].path);
+            snprintf(g_root_name, sizeof(g_root_name), "%s", g_pl[g_bsel].name);
+            dir_load(g_root);
+        }
         return;
     }
-    if (g_bsel >= g_list.n) return;
-    if (g_list.e[g_bsel].is_up) { browse_up(); return; }
-    if (g_list.e[g_bsel].is_dir) { fops_join(p, sizeof(p), g_dir, g_list.e[g_bsel].name); dir_load(p); return; }
-    music_play_list(g_dir, g_list.e, g_list.n, g_bsel);   /* the folder's songs, from this one */
+    if (g_bsel < g_nspec) {   /* Play all, Shuffle: the folder's songs, from the first or a random one */
+        int i, first = -1, n = 0, pick;
+        for (i = 0; i < g_list.n; i++) if (!g_list.e[i].is_dir) { if (first < 0) first = i; n++; }
+        if (first < 0) return;
+        g_shuffle = g_bsel == 1;
+        pick = first;
+        if (g_shuffle) { int k = rand() % n; for (i = 0; i < g_list.n; i++) if (!g_list.e[i].is_dir && k-- == 0) { pick = i; break; } }
+        music_play_list(g_dir, g_list.e, g_list.n, pick);
+        return;
+    }
+    {
+        const FEntry *e = lib_entry(g_bsel);
+        if (!e) return;
+        if (e->is_dir) { fops_join(p, sizeof(p), g_dir, e->name); dir_load(p); return; }
+        music_play_list(g_dir, g_list.e, g_list.n, g_bsel - g_nspec);   /* the folder's songs, from this one */
+    }
 }
 
 /* ---- the app ------------------------------------------------------------------------------------ */
@@ -435,18 +501,50 @@ static void browse_choose(void)
 static void mu_open(void)
 {
     g_exit = 0; g_opts = 0; g_dirty = 1; g_cover_key[0] = 0;   /* (Files' viewer may have used the picture since) */
-    g_view = g_at >= 0 ? V_NOW : V_BROWSE;
+    {   /* Now playing only while something plays: a film or a song left paused opens the Library */
+        PlayerInfo pi;
+        g_view = g_at >= 0 && player_info(&pi) && !pi.paused && !pi.ended ? V_NOW : V_BROWSE;
+    }
     if (g_view == V_BROWSE && !g_dir[0]) places_load();
 }
 
+/* the play order popup's rows: shuffle, repeat, and in the Queue its clearing */
+static int opts_rows(void) { return g_view == V_QUEUE ? 3 : 2; }
+
+/* the queue down to the track playing (none: empty) */
+static void queue_clear(void)
+{
+    if (g_at >= 0 && g_at < g_qn) {
+        Track keep = g_q[g_order[g_at]];
+        g_q[0] = keep; g_order[0] = 0; g_qn = 1; g_at = 0;
+    } else { g_qn = 0; g_at = -1; }
+    g_qsel = g_qtop = 0;
+    snprintf(g_note, sizeof(g_note), "The queue cleared");
+}
+
+/* Buttons (2026-10-29, architecture §12d): L / R the tabs (Now playing, Library, Queue); in Now playing
+ * and a film left / right the previous / next track, held a seek; circle back to the Library, never
+ * out (HOME); triangle the play order; square stop, add, or remove; START and SELECT free. */
 static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
-    (void)b;
+    static uint64_t lr_since, lr_seek_at;
+    static int lr_dir, lr_seeked, lr_swallow;
+    PlayerInfo pi;
+    int lr = (b & PSPEXP_BUTTON_LEFT) ? -1 : (b & PSPEXP_BUTTON_RIGHT) ? 1 : 0;
+    int film = g_view == V_NOW && !g_opts && player_info(&pi) && pi.video;
+    if (g_view == V_NOW && !g_opts) {   /* left / right: a tap the track, held a seek (5 s each 0.25 s) */
+        if (lr && !lr_dir) { lr_dir = lr; lr_since = now; lr_seeked = 0; lr_swallow = film && !pi.paused && !pi.ended && now >= g_hud_until; }
+        else if (lr_dir && lr == lr_dir && !lr_swallow && now - lr_since >= 400000u && now - lr_seek_at >= 250000u) {
+            player_seek(lr_dir * 5); lr_seeked = 1; lr_seek_at = now; g_dirty = 1; g_hud_until = now + 3000000;
+        } else if (lr_dir && lr != lr_dir) {   /* let go */
+            if (!lr_seeked && !lr_swallow && g_qn) step(lr_dir, 1);
+            lr_dir = 0; g_dirty = 1;
+        }
+    } else lr_dir = 0;
     if (!pressed && !up && !down && !left && !right) return;
     g_dirty = 1;
     {   /* over a film: the first key only brings its controls back */
-        PlayerInfo pi;
-        if (g_view == V_NOW && !g_opts && player_info(&pi) && pi.video && !pi.paused && !pi.ended && now >= g_hud_until && !(pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_START))) {
+        if (film && !pi.paused && !pi.ended && now >= g_hud_until && !(pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER))) {
             g_hud_until = now + 3000000;
             return;
         }
@@ -454,35 +552,38 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     }
     if (g_msg[0] && pressed) g_msg[0] = 0;
     if (g_note[0] && pressed) g_note[0] = 0;
-    if (g_opts) {   /* shuffle and repeat */
-        if (up || down) g_opt_sel ^= 1;
+    if (g_opts) {   /* shuffle, repeat (and in the Queue: clear it) */
+        if (up) g_opt_sel = (g_opt_sel + opts_rows() - 1) % opts_rows();
+        if (down) g_opt_sel = (g_opt_sel + 1) % opts_rows();
         if (pressed & PSPEXP_BUTTON_CROSS) {
             if (g_opt_sel == 0) {
                 int playing = g_at >= 0 ? g_order[g_at] : -1;
                 g_shuffle = !g_shuffle;
                 order_build(playing);
                 if (!g_shuffle && playing >= 0) g_at = playing;
-            } else g_repeat = (g_repeat + 1) % 3;
+            } else if (g_opt_sel == 1) g_repeat = (g_repeat + 1) % 3;
+            else { queue_clear(); g_opts = 0; }
         }
         if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE)) g_opts = 0;
         return;
     }
-    if (pressed & PSPEXP_BUTTON_START) { g_view = (g_view + 1) % NVIEWS; if (g_view == V_BROWSE && !g_dir[0]) places_load(); return; }
+    if (pressed & (PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER)) {   /* the tabs */
+        if (g_view == V_NOW) music_leave();   /* (a film waits, paused) */
+        g_view = (g_view + ((pressed & PSPEXP_BUTTON_RTRIGGER) ? 1 : NVIEWS - 1)) % NVIEWS;
+        if (g_view == V_BROWSE && !g_dir[0]) places_load();
+        return;
+    }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) { g_opts = 1; g_opt_sel = 0; return; }
-    if ((pressed & PSPEXP_BUTTON_LTRIGGER) && g_qn) { step(-1, 1); return; }
-    if ((pressed & PSPEXP_BUTTON_RTRIGGER) && g_qn) { step(1, 1); return; }
     switch (g_view) {
     case V_NOW:
         if (pressed & PSPEXP_BUTTON_CROSS) music_toggle();
-        if (left) player_seek(-10);
-        if (right) player_seek(10);
         if (up && g_mod_ch0 > 0) g_mod_ch0--;   /* a module: its channels, when they do not all fit */
         if (down) g_mod_ch0++;                   /* (draw_module keeps it in range) */
         if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
-        if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_view = V_BROWSE; }   /* back to the lists (a film paused) */
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_view = V_BROWSE; if (!g_dir[0]) places_load(); }   /* back to the Library (a film paused) */
         break;
     case V_BROWSE: {
-        int n = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : g_dir[0] ? g_list.n : g_npl;
+        int n = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : g_dir[0] ? lib_rows() : g_npl;
         if (g_up) {   /* a media server's lists */
             if (up && g_bsel > 0) g_bsel--;
             if (down && g_bsel < n - 1) g_bsel++;
@@ -502,8 +603,11 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (right) g_bsel = g_bsel + 6 < n ? g_bsel + 6 : (n ? n - 1 : 0);
         if (pressed & PSPEXP_BUTTON_CROSS) browse_choose();
         if (pressed & PSPEXP_BUTTON_CIRCLE) browse_up();
-        if ((pressed & PSPEXP_BUTTON_SQUARE) && g_dir[0] && g_bsel < g_list.n && !g_list.e[g_bsel].is_up)
-            music_add(g_dir, &g_list.e[g_bsel], 1);   /* a song, or a folder's songs, at the end of the queue */
+        if ((pressed & PSPEXP_BUTTON_SQUARE) && g_dir[0]) {   /* a song, or a folder's songs (Play all, Shuffle: the folder's), at the end of the queue */
+            const FEntry *e = lib_entry(g_bsel);
+            if (e) music_add(g_dir, e, 1);
+            else if (g_bsel < g_nspec) music_add(g_dir, g_list.e, g_list.n);
+        }
         break;
     }
     case V_QUEUE:
@@ -521,7 +625,7 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
             if (g_qsel < g_at) g_at--;
             if (g_qsel >= g_qn && g_qsel > 0) g_qsel--;
         }
-        if (pressed & PSPEXP_BUTTON_CIRCLE) g_view = V_BROWSE;
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { g_view = V_BROWSE; if (!g_dir[0]) places_load(); }
         break;
     }
 }
@@ -557,7 +661,7 @@ static void fmt_time(double t, char *out, size_t n)
     else snprintf(out, n, "%d:%02d", s / 60, s % 60);
 }
 
-static const char *track_name(int k) { return g_q[g_order[k]].e.name; }
+static const char *track_name(int k) { const Track *t = &g_q[g_order[k]]; return t->title[0] ? t->title : t->e.name; }
 
 /* ---- a tracker module, as a tracker shows it (libopenmpt: player_module) ---------------------------- */
 
@@ -657,7 +761,7 @@ static void draw_now(uint64_t now)
         gfx_nine(NINE_R10, 24, 44, 128, 128, UI_TILE, 255);
         gfx_icon("music", 64, 24 + 32, 44 + 32, UI_MUTED, 255);
         gfx_text(FONT_TITLE, x, 60, "Nothing playing", UI_TEXT, 255, 0);
-        gfx_text_wrapped(FONT_SMALL, x, 90, "Choose songs or films in Browse (START), or one in Files.", UI_SUB, 255, UI_SCREEN_W - x - 16, 14, 3);
+        gfx_text_wrapped(FONT_SMALL, x, 90, "Choose songs or films in the Library (R), or one in Files.", UI_SUB, 255, UI_SCREEN_W - x - 16, 14, 3);
         return;
     }
     if (have && pi.cover[0] && strcmp(g_cover_key, pi.cover)) {
@@ -748,15 +852,36 @@ static void draw_browse(void)
         }
         return;
     }
+    if (g_dir[0]) n = lib_rows();
     if (g_bsel < g_btop) g_btop = g_bsel;
     if (g_bsel >= g_btop + ROWS) g_btop = g_bsel - ROWS + 1;
-    gfx_text(FONT_SMALL, 16, 26, g_dir[0] ? g_dir : "Where your music is", UI_MUTED, 255, UI_SCREEN_W - 32);
+    {   /* where: the place's name, then the folders below it ("Music / Album") */
+        char where[FOPS_PATH + 64];
+        if (!g_dir[0]) snprintf(where, sizeof(where), "Your music, films and captures");
+        else {
+            size_t rl = strlen(g_root);
+            const char *rest = !strncmp(g_dir, g_root, rl) ? g_dir + rl : "";
+            while (*rest == '/') rest++;
+            snprintf(where, sizeof(where), "%s%s%s", g_root_name, *rest ? " / " : "", rest);
+            { char *c; for (c = where + strlen(g_root_name); *c; c++) if (*c == '/' && c[-1] != ' ') { memmove(c + 3, c + 1, strlen(c + 1) + 1); c[0] = ' '; c[1] = '/'; c[2] = ' '; c += 2; } }
+        }
+        gfx_text(FONT_SMALL, 16, 26, where, UI_MUTED, 255, UI_SCREEN_W - 32);
+    }
     if (!n) { gfx_text(FONT_BODY, 32, 60, g_dir[0] ? "No folders or songs here" : "No places", UI_MUTED, 255, 0); return; }
     for (i = g_btop; i < n && i < g_btop + ROWS; i++) {
-        if (!g_dir[0]) list_row(i, g_btop, i == g_bsel, g_pl[i].icon, g_pl[i].name, UI_TEXT);
-        else {
-            const FEntry *f = &g_list.e[i];
-            list_row(i, g_btop, i == g_bsel, f->is_up ? "folder-up" : f->is_dir ? "folder" : player_is_video(f->name) ? "film" : "file-music", f->is_up ? ".." : f->name, f->is_dir ? UI_TEXT : UI_SUB);
+        if (!g_dir[0]) { list_row(i, g_btop, i == g_bsel, g_pl[i].icon, g_pl[i].name, UI_TEXT); continue; }
+        if (i < g_nspec) { list_row(i, g_btop, i == g_bsel, i == 0 ? "play" : "shuffle", i == 0 ? "Play all" : "Shuffle", UI_ACCENT); continue; }
+        {
+            const FEntry *f = lib_entry(i);
+            const struct LTitle *t = &g_lt[i - g_nspec];
+            int cur = !f->is_dir && music_is_current(g_dir, f->name);
+            list_row(i, g_btop, i == g_bsel, f->is_dir ? "folder" : cur ? "volume-2" : player_is_video(f->name) ? "film" : "file-music",
+                     f->is_dir ? f->name : t->title[0] ? t->title : f->name, f->is_dir ? UI_TEXT : cur ? UI_ACCENT : UI_SUB);
+            if (!f->is_dir && t->artist[0]) {   /* the artist, at the row's end */
+                const int y = 40 + (i - g_btop) * 24 + 4, w = gfx_text_width(FONT_SMALL, t->artist), maxw = 140;
+                int x = UI_SCREEN_W - 28 - (w < maxw ? w : maxw);
+                gfx_text(FONT_SMALL, x, y, t->artist, i == g_bsel ? 0xffffff : UI_MUTED, 255, maxw);
+            }
         }
     }
 }
@@ -764,7 +889,7 @@ static void draw_browse(void)
 static void draw_queue(void)
 {
     int i;
-    if (!g_qn) { gfx_text(FONT_BODY, 32, 60, "The queue is empty: choose songs or films in Browse.", UI_MUTED, 255, 0); return; }
+    if (!g_qn) { gfx_text(FONT_BODY, 32, 60, "The queue is empty: square adds songs in the Library.", UI_MUTED, 255, 0); return; }
     if (g_qsel < g_qtop) g_qtop = g_qsel;
     if (g_qsel >= g_qtop + ROWS) g_qtop = g_qsel - ROWS + 1;
     for (i = g_qtop; i < g_qn && i < g_qtop + ROWS; i++)
@@ -773,17 +898,17 @@ static void draw_queue(void)
 
 static void draw_opts(void)
 {
-    int w = 260, h = 96, x = (UI_SCREEN_W - w) / 2, y = (UI_SCREEN_H - h) / 2 - 8, i;
+    int rows = opts_rows(), w = 260, h = 44 + rows * 26, x = (UI_SCREEN_W - w) / 2, y = (UI_SCREEN_H - h) / 2 - 8, i;
     static const char *rep[3] = { "Off", "All", "One" };
     gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
     gfx_nine(NINE_R14, x, y, w, h, 0x1b2a46, 250);
     gfx_text(FONT_BODY, x + 16, y + 10, "Play order", UI_TEXT, 255, 0);
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < rows; i++) {
         int ry = y + 36 + i * 26, on = i == g_opt_sel;
         if (on) gfx_nine(NINE_R6, x + 10, ry - 2, w - 20, 24, 0xffffff, 30);
-        gfx_icon(i == 0 ? "shuffle" : g_repeat == R_ONE ? "repeat-1" : "repeat", 16, x + 18, ry + 2, UI_ACCENT, 255);
-        gfx_text(FONT_SMALL, x + 42, ry + 2, i == 0 ? "Shuffle" : "Repeat", UI_TEXT, 255, 0);
-        gfx_text(FONT_SMALL, x + w - 60, ry + 2, i == 0 ? (g_shuffle ? "On" : "Off") : rep[g_repeat], UI_SUB, 255, 0);
+        gfx_icon(i == 0 ? "shuffle" : i == 2 ? "trash-2" : g_repeat == R_ONE ? "repeat-1" : "repeat", 16, x + 18, ry + 2, UI_ACCENT, 255);
+        gfx_text(FONT_SMALL, x + 42, ry + 2, i == 0 ? "Shuffle" : i == 1 ? "Repeat" : "Clear the queue", UI_TEXT, 255, 0);
+        if (i < 2) gfx_text(FONT_SMALL, x + w - 60, ry + 2, i == 0 ? (g_shuffle ? "On" : "Off") : rep[g_repeat], UI_SUB, 255, 0);
     }
 }
 
@@ -825,11 +950,9 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
         }
         if (g_msg[0]) gfx_text(FONT_BADGE, 16, UI_SCREEN_H - 62, g_msg, 0xff9a9a, 255, UI_SCREEN_W - 32);
         x = ui_hint_btn(x, 'x', !pi.paused && !pi.ended ? "Pause" : "Play");
-        x = ui_hint_cap(x, "LEFT/RIGHT", "10 s", UI_SUB);
+        x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Film, held: seek" : "Held: seek", UI_SUB);
         x = ui_hint_btn(x, 's', "Stop");
-        if (g_qn > 1) x = ui_hint_cap(x, "L/R", "Previous / next", UI_SUB);
-        x = ui_hint_cap(x, "START", "View", UI_SUB);
-        x = ui_hint_btn(x, 'o', "Browse");
+        x = ui_hint_btn(x, 'o', "Library");
     }
     notify_draw(now);
     pspexp_present(ctx);
@@ -838,8 +961,8 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
 
 static void mu_render(PspExpContext *ctx, uint64_t now)
 {
-    static const char *tab[NVIEWS] = { "Now playing", "Browse", "Queue" };
-    int i, x, tx = 120;
+    static const char *tab[NVIEWS] = { "Now playing", "Library", "Queue" };
+    int i, x, tx = 112;
     char s[64];
     g_dirty = 0;
     if (draw_film(ctx, now)) return;
@@ -849,12 +972,16 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     gfx_backdrop();
     gfx_icon("clapperboard", 16, 12, 8, UI_ACCENT, 255);
     gfx_text(FONT_TITLE, 34, 5, "Media", UI_TEXT, 255, 0);
-    for (i = 0; i < NVIEWS; i++) {   /* the views, as tabs (START) */
+    gfx_nine(NINE_R6, tx - 20, 9, 16, 14, 0x1e2c4a, 255);   /* the views, as tabs: L and R on either side */
+    gfx_text(FONT_BADGE, tx - 15, 10, "L", UI_SUB, 255, 0);
+    for (i = 0; i < NVIEWS; i++) {
         int w = gfx_text_width(FONT_SMALL, tab[i]) + 18, on = i == g_view;
         if (on) gfx_nine(NINE_R6, tx, 7, w, 18, UI_ACCENT, 200);
         gfx_text(FONT_SMALL, tx + 9, 8, tab[i], on ? 0xffffff : UI_SUB, 255, 0);
         tx += w + 4;
     }
+    gfx_nine(NINE_R6, tx, 9, 16, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, tx + 5, 10, "R", UI_SUB, 255, 0);
     x = UI_SCREEN_W - 12;   /* the play order, top right */
     if (g_repeat != R_OFF) { x -= 16; gfx_icon(g_repeat == R_ONE ? "repeat-1" : "repeat", 16, x, 8, UI_SUB, 255); x -= 6; }
     if (g_shuffle) { x -= 16; gfx_icon("shuffle", 16, x, 8, UI_SUB, 255); x -= 6; }
@@ -865,24 +992,28 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     if (g_msg[0]) gfx_text(FONT_BADGE, 16, 236, g_msg, 0xff9a9a, 255, UI_SCREEN_W - 32);
     else if (g_note[0]) gfx_text(FONT_BADGE, 16, 236, g_note, UI_ACCENT, 255, UI_SCREEN_W - 32);
     x = 12;
-    if (g_view == V_NOW) {
+    if (g_opts) {   /* the popup's own buttons */
+        x = ui_hint_btn(x, 'x', g_opt_sel == 2 ? "Clear" : "Change");
+        x = ui_hint_btn(x, 'o', "Close");
+    } else if (g_view == V_NOW) {
         PlayerInfo pi;
         int have = player_info(&pi);
         x = ui_hint_btn(x, 'x', have && !pi.paused && !pi.ended ? "Pause" : "Play");
-        x = ui_hint_cap(x, "LEFT/RIGHT", "10 s", UI_SUB);
+        if (g_qn > 1 || have) x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Track, held: seek" : "Held: seek", UI_SUB);
         if (have) x = ui_hint_btn(x, 's', "Stop");
+        x = ui_hint_btn(x, 't', "Order");
+        x = ui_hint_btn(x, 'o', "Library");
     } else if (g_view == V_BROWSE) {
-        x = ui_hint_btn(x, 'x', "Open / play");
-        if (g_dir[0] || g_up) x = ui_hint_btn(x, 'o', "Up");
+        x = ui_hint_btn(x, 'x', g_dir[0] && g_bsel < g_nspec ? "Play" : "Open / play");
         if (g_dir[0] || g_up == UP_FOLDER) x = ui_hint_btn(x, 's', "Add");
+        x = ui_hint_btn(x, 't', "Order");
+        if (g_dir[0] || g_up) x = ui_hint_btn(x, 'o', "Up");
     } else {
         x = ui_hint_btn(x, 'x', "Play");
         x = ui_hint_btn(x, 's', "Remove");
+        x = ui_hint_btn(x, 't', "Order");
+        x = ui_hint_btn(x, 'o', "Library");
     }
-    if (g_qn > 1) x = ui_hint_cap(x, "L/R", "Track", UI_SUB);
-    x = ui_hint_btn(x, 't', "Order");
-    x = ui_hint_cap(x, "START", "View", UI_SUB);
-    if (g_view != V_BROWSE) x = ui_hint_btn(x, 'o', "Browse");
     if (g_opts) draw_opts();
     notify_draw(now);
     pspexp_present(ctx);

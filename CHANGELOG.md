@@ -23,6 +23,11 @@
   smaller, down to about a third.
 - A recording's first moment, before the PSP's first picture arrives, shows
   that picture instead of black.
+- **Media, made simpler**: L / R switch its tabs (Now playing, Library,
+  Queue); left / right change song (held: seek); a folder starts with
+  **Play all** and **Shuffle**; songs show their titles and artists, the one
+  playing marked; a **Captures** place with your recordings; the play-order
+  menu can clear the queue. It opens on the Library unless something plays.
 - **Circle never closes an app** any more: it steps back (the folder above,
   Media's Browse) and does nothing at an app's top; HOME closes. Media's
   Now playing and Queue go back to Browse on circle. Holding SELECT no

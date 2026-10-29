@@ -1620,6 +1620,25 @@ circle goes back to Browse and pauses the film (it closed Media until
 2026-10-29; HOME does now). The textures go when a track
 without a picture plays. Not yet tried: the GameShell (armhf, slower).
 
+**Media, redone (2026-10-29, after a walk-through of its buttons).** Its
+three views are tabs on L / R (Now playing, Library, which was Browse,
+Queue); START no longer cycles them, and START and SELECT are free. In Now
+playing and a film, left / right are the previous / next track, held a seek
+(5 s each 0.25 s after 0.4 s). Square stays Stop there. Media opens on the
+Library unless something plays, so a paused film is no longer what it
+opens on. The Library's places: Music, Videos, Captures (the recorder's
+folder), the drives, the PSP's memory stick as one place, Media servers
+(Home went: Files is for the board; PSP: MUSIC and VIDEO went into PSP). A
+folder has no ".." row (circle goes up, onto the folder come from) and,
+when it holds songs, starts with Play all and Shuffle. Songs show their tag
+titles and artists (`tags.c`: ID3v2 and v1, FLAC and Ogg comments from a
+file's first 32 KB, local files only, the first 300 a folder;
+`tests/test_tags.c`), the one playing marked; the queue and Now playing's
+"next" use the same titles. The top line names the place ("Music / Album")
+instead of the path. Triangle's menu has its own hints and, in the Queue,
+"Clear the queue" (the one playing kept). Tried on the PSP-1000 through the
+test port, each screen checked at 1:1.
+
 **Media servers** (2026-10-12, `upnp.c`): Browse's last place, "Media
 servers", searches the network by SSDP (an M-SEARCH for MediaServer:1 to
 239.255.255.250:1900, sent twice, 2.5 s of answers); each answer's

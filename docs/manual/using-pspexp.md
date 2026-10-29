@@ -235,28 +235,32 @@ first. A zipped ROM still goes straight to its emulator.
 ## Media
 
 **Apps > Media** plays the music and the films on your board, your USB
-sticks and the PSP's memory stick. Cross on a song or a film in **Files**
-opens it here too. It has three views; **START** goes from one to the next:
+sticks and the PSP's memory stick, and your captures. Cross on a song or a
+film in **Files** opens it here too. It has three tabs; **L / R** go from
+one to the next. It opens on **Now playing** while something plays, else on
+the **Library**:
 
 - **Now playing**: the song, artist, album and cover, the time, and
   what comes next;
-- **Browse**: your Music and Videos folders, home, the drives, the
-  PSP's **MUSIC** and **VIDEO** folders, and **Media servers**: the ones on
-  your network (Plex, Jellyfin, Kodi, MiniDLNA, a NAS or a router with
-  DLNA on), found when you open it. Cross opens a folder, or plays a
-  song (or film) and the rest of its folder; **square adds** the song, or a folder's songs (with its
-  subfolders'), to the end of the queue; circle goes up;
+- **Library**: **Music**, **Videos**, **Captures** (your recordings, clips
+  and screenshots, a folder for each game), the drives, the **PSP**'s
+  memory stick, and **Media servers**: the ones on your network (Plex,
+  Jellyfin, Kodi, MiniDLNA, a NAS or a router with DLNA on), found when you
+  open it. A folder with songs starts with **Play all** and **Shuffle**;
+  songs show their title and artist, and the one playing is marked. Cross
+  opens a folder, or plays a song (or film) and the rest of its folder;
+  **square adds** the song, or a folder's songs (with its subfolders'), to
+  the end of the queue; circle goes up;
 - **Queue**: the songs to come. Cross plays one, square takes it out.
 
 | Button | |
 |---|---|
-| cross | pause / play |
-| left / right | 10 seconds back / on |
-| L / R | the previous / next song |
-| square | stop (Browse: add to the queue; Queue: take out) |
-| triangle | play order: shuffle, repeat (off, all, one song) |
-| START | the next view |
-| circle | Browse: the folder above; Now playing and Queue: back to Browse (a film pauses) |
+| L / R | the other tab |
+| cross | pause / play (Library: open, play; Queue: play that one) |
+| left / right | Now playing: the previous / next song; held: back / on in it |
+| square | Now playing: stop; Library: add to the queue; Queue: take out |
+| triangle | play order: shuffle, repeat (off, all, one song); in the Queue also clear it |
+| circle | Library: the folder above; Now playing and Queue: back to the Library (a film pauses) |
 | HOME, twice | close Media (back to Files, if you came from there); the music goes on, a film pauses |
 | ♪ (note) | pause / play, from anywhere |
 
@@ -281,8 +285,9 @@ reads, H.264, H.265, VP9, AV1, with any sound) play full screen in
 screen, up to 30 frames a second (a 60 a second film shows every other
 one); the PSP draws each picture and plays the sound. A key brings the
 title, the time and the buttons over the picture for a few seconds (the
-first press only shows them); cross pauses, left / right jump 10 seconds,
-square stops. Closing Media pauses a film. A Raspberry Pi 400 shows a
+first press only shows them); cross pauses, left / right go to the
+previous or next film (held: back or on in it), square stops, circle goes
+back to the Library. Closing Media pauses a film. A Raspberry Pi 400 shows a
 720p or 1080p H.264 film at 29–30 frames a second; films need ffmpeg,
 which the card images have.
 

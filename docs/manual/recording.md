@@ -55,7 +55,7 @@ Videos made before this version, in **Videos/PSPExp**, are moved once into
 
 - **Watch one on the PSP:** **Settings > Recording > Captures** opens the
   folder in Files; open a game's folder and choose a video (it plays full
-  screen) or a picture.
+  screen) or a picture. Media has them too: **Library > Captures**.
 - **Copy one to a computer:** in Files, show the PSP's memory stick in the
   other panel, select the video and choose **triangle > Copy**. Then connect
   the PSP to the computer in USB mode as usual.
