@@ -40,16 +40,6 @@
  * mouse (xterm mouse modes 1000/1002/1006) get clicks. --no-host-input
  * turns this off, --no-grab shares the devices.
  *
- * Mirror view (Linux, --mirror [/dev/fb0]): the host's own framebuffer is
- * streamed to the PSP, scaled to fit (the ClockworkPi GameShell's 320x240
- * launcher and games), and the PSP's buttons become a virtual keypad through
- * /dev/uinput (default: the GameShell's keys: d-pad/nub = arrows, cross /
- * circle / square / triangle = A B X Y = J K U I, start = Enter, select =
- * Space, L / R = H / L). Hold start ~0.7 s = Menu (Esc); hold select ~0.7 s
- * switches between the mirror and the terminal (quick taps of select and
- * start still type Space / Enter, sent on release). No shoulder-button
- * combos: on a PSP-1000 over Wi-Fi, holding L+R covers the antenna.
- *
  * Hand-over: another PSPExp program (a game) can take the PSP while the
  * terminal keeps running: SIGUSR1 releases the PSP, SIGUSR2 takes it back
  * (scripts/board/pspexp-exec does both around a command).
@@ -723,10 +713,6 @@ static void send_arrow(char d)
 /* ---- rendering ------------------------------------------------------------ */
 
 static void draw_pointer(void);
-static void mirror_invalidate(void);
-static void mirror_reset(void);
-static void keypad_release_all(void);
-static int mirror_frame(void);
 
 static PspExpContext *ctx;
 static PspExpFont font;
@@ -1557,7 +1543,6 @@ static int try_connect(void)
     fprintf(stderr, "[pspexp-term] PSP connected\n");
     g_home_sent = -1;   /* (the PSP gives HOME back to its dialog at every disconnect) */
     T.dirty = 1;
-    mirror_reset();
     {
         char link[160];
         if (g_link_tcp) snprintf(link, sizeof(link), "Wi-Fi, PSP at %s", g_tcp.host ? g_tcp.host : "?");
@@ -1573,7 +1558,6 @@ static int try_connect(void)
 static void release_psp(void)
 {
     if (g_released) return;
-    keypad_release_all();
     if (pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED) {
         /* a program the launcher is starting, its "Starting" frame on the PSP: handed over, the PSP
          * keeps that frame and turns a spinner on it until the program draws (PspExpDisconnect) */
@@ -1609,9 +1593,6 @@ static int fire(int v, int held, uint64_t now, int repeat)
 static uint32_t g_prev_buttons;
 static int g_prev_l_held;
 static int g_prev_select_held, g_prev_select_released, g_select_tap;
-static int g_view_mirror;           /* 1: the host framebuffer is shown, buttons drive the keypad */
-static int mirror_available(void);
-static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay);
 static int g_view_launcher;
 static int g_launcher_on;   /* --launcher: the menu tree as the home view (launcher.c) */
 static int g_view_files, g_files_from_launcher;   /* the file manager (files.c), and where it was opened from */
@@ -1620,29 +1601,24 @@ static const AppView *g_app;                      /* a built-in app shown instea
 static int g_app_from_files;                      /* it was opened by Files (a song): closing it goes back there */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
-static int g_launch_aware;                   /* it hands the PSP over itself: no mirror while it runs */
+static int g_launch_aware;                   /* it hands the PSP over itself (a PSPExp program) */
 
-/* hold select: launcher -> terminal -> mirror -> launcher (the views that exist) */
+/* hold select: the launcher <-> the terminal; an app or Files closed (HOME, their own exit): where
+ * it was opened from. (The mirror view, the board's framebuffer on the PSP for the GameShell's
+ * ClockworkOS, went with it on 2026-10-29.) */
 static void view_cycle(void)
 {
     swallow();   /* the press that switched does not act in the new view */
     if (g_app) { g_app = NULL; g_view_launcher = 1; launcher_invalidate(); return; }
     if (g_view_files) { g_view_files = 0; if (g_files_from_launcher) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1; return; }
     if (g_view_launcher) { g_view_launcher = 0; T.dirty = 1; }
-    else if (!g_view_mirror) {
-        if (mirror_available()) { g_view_mirror = 1; mirror_invalidate(); }
-        else if (g_launcher_on) { g_view_launcher = 1; launcher_invalidate(); }
-    } else {
-        keypad_release_all();
-        g_view_mirror = 0;
-        if (g_launcher_on) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1;
-    }
+    else if (g_launcher_on) { g_view_launcher = 1; launcher_invalidate(); }
 }
 
 /* HOME: leave what is on screen (architecture §12d). The launcher keeps the PSP's own "Quit?"
  * dialog (HOME_MODE SYSTEM, home_mode_tick); everywhere else HOME is the console's: an app closes
  * as on its own exit (Media opened from Files back there), Files and the terminal go to the
- * launcher, a program shown in the mirror is ended (its end brings the launcher back) */
+ * launcher */
 static void home_leave(void)
 {
     swallow();
@@ -1653,17 +1629,15 @@ static void home_leave(void)
         return;
     }
     if (g_view_files) { view_cycle(); return; }
-    if (g_view_mirror && g_launch_pid > 0 && !g_launch_aware) { kill(-g_launch_pid, SIGTERM); return; }
-    if (!g_view_launcher && g_launcher_on) {   /* the terminal, or a mirror of nothing launched */
-        keypad_release_all();
-        g_view_mirror = 0; g_view_launcher = 1; launcher_invalidate();
+    if (!g_view_launcher && g_launcher_on) {   /* the terminal */
+        g_view_launcher = 1; launcher_invalidate();
     }
 }
 
 /* who HOME belongs to, said to the PSP when it changes and after each connection */
 static void home_mode_tick(void)
 {
-    int want = g_launcher_on && !(g_view_launcher && !g_app && !g_view_files && !g_view_mirror);
+    int want = g_launcher_on && !(g_view_launcher && !g_app && !g_view_files);
     if (want == g_home_sent || !pspexp_home_supported(ctx)) return;
     if (pspexp_home_mode(ctx, want) == 0) g_home_sent = want;
 }
@@ -1673,7 +1647,7 @@ static void app_show(const AppView *a)
 {
     if (!g_launcher_on || !a) return;   /* it draws with the launcher's graphics */
     g_app = a; g_app_from_files = 0;
-    g_view_files = 0; g_view_launcher = 0; g_view_mirror = 0;
+    g_view_files = 0; g_view_launcher = 0;
     swallow();
     a->open();
 }
@@ -1684,7 +1658,7 @@ static void files_show(const char *path, int from_launcher)
     if (!g_launcher_on) return;   /* it draws with the launcher's graphics */
     g_files_from_launcher = from_launcher;
     g_app = NULL;
-    g_view_files = 1; g_view_launcher = 0; g_view_mirror = 0;
+    g_view_files = 1; g_view_launcher = 0;
     swallow();
     files_open(path);
 }
@@ -1696,7 +1670,7 @@ static void notify_go(const char *a)
     else if (!strncmp(a, "app:", 4) && app_find(a + 4)) app_show(app_find(a + 4));
     else if (!strcmp(a, "files")) files_show(NULL, 1);
     else if (!strncmp(a, "category:", 9)) {
-        g_app = NULL; g_view_files = 0; g_view_mirror = 0; g_view_launcher = 1;
+        g_app = NULL; g_view_files = 0; g_view_launcher = 1;
         launcher_category(a + 9);
         launcher_invalidate();
         swallow();
@@ -1843,25 +1817,24 @@ static void handle_input(void)
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
     if (b || ax * ax + ay * ay > 64 * 64) g_input_at = now;   /* (a worn nub rests up to ~55 off the middle) */
-    /* select: a long hold switches between the terminal and the mirrored
-     * screen; a tap is resolved on release (keyboard toggle / Space) */
+    /* select: a long hold switches between the launcher and the terminal; a tap is resolved on
+     * release (the terminal's keyboard, the launcher's notifications) */
     {
         static uint64_t sel_down; static int sel_used;
         int sel_tap = 0;
         if (pressed & PSPEXP_BUTTON_SELECT) { sel_down = now; sel_used = 0; }
         /* (not in an app or Files: HOME leaves them, and SELECT is theirs; held, it went to the
          * launcher until 2026-10-29) */
-        if ((b & PSPEXP_BUTTON_SELECT) && !sel_used && now - sel_down >= 700000u && (mirror_available() || g_launcher_on) && !g_app && !g_view_files) {
+        if ((b & PSPEXP_BUTTON_SELECT) && !sel_used && now - sel_down >= 700000u && g_launcher_on && !g_app && !g_view_files) {
             sel_used = 1;
             view_cycle();
         }
         if ((g_prev_select_released = (!(b & PSPEXP_BUTTON_SELECT) && g_prev_select_held))) sel_tap = !sel_used;
         g_prev_select_held = (b & PSPEXP_BUTTON_SELECT) != 0;
         g_select_tap = sel_tap;
-        if (!mirror_available() && !g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
+        if (!g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
     }
     if (pressed & PSPEXP_BUTTON_HOME) { home_leave(); return; }   /* (only sent while HOME is the console's) */
-    if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
     /* the views get SELECT as a tap, on its release (a press acted on also when the user was
      * holding it for the launcher); none closes on it now: circle steps back, HOME leaves */
     if (g_app || g_view_files || g_view_launcher) pressed = (pressed & ~(uint32_t)PSPEXP_BUTTON_SELECT) | (g_select_tap ? PSPEXP_BUTTON_SELECT : 0);
@@ -1982,448 +1955,6 @@ static void handle_input(void)
     if (pressed & PSPEXP_BUTTON_TRIANGLE) { pty_puts(shift ? "\t" : " "); T.view = 0; }   /* L + triangle: Tab */
     if (pressed & PSPEXP_BUTTON_START) { pty_puts("\r"); T.view = 0; }
 }
-
-/* ---- mirror view: the host framebuffer and a virtual keypad (Linux) ------------------ */
-
-#ifdef __linux__
-#include <linux/fb.h>
-#include <linux/uinput.h>
-#include <sys/mman.h>
-
-static const char *g_fb_path;
-static int g_fb = -1, g_ui = -1;
-static uint8_t *g_fb_mem;
-static size_t g_fb_len;
-static struct fb_fix_screeninfo g_fbf;
-static uint8_t *g_fb_prev;          /* last frame sent, for change detection */
-static size_t g_fb_prev_len;
-static int g_mirror_force;
-static uint16_t g_mirror_tex[8];
-static int g_mirror_npages;
-static uint64_t g_mirror_last;
-/* tiled mode (screens up to 480x272, sent at native size): 64x32 tiles kept
- * on the PSP as separate textures; only the tiles that changed are re-sent */
-#define MT_W 64
-#define MT_H 32
-#define MT_MAX ((480 / MT_W + 1) * (272 / MT_H + 1))
-static uint16_t g_tile_id[MT_MAX];   /* 0: not uploaded */
-static int g_tile_gen[MT_MAX];
-static int g_tile_cols, g_tile_rows, g_tile_w, g_tile_h;
-static unsigned g_tiles_sent, g_tiles_frames;
-
-static int mirror_available(void) { return g_fb_path != NULL; }
-/* redraw everything (view switch): the PSP still holds the tiles, their ids stay known */
-static void mirror_invalidate(void) { g_mirror_force = 1; }
-/* after a (re)connect the PSP holds none of them: forget the ids, or new
- * uploads would reuse names the old session left behind -> DUPLICATE_ID */
-static void mirror_reset(void)
-{
-    int i;
-    g_mirror_force = 1;
-    for (i = 0; i < MT_MAX; i++) g_tile_id[i] = 0;
-}
-
-static int mirror_open(void)
-{
-    if (g_fb >= 0) return 0;
-    if (!g_fb_path) return -1;
-    g_fb = open(g_fb_path, O_RDONLY);
-    if (g_fb < 0) return -1;
-    if (ioctl(g_fb, FBIOGET_FSCREENINFO, &g_fbf) < 0) { close(g_fb); g_fb = -1; return -1; }
-    g_fb_len = g_fbf.smem_len;
-    g_fb_mem = (uint8_t *)mmap(NULL, g_fb_len, PROT_READ, MAP_SHARED, g_fb, 0);
-    if (g_fb_mem == MAP_FAILED) { g_fb_mem = NULL; close(g_fb); g_fb = -1; return -1; }
-    return 0;
-}
-
-/* 16 or 32 bpp framebuffer pixel -> 5650 (R in the low bits, as the PSP wants) */
-static inline uint16_t fb_pixel(const uint8_t *row, int x, const struct fb_var_screeninfo *v)
-{
-    uint32_t p, r, g, b;
-    if (v->bits_per_pixel == 16) p = ((const uint16_t *)row)[x];
-    else p = ((const uint32_t *)row)[x];
-    r = (p >> v->red.offset) & ((1u << v->red.length) - 1);
-    g = (p >> v->green.offset) & ((1u << v->green.length) - 1);
-    b = (p >> v->blue.offset) & ((1u << v->blue.length) - 1);
-    r = v->red.length >= 5 ? r >> (v->red.length - 5) : r << (5 - v->red.length);
-    g = v->green.length >= 6 ? g >> (v->green.length - 6) : g << (6 - v->green.length);
-    b = v->blue.length >= 5 ? b >> (v->blue.length - 5) : b << (5 - v->blue.length);
-    return (uint16_t)(r | (g << 5) | (b << 11));
-}
-
-/* Tiled mirror: compare each 64x32 tile with the last frame sent, upload the
- * changed ones (alternating texture ids, the old one released), and draw all
- * tiles from what the PSP holds. A launcher cursor move costs a few tiles,
- * not the whole 150 KB screen: the difference that matters over Wi-Fi. */
-static int mirror_frame_tiled(const struct fb_var_screeninfo *v, const uint8_t *base, size_t fl)
-{
-    int w = (int)v->xres, h = (int)v->yres, tx, ty, i, changed = 0, bpp = (int)v->bits_per_pixel / 8;
-    float s = 480.0f / w < 272.0f / h ? 480.0f / w : 272.0f / h;
-    int qw = (int)(w * s), qh = (int)(h * s), ox = (480 - qw) / 2, oy = (272 - qh) / 2;
-    int cols = (w + MT_W - 1) / MT_W, rows = (h + MT_H - 1) / MT_H;
-    uint8_t dirty[MT_MAX];
-    size_t line = g_fbf.line_length;
-
-    if (cols * rows > MT_MAX) return 0;
-    if (cols != g_tile_cols || rows != g_tile_rows || w != g_tile_w || h != g_tile_h || g_fb_prev_len != fl) {
-        for (i = 0; i < MT_MAX; i++) { if (g_tile_id[i]) pspexp_release(ctx, g_tile_id[i]); g_tile_id[i] = 0; }
-        free(g_fb_prev); g_fb_prev = (uint8_t *)malloc(fl); g_fb_prev_len = g_fb_prev ? fl : 0;
-        g_tile_cols = cols; g_tile_rows = rows; g_tile_w = w; g_tile_h = h;
-        g_mirror_force = 1;
-    }
-    if (!g_fb_prev) return 0;
-    /* which tiles changed */
-    for (ty = 0; ty < rows; ty++)
-        for (tx = 0; tx < cols; tx++) {
-            int k = ty * cols + tx, y, y1 = (ty + 1) * MT_H < h ? (ty + 1) * MT_H : h;
-            size_t xoff = (size_t)tx * MT_W * bpp, xlen = (size_t)((tx + 1) * MT_W < w ? MT_W : w - tx * MT_W) * bpp;
-            dirty[k] = g_mirror_force || !g_tile_id[k];
-            for (y = ty * MT_H; !dirty[k] && y < y1; y++)
-                if (memcmp(g_fb_prev + (size_t)y * line + xoff, base + (size_t)y * line + xoff, xlen)) dirty[k] = 1;
-            changed |= dirty[k];
-        }
-    if (!changed) return 0;
-    g_mirror_force = 0;
-
-    pspexp_begin_frame(ctx);
-    pspexp_set_clip(ctx, 0, 0, 480, 272);
-    pspexp_fill_rect(ctx, 0, 0, 480, 272, 0, 255);
-    for (ty = 0; ty < rows; ty++)
-        for (tx = 0; tx < cols; tx++) {
-            int k = ty * cols + tx, x0 = tx * MT_W, y0 = ty * MT_H;
-            int pw = w - x0 < MT_W ? w - x0 : MT_W, ph = h - y0 < MT_H ? h - y0 : MT_H;
-            PspExpQuadExRec q;
-            if (dirty[k]) {
-                int tw = 16, th = 8, y, rowblocks;
-                uint16_t id = (uint16_t)(1000 + k * 2 + (g_tile_gen[k] & 1)), *dst;
-                PspExpTextureDesc d;
-                PspExpFrame f;
-                while (tw < pw) tw <<= 1;
-                while (th < ph) th <<= 1;
-                memset(&d, 0, sizeof(d));
-                d.width = (uint16_t)tw; d.height = (uint16_t)th; d.format = PSPEXP_TEX_5650;
-                d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;
-                f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw < 64 ? tw : 64); f.h = (uint16_t)th;
-                dst = (uint16_t *)pspexp_upload_texture_begin(ctx, id, &d, (uint32_t)(tw * th * 2), &f, 1);
-                if (!dst) continue;
-                rowblocks = tw >> 3;
-                for (y = 0; y < th; y++) {
-                    uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
-                    int x = 0;
-                    if (y < ph) {
-                        const uint8_t *row = base + (size_t)(y0 + y) * line;
-                        for (; x < pw; x++) band[((x >> 3) << 6) + (x & 7)] = fb_pixel(row, x0 + x, v);
-                        memcpy(g_fb_prev + (size_t)(y0 + y) * line + (size_t)x0 * bpp, row + (size_t)x0 * bpp, (size_t)pw * bpp);
-                    }
-                    for (; x < tw; x++) band[((x >> 3) << 6) + (x & 7)] = 0;
-                }
-                if (pspexp_upload_texture_commit(ctx, 0) < 0) continue;
-                if (g_tile_id[k]) pspexp_release(ctx, g_tile_id[k]);
-                g_tile_id[k] = id;
-                g_tile_gen[k]++;
-                g_tiles_sent++;
-            }
-            if (!g_tile_id[k]) continue;
-            memset(&q, 0, sizeof(q));
-            q.x = (int16_t)(ox + x0 * qw / w); q.y = (int16_t)(oy + y0 * qh / h);
-            q.w = (int16_t)(ox + (x0 + pw) * qw / w - q.x); q.h = (int16_t)(oy + (y0 + ph) * qh / h - q.y);
-            q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)pw; q.v1 = (uint16_t)ph; q.color = 0xFFFF;
-            pspexp_draw_quad_ex_batch(ctx, g_tile_id[k], &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
-        }
-    draw_pointer();
-    pspexp_present(ctx);
-    g_mirror_last++;
-    g_tiles_frames++;
-    return 1;
-}
-
-/* One frame: if the screen changed, upload it (downscaled when larger than the
- * PSP, else native and scaled by the GE) as swizzled 5650 pages and draw it
- * letterboxed. Returns 1 when a frame was sent. */
-static int mirror_frame(void)
-{
-    struct fb_var_screeninfo v;
-    int w, h, dw, dh, x0, y0, i, ox, oy, qw, qh;
-    const uint8_t *base;
-    size_t fl;
-    float s;
-    if (mirror_open() < 0) return 0;
-    if (ioctl(g_fb, FBIOGET_VSCREENINFO, &v) < 0) return 0;
-    if (v.bits_per_pixel != 16 && v.bits_per_pixel != 32) return 0;
-    w = (int)v.xres; h = (int)v.yres;
-    base = g_fb_mem + (size_t)v.yoffset * g_fbf.line_length + (size_t)v.xoffset * (v.bits_per_pixel / 8);
-    fl = (size_t)h * g_fbf.line_length;
-    if (base + fl > g_fb_mem + g_fb_len) return 0;
-    if (w <= 480 && h <= 272) return mirror_frame_tiled(&v, base, fl);
-    if (!g_mirror_force && g_fb_prev && g_fb_prev_len == fl && memcmp(g_fb_prev, base, fl) == 0) return 0;
-    if (g_fb_prev_len != fl) { free(g_fb_prev); g_fb_prev = (uint8_t *)malloc(fl); g_fb_prev_len = g_fb_prev ? fl : 0; }
-    if (g_fb_prev) memcpy(g_fb_prev, base, fl);
-    g_mirror_force = 0;
-
-    s = 480.0f / w < 272.0f / h ? 480.0f / w : 272.0f / h;
-    if (s < 1.0f) { dw = (int)(w * s); dh = (int)(h * s); } else { dw = w; dh = h; }
-    qw = (int)(w * s); qh = (int)(h * s);
-    ox = (480 - qw) / 2; oy = (272 - qh) / 2;
-
-    for (i = 0; i < g_mirror_npages; i++) pspexp_release(ctx, g_mirror_tex[i]);
-    g_mirror_npages = 0;
-    pspexp_begin_frame(ctx);
-    pspexp_set_clip(ctx, 0, 0, 480, 272);
-    pspexp_fill_rect(ctx, 0, 0, 480, 272, 0, 255);
-    for (y0 = 0; y0 < dh; y0 += 256) {
-        for (x0 = 0; x0 < dw; x0 += 256) {
-            int pw = dw - x0 < 256 ? dw - x0 : 256, ph = dh - y0 < 256 ? dh - y0 : 256;
-            int tw = 16, th = 8, y, rowblocks;
-            PspExpTextureDesc d;
-            PspExpFrame f;
-            PspExpQuadExRec q;
-            uint16_t *dst, id;
-            while (tw < pw) tw <<= 1;
-            while (th < ph) th <<= 1;
-            memset(&d, 0, sizeof(d));
-            d.width = (uint16_t)tw; d.height = (uint16_t)th; d.format = PSPEXP_TEX_5650;
-            d.layout = PSPEXP_LAYOUT_SWIZZLED; d.priority = PSPEXP_PRIORITY_NORMAL;
-            f.u0 = 0; f.v0 = 0; f.w = (uint16_t)(tw < 64 ? tw : 64); f.h = (uint16_t)th;
-            id = (uint16_t)(100 + (g_mirror_last & 1) * 8 + g_mirror_npages);   /* alternate ids: old pages may still be drawn */
-            dst = (uint16_t *)pspexp_upload_texture_begin(ctx, id, &d, (uint32_t)(tw * th * 2), &f, 1);
-            if (!dst) continue;
-            rowblocks = tw >> 3;
-            for (y = 0; y < th; y++) {
-                uint16_t *band = dst + (size_t)(y >> 3) * (size_t)rowblocks * 64u + (size_t)((y & 7) << 3);
-                int x = 0;
-                if (y < ph) {
-                    int sy = dh == h ? y0 + y : (int)((int64_t)(y0 + y) * h / dh);
-                    const uint8_t *row = base + (size_t)sy * g_fbf.line_length;
-                    for (; x < pw; x++) {
-                        int sx = dw == w ? x0 + x : (int)((int64_t)(x0 + x) * w / dw);
-                        band[((x >> 3) << 6) + (x & 7)] = fb_pixel(row, sx, &v);
-                    }
-                }
-                for (; x < tw; x++) band[((x >> 3) << 6) + (x & 7)] = 0;
-            }
-            if (pspexp_upload_texture_commit(ctx, 0) < 0) continue;
-            g_mirror_tex[g_mirror_npages++] = id;
-            memset(&q, 0, sizeof(q));
-            q.x = (int16_t)(ox + x0 * qw / dw); q.y = (int16_t)(oy + y0 * qh / dh);
-            q.w = (int16_t)(pw * qw / dw); q.h = (int16_t)(ph * qh / dh);
-            q.u0 = 0; q.v0 = 0; q.u1 = (uint16_t)pw; q.v1 = (uint16_t)ph; q.color = 0xFFFF;
-            pspexp_draw_quad_ex_batch(ctx, id, &q, 1, PSPEXP_PALETTE_DEFAULT, PSPEXP_VTX_SPRITE_2D_5650);
-        }
-    }
-    draw_pointer();
-    pspexp_present(ctx);
-    g_mirror_last++;
-    return 1;
-}
-
-/* the virtual keypad */
-static const struct { uint32_t button; int key; } KEYPAD[] = {
-    { PSPEXP_BUTTON_UP, KEY_UP }, { PSPEXP_BUTTON_DOWN, KEY_DOWN }, { PSPEXP_BUTTON_LEFT, KEY_LEFT }, { PSPEXP_BUTTON_RIGHT, KEY_RIGHT },
-    { PSPEXP_BUTTON_CROSS, KEY_J }, { PSPEXP_BUTTON_CIRCLE, KEY_K }, { PSPEXP_BUTTON_SQUARE, KEY_U }, { PSPEXP_BUTTON_TRIANGLE, KEY_I },
-    { PSPEXP_BUTTON_START, KEY_ENTER }, { PSPEXP_BUTTON_SELECT, KEY_SPACE },
-    { PSPEXP_BUTTON_LTRIGGER, KEY_H }, { PSPEXP_BUTTON_RTRIGGER, KEY_L },
-};
-#define NKEYPAD (int)(sizeof(KEYPAD) / sizeof(KEYPAD[0]))
-static int g_kp_down[NKEYPAD], g_kp_menu, g_kp_nub[4];
-
-/* XTEST fallback (kernels without uinput, like the GameShell's 5.3.6): a
- * minimal X11 client, speaking the protocol directly so the static binary
- * needs no libraries. Keys go to the X server on :0 as XTEST fake input,
- * X keycode = Linux keycode + 8 (the evdev keymap). */
-#include <sys/socket.h>
-#include <sys/un.h>
-static int g_x = -1, g_xtest_op;
-static uint64_t g_x_retry;
-
-static int read_full(int fd, void *buf, size_t n)
-{
-    size_t got = 0;
-    while (got < n) {
-        ssize_t r = read(fd, (char *)buf + got, n - got);
-        if (r <= 0) { if (r < 0 && errno == EINTR) continue; return -1; }
-        got += (size_t)r;
-    }
-    return 0;
-}
-
-/* MIT-MAGIC-COOKIE-1 for display 0 from $XAUTHORITY or ~/.Xauthority */
-static int xauth_cookie(uint8_t *cookie, int max)
-{
-    char path[512];
-    const char *xa = getenv("XAUTHORITY"), *home = getenv("HOME");
-    FILE *f;
-    int n = -1;
-    if (xa) snprintf(path, sizeof(path), "%s", xa); else snprintf(path, sizeof(path), "%s/.Xauthority", home ? home : "/root");
-    f = fopen(path, "rb");
-    if (!f) return -1;
-    for (;;) {
-        uint8_t hdr[2], len[2], fields[4][256];
-        int fl[4], i;
-        if (fread(hdr, 1, 2, f) != 2) break;
-        for (i = 0; i < 4; i++) {
-            if (fread(len, 1, 2, f) != 2) { fclose(f); return n; }
-            fl[i] = (len[0] << 8) | len[1];
-            if (fl[i] > 255 || fread(fields[i], 1, (size_t)fl[i], f) != (size_t)fl[i]) { fclose(f); return n; }
-        }
-        /* fields: address, display number, name, data */
-        if (fl[2] == 18 && !memcmp(fields[2], "MIT-MAGIC-COOKIE-1", 18) && fl[3] <= max &&
-            (fl[1] == 0 || (fl[1] == 1 && fields[1][0] == '0'))) {
-            memcpy(cookie, fields[3], (size_t)fl[3]); n = fl[3];
-            break;
-        }
-    }
-    fclose(f);
-    return n;
-}
-
-static int xtest_open(void)
-{
-    struct sockaddr_un sa;
-    uint8_t cookie[64], req[64], rep[32];
-    int clen, fd, len;
-    uint64_t now = pspexp_time_us();
-    if (g_x >= 0) return 0;
-    if (now - g_x_retry < 3000000u) return -1;
-    g_x_retry = now;
-    fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) return -1;
-    memset(&sa, 0, sizeof(sa));
-    sa.sun_family = AF_UNIX;
-    strcpy(sa.sun_path, "/tmp/.X11-unix/X0");
-    if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) { close(fd); return -1; }
-    clen = xauth_cookie(cookie, (int)sizeof(cookie));
-    memset(req, 0, sizeof(req));
-    req[0] = 'l'; req[2] = 11; req[4] = 0;               /* little-endian, protocol 11.0 */
-    if (clen > 0) {
-        req[6] = 18; req[8] = (uint8_t)clen;
-        memcpy(req + 12, "MIT-MAGIC-COOKIE-1", 18);     /* 18 -> padded to 20 */
-        memcpy(req + 32, cookie, (size_t)clen);
-        len = 32 + ((clen + 3) & ~3);
-    } else len = 12;
-    if (write(fd, req, (size_t)len) != len || read_full(fd, rep, 8) < 0 || rep[0] != 1) {
-        fprintf(stderr, "[pspexp-term] X connection refused (auth?)\n");
-        close(fd); return -1;
-    }
-    {   /* skip the rest of the setup reply */
-        size_t extra = (size_t)(rep[6] | (rep[7] << 8)) * 4;
-        uint8_t *tmp = (uint8_t *)malloc(extra ? extra : 1);
-        if (!tmp || read_full(fd, tmp, extra) < 0) { free(tmp); close(fd); return -1; }
-        free(tmp);
-    }
-    /* QueryExtension "XTEST" */
-    memset(req, 0, sizeof(req));
-    req[0] = 98; req[2] = 4; req[4] = 5;                  /* length 4 units: 8 + "XTEST" padded to 8 */
-    memcpy(req + 8, "XTEST", 5);
-    if (write(fd, req, 16) != 16 || read_full(fd, rep, 32) < 0 || rep[0] != 1 || !rep[8]) {
-        fprintf(stderr, "[pspexp-term] X server has no XTEST\n");
-        close(fd); return -1;
-    }
-    g_xtest_op = rep[9];
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-    g_x = fd;
-    fprintf(stderr, "[pspexp-term] keypad through X (XTEST)\n");
-    return 0;
-}
-
-static void xtest_key(int linux_code, int down)
-{
-    uint8_t req[36], junk[256];
-    if (xtest_open() < 0) return;
-    while (read(g_x, junk, sizeof(junk)) > 0) {}          /* discard events / errors */
-    memset(req, 0, sizeof(req));
-    req[0] = (uint8_t)g_xtest_op; req[1] = 2;             /* FakeInput */
-    req[2] = 9;                                           /* 36 bytes */
-    req[4] = down ? 2 : 3;                                /* KeyPress / KeyRelease */
-    req[5] = (uint8_t)(linux_code + 8);
-    if (write(g_x, req, sizeof(req)) != (ssize_t)sizeof(req)) { close(g_x); g_x = -1; }
-}
-
-static void ui_emit(int type, int code, int value)
-{
-    struct input_event e;
-    if (g_ui < 0) { if (type == EV_KEY) xtest_key(code, value); return; }
-    memset(&e, 0, sizeof(e));
-    e.type = (uint16_t)type; e.code = (uint16_t)code; e.value = value;
-    if (write(g_ui, &e, sizeof(e)) < 0) { /* keypad gone */ }
-}
-
-static int keypad_open(void)
-{
-    struct uinput_setup us;
-    int i;
-    static int uinput_failed;
-    if (g_ui >= 0) return 0;
-    if (uinput_failed) return xtest_open() == 0 ? 0 : -1;
-    g_ui = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (g_ui < 0) {
-        fprintf(stderr, "[pspexp-term] /dev/uinput: %s; trying the X server\n", strerror(errno));
-        uinput_failed = 1;
-        return xtest_open() == 0 ? 0 : -1;
-    }
-    ioctl(g_ui, UI_SET_EVBIT, EV_KEY);
-    for (i = 0; i < NKEYPAD; i++) ioctl(g_ui, UI_SET_KEYBIT, KEYPAD[i].key);
-    ioctl(g_ui, UI_SET_KEYBIT, KEY_ESC);
-    memset(&us, 0, sizeof(us));
-    us.id.bustype = BUS_VIRTUAL; us.id.vendor = 0x054c; us.id.product = 0x01ca;
-    strcpy(us.name, "PSPExp keypad");
-    if (ioctl(g_ui, UI_DEV_SETUP, &us) < 0 || ioctl(g_ui, UI_DEV_CREATE) < 0) {
-        fprintf(stderr, "[pspexp-term] uinput setup failed: %s\n", strerror(errno));
-        close(g_ui); g_ui = -1; return -1;
-    }
-    fprintf(stderr, "[pspexp-term] virtual keypad created\n");
-    return 0;
-}
-
-static void keypad_release_all(void)
-{
-    int i;
-    for (i = 0; i < NKEYPAD; i++) if (g_kp_down[i]) { ui_emit(EV_KEY, KEYPAD[i].key, 0); g_kp_down[i] = 0; }
-    for (i = 0; i < 4; i++) if (g_kp_nub[i]) { ui_emit(EV_KEY, i == 0 ? KEY_UP : i == 1 ? KEY_DOWN : i == 2 ? KEY_LEFT : KEY_RIGHT, 0); g_kp_nub[i] = 0; }
-    if (g_kp_menu) { ui_emit(EV_KEY, KEY_ESC, 0); g_kp_menu = 0; }
-    ui_emit(EV_SYN, SYN_REPORT, 0);
-}
-
-static void tap_key(int key)
-{
-    ui_emit(EV_KEY, key, 1); ui_emit(EV_SYN, SYN_REPORT, 0);
-    usleep(30000);
-    ui_emit(EV_KEY, key, 0); ui_emit(EV_SYN, SYN_REPORT, 0);
-}
-
-static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay)
-{
-    static uint64_t start_down; static int start_held, start_used;
-    uint64_t now = pspexp_time_us();
-    int i, nub[4];
-    (void)pressed;
-    if (keypad_open() < 0) return;
-    /* start: a long hold is Menu (Esc), held while start stays down; a tap is Enter */
-    if ((b & PSPEXP_BUTTON_START) && !start_held) { start_held = 1; start_down = now; start_used = 0; }
-    if ((b & PSPEXP_BUTTON_START) && !start_used && now - start_down >= 700000u) { ui_emit(EV_KEY, KEY_ESC, 1); g_kp_menu = 1; start_used = 1; }
-    if (!(b & PSPEXP_BUTTON_START) && start_held) {
-        start_held = 0;
-        if (g_kp_menu) { ui_emit(EV_KEY, KEY_ESC, 0); g_kp_menu = 0; }
-        else if (!start_used) tap_key(KEY_ENTER);
-    }
-    if (g_select_tap) tap_key(KEY_SPACE);
-    for (i = 0; i < NKEYPAD; i++) {
-        int down = (b & KEYPAD[i].button) != 0;
-        if (KEYPAD[i].button == PSPEXP_BUTTON_START || KEYPAD[i].button == PSPEXP_BUTTON_SELECT) continue;   /* above */
-        if (down != g_kp_down[i]) { ui_emit(EV_KEY, KEYPAD[i].key, down); g_kp_down[i] = down; }
-    }
-    nub[0] = ay < -60; nub[1] = ay > 60; nub[2] = ax < -60; nub[3] = ax > 60;
-    for (i = 0; i < 4; i++)
-        if (nub[i] != g_kp_nub[i]) { ui_emit(EV_KEY, i == 0 ? KEY_UP : i == 1 ? KEY_DOWN : i == 2 ? KEY_LEFT : KEY_RIGHT, nub[i]); g_kp_nub[i] = nub[i]; }
-    ui_emit(EV_SYN, SYN_REPORT, 0);
-}
-#else
-static int mirror_available(void) { return 0; }
-static void mirror_invalidate(void) {}
-static void mirror_reset(void) {}
-static void mirror_input(uint32_t b, uint32_t pressed, int ax, int ay) { (void)b; (void)pressed; (void)ax; (void)ay; }
-static int mirror_frame(void) { return 0; }
-static void keypad_release_all(void) {}
-#endif
 
 /* ---- host keyboard and mouse (Linux evdev) ------------------------------------------ */
 
@@ -2611,13 +2142,13 @@ static void host_input_poll(int connected)
     uint64_t now = pspexp_time_us();
     if (!g_host_input) return;
     if (now - g_in_scan > 3000000u) { g_in_scan = now; host_input_scan(); }
-    if (g_grab) host_input_grab(connected && !g_released && !g_view_mirror);   /* mirror view: keys go to the host's own UI */
+    if (g_grab) host_input_grab(connected && !g_released);
     for (i = 0; i < g_nin; i++) {
         struct input_event ev[32];
         ssize_t n;
         while ((n = read(g_in[i].fd, ev, sizeof(ev))) > 0) {
             int k, cnt = (int)(n / (ssize_t)sizeof(ev[0]));
-            if (!connected || g_released || g_view_mirror) continue;   /* not ours to use: drain */
+            if (!connected || g_released) continue;   /* not ours to use: drain */
             for (k = 0; k < cnt; k++) {
                 if (g_in[i].kbd && ev[k].type == EV_KEY && ev[k].code < BTN_MISC) host_key(ev[k].code, ev[k].value);
                 else if (g_in[i].mouse) host_mouse(&ev[k]);
@@ -2693,8 +2224,7 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
      * when a wrapper (pspexp-exec, pspexp-run) asks with SIGUSR1: a player or
      * game started without one would otherwise wait for a PSP we hold */
     if (aware && pid > 0) release_psp();
-    fprintf(stderr, "[pspexp-term] launcher: started pid %d (%s): %s\n", (int)pid, aware ? "PSPExp-aware" : "mirrored", cmd);
-    if (!aware && mirror_available()) { g_view_launcher = 0; g_view_mirror = 1; mirror_invalidate(); }
+    fprintf(stderr, "[pspexp-term] launcher: started pid %d (%s): %s\n", (int)pid, aware ? "PSPExp-aware" : "not PSPExp-aware", cmd);
 }
 
 static void launch_done(int status)
@@ -2703,7 +2233,6 @@ static void launch_done(int status)
     fprintf(stderr, "[pspexp-term] launcher: pid %d ended (%d)\n", (int)g_launch_pid, code);
     g_launch_pid = 0;
     if (g_launch_aware) g_acquire_req = 1;   /* ours again (pspexp-exec's SIGUSR2 may have said so already) */
-    if (g_view_mirror) { keypad_release_all(); g_view_mirror = 0; }
     if (g_launch_from_files) { g_view_files = 1; g_view_launcher = 0; files_invalidate(); }   /* back where it was opened */
     else g_view_launcher = 1;
     {
@@ -2725,7 +2254,7 @@ static void usage(void)
 {
     fprintf(stderr, "usage: pspexp-term [--usb | --tcp host[:port] | --null | --sdl] [--shell PATH] [--cmd \"command\"]\n"
                     "                   [--audio-fifo PATH | --no-audio-fifo] [--pidfile PATH] [--shot N]\n"
-                    "                   [--no-host-input] [--no-grab] [--mirror [/dev/fbN]]\n"
+                    "                   [--no-host-input] [--no-grab]\n"
                     "                   [--launcher] [--assets DIR]\n"
                     "       pspexp-term --upnp [SERVER [FOLDER-ID]]   the network's media servers, a server's folder\n");
 }
@@ -3071,7 +2600,7 @@ static void ctl_state(char *o, size_t n)
     int y, x;
     o[0] = 0;
     ctl_add(o, n, "ok\nview=%s\nconnected=%d\npsp_files=%d\nrunning=%s\n",
-            g_app ? g_app->id : g_view_files ? "files" : g_view_launcher ? "launcher" : g_view_mirror ? "mirror" : "terminal",
+            g_app ? g_app->id : g_view_files ? "files" : g_view_launcher ? "launcher" : "terminal",
             pspexp_link_state(ctx) == PSPEXP_LINK_CONNECTED, files_psp_available(),
             g_launcher_on && launcher_running_title() ? launcher_running_title() : "");
     if (g_launcher_on) launcher_state(o, n);
@@ -3544,22 +3073,10 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--no-control")) g_ctl_on = -1;
         else if (!strcmp(argv[i], "--no-host-input")) g_host_input = 0;
-#ifdef __linux__
-        else if (!strcmp(argv[i], "--test-key") && i + 1 < argc) {   /* send one key through the keypad path and exit */
-            int code = atoi(argv[++i]);
-            if (keypad_open() < 0) { fprintf(stderr, "no keypad (uinput or X)\n"); return 1; }
-            usleep(300000);
-            ui_emit(EV_KEY, code, 1); ui_emit(EV_SYN, SYN_REPORT, 0);
-            usleep(80000);
-            ui_emit(EV_KEY, code, 0); ui_emit(EV_SYN, SYN_REPORT, 0);
-            usleep(300000);
-            return 0;
+        else if (!strcmp(argv[i], "--mirror")) {   /* (gone, 2026-10-29: accepted so an old service still starts) */
+            if (i + 1 < argc && argv[i + 1][0] == '/') i++;
+            fprintf(stderr, "[pspexp-term] --mirror: the mirror view is gone; ignored\n");
         }
-        else if (!strcmp(argv[i], "--mirror")) {
-            g_fb_path = (i + 1 < argc && argv[i + 1][0] == '/') ? argv[++i] : "/dev/fb0";
-            g_view_mirror = 1;
-        }
-#endif
         else if (!strcmp(argv[i], "--no-grab")) g_grab = 0;
         else if (!strcmp(argv[i], "--launcher")) g_launcher_on = 1;
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) g_launcher_assets = argv[++i];
@@ -3662,7 +3179,7 @@ int main(int argc, char **argv)
             }
         }
         if (launcher_init(ctx, g_launcher_assets) < 0) g_launcher_on = 0;
-        else { g_view_launcher = 1; g_view_mirror = 0; notify_init(); }   /* the home view; the mirror shows the programs it starts */
+        else { g_view_launcher = 1; notify_init(); }   /* the home view */
         {   /* screenshots: PSPEXP_LAUNCHER_OPEN=files or files:/some/folder */
             const char *o = getenv("PSPEXP_LAUNCHER_OPEN");
             if (g_launcher_on && o && !strncmp(o, "files", 5)) files_show(o[5] == ':' ? o + 6 : NULL, 1);
@@ -3729,7 +3246,6 @@ int main(int argc, char **argv)
         if (g_ctl_relink) {   /* the control port's relink: as a cable pull */
             g_ctl_relink = 0;
             fprintf(stderr, "[pspexp-term] control port: dropping the link\n");
-            keypad_release_all();
             pspexp_set_transport(ctx, NULL);
             last_try = pspexp_time_us();   /* a second down, then back */
         }
@@ -3770,8 +3286,7 @@ int main(int argc, char **argv)
             if (st->inputs_received != last_inputs || !last_heard) { last_inputs = st->inputs_received; last_heard = now; }
             else if (now - last_heard > 3000000u) {
                 fprintf(stderr, "[pspexp-term] no word from the PSP for 3 s: dropping the link\n");
-                keypad_release_all();
-                pspexp_set_transport(ctx, NULL);
+                    pspexp_set_transport(ctx, NULL);
                 last_heard = 0; last_try = 0;
                 continue;
             }
@@ -3897,13 +3412,6 @@ int main(int argc, char **argv)
                 frames++; g_ctl_frame_us = now; g_launcher_frames++;
                 if (shot_every && frames % (unsigned)shot_every == 0) pspexp_request_screenshot(ctx, shot_index++);
             }
-        } else if (g_view_mirror) {
-            /* ~30 fps poll of the framebuffer; frames only when it changed */
-            static uint64_t last_mirror;
-            if (now - last_mirror >= 16000u && pspexp_should_render(ctx)) {
-                last_mirror = now;
-                if (mirror_frame()) frames++; g_ctl_frame_us = now;
-            }
         } else if (T.dirty && pspexp_should_render(ctx)) {
             render();
             frames++; g_ctl_frame_us = now;
@@ -3919,7 +3427,7 @@ int main(int argc, char **argv)
                 const PspExpStats *st = pspexp_stats(ctx);
                 const PspExpInput *in = pspexp_input(ctx);
                 fprintf(stderr, "[pspexp-term] %s view: frames sent %u, presented %u, inputs %u (buttons %08x), in flight %d, errors %u/%u, B/frame %u\n",
-                        g_view_launcher ? "launcher" : g_view_mirror ? "mirror" : "terminal", frames - last_frames, st->frames_presented - last_presented,
+                        g_view_launcher ? "launcher" : "terminal", frames - last_frames, st->frames_presented - last_presented,
                         st->inputs_received - last_inputs, (unsigned)in->buttons, pspexp_frames_in_flight(ctx),
                         st->protocol_errors, st->resource_errors, st->last_frame_bytes);
                 last_stat = now; last_frames = frames; last_presented = st->frames_presented; last_inputs = st->inputs_received;

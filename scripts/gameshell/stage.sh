@@ -80,7 +80,7 @@ After=multi-user.target
 User=cpi
 WorkingDirectory=/home/cpi
 Environment=PSPEXP_TERM=1 HOME=/home/cpi SHELL=/usr/bin/bash PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/games
-ExecStart=$CONSOLE --shell /usr/bin/bash --launcher --mirror /dev/fb0 --usb --tcp 192.168.50.2
+ExecStart=$CONSOLE --shell /usr/bin/bash --launcher --usb --tcp 192.168.50.2
 Restart=always
 RestartSec=2
 # real-time priority allowed: its programs' sound to Bluetooth (pw-play) starved without it on the GameShell

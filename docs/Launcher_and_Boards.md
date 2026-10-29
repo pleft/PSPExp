@@ -306,7 +306,7 @@ press, so holding SELECT in them for the terminal closed them too.
 §12d). The console gives HOME to itself (HOME_MODE) whenever something other
 than the launcher is shown: an app closes as on its own exit (Media opened
 from Files goes back there, a film paused), Files and the terminal go to the
-launcher, a program shown in the mirror is ended. In the launcher HOME is the
+launcher. In the launcher HOME is the
 PSP's again: its "Quit?" dialog, to the XMB. Elsewhere it asks first: the
 library holds back a first press and the PSP shows "HOME again to quit" for
 3 s; a second press meanwhile goes through (the test port's `hint home`
@@ -747,7 +747,8 @@ emulators and apps, nothing of ClockworkOS's own launcher. The stock content
 NW.js, skins, sample music, RetroArch, LOVE, mpd, aria2, shairport-sync and
 their now unused libraries) is removed; what the launcher shows comes only
 from **packages** and the user's own entry files. Nothing is mirrored any
-more (the mirror stays for the console and debugging).
+more (the mirror stayed for the console and debugging until 2026-10-29,
+when it was removed: `--mirror` is accepted and ignored).
 
 ### 4.1 On the GameShell
 
