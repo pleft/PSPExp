@@ -46,14 +46,23 @@ top that **L and R** step through (round from the last to the first):
   Advance...).
 
 ```
- 12:04 Sat 03 Oct (bell)2          PSP 76%  |  headphones 40%  wifi  plug  board
+ 12:04 (bell)2                                    music  headphones 40%  wifi  76%
  [GAMES] | L  [All]  PSP  Raspberry Pi 400  Mega Drive  >  R      56 games
  [apps]  |   (DISC)   (disc)   (disc)   (disc)   (disc)  >
  [gear]  | * Chrono Tr. * Super Ma.  Hurrican  SuperTuxKart  OpenTyrian
          | * Chrono Trigger
-         | SNES  /  U  /  4.0 MB  /  PSP renderer
- (X) Play  ([]) Unfavourite  (/\) Details     SELECT Notifications  START Menu
+         | Super Nintendo  ·  played lately
+ (X) Play  (/\) Details                                               START Menu
 ```
+
+The top bar keeps to what tells you something: the clock; the **bell**, only
+while there is news (with how many); on the right a note while music is
+loaded, Bluetooth headphones and their volume, the board's network, the
+board's own battery when it has one (the GameShell's, its icon before it),
+and the PSP's battery. Under each game a line says what it is and whether
+you played it lately; its size, the file and who draws it are in **Details**
+(triangle). The bottom row shows at most three buttons; square (favourites)
+and SELECT (notifications) work everywhere, and START's menu has them too.
 
 Coming back to Games from Apps or Settings, it is on the tab you left.
 
@@ -78,8 +87,8 @@ game that could not start, a battery running low (the PSP's or the
 board's), the board losing its network, Bluetooth headphones gone,
 storage nearly full, an install or a Wi-Fi join that finished.
 
-Nothing is lost when you look away: the **bell** next to the date in the
-top bar counts what you have not seen. In the launcher press **SELECT**
+Nothing is lost when you look away: the **bell** appears next to the clock
+in the top bar while there is something you have not seen, with how many. In the launcher press **SELECT**
 to open the list (or START > Notifications), the last 50, newest first:
 
 - **cross**: go where it is about (Packages for updates, Settings for the

@@ -2328,50 +2328,56 @@ static void board_detect(void)
     } else if (uname(&u) == 0 && !strcmp(u.sysname, "Darwin")) { g_board.icon = "laptop"; g_board.colour = 0xa5b4fc; snprintf(g_board.name, sizeof(g_board.name), "Mac"); }
 }
 
+/* the top bar (2026-10-30: only what tells something): the clock, the bell while there is news;
+ * on the right the music (loaded), Bluetooth sound, the board's network, the board's battery when
+ * it has one (its icon before it), the PSP's battery */
 static void draw_status(void)
 {
     char s[64];
     time_t t = time(NULL);
     struct tm tmv;
     int x, w;
+    PspExpPowerStatus p;
+    char b[160];
     localtime_r(&t, &tmv);
     strftime(s, sizeof(s), "%H:%M", &tmv);
     w = gfx_text(FONT_TITLE, 16, 4, s, C_TEXT, 255, 0);
-    strftime(s, sizeof(s), "%a %d %b", &tmv);
-    x = 16 + w + 8;
-    x += gfx_text(FONT_SMALL, x, 8, s, C_MUTED, 255, 0) + 12;
-    {   /* the bell: the notification centre (up from the home screen's tiles); its unread count */
-        int unread = notify_unread(), on = 0;
-        if (on) { gfx_shadow(NINE_SHADOW10, x - 5, 2, 26 + (unread ? 14 : 0), 24, 0x40a0ff, 220); gfx_nine(NINE_R10, x - 5, 2, 26 + (unread ? 14 : 0), 24, 0x1e3a6e, 235); }
-        gfx_icon(unread ? "bell-dot" : "bell", 16, x, 6, on ? 0xffffff : unread ? C_ACCENT : C_MUTED, 255);
+    x = 16 + w + 12;
+    {
+        int unread = notify_unread();
         if (unread) {
+            gfx_icon("bell-dot", 16, x, 6, C_ACCENT, 255);
             snprintf(s, sizeof(s), "%d", unread > 99 ? 99 : unread);
-            gfx_text(FONT_BADGE, x + 19, 9, s, on ? 0xffffff : C_ACCENT, 255, 0);
+            gfx_text(FONT_BADGE, x + 19, 9, s, C_ACCENT, 255, 0);
         }
     }
-    /* right to left: the board (always last, so it never moves), power, network; then, past a
-     * separator, the PSP's own battery */
     x = SCREEN_W - 16;
-    board_detect();
-    x -= 16;
-    gfx_icon(g_board.icon, 16, x, 6, g_board.colour, 255);
-    x -= 12;
-    if (g_bat >= 0) {
+    if (psp_battery(b, sizeof(b), &p)) {   /* the PSP's, once its runtime has reported it */
+        int chg = (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) != 0;
+        const char *ic = chg ? "battery-charging" : p.percent > 70 ? "battery-full" : p.percent > 35 ? "battery-medium" : p.percent > 12 ? "battery-low" : "battery-warning";
+        snprintf(s, sizeof(s), "%d%%", p.percent);
+        x -= gfx_text_width(FONT_SMALL, s);
+        gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
+        x -= 20;
+        gfx_icon(ic, 16, x, 6, p.percent <= 12 && !chg ? 0xf87171 : C_SUB, 255);
+        x -= 12;
+    }
+    if (g_bat >= 0) {   /* the board's own battery (the GameShell's), its icon before it */
         const char *ic = g_chg ? "battery-charging" : g_bat > 70 ? "battery-full" : g_bat > 35 ? "battery-medium" : g_bat > 12 ? "battery-low" : "battery-warning";
+        board_detect();
         snprintf(s, sizeof(s), "%d%%", g_bat);
         x -= gfx_text_width(FONT_SMALL, s);
         gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
         x -= 20;
         gfx_icon(ic, 16, x, 6, g_bat <= 12 && !g_chg ? 0xf87171 : C_SUB, 255);
-    } else {   /* mains or USB power */
-        x -= 16;
-        gfx_icon("plug", 16, x, 6, C_SUB, 255);
+        x -= 18;
+        gfx_icon(g_board.icon, 16, x, 6, g_board.colour, 255);
+        x -= 12;
     }
-    x -= 10;
-    if (g_np_on) {   /* music (Music) loaded: a note, or a pause sign while paused */
-        x -= 16;
-        gfx_icon(g_np_paused ? "pause" : "music", 16, x, 6, g_np_paused ? C_SUB : C_ACCENT, 255);
-        x -= 10;
+    if (g_wired) { x -= 16; gfx_icon("ethernet-port", 16, x, 6, C_SUB, 255); x -= 10; }
+    else if (g_wifi >= 0) {
+        const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-off";
+        x -= 16; gfx_icon(ic, 16, x, 6, C_SUB, 255); x -= 10;
     }
     if (g_snd_on) {   /* the sound on a Bluetooth device: its volume (the PSP's volume buttons set it) */
         if (g_snd_vol >= 0) {
@@ -2380,36 +2386,16 @@ static void draw_status(void)
             gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
             x -= 4;
         }
-        x -= 16;
-        gfx_icon("headphones", 16, x, 6, C_SUB, 255);
-        x -= 10;
+        x -= 16; gfx_icon("headphones", 16, x, 6, C_SUB, 255); x -= 10;
     }
-    if (g_wired) {
-        x -= 16;
-        gfx_icon("ethernet-port", 16, x, 6, C_SUB, 255);
-    } else if (g_wifi >= 0) {
-        const char *ic = g_wifi >= 3 ? "wifi" : g_wifi == 2 ? "wifi-high" : g_wifi == 1 ? "wifi-low" : "wifi-off";
-        x -= 16;
-        gfx_icon(ic, 16, x, 6, C_SUB, 255);
-    }
-    {   /* the PSP's battery, once its runtime has reported it: "PSP", its icon, the charge */
-        PspExpPowerStatus p;
-        char b[160];
-        if (psp_battery(b, sizeof(b), &p)) {
-            int chg = (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) != 0;
-            const char *ic = chg ? "battery-charging" : p.percent > 70 ? "battery-full" : p.percent > 35 ? "battery-medium" : p.percent > 12 ? "battery-low" : "battery-warning";
-            x -= 9;
-            gfx_rect(x, 7, 1, 14, C_SUB, 200);   /* the separator: the board's to its right */
-            x -= 9;
-            snprintf(s, sizeof(s), "%d%%", p.percent);
-            x -= gfx_text_width(FONT_SMALL, s);
-            gfx_text(FONT_SMALL, x, 8, s, C_SUB, 255, 0);
-            x -= 20;
-            gfx_icon(ic, 16, x, 6, p.percent <= 12 && !chg ? 0xf87171 : C_SUB, 255);
-            x -= 4 + gfx_text_width(FONT_BADGE, "PSP");
-            gfx_text(FONT_BADGE, x, 9, "PSP", C_MUTED, 255, 0);
-        }
-    }
+    if (g_np_on) { x -= 16; gfx_icon(g_np_paused ? "pause" : "music", 16, x, 6, g_np_paused ? C_SUB : C_ACCENT, 255); }   /* music loaded: a note, a pause sign while paused */
+}
+
+/* a section's colour, lighter: the line under a description */
+static uint32_t light_of(uint32_t c)
+{
+    uint32_t r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+    return (r + (255 - r) * 35 / 100) << 16 | (g + (255 - g) * 35 / 100) << 8 | (b + (255 - b) * 35 / 100);
 }
 
 /* a section's colour, dark: its selected tiles */
@@ -2463,26 +2449,28 @@ static void human_size(long long b, char *out, size_t n)
     else snprintf(out, n, "%lld KB", (b + 1023) / 1024);
 }
 
-/* who draws it: the PSP's GE (the SDL layer, its OpenGL), or the board's own GPU with each frame
- * sent as a picture (graphics=board-gpu) */
-static const char *renderer(const LEntry *e)
-{
-    const char *g = e->type == LT_ROM && e->sys >= 0 ? L.sys[e->sys].graphics : e->graphics;
-    return !strcmp(g, "board-gpu") ? "Board GPU renderer" : !strcmp(g, "native") ? "Runs on the PSP" : "PSP renderer";
-}
-
+/* the line under a game's or an app's description, in plain words (2026-10-30): what it is and
+ * when it was played; sizes, dump tags, paths and who draws it are in Details */
 static void detail_line(const LEntry *e, char *s, size_t n)
 {
-    char sz[32];
+    int r = recent_rank(e);
+    const char *played = r == 0 ? "  ·  played last" : r < 1000 ? "  ·  played lately" : "";
     switch (e->type) {
     case LT_ROM:
-        human_size(e->size, sz, sizeof(sz));
-        if (e->tags[0]) snprintf(s, n, "%s  /  %s  /  %s  /  %s", L.sys[e->sys].shortname, e->tags, sz, renderer(e));
-        else snprintf(s, n, "%s  /  %s  /  %s", L.sys[e->sys].name, sz, renderer(e));
+        if (is_psp_sys(e->sys) && e->tags[0]) {   /* a PSP game: its region ("Europe, En,Fr,De": Europe) */
+            char reg[64];
+            snprintf(reg, sizeof(reg), "%s", e->tags);
+            reg[strcspn(reg, ",")] = 0;
+            snprintf(s, n, "PSP  ·  %s%s", reg, played);
+        } else snprintf(s, n, "%s%s", L.sys[e->sys].name, played);
+        break;
+    case LT_GAME:
+        board_detect();
+        snprintf(s, n, "%s%s", g_board.name, played);
         break;
     case LT_APP:
-        if (is_builtin(e)) snprintf(s, n, "Built in  /  %s", e->tags);
-        else snprintf(s, n, "App%s%s", e->pspexp ? "  /  " : "", e->pspexp ? renderer(e) : "");
+        if (is_builtin(e)) snprintf(s, n, "Built into PSPExp");
+        else snprintf(s, n, "App");
         break;
     case LT_TOOL:
         snprintf(s, n, "Tool");
@@ -2502,7 +2490,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
                                                                   : "Not on the PSP's memory stick: cross puts it there and turns it on");
         else snprintf(s, n, "%s", e->tags);
         break;
-    default: snprintf(s, n, "Game  /  %s%s%s", renderer(e), e->tags[0] ? "  /  " : "", e->tags); break;
+    default: snprintf(s, n, "%s", e->tags); break;
     }
 }
 
@@ -2725,9 +2713,12 @@ static void draw_list(float dt)
         if (e->fav) { gfx_star(15, tx, DETAIL_Y + (gfx_line_height(FONT_TITLE) - 15) / 2, C_STAR, alpha); tx += 20; }
         mtext(FONT_TITLE, tx, DETAIL_Y, e->title, C_TEXT, alpha, SCREEN_W - 16 - tx - (v ? gfx_text_width(FONT_BODY, v) + 12 : 0), g_sel_since);
         if (v) gfx_text(FONT_BODY, SCREEN_W - 16 - gfx_text_width(FONT_BODY, v), DETAIL_Y + 1, v, C_ACCENT, alpha, 0);
-        if (e->desc[0]) gfx_text_wrapped(FONT_SMALL, DETAIL_X, DETAIL_Y + 22, e->desc, C_SUB, alpha, SCREEN_W - 16 - DETAIL_X, 14, 2);
-        detail_line(e, s, sizeof(s));
-        mtext(FONT_SMALL, DETAIL_X, e->desc[0] ? DETAIL_Y + 54 : DETAIL_Y + 24, s, 0x7fb2f5, alpha, SCREEN_W - 16 - DETAIL_X, g_sel_since);
+        {
+            const char *d = e->desc[0] ? e->desc : is_builtin(e) ? e->tags : "";   /* (a built-in app's is in its tags) */
+            if (d[0]) gfx_text_wrapped(FONT_SMALL, DETAIL_X, DETAIL_Y + 22, d, C_SUB, alpha, SCREEN_W - 16 - DETAIL_X, 14, 2);
+            detail_line(e, s, sizeof(s));
+            mtext(FONT_SMALL, DETAIL_X, d[0] ? DETAIL_Y + 54 : DETAIL_Y + 24, s, light_of(g_cat[g_cur].col), alpha, SCREEN_W - 16 - DETAIL_X, g_sel_since);
+        }
     }
 }
 
@@ -2764,21 +2755,12 @@ static void draw_hints(void)
         hint_right(SCREEN_W - 16, "START", "Menu");
         return;
     }
+    /* three at most (2026-10-30): cross, Details, START; square (favourites) and SELECT (the
+     * notifications) work as before and are in START's menu */
     const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
-    if (e) { gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14; }   /* (an empty section: nothing to open) */
-    if (e && can_fav(e)) {   /* a game, a ROM: favourites */
-        gfx_button('s', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, 255, 0) + 14;
-    }
-    if (e && e->type != LT_ACTION) {   /* a game, a ROM, an app: the Details card (on a setting or a built-in app
-        * triangle only says what it is: no hint) */
-        gfx_button('t', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Details", C_SUB, 255, 0) + 14;
-    }
-    if (g_cat[g_cur].hidden && !g_cat[g_cur].tab) { gfx_button('o', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Settings", C_SUB, 255, 0); }
-    {   /* SELECT's hint where there is room (a long left side: "Unfavourite", "Emulators"); the button works anyway */
-        int left_end = x, r = hint_right(SCREEN_W - 16, "START", "Menu");
-        int w = gfx_text_width(FONT_BADGE, "SELECT") + 10 + 6 + gfx_text_width(FONT_SMALL, "Notifications");
-        if (r - 14 - w >= left_end + 12) hint_right(r - 14, "SELECT", "Notifications");
-    }
+    if (e) x = hint_btn(x, 'x', go);   /* (an empty section: nothing to open) */
+    if (e && e->type != LT_ACTION && !is_builtin(e)) x = hint_btn(x, 't', "Details");   /* (a built-in app's triangle only repeats what it is) */
+    hint_right(SCREEN_W - 16, "START", "Menu");
 }
 
 /* a small key cap with a label, for hint rows */

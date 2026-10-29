@@ -601,7 +601,18 @@ row with the heading above it in view; the highlighted row's `detail_line`
 shows under it. `category <group>` (notifications, the control port) opens
 Settings on that group's first row. Tried on the Mac's stand-in: the list,
 a switch, a choice stepped and back, the end of the list, up from the top.
-Step 3 (calmer bars and wording) follows.
+Step 3: **calmer bars and plain words.** The hint row has at most three
+(cross, triangle Details where it shows a card, START Menu); square and
+SELECT work as before, in START's menu too. The top bar: the clock (the date
+went), the bell only while `notify_unread()` (with the count), and on the
+right the music, Bluetooth sound, the board's network, the board's battery
+only when it has one (with `g_board.icon` before it: the GameShell), the
+PSP's battery (the board's icon and the plug went). `detail_line` says what
+a game is in words, the system's name, "PSP · Europe", the board's name for
+its own games, and "played last" / "played lately" from `recent_rank` (the
+recent list has no times); the size, dump tags and renderer are in Details.
+Its colour is the section's, lighter (`light_of`). The launcher pictures in
+docs/images and on the site are to be taken again on the real PSP.
 
 ### 3.4 Status (2026-09-26)
 

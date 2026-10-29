@@ -15,6 +15,11 @@
   on the right; switches change with cross, choices (Clip length, Quality)
   with left / right, in place; what is waiting (an update for the PSP)
   comes first.
+- **Calmer screens**: the bottom row shows at most three buttons (cross,
+  triangle Details, START Menu); the top bar the clock, the bell only when
+  there is news, and on the right the music, headphones, network and the
+  batteries; the line under a game says what it is and whether you played
+  it lately (sizes, files and how it draws are in Details).
 - **HOME leaves what is on screen**: in an app (Files, Media, Packages,
   the terminal...) or a game, press it twice ("HOME again to quit" shows
   for 3 seconds after the first) to go back to the launcher; in the
