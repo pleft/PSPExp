@@ -101,7 +101,7 @@ static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, 
     }
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_page = PAGE_OVERVIEW;
     if (pressed & PSPEXP_BUTTON_RTRIGGER) g_page = PAGE_PROGRAMS;
-    if (pressed & PSPEXP_BUTTON_CIRCLE) { g_exit = 1; return; }
+    /* (circle: nothing here, it never leaves an app: HOME does) */
     if (g_page != PAGE_PROGRAMS) return;
     if (up && g_sel > 0) g_sel--;
     if (down && g_sel < g_s.nproc - 1) g_sel++;
@@ -332,7 +332,6 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
             x = ui_hint_btn(x, 'x', "End");
             x = ui_hint_btn(x, 's', g_sort_mem ? "By CPU" : "By memory");
         }
-        x = ui_hint_btn(x, 'o', "Close");
     }
     notify_draw(now);
     pspexp_present(ctx);

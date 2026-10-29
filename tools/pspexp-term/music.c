@@ -409,7 +409,7 @@ static void dir_load(const char *dir)
 static void browse_up(void)
 {
     char p[FOPS_PATH];
-    if (!g_dir[0]) { g_exit = 1; return; }                       /* the places: out of Music */
+    if (!g_dir[0]) return;                                       /* the places: the top (circle never leaves an app: HOME does) */
     if (!strcmp(g_dir, g_root)) { g_dir[0] = 0; places_load(); g_bsel = g_btop = 0; return; }
     snprintf(p, sizeof(p), "%s", g_dir);
     fops_parent(p);
@@ -479,7 +479,7 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (up && g_mod_ch0 > 0) g_mod_ch0--;   /* a module: its channels, when they do not all fit */
         if (down) g_mod_ch0++;                   /* (draw_module keeps it in range) */
         if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
-        if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_exit = 1; }
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_view = V_BROWSE; }   /* back to the lists (a film paused) */
         break;
     case V_BROWSE: {
         int n = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : g_dir[0] ? g_list.n : g_npl;
@@ -521,7 +521,7 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
             if (g_qsel < g_at) g_at--;
             if (g_qsel >= g_qn && g_qsel > 0) g_qsel--;
         }
-        if (pressed & PSPEXP_BUTTON_CIRCLE) g_exit = 1;
+        if (pressed & PSPEXP_BUTTON_CIRCLE) g_view = V_BROWSE;
         break;
     }
 }
@@ -827,9 +827,9 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 'x', !pi.paused && !pi.ended ? "Pause" : "Play");
         x = ui_hint_cap(x, "LEFT/RIGHT", "10 s", UI_SUB);
         x = ui_hint_btn(x, 's', "Stop");
-        if (g_qn > 1) x = ui_hint_cap(x, "L/R", "Next / previous", UI_SUB);
+        if (g_qn > 1) x = ui_hint_cap(x, "L/R", "Previous / next", UI_SUB);
         x = ui_hint_cap(x, "START", "View", UI_SUB);
-        x = ui_hint_btn(x, 'o', "Close");
+        x = ui_hint_btn(x, 'o', "Browse");
     }
     notify_draw(now);
     pspexp_present(ctx);
@@ -873,7 +873,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
         if (have) x = ui_hint_btn(x, 's', "Stop");
     } else if (g_view == V_BROWSE) {
         x = ui_hint_btn(x, 'x', "Open / play");
-        x = ui_hint_btn(x, 'o', g_dir[0] || g_up ? "Up" : "Close");
+        if (g_dir[0] || g_up) x = ui_hint_btn(x, 'o', "Up");
         if (g_dir[0] || g_up == UP_FOLDER) x = ui_hint_btn(x, 's', "Add");
     } else {
         x = ui_hint_btn(x, 'x', "Play");
@@ -882,7 +882,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     if (g_qn > 1) x = ui_hint_cap(x, "L/R", "Track", UI_SUB);
     x = ui_hint_btn(x, 't', "Order");
     x = ui_hint_cap(x, "START", "View", UI_SUB);
-    if (g_view != V_BROWSE) x = ui_hint_btn(x, 'o', "Close");
+    if (g_view != V_BROWSE) x = ui_hint_btn(x, 'o', "Browse");
     if (g_opts) draw_opts();
     notify_draw(now);
     pspexp_present(ctx);

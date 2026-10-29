@@ -878,8 +878,8 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         else if (e->is_dir) { char path[FOPS_PATH]; fops_join(path, sizeof(path), p->path, e->name); panel_cd(p, path, NULL); }
         else open_file(p, e);
     }
-    if (pressed & PSPEXP_BUTTON_CIRCLE) {   /* back: up a folder; from the top of a drive, out of Files (as circle leaves Packages and the Monitor) */
-        if (fops_is_root(p->path)) { g_exit = 1; return; }
+    if (pressed & PSPEXP_BUTTON_CIRCLE) {   /* back: up a folder; at the top of a drive, nothing (circle never leaves an app: HOME does) */
+        if (fops_is_root(p->path)) return;
         panel_up(p);
     }
     if ((pressed & PSPEXP_BUTTON_SQUARE) && p->sel < p->list.n) {
@@ -1181,7 +1181,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 'x', "Drives");
         x = ui_hint_cap(x, "DOWN", "The files", UI_SUB);
     } else {
-        x = ui_hint_btn(x, 'o', fops_is_root(act()->path) ? "Close" : "Up");
+        if (!fops_is_root(act()->path)) x = ui_hint_btn(x, 'o', "Up");
         x = ui_hint_btn(x, 's', "Mark");
         x = ui_hint_btn(x, 't', "Actions");
     }

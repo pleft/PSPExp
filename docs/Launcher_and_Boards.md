@@ -286,8 +286,9 @@ shows a game or ROM in its disc.
 
 **The buttons, made the same on every screen** (2026-10-03, after an
 audit of each view's handling): cross chooses, circle goes back (closes,
-cancels, the folder above; at a drive's top it closes Files, as it closes
-Packages and the Monitor), triangle shows more (details, the actions menu,
+cancels, the folder above; at a drive's top it closed Files, as it closed
+Packages and the Monitor, until 2026-10-29: now circle never leaves an app,
+HOME does), triangle shows more (details, the actions menu,
 a password), square marks or removes (favourite, mark, delete a letter,
 remove a package, forget a device, stop the music), START searches,
 refreshes or rescans. Moved: Packages' remove from triangle to square, the
@@ -1473,9 +1474,10 @@ to touch the PSP's Settings.
 Apps now holds four built-in apps: Terminal, Files, **System Monitor** and
 **Packages**, each with a cover of its own. The last two are views like the
 file manager, and share one small interface (`appview.h`: open, input, frame,
-render, exit, state). The console shows them in place of the launcher; hold
-circle closes them (held select: the launcher; a select tap also closed
-them until 2026-10-06).
+render, exit, state). The console shows them in place of the launcher; HOME
+twice closes them (circle did until 2026-10-29, now only steps back inside
+them; held select: the launcher; a select tap also closed them until
+2026-10-06).
 
 ### 10.1 System Monitor
 
@@ -1613,7 +1615,8 @@ H.264 at 29.3–29.5 pictures a second shown, the film's clock 1.00–1.01x,
 ffmpeg about half a core; the first picture about a second after cross.
 In Now playing the film is full screen on black; a key brings the title,
 the time and the buttons for 3 s (the first press only shows them),
-circle closes Media and pauses the film. The textures go when a track
+circle goes back to Browse and pauses the film (it closed Media until
+2026-10-29; HOME does now). The textures go when a track
 without a picture plays. Not yet tried: the GameShell (armhf, slower).
 
 **Media servers** (2026-10-12, `upnp.c`): Browse's last place, "Media

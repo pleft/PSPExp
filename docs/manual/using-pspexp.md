@@ -9,7 +9,7 @@ buttons; the board needs no screen, keyboard or mouse.
 |---|---|
 | HOME | leave what is on screen: in an app or a game, press it twice (the first shows "HOME again to quit" for 3 seconds), and the launcher comes back; in the launcher, the PSP's own "Quit?" (to the XMB); in your own PSP games, the PSP's HOME menu (Exit Game: back to PSPExp); held 2 s, PSPExp quits from anywhere |
 | cross | choose: open, play, confirm, type the highlighted key |
-| circle | back one step: cancel, the folder above; on an app's first screen, out to where you came from (in the terminal: Esc) |
+| circle | back one step: cancel, the folder above; it never closes an app (HOME does; in the terminal: Esc) |
 | triangle | show more: details, the actions menu, a hidden password (in the terminal: Space) |
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
 | START | search, refresh or rescan, options |
@@ -150,7 +150,7 @@ how many next to its name. It opens with
 | cross | install it (or update it, when a newer version is there) |
 | square | remove it (asks first) |
 | START | look for new packages |
-| circle | close |
+| HOME, twice | close Packages |
 
 Each game's entry says its **renderer**: **PSP** (SDL or OpenGL games, drawn
 by the PSP's graphics chip) or **Board GPU** (drawn by the board's own
@@ -212,7 +212,8 @@ Only use ROMs of games you own.
 | up from the top | the drive button: cross lists every drive |
 | L / R | the left / right panel |
 | cross | open: a folder, a picture, a text file, music or a film (in Media), a ROM (plays it), an archive (unpack it, or see what is in it), a package (installs it) |
-| circle | the folder above; at the top of a drive, close Files |
+| circle | the folder above |
+| HOME, twice | close Files |
 | square | mark several files |
 | triangle | copy or move to the other panel, delete, rename, new folder, details, compress to a .zip |
 | START | options: hidden files, sorting, the same folder in both panels, a terminal here |
@@ -256,7 +257,8 @@ opens it here too. It has three views; **START** goes from one to the next:
 | square | stop (Browse: add to the queue; Queue: take out) |
 | triangle | play order: shuffle, repeat (off, all, one song) |
 | START | the next view |
-| circle | close Media (back to Files, if you came from there); the music goes on, a film pauses |
+| circle | Browse: the folder above; Now playing and Queue: back to Browse (a film pauses) |
+| HOME, twice | close Media (back to Files, if you came from there); the music goes on, a film pauses |
 | ♪ (note) | pause / play, from anywhere |
 
 The music goes on while you use the launcher, Files or the other apps;
