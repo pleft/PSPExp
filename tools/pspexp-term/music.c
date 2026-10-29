@@ -356,24 +356,19 @@ static void up_track(Track *t, int i)
     t->video = g_upl[i].kind == UPNP_VIDEO;
 }
 
-/* the folder's songs and films as the queue, from item i (as a folder of files plays) */
+/* item i alone as the queue (as a file of the Library plays: square adds more) */
 static void up_play(int i)
 {
-    Track *q; int *o, k, at = 0, n = 0;
-    for (k = 0; k < g_upn; k++) n += g_upl[k].kind != UPNP_FOLDER;
-    if (!n) return;
-    q = (Track *)calloc((size_t)n, sizeof(Track)); o = (int *)malloc(sizeof(int) * (size_t)n);
+    Track *q; int *o;
+    if (i < 0 || i >= g_upn || g_upl[i].kind == UPNP_FOLDER) return;
+    q = (Track *)calloc(1, sizeof(Track)); o = (int *)malloc(sizeof(int));
     if (!q || !o) { free(q); free(o); return; }
     free(g_q); free(g_order);
-    g_q = q; g_order = o; g_qn = 0; g_qcap = n; g_at = -1;
-    for (k = 0; k < g_upn; k++) {
-        if (g_upl[k].kind == UPNP_FOLDER) continue;
-        if (k == i) at = g_qn;
-        up_track(&g_q[g_qn++], k);
-    }
-    order_build(at);
+    g_q = q; g_order = o; g_qn = 0; g_qcap = 1; g_at = -1;
+    up_track(&g_q[g_qn++], i);
+    order_build(0);
     g_view = V_NOW;
-    play_at(g_at >= 0 ? g_at : 0);
+    play_at(0);
 }
 
 /* square on an item: at the end of the queue */
@@ -492,7 +487,7 @@ static void browse_choose(void)
         const FEntry *e = lib_entry(g_bsel);
         if (!e) return;
         if (e->is_dir) { fops_join(p, sizeof(p), g_dir, e->name); dir_load(p); return; }
-        music_play_list(g_dir, g_list.e, g_list.n, g_bsel - g_nspec);   /* the folder's songs, from this one */
+        music_play_list(g_dir, e, 1, 0);   /* that one alone (the folder: Play all, Shuffle; more: square) */
     }
 }
 

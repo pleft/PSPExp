@@ -248,7 +248,8 @@ the **Library**:
   Jellyfin, Kodi, MiniDLNA, a NAS or a router with DLNA on), found when you
   open it. A folder with songs starts with **Play all** and **Shuffle**;
   songs show their title and artist, and the one playing is marked. Cross
-  opens a folder, or plays a song (or film) and the rest of its folder;
+  opens a folder, or plays that song (or film) alone: **Play all** and
+  **Shuffle** play the folder;
   **square adds** the song, or a folder's songs (with its subfolders'), to
   the end of the queue; circle goes up;
 - **Queue**: the songs to come. Cross plays one, square takes it out.
