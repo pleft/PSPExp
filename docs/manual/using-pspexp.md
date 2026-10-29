@@ -10,9 +10,9 @@ buttons; the board needs no screen, keyboard or mouse.
 | HOME | leave what is on screen: in an app or a game, press it twice (the first shows "HOME again to quit" for 3 seconds), and the launcher comes back; in the launcher, the PSP's own "Quit?" (to the XMB); in your own PSP games, the PSP's HOME menu (Exit Game: back to PSPExp); held 2 s, PSPExp quits from anywhere |
 | cross | choose: open, play, confirm, type the highlighted key |
 | circle | back one step: cancel, the folder above; it never closes an app (HOME does; in the terminal: Esc) |
-| triangle | show more: details, the actions menu, a hidden password (in the terminal: Space) |
+| triangle | show more: details, a hidden password (in the terminal: Space) |
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
-| START | search, refresh or rescan, options |
+| START | the menu: what you can do with the highlighted item, then the screen's own (in a keyboard: done; in the terminal: Enter) |
 | SELECT, held | in the launcher: the terminal (and back) |
 | L / R | the other tab, panel or page |
 | ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + L twice a screenshot, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
@@ -32,7 +32,7 @@ music playing, a pause sign that it is paused.
  Favourites   PSP     Games   Emulators   Apps   Settings
                          10 games
                  (>) Play again  GoldenEye 007
- (X) Open                          SELECT Notifications  START Search
+ (X) Open                            SELECT Notifications  START Menu
 ```
 
 Left and right pick a tile, cross opens it; down then cross plays what
@@ -62,7 +62,7 @@ game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
  [apps]   | Cave Story
  [gear]   | a short description of the game
           | Game  /  PSP renderer
- (X) Play  ([]) Favourite  (/\) Details  (O) Home  SELECT Notifications  START Search
+ (X) Play  ([]) Favourite  (/\) Details  (O) Home  SELECT Notifications  START Menu
 ```
 
 | Button | In the launcher |
@@ -73,7 +73,7 @@ game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
 | cross | play, or open |
 | square | add to / remove from Favourites |
 | triangle | details: description, how it draws, size, when last played |
-| START | search everything: games, apps and every ROM, by name |
+| START | the menu: Play, Add to favourites, Details, **Search** (everything: games, apps and every ROM, by name), Notifications; on the home screen also Restart PSPExp and Power off the board (each asked again) |
 | SELECT | the notifications |
 | SELECT, held | the terminal (and back) |
 
@@ -215,8 +215,8 @@ Only use ROMs of games you own.
 | circle | the folder above |
 | HOME, twice | close Files |
 | square | mark several files |
-| triangle | copy or move to the other panel, delete, rename, new folder, details, compress to a .zip |
-| START | options: hidden files, sorting, the same folder in both panels, a terminal here |
+| triangle | details: size, where it is, when it changed |
+| START | the menu: copy or move to the other panel, delete, rename, add to the Media queue, compress to a .zip; **Folder and view**: new folder, a terminal here, the same folder in both panels, swap the panels, hidden files, sorting, Media |
 
 The drives include the board's storage, any USB stick plugged into it, and
 **the PSP's own memory stick** (drive **PSP**), while PSPExp runs. Copying
@@ -268,8 +268,8 @@ the **Library**:
 The music goes on while you use the launcher, Files or the other apps;
 **Now playing** on the home screen, or Apps > Media, brings it back. In
 **Files** the song playing has a note beside it and its title shows at the
-foot of the panel; cross on it (or START > Media) brings Media back
-without starting the song over. Files' triangle menu has **Add to the
+foot of the panel; cross on it (or START > Folder and view > Media) brings Media back
+without starting the song over. Files' START menu has **Add to the
 Media queue**, for the highlighted or marked songs, films and folders.
 Starting a game stops it.
 

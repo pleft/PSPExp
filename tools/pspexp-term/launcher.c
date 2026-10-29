@@ -1897,10 +1897,88 @@ static LEntry *home_continue(void)
     return NULL;
 }
 
+/* ---- START: the menu (the highlighted entry's actions, then Search and Notifications; on the home
+ * screen also Restart PSPExp and Power off, each asked again) ---- */
+static UiMenu g_menu;
+enum { MN_GO = 1, MN_FAV, MN_DETAILS, MN_SEARCH, MN_NOTIFY, MN_RESTART, MN_POWER, MN_RESTART_YES, MN_POWER_YES, MN_CANCEL };
+
+static int can_fav(const LEntry *e) { return e && e->type != LT_ACTION && !is_system_item(e) && !is_group_item(e); }
+static void fav_toggle(LEntry *e, uint64_t now)
+{
+    char id[160];
+    int on;
+    snprintf(id, sizeof(id), "%s", e->id);
+    on = lib_fav_toggle(&L, id);
+    cats_build();
+    toast("star", on ? "Added to favourites" : "Removed from favourites", now);
+}
+/* triangle: a game's, a ROM's, an app's Details card; what a setting, a system or a built-in app is, in a toast */
+static void show_more(LEntry *e, uint64_t now)
+{
+    if (is_system_item(e) || is_group_item(e)) toast(e->icon, e->desc, now);
+    else if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
+    else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
+}
+
+static void menu_open(uint64_t now)
+{
+    LEntry *e = g_mode == M_BROWSE ? cur_entry() : NULL;
+    (void)now;
+    ui_menu_begin(&g_menu, e ? e->title : "PSPExp");
+    if (e) {
+        int game = e->type == LT_ROM || e->type == LT_GAME;
+        ui_menu_add(&g_menu, MN_GO, game ? "play" : e->type == LT_ACTION ? "check" : "folder-open", game ? "Play" : e->type == LT_ACTION ? "Select" : "Open", NULL, 0, 0);
+        if (can_fav(e)) {
+            ui_menu_add(&g_menu, MN_FAV, "star", e->fav ? "Remove from favourites" : "Add to favourites", NULL, 0, 0);
+            ui_menu_add(&g_menu, MN_DETAILS, "info", "Details", NULL, 0, 0);
+        }
+    }
+    ui_menu_add(&g_menu, MN_SEARCH, "search", "Search", NULL, e != NULL, 0);
+    ui_menu_add(&g_menu, MN_NOTIFY, "bell", "Notifications", NULL, 0, 0);
+    if (g_mode == M_HOME) {
+        ui_menu_add(&g_menu, MN_RESTART, "refresh-cw", "Restart PSPExp", NULL, 1, 1);
+        ui_menu_add(&g_menu, MN_POWER, "power", "Power off the board", NULL, 0, 1);
+    }
+    g_dirty = 1;
+}
+
+static void menu_choose(int id, uint64_t now)
+{
+    LEntry *e = g_mode == M_BROWSE ? cur_entry() : NULL;
+    g_dirty = 1;
+    switch (id) {
+    case MN_GO: if (e) launch(e, now); break;
+    case MN_FAV: if (e) fav_toggle(e, now); break;
+    case MN_DETAILS: if (e) show_more(e, now); break;
+    case MN_SEARCH: search_open(now); break;
+    case MN_NOTIFY: snprintf(g_app_req, sizeof(g_app_req), "notifications"); break;
+    case MN_RESTART:   /* asked again, in the menu */
+        ui_menu_begin(&g_menu, "Restart PSPExp?");
+        ui_menu_add(&g_menu, MN_RESTART_YES, "refresh-cw", "Restart", NULL, 0, 0);
+        ui_menu_add(&g_menu, MN_CANCEL, "x", "Cancel", NULL, 0, 0);
+        break;
+    case MN_POWER:
+        ui_menu_begin(&g_menu, "Power off the board?");
+        ui_menu_add(&g_menu, MN_POWER_YES, "power", "Power off", NULL, 0, 0);
+        ui_menu_add(&g_menu, MN_CANCEL, "x", "Cancel", NULL, 0, 0);
+        break;
+    case MN_RESTART_YES: g_console_restart_req = 1; toast("refresh-cw", "Restarting PSPExp...", now); break;
+    case MN_POWER_YES: {   /* the Settings action, its "again" already given */
+        int i;
+        for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, "a:poweroff")) {
+            snprintf(g_confirm, sizeof(g_confirm), "poweroff"); g_confirm_until = now + 1000000u;
+            run_action(&g_actions[i], now);
+        }
+        break;
+    }
+    default: break;
+    }
+}
+
 static void home_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
     int n = rail_n();
-    if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
+    if (pressed & PSPEXP_BUTTON_START) { menu_open(now); return; }
     if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* as the bell */
     if (left && g_home_row == 0) { g_home_sel = (g_home_sel + n - 1) % n; g_dirty = 1; }
     if (right && g_home_row == 0) { g_home_sel = (g_home_sel + 1) % n; g_dirty = 1; }
@@ -1927,6 +2005,12 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         else if (pressed & PSPEXP_BUTTON_CIRCLE) { g_sheet = 0; g_dirty = 1; }
         return;
     }
+    if (g_menu.open) {   /* START's menu over the home screen or a section */
+        int id = ui_menu_input(&g_menu, pressed, up, down);
+        if (id >= 0) menu_choose(id, now);
+        g_dirty = 1;
+        return;
+    }
     if (g_mode == M_HOME) { home_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
@@ -1936,8 +2020,8 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_mode = M_BROWSE; g_dirty = 1; }
         return;
     }
-    if (pressed & PSPEXP_BUTTON_START) { search_open(now); return; }
-    if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* the notification centre, as START searches */
+    if (pressed & PSPEXP_BUTTON_START) { menu_open(now); return; }
+    if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* the notification centre (also in START's menu) */
     /* up and down the rail of categories, left and right along the shelf */
     if (up) select_cat(rail_pos(g_cur) - 1, -1, now);
     if (down) select_cat(rail_pos(g_cur) + 1, 1, now);
@@ -1949,19 +2033,8 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     e = cur_entry();
     if (!e) return;
     if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && e->type != LT_ACTION && !is_system_item(e) && !is_group_item(e)) {
-        char id[160];
-        int on;
-        snprintf(id, sizeof(id), "%s", e->id);
-        on = lib_fav_toggle(&L, id);
-        cats_build();
-        toast("star", on ? "Added to favourites" : "Removed from favourites", now);
-    }
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) {
-        if (is_system_item(e) || is_group_item(e)) toast(e->icon, e->desc, now);
-        else if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
-        else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
-    }
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && can_fav(e)) fav_toggle(e, now);
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) show_more(e, now);
 }
 
 /* ---- status sources ------------------------------------------------------------------------ */
@@ -2529,11 +2602,11 @@ static void draw_home(float dt)
             x += w[k] + gap;
         }
     }
-    {
+    if (!g_menu.open) {   /* (START's menu draws its own) */
         int x = 16;
         gfx_button('x', x, HINT_Y); x += 18;
         gfx_text(FONT_SMALL, x, HINT_Y - 1, g_home_row == -1 ? "Notifications" : g_home_row == 1 && g_home_pill == 1 ? "Play" : "Open", C_SUB, 255, 0);
-        x = hint_right(SCREEN_W - 16, "START", "Search");
+        x = hint_right(SCREEN_W - 16, "START", "Menu");
         hint_right(x - 14, "SELECT", "Notifications");
     }
 }
@@ -2555,6 +2628,7 @@ static void draw_hints(void)
 {
     int x = 16;
     LEntry *e = cur_entry();
+    if (g_menu.open) return;   /* (START's menu draws its own) */
     const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
     if (e) { gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, go, C_SUB, 255, 0) + 14; }   /* (an empty section: nothing to open) */
     if (e && e->type != LT_ACTION && !is_system_item(e) && !is_group_item(e)) {   /* a game, a ROM, an app: favourites and the Details card
@@ -2564,7 +2638,7 @@ static void draw_hints(void)
     }
     gfx_button('o', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, g_cat[g_cur].hidden ? (parent_kind(&g_cat[g_cur]) == CK_SETTINGS ? "Settings" : "Emulators") : "Home", C_SUB, 255, 0);
     {   /* SELECT's hint where there is room (a long left side: "Unfavourite", "Emulators"); the button works anyway */
-        int left_end = x, r = hint_right(SCREEN_W - 16, "START", "Search");
+        int left_end = x, r = hint_right(SCREEN_W - 16, "START", "Menu");
         int w = gfx_text_width(FONT_BADGE, "SELECT") + 10 + 6 + gfx_text_width(FONT_SMALL, "Notifications");
         if (r - 14 - w >= left_end + 12) hint_right(r - 14, "SELECT", "Notifications");
     }
@@ -3075,6 +3149,7 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
         draw_hints();
         if (g_mode == M_DETAILS) draw_details(dt);
     }
+    if (g_menu.open && (g_mode == M_HOME || g_mode == M_BROWSE)) ui_menu_draw(&g_menu);   /* START's menu, with its own hints */
     notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;

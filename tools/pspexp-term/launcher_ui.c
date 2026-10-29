@@ -22,6 +22,62 @@ int ui_hint_btn(int x, char b, const char *label)
     return x + gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, label, UI_SUB, 255, 0) + 14;
 }
 
+/* ---- the menu --------------------------------------------------------------------- */
+
+void ui_menu_begin(UiMenu *m, const char *title)
+{
+    memset(m, 0, sizeof(*m));
+    snprintf(m->title, sizeof(m->title), "%s", title ? title : "");
+    m->open = 1;
+}
+
+void ui_menu_add(UiMenu *m, int id, const char *icon, const char *label, const char *value, int sep, int more)
+{
+    UiMenuItem *it;
+    if (m->n >= UI_MENU_MAX) return;
+    it = &m->it[m->n++];
+    it->id = id; it->sep = sep && m->n > 1; it->more = more;
+    snprintf(it->icon, sizeof(it->icon), "%s", icon ? icon : "");
+    snprintf(it->label, sizeof(it->label), "%s", label ? label : "");
+    snprintf(it->value, sizeof(it->value), "%s", value ? value : "");
+}
+
+int ui_menu_input(UiMenu *m, uint32_t pressed, int up, int down)
+{
+    if (!m->open || !m->n) { m->open = 0; return UIM_CLOSE; }
+    if (up) m->sel = (m->sel + m->n - 1) % m->n;
+    if (down) m->sel = (m->sel + 1) % m->n;
+    if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_START)) { m->open = 0; return UIM_CLOSE; }
+    if (pressed & PSPEXP_BUTTON_CROSS) { m->open = 0; return m->it[m->sel].id; }
+    return UIM_NONE;
+}
+
+void ui_menu_draw(const UiMenu *m)
+{
+    int i, seps = 0, w = 270, h, x, y, ry;
+    if (!m->open) return;
+    for (i = 0; i < m->n; i++) seps += m->it[i].sep;
+    h = 30 + m->n * 20 + seps * 7;
+    x = (UI_SCREEN_W - w) / 2; y = (UI_SCREEN_H - h) / 2 - 8;
+    gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
+    gfx_nine(NINE_R14, x, y, w, h, 0x1b2a46, 250);
+    gfx_text(FONT_BODY, x + 14, y + 8, m->title, UI_TEXT, 255, w - 28);
+    ry = y + 28;
+    for (i = 0; i < m->n; i++) {
+        const UiMenuItem *it = &m->it[i];
+        int on = i == m->sel, right = x + w - 14;
+        if (it->sep) { gfx_rect(x + 12, ry + 1, w - 24, 1, 0x34466b, 255); ry += 7; }
+        if (on) gfx_nine(NINE_R6, x + 6, ry - 2, w - 12, 19, UI_ACCENT, 90);
+        if (it->icon[0]) gfx_icon(it->icon, 13, x + 14, ry + 1, on ? 0xffffff : UI_ACCENT, 255);
+        if (it->more) { gfx_icon("chevron-right", 13, right - 13, ry + 1, on ? 0xffffff : UI_SUB, 255); right -= 18; }
+        if (it->value[0]) { int vw = gfx_text_width(FONT_SMALL, it->value); gfx_text(FONT_SMALL, right - vw, ry, it->value, on ? 0xffffff : UI_SUB, 255, 0); right -= vw + 8; }
+        gfx_text(FONT_SMALL, x + 36, ry, it->label, on ? 0xffffff : UI_TEXT, 255, right - x - 36);
+        ry += 20;
+    }
+    i = ui_hint_btn(12, 'x', "Choose");
+    ui_hint_btn(i, 'o', "Close");
+}
+
 /* ---- the text keyboard ------------------------------------------------------------ */
 
 #define TK_COLS 13

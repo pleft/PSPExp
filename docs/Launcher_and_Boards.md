@@ -323,7 +323,22 @@ Search's circle goes back to where it was opened (the home screen or a
 section; it went to the section). The Wi-Fi picker's square is a new
 password only for a saved network, as hinted (for another, cross asks
 anyway), and "cross Join" is not shown while a scan runs. Files' Compress
-keyboard is titled Compress (it said Rename). A game holding the PSP gives
+keyboard is titled Compress (it said Rename).
+
+**START, the menu (2026-10-29).** START opens one menu everywhere: the
+highlighted item's actions, then the screen's own (`ui_menu`, launcher_ui.c:
+cross runs a row, circle or START closes it, a line between the two kinds,
+a chevron on a row that opens another menu). In the launcher: Play / Open /
+Select, Add to (Remove from) favourites and Details where the entry has
+them, then Search (which was START itself) and Notifications (SELECT too);
+on the home screen Search, Notifications, Restart PSPExp and Power off the
+board, the last two asked again in a second menu. In Files: the file's (or
+the marked ones') actions, and "Folder and view" (new folder, terminal here,
+the same folder in both panels, swap, hidden files, sorting, Media), which
+was START's Options menu; its "Close the file manager" went (HOME). Triangle
+is Details, as in the launcher (it opened the actions). The footers say
+"START Menu", and none is drawn under an open menu. Keyboards keep START as
+done, the terminal as Enter, games their own. A game holding the PSP gives
 HOME to itself the same way (the SDL layer): HOME asks it to quit, as START +
 SELECT held did, which now works only with a PSP runtime from before
 HOME_MODE. The "Starting" screen, the controls sheet and the Details card say

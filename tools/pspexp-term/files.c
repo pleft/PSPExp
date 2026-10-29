@@ -569,14 +569,17 @@ static void open_file(Panel *p, const FEntry *e)
 /* ---- menus ------------------------------------------------------------------- */
 
 typedef struct MItem { const char *icon, *label; int id; } MItem;
-enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE, A_ZIP,
-       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_MUSIC, P_CLOSE,
+enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE, A_ZIP, A_MORE,
+       P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_MUSIC,
        X_OTHER, X_HERE, X_LIST, X_INSTALL };
+/* START's menu (2026-10-29: START is the menu everywhere): the file's (or the marked ones') actions,
+ * and "Folder and view" for the rest; triangle is Details, as everywhere. (Triangle opened these
+ * and START the options, two menus; one menu with all of them would have been too long.) */
 static const MItem ACTIONS[] = {
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
-    { "folder-plus", "New folder", A_MKDIR }, { "info", "Details", A_DETAILS },
     { "list", "Add to the Media queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
+    { "sliders-horizontal", "Folder and view", A_MORE },
 };
 /* cross on an archive */
 static const MItem ARCHIVE[] = {
@@ -584,9 +587,9 @@ static const MItem ARCHIVE[] = {
     { "list", "Show what is in it", X_LIST }, { "package-open", "Install as a PSPExp package", X_INSTALL },
 };
 static const MItem OPTIONS[] = {
-    { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT },
+    { "folder-plus", "New folder", A_MKDIR }, { "square-terminal", "Terminal here", P_TERMINAL },
     { "columns-2", "This folder in the other panel", P_SAME }, { "arrow-right-left", "Swap the panels", P_SWAP },
-    { "square-terminal", "Terminal here", P_TERMINAL }, { "clapperboard", "Media", P_MUSIC }, { "x", "Close the file manager", P_CLOSE },
+    { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT }, { "clapperboard", "Media", P_MUSIC },
 };
 #define NACT ((int)(sizeof(ACTIONS) / sizeof(ACTIONS[0])))
 #define NOPT ((int)(sizeof(OPTIONS) / sizeof(OPTIONS[0])))
@@ -681,6 +684,7 @@ static void run_action(int id)
         break;
     case A_MKDIR: ui_kbd_reset(&g_kbd, "", 0, "Create"); g_kmode = K_MKDIR; g_over = O_KBD; break;
     case A_DETAILS: details(); break;
+    case A_MORE: g_over = O_OPTIONS; g_msel = 0; break;   /* the folder's and the view's: the second menu */
     case A_QUEUE: {   /* the marked (or highlighted) songs and folders, at the end of Music's queue */
         FEntry *e = (FEntry *)malloc(sizeof(FEntry) * (size_t)(p->list.n ? p->list.n : 1));
         int i, n = 0;
@@ -732,7 +736,6 @@ static void run_action(int id)
         } else { g_term = 1; snprintf(g_term_path, sizeof(g_term_path), "%s", p->path); }
         break;
     case P_MUSIC: snprintf(g_open_app, sizeof(g_open_app), "music"); g_exit = 1; break;   /* (circle there: back here) */
-    case P_CLOSE: g_exit = 1; break;
     }
     g_dirty = 1;
 }
@@ -862,8 +865,7 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     if (p->on_drives) {   /* the drive button: cross opens the list, down / circle back to the files */
         if (pressed & PSPEXP_BUTTON_CROSS) { drives_refresh(); g_msel = drive_cur(p); g_over = O_DRIVES; }
         else if (down || (pressed & PSPEXP_BUTTON_CIRCLE)) p->on_drives = 0;
-        if (pressed & PSPEXP_BUTTON_TRIANGLE) { p->on_drives = 0; g_over = O_ACTIONS; g_msel = 0; }
-        if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }
+        if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }   /* (no file here: the folder's and the view's) */
         g_dirty = 1;
         return;
     }
@@ -886,8 +888,11 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         if (!p->list.e[p->sel].is_up) p->list.e[p->sel].marked = !p->list.e[p->sel].marked;
         move_sel(p, 1);
     }
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) { g_over = O_ACTIONS; g_msel = 0; }
-    if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }
+    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && p->sel < p->list.n && !p->list.e[p->sel].is_up) details();   /* more: Details */
+    if (pressed & PSPEXP_BUTTON_START) {   /* the menu: on ".." the folder's and the view's at once */
+        g_over = p->sel < p->list.n && !p->list.e[p->sel].is_up ? O_ACTIONS : O_OPTIONS;
+        g_msel = 0;
+    }
     g_dirty = 1;
 }
 
@@ -1040,6 +1045,7 @@ static void draw_menu(const MItem *items, int n, const char *title)
         snprintf(label, sizeof(label), "%s", items[i].label);
         if (items[i].id == P_HIDDEN) snprintf(label, sizeof(label), "Hidden files: %s", g_hidden ? "shown" : "hidden");
         if (items[i].id == P_SORT) snprintf(label, sizeof(label), "Sort by %s", g_sort == FSORT_NAME ? "name" : g_sort == FSORT_SIZE ? "size" : "date");
+        if (items[i].id == A_MORE) { gfx_rect(x + 12, ry - 4, w - 24, 1, 0x34466b, 255); gfx_icon("chevron-right", 13, x + w - 27, ry + 1, i == g_msel ? 0xffffff : UI_SUB, 255); }
         if (i == g_msel) gfx_nine(NINE_R6, x + 6, ry - 2, w - 12, 19, UI_ACCENT, 90);
         gfx_icon(items[i].icon, 13, x + 14, ry + 1, i == g_msel ? 0xffffff : UI_ACCENT, 255);
         gfx_text(FONT_SMALL, x + 36, ry, label, i == g_msel ? 0xffffff : UI_TEXT, 255, w - 48);
@@ -1190,16 +1196,25 @@ void files_render(PspExpContext *ctx, uint64_t now)
     } else {
         if (!fops_is_root(act()->path)) x = ui_hint_btn(x, 'o', "Up");
         x = ui_hint_btn(x, 's', "Mark");
-        x = ui_hint_btn(x, 't', "Actions");
+        x = ui_hint_btn(x, 't', "Details");
     }
     if (g_over == O_NONE) {
-        x = ui_hint_cap(x, "START", "Options", UI_SUB);
+        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
         x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
     }
     switch (g_over) {
     case O_DRIVES: draw_drives(); break;
-    case O_ACTIONS: draw_menu(ACTIONS, NACT, "Actions"); break;
-    case O_OPTIONS: draw_menu(OPTIONS, NOPT, "Options"); break;
+    case O_ACTIONS: {   /* titled with what it acts on */
+        Panel *p = act();
+        int i, n = 0;
+        char t[96];
+        for (i = 0; i < p->list.n; i++) n += p->list.e[i].marked;
+        if (n > 1) snprintf(t, sizeof(t), "%d items", n);
+        else snprintf(t, sizeof(t), "%s", p->sel < p->list.n ? p->list.e[p->sel].name : "Actions");
+        draw_menu(ACTIONS, NACT, t);
+        break;
+    }
+    case O_OPTIONS: draw_menu(OPTIONS, NOPT, "Folder and view"); break;
     case O_ARCHIVE: draw_menu(ARCHIVE, narc(), g_arc); break;
     case O_CONFIRM:
         draw_box(g_q == Q_DELETE ? "Delete" : g_q == Q_INSTALL ? "Install" : "Replace", g_qtext, 96);
