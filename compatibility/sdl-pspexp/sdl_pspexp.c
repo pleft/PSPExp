@@ -3517,6 +3517,10 @@ HOOK(void, SDL_GL_SwapWindow, (SDL_Window *win))
     int w = 0, h = 0;
     static int drop = -1;
     if (drop < 0) drop = getenv("PSPEXP_FRAME_DROP") ? atoi(getenv("PSPEXP_FRAME_DROP")) : 0;
+    /* asked to quit by HOME: what the game draws from then on is not the PSP's (Yaba Sanshiro clears
+     * its own framebuffer and swaps, the window's showing upside down for a moment, 2026-10-29);
+     * the PSP keeps the last frame until the launcher's, the input still served (HOME's way out) */
+    if (S.home_at) { service_link(); REAL(SDL_GL_SwapWindow)(win); return; }
     if (drop < 0) drop = 0;
     /* PSPEXP_FRAME_DROP=1: while the PSP still has the frame before, this one is not sent (nor read
      * back) rather than waited for: a program that keeps time by its sound (Mupen64Plus, its audio

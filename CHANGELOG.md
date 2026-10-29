@@ -25,7 +25,8 @@
 - **Game Boy Advance**: no more dark one-pixel line near the right edge of
   every game (the picture's pieces now meet exactly).
 - **Saturn**: leaving a game no longer ends with a "Stopped with status 138"
-  notice (a fault in Yaba Sanshiro's own thread code, patched).
+  notice (a fault in Yaba Sanshiro's own thread code, patched), nor shows
+  the picture upside down for a moment.
 - **Battery saves** of the cartridge emulators are written also when HOME
   has to end an emulator that does not close in time.
 - **A PSP game left in its first seconds** (HOME › Exit Game) comes back to
