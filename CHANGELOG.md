@@ -25,7 +25,7 @@
   that picture instead of black.
 - **Media, made simpler**: L / R switch its tabs (Now playing, Library,
   Queue); left / right change song (held: seek); a folder starts with
-  **Play all** and **Shuffle**, and choosing one song plays only that one; songs show their titles and artists, the one
+  **Play all** and **Shuffle**, and choosing one song plays only that one (in Files too); songs show their titles and artists, the one
   playing marked; a **Captures** place with your recordings; the play-order
   menu can clear the queue. It opens on the Library unless something plays.
 - **Circle never closes an app** any more: it steps back (the folder above,

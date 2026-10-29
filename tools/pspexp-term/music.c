@@ -201,6 +201,12 @@ int music_play_list(const char *dir, const FEntry *entries, int n, int start)
     return play_at(g_at >= 0 ? g_at : 0);
 }
 
+int music_play_one(const char *dir, const FEntry *entries, int n, int chosen)
+{
+    if (chosen < 0 || chosen >= n) return -1;
+    return music_play_list(dir, &entries[chosen], 1, 0);
+}
+
 void music_tick(uint64_t now)
 {
     PlayerInfo pi;

@@ -23,6 +23,8 @@ int  music_is_current(const char *dir, const char *name);
 /* play dir's playable entries (of the n given: folders and others are left out) from entries[start];
  * the song playing already: Music shown, nothing restarted */
 int  music_play_list(const char *dir, const FEntry *entries, int n, int start);
+/* Files' cross on a song or a film: that one alone (as the Library's; the queue takes more: Add to the Media queue) */
+int  music_play_one(const char *dir, const FEntry *entries, int n, int chosen);
 /* add songs at the end of the queue: dir's entries, folders with the songs in them (4 deep);
  * nothing playing, the first one added plays. How many were added (a note says so) */
 int  music_add(const char *dir, const FEntry *entries, int n);

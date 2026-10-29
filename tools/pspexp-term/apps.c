@@ -13,7 +13,7 @@ const AppView *app_find(const char *id)
 }
 
 static const FileHandler HANDLERS[] = {
-    { "music", player_handles, music_play_list },
+    { "music", player_handles, music_play_one },
 };
 
 const FileHandler *app_file_handler(const char *name)

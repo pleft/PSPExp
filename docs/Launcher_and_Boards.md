@@ -1632,7 +1632,7 @@ folder), the drives, the PSP's memory stick as one place, Media servers
 folder has no ".." row (circle goes up, onto the folder come from) and,
 when it holds songs, starts with Play all and Shuffle; cross on a song or a
 film plays it alone (it played the rest of its folder after it), a media
-server's item too. Files' cross still plays a song with its folder. Songs show their tag
+server's item too, and so does Files' cross on one (`music_play_one`). Songs show their tag
 titles and artists (`tags.c`: ID3v2 and v1, FLAC and Ogg comments from a
 file's first 32 KB, local files only, the first 300 a folder;
 `tests/test_tags.c`), the one playing marked; the queue and Now playing's
