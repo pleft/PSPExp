@@ -2,10 +2,10 @@
 # Every game on the real PSP, started from the launcher as a player would (on the board, with the
 # PSP connected and nobody using it). For each: does it start, how many frames (median / best a
 # second), does its sound reach the PSP, do the nub's four directions and cross reach it, does
-# holding START + SELECT end it, is the PSP still there afterwards. The console's games get the
+# HOME end it, is the PSP still there afterwards. The console's games get the
 # test's settings from a systemd drop-in for the run (removed at the end): input logged
 # (PSPEXP_LOG_EVENTS), a PSP screenshot every 300 frames, and PSPEXP_SCRIPT: the nub up, down,
-# left, right from 15 s, cross at 20 s, START + SELECT held from 28 s.
+# left, right from 15 s, cross at 20 s, HOME at 28 s.
 #   tests/psp/all-games.sh                     every installed game (type=game entries)
 #   tests/psp/all-games.sh ENTRY... "Nintendo 64::Super Mario 64"...   those (a ROM: section::title)
 # Results in $OUT (default /tmp/pspexp-all-games): results.tsv, logs/<id>.log, shots/<id>.bmp.
@@ -15,7 +15,7 @@
 # while working. Each screenshot stalls the PSP a moment: its sound queue jumps then.
 OUT=${OUT:-/tmp/pspexp-all-games}; L=/tmp/pspexp-launcher.log; R=$OUT/results.tsv
 DROP=/etc/systemd/system/pspexp-term.service.d/all-games-test.conf
-SCRIPT="15000:nub:0x-120,16000:nub:0x120,17000:nub:-120x0,18000:nub:120x0,19000:nub:0x0,20000:pad:cross,28000:+pad:start,28000:+pad:select"
+SCRIPT="15000:nub:0x-120,16000:nub:0x120,17000:nub:-120x0,18000:nub:120x0,19000:nub:0x0,20000:pad:cross,28000:pad:home"
 C() { pspexp-term --ctl "$*" 2>/dev/null; }
 st() { C state | grep "^$1=" | cut -d= -f2-; }
 ready() { i=0; until [ "$(st connected)" = 1 ] && [ -z "$(st running)" ] || [ $i -ge 40 ]; do i=$((i+1)); sleep 1; done; }

@@ -479,11 +479,7 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (up && g_mod_ch0 > 0) g_mod_ch0--;   /* a module: its channels, when they do not all fit */
         if (down) g_mod_ch0++;                   /* (draw_module keeps it in range) */
         if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
-        if (pressed & PSPEXP_BUTTON_CIRCLE) {   /* the music goes on; a film waits, paused */
-            PlayerInfo pi;
-            if (player_info(&pi) && pi.video && !pi.paused && !pi.ended) player_toggle_pause();
-            g_exit = 1;
-        }
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_exit = 1; }
         break;
     case V_BROWSE: {
         int n = g_up == UP_SERVERS ? g_nsrv : g_up == UP_FOLDER ? g_upn : g_dir[0] ? g_list.n : g_npl;
@@ -923,6 +919,12 @@ static void mu_state(char *out, size_t n)
         l = strlen(out);
         if (l < n) snprintf(out + l, n - l, "\nmusic.browse_sel=%d\n", g_bsel);
     }
+}
+
+void music_leave(void)
+{
+    PlayerInfo pi;
+    if (player_info(&pi) && pi.video && !pi.paused && !pi.ended) player_toggle_pause();
 }
 
 const AppView MUSIC_APP = { "music", mu_open, mu_input, mu_needs_frame, mu_render, mu_take_exit, mu_state };

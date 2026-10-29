@@ -43,7 +43,7 @@
  * cross = B, circle = A, square = Y, triangle = X, as on a Nintendo pad; the
  * nub is the d-pad) or the keyboard (arrows, x = A, z = B, s = X, a = Y,
  * q / w = L / R, Return = Start, right Shift = Select, Escape quits). Holding
- * START + SELECT on the PSP leaves (the SDL layer's gesture).
+ * HOME on the PSP leaves (the SDL layer's way out).
  *
  * Battery saves (the cartridge's SRAM) go to $PSPEXP_RETRO_SAVES or
  * ~/.local/share/pspexp-retro/saves/<rom name>.srm, written every 10 s when

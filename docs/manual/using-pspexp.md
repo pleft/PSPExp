@@ -7,6 +7,7 @@ buttons; the board needs no screen, keyboard or mouse.
 
 | Button | What it does, on every screen |
 |---|---|
+| HOME | leave what is on screen: an app or a game closes and the launcher comes back; in the launcher, the PSP's own "Quit?" (to the XMB); in your own PSP games, the PSP's HOME menu (Exit Game: back to PSPExp); held 2 s, PSPExp quits from anywhere |
 | cross | choose: open, play, confirm, type the highlighted key |
 | circle | back one step: cancel, the folder above; on an app's first screen, out to where you came from (in the terminal: Esc) |
 | triangle | show more: details, the actions menu, a hidden password (in the terminal: Space) |
@@ -115,10 +116,10 @@ itself.
 A game that cannot start says why at the bottom of the screen: Warcraft,
 for example, when the data from your own copy is not on the board yet.
 
-**To leave any game, hold START + SELECT.** After a second the game is
-asked to quit; still held after two, it is ended, and a game that hangs
-while closing is ended a moment later. Many games also have their own
-Quit in their menus.
+**To leave any game, press HOME.** The game is asked to quit and the
+launcher comes back; a game still there two seconds later (one that asks
+"are you sure?") is ended, and so is one that hangs while closing. Many
+games also have their own Quit in their menus.
 
 Each game comes with its buttons mapped for the PSP (the analog nub as a
 mouse pointer in the point-and-click adventures and strategy games, as the

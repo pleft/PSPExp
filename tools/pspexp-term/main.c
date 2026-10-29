@@ -1546,6 +1546,7 @@ static PspExpTransport *open_transport(void)
 }
 
 static int g_redraw_app;   /* a new connection: the app shown draws again, changed or not */
+static int g_home_sent = -1;   /* HOME_MODE last sent on this connection (-1: none yet) */
 
 static int try_connect(void)
 {
@@ -1554,6 +1555,7 @@ static int try_connect(void)
     pspexp_set_transport(ctx, t);
     if (pspexp_connect(ctx, 3000) < 0) { pspexp_set_transport(ctx, NULL); return 0; }
     fprintf(stderr, "[pspexp-term] PSP connected\n");
+    g_home_sent = -1;   /* (the PSP gives HOME back to its dialog at every disconnect) */
     T.dirty = 1;
     mirror_reset();
     {
@@ -1635,6 +1637,35 @@ static void view_cycle(void)
         g_view_mirror = 0;
         if (g_launcher_on) { g_view_launcher = 1; launcher_invalidate(); } else T.dirty = 1;
     }
+}
+
+/* HOME: leave what is on screen (architecture §12d). The launcher keeps the PSP's own "Quit?"
+ * dialog (HOME_MODE SYSTEM, home_mode_tick); everywhere else HOME is the console's: an app closes
+ * as on its own exit (Media opened from Files back there), Files and the terminal go to the
+ * launcher, a program shown in the mirror is ended (its end brings the launcher back) */
+static void home_leave(void)
+{
+    swallow();
+    if (g_app) {
+        if (g_app == &MUSIC_APP) music_leave();
+        if (g_app_from_files) { g_app = NULL; g_app_from_files = 0; g_view_files = 1; files_invalidate(); }
+        else view_cycle();
+        return;
+    }
+    if (g_view_files) { view_cycle(); return; }
+    if (g_view_mirror && g_launch_pid > 0 && !g_launch_aware) { kill(-g_launch_pid, SIGTERM); return; }
+    if (!g_view_launcher && g_launcher_on) {   /* the terminal, or a mirror of nothing launched */
+        keypad_release_all();
+        g_view_mirror = 0; g_view_launcher = 1; launcher_invalidate();
+    }
+}
+
+/* who HOME belongs to, said to the PSP when it changes and after each connection */
+static void home_mode_tick(void)
+{
+    int want = g_launcher_on && !(g_view_launcher && !g_app && !g_view_files && !g_view_mirror);
+    if (want == g_home_sent || !pspexp_home_supported(ctx)) return;
+    if (pspexp_home_mode(ctx, want) == 0) g_home_sent = want;
 }
 
 /* a built-in app (System Monitor, Packages), in place of the launcher */
@@ -1806,7 +1837,6 @@ static void handle_input(void)
     g_swallow &= b;          /* released: counts again */
     b &= ~g_swallow;
     pressed = b & ~g_prev_buttons;
-    if (pressed & PSPEXP_BUTTON_HOME) fprintf(stderr, "[pspexp-term] HOME pressed (the board's)\n");   /* (HOME_MODE: nothing does it yet) */
     int shift = (b & PSPEXP_BUTTON_LTRIGGER) != 0, ctrl = (b & PSPEXP_BUTTON_RTRIGGER) != 0;
     int ax = (g_ctl_nub ? g_ctl_ax : (int)in->analog_x) - 128, ay = (g_ctl_nub ? g_ctl_ay : (int)in->analog_y) - 128;
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
@@ -1831,6 +1861,7 @@ static void handle_input(void)
         g_select_tap = sel_tap;
         if (!mirror_available() && !g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
     }
+    if (pressed & PSPEXP_BUTTON_HOME) { home_leave(); return; }   /* (only sent while HOME is the console's) */
     if (g_view_mirror) { mirror_input(b, pressed, ax, ay); return; }
     /* the views get SELECT as a tap, on its release (a press acted on also when the user was
      * holding it for the launcher); none closes on it now: circle steps back, held SELECT goes home */
@@ -3012,7 +3043,8 @@ static uint32_t ctl_buttons_of(const char *s)   /* "l+r+right" */
     static const struct { const char *n; uint32_t b; } names[] = {
         { "up", PSPEXP_BUTTON_UP }, { "down", PSPEXP_BUTTON_DOWN }, { "left", PSPEXP_BUTTON_LEFT }, { "right", PSPEXP_BUTTON_RIGHT },
         { "cross", PSPEXP_BUTTON_CROSS }, { "circle", PSPEXP_BUTTON_CIRCLE }, { "square", PSPEXP_BUTTON_SQUARE }, { "triangle", PSPEXP_BUTTON_TRIANGLE },
-        { "l", PSPEXP_BUTTON_LTRIGGER }, { "r", PSPEXP_BUTTON_RTRIGGER }, { "start", PSPEXP_BUTTON_START }, { "select", PSPEXP_BUTTON_SELECT }, { "note", PSPEXP_BUTTON_NOTE } };
+        { "l", PSPEXP_BUTTON_LTRIGGER }, { "r", PSPEXP_BUTTON_RTRIGGER }, { "start", PSPEXP_BUTTON_START }, { "select", PSPEXP_BUTTON_SELECT }, { "note", PSPEXP_BUTTON_NOTE },
+        { "home", PSPEXP_BUTTON_HOME } };   /* (HOME as the PSP sends it while it is the console's) */
     uint32_t m = 0;
     while (*s) {
         size_t l = strcspn(s, "+"), i;
@@ -3217,7 +3249,7 @@ static void ctl_step(uint64_t now, int connected)
         char what[128] = "";
         int ms = 0;
         sscanf(cmd + (cmd[0] == 'p' ? 6 : 5), "%127s %d", what, &ms);
-        if (!(g_ctl_mask = ctl_buttons_of(what))) { ctl_reply("error buttons: up down left right cross circle square triangle l r start select, joined with +"); return; }
+        if (!(g_ctl_mask = ctl_buttons_of(what))) { ctl_reply("error buttons: up down left right cross circle square triangle l r start select note home, joined with +"); return; }
         if (!connected) { g_ctl_mask = 0; ctl_reply("error the PSP is not connected"); return; }
         C.st = CS_PRESS; C.until = now + (uint64_t)(ms > 0 ? ms : 100) * 1000u;
     } else if (!strncmp(cmd, "nub ", 4)) {
@@ -3743,6 +3775,7 @@ int main(int argc, char **argv)
                 continue;
             }
         }
+        home_mode_tick();
         handle_input();
         if (g_launcher_on && g_launch_pid <= 0) {
             char cmd[1024], cwd[512];

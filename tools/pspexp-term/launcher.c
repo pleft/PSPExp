@@ -2742,7 +2742,7 @@ static void draw_details(float dt)
     } else {
         if (!e->pspexp) snprintf(s, sizeof(s), "Shown through the mirror");
         else if (graphics_label(e->graphics)[0]) snprintf(s, sizeof(s), "%s", graphics_label(e->graphics));
-        else snprintf(s, sizeof(s), "PSP renderer; hold START + SELECT to quit");
+        else snprintf(s, sizeof(s), "PSP renderer; HOME quits");
         info_row(tx, ty, !e->pspexp ? "monitor" : !strncmp(e->graphics, "opengl", 6) || !strcmp(e->graphics, "board-gpu") ? "box" : !strcmp(e->graphics, "sdl") ? "image" : "zap", s, tw, a); ty += 20;
         if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
         if (!e->pkg[0]) { info_row(tx, ty, "folder-open", e->dir[0] ? e->dir : "/", tw, a); ty += 20; }   /* (a package's: its own folder) */
@@ -2822,7 +2822,7 @@ static void draw_sheet(void)
     x = 16;
     gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Play", C_SUB, 255, 0) + 14;
     gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Back", C_SUB, 255, 0);
-    hint_right(SCREEN_W - 16, "START + SELECT", "held, quits the game");
+    hint_right(SCREEN_W - 16, "HOME", "quits the game");
 }
 
 /* the program being started: the last frame the PSP shows before it, which keeps it and turns a
@@ -2831,7 +2831,7 @@ static void draw_sheet(void)
 static void draw_running(void)
 {
     int w, cx = (SCREEN_W - COVER_SIZE) / 2, s = PSPEXP_SPINNER_SIZE;
-    const char *sub = "Starting", *h = "Hold START + SELECT in the game to quit it";
+    const char *sub = "Starting", *h = "Press HOME in the game to quit it";
     gfx_shadow(NINE_SHADOW14, cx, 40 + 8, COVER_SIZE, COVER_SIZE, 0x000000, 180);
     draw_cover(&g_running_e, cx, 40, 255);
     w = gfx_text_width(FONT_H1, g_running_e.title);

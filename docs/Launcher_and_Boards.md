@@ -301,6 +301,17 @@ the terminal; START + SELECT held quits a game. The views now get SELECT
 as a tap, on its release: Files, Packages and the Monitor had closed on the
 press, so holding SELECT in them for the terminal closed them too.
 
+**HOME (2026-10-29).** HOME leaves what is on screen (the architecture's
+§12d). The console gives HOME to itself (HOME_MODE) whenever something other
+than the launcher is shown: an app closes as on its own exit (Media opened
+from Files goes back there, a film paused), Files and the terminal go to the
+launcher, a program shown in the mirror is ended. In the launcher HOME is the
+PSP's again: its "Quit?" dialog, to the XMB. A game holding the PSP gives
+HOME to itself the same way (the SDL layer): HOME asks it to quit, as START +
+SELECT held did, which now works only with a PSP runtime from before
+HOME_MODE. The "Starting" screen, the controls sheet and the Details card say
+HOME.
+
 **Leaving an app** (2026-10-06, the user's choice): three ways out were
 one too many. Circle steps back one level everywhere and, on an app's
 first screen, returns where the app was opened from (the launcher; Files
@@ -861,8 +872,8 @@ itself (on the Mac it plays in a window).
 - **Input.** The PSP's controller as the SDL layer offers it: cross = B,
   circle = A, square = Y, triangle = X (a Nintendo pad's layout), L / R,
   START / SELECT, the d-pad and the nub. On a keyboard: arrows, x, z, s, a,
-  q, w, Return, right Shift; Escape quits. Holding START + SELECT on the PSP
-  leaves, as in every game.
+  q, w, Return, right Shift; Escape quits. HOME on the PSP leaves, as in
+  every game (START + SELECT held, with a PSP runtime from before HOME_MODE).
 - **Battery saves.** The cartridge's SRAM in
   `~/.local/share/pspexp-retro/saves/<rom>.srm`, written every 10 s when it
   changed and at exit. BIOS files for systems that need them go in

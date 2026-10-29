@@ -26,7 +26,7 @@
  *   PSPEXP=usb | tcp[:host[:port]] | sdl | null   (default usb; sdl = the
  *          PSPExp SDL executor in a second window, for checking the stream)
  *   PSPEXP_KEYS=cross=z,circle=x,...          keyboard events for PSP buttons ("return+y": both)
- *   (holding START + SELECT leaves any game: SDL_QUIT after 1 s, exit after 2 s)
+ *   (HOME leaves any game: SDL_QUIT at once, exit 2 s later; START + SELECT held with a PSP runtime before HOME_MODE)
  *   PSPEXP_JOYSTICK=0                         no virtual game controller: the keys only
  *   PSPEXP_SCRIPT="ms:key,ms:+key,ms:-key"    keys at those times (testing with nobody at the PSP)
  *   PSPEXP_NUB=joystick | mouse | keys        (default joystick; keys = arrows; mouse: the nub moves
@@ -297,7 +297,9 @@ static struct {
     Uint8 kheld[SDL_NUM_SCANCODES]; Uint32 mbuttons; float rel_x, rel_y, rel_ex, rel_ey;
     Uint32 held_since[16], last_repeat[16];
     SDL_Keycode keys[16][3];           /* up to three keys per PSP button ("return+y") */
-    Uint32 quit_hold; int quit_sent;   /* START + SELECT held: leave the game */
+    Uint32 quit_hold; int quit_sent;   /* START + SELECT held: leave the game (a PSP runtime without HOME_MODE) */
+    Uint32 home_at;                    /* HOME pressed: the game asked to quit, then ended 2 s on */
+    int link_gen, home_gen;            /* connections made; the one HOME_MODE went to */
     int vjoy;                          /* virtual joystick device index, -1 none */
     SDL_Joystick *vjoy_handle;
     /* stats */
@@ -520,7 +522,8 @@ static void connect_once(void)
     pspexp_set_log(S.ctx, lib_log, NULL);
     if (S.want_depth) pspexp_set_depth_buffer(S.ctx, 1);   /* an OpenGL program: before the handshake asks for it */
     if (!S.transport) logf_("%s: retrying every second", err[0] ? err : "no PSP yet");
-    else if (pspexp_connect(S.ctx, 5000) < 0) {
+    else if (pspexp_connect(S.ctx, 5000) == 0) S.link_gen++;
+    else {
         logf_("no HELLO from the runtime: retrying every second");
         pspexp_set_transport(S.ctx, NULL);
         S.transport = NULL;
@@ -583,6 +586,7 @@ static void try_reconnect(void)
     if (pspexp_connect(S.ctx, 3000) == 0) {
         Tex *tx;
         logf_("reconnected");
+        S.link_gen++;   /* (HOME_MODE again: the PSP gives HOME back to its dialog when a link goes) */
         for (tx = S.textures; tx; tx = tx->next) tx->dirty = 1;   /* the library replays, but re-upload cheaply anyway */
         cursors_forget();
     }
@@ -2186,10 +2190,31 @@ static void feed_input(void)
             for (k = 0; k < 3; k++) push_key_repeat(S.keys[i][k]);
         }
     }
-    /* START + SELECT held: the way out of any game. After 1 s the game is
-     * asked to quit (SDL_QUIT, as when its window is closed); still held at
-     * 2 s (a game that asks "are you sure?"), the process ends. */
-    if ((in->buttons & (PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) == (PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) {
+    /* HOME: the way out of any game (architecture §12d). The PSP sends it once told HOME is this
+     * program's (HOME_MODE, at each connection), its own "Quit?" dialog then off. The game is asked
+     * to quit (SDL_QUIT, as when its window is closed); still there 2 s later (a game that asks
+     * "are you sure?"), the process ends. */
+    if (S.home_gen != S.link_gen && pspexp_home_supported(S.ctx) && pspexp_home_mode(S.ctx, 1) == 0) S.home_gen = S.link_gen;
+    if ((pressed & PSPEXP_BUTTON_HOME) && !S.home_at) {
+        SDL_Event ev;
+        pthread_t t;
+        static int watching;
+        SDL_zero(ev);
+        ev.type = SDL_QUIT;
+        SDL_PushEvent(&ev);
+        S.home_at = SDL_GetTicks() | 1;
+        logf_("HOME: asking the game to quit");
+        if (!watching && pthread_create(&t, NULL, quit_request_watchdog, NULL) == 0) { pthread_detach(t); watching = 1; }
+    }
+    if (S.home_at && SDL_GetTicks() - S.home_at >= 2000) {
+        pthread_t t;
+        logf_("HOME 2 s ago: leaving");
+        if (pthread_create(&t, NULL, quit_watchdog, NULL) == 0) pthread_detach(t);   /* (see below: exit() can hang) */
+        exit(0);
+    }
+    /* START + SELECT held: the way out with a PSP runtime from before HOME_MODE (until Update the
+     * PSP). After 1 s the game is asked to quit; still held at 2 s, the process ends. */
+    if (!pspexp_home_supported(S.ctx) && (in->buttons & (PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) == (PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) {
         Uint32 now = SDL_GetTicks();
         if (!S.quit_hold) S.quit_hold = now ? now : 1;
         if (!S.quit_sent && now - S.quit_hold >= 1000) {
@@ -3265,6 +3290,11 @@ static void script_tick(void)
         if (!strncmp(name, "pad:", 4)) {   /* "pad:cross": a PSP button, through the same path as the PSP's own
                                             * (the virtual controller and its keys): games that tell a pad from a keyboard */
             int b;
+            if (!strcmp(name + 4, "home")) {   /* (HOME: not a game's button, the way out) */
+                script_pad |= PSPEXP_BUTTON_HOME; pad_tapped |= PSPEXP_BUTTON_HOME; pad_up_at = now + 150;
+                logf_("script: pad:home at %ld ms", at);
+                continue;
+            }
             for (b = 0; b < B_COUNT; b++) if (!strcmp(name + 4, BUTTON_NAMES[b])) break;
             if (b < B_COUNT) {
                 if (getenv("PSPEXP_LOG_EVENTS")) logf_("script: virtual controller %s", S.vjoy_handle ? (SDL_JoystickGetAttached(S.vjoy_handle) ? "attached and open" : "handle no longer attached") : "not open");
