@@ -17,6 +17,8 @@
   smaller, down to about a third.
 - A recording's first moment, before the PSP's first picture arrives, shows
   that picture instead of black.
+- **A PSP game left in its first seconds** (HOME › Exit Game) comes back to
+  PSPExp instead of the XMB.
 
 ## 1.3.0 (2026-10-25)
 

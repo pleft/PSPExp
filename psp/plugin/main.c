@@ -1204,6 +1204,7 @@ static volatile u32 g_vd_reads, g_vd_waits, g_vd_opens, g_vd_fails;
 static volatile int g_vd_last;   /* the last ask's result */
 static u32 g_vd_said;            /* the first calls logged (which ones PRO makes after the open) */
 static char g_back_eboot[256];   /* PSPExp's EBOOT, started again at the game's exit (back_note_read) */
+static int g_back_looked;   /* (the note read, at 6 s) */
 
 /* one ask: n bytes at off into dst; the bytes got, -1 the link is not up (ask again), -2 the
  * board has no such disc */
@@ -2065,7 +2066,6 @@ static int capture_thread(SceSize args, void *argp)
 
     t0 = now_us();
     while (!g_quit) {
-        static int back_looked;
         sceDisplayWaitVblankStart();
         util_check();
         log_flush();
@@ -2073,7 +2073,7 @@ static int capture_thread(SceSize args, void *argp)
         pace_check(now_us());
         home_check();
         link_check(now_us());
-        if (!back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
+        if (!g_back_looked && now_us() - g_started_at > 6000000 && !g_home_paused) { g_back_looked = 1; back_note_read(); }   /* (once; see back_note_read) */
         if (g_vdisc && !g_vd_opened) {   /* the virtual disc not open yet: said every 5 s (no picture yet to carry the log), given up after 30 s */
             static u32 said;
             if (now_us() - said > 5000000) {
@@ -2319,8 +2319,9 @@ static void exit_note(void)
 /* A game PSPExp's shelf started (BOOT_DISC: architecture §12c) goes back to PSPExp when it
  * exits, not to the XMB. PSPExp leaves a note before starting it, ms0:/PSP/GAME/PSPExp/launch.txt:
  * the ISO, then PSPExp's EBOOT. Read once the game is past its start (6 s: no memory stick while
- * a game starts), kept if it names this game's ISO, removed either way (a game started from the
- * XMB later goes back there). At the exit, as ARK-4's exitgame.c: the ISO mode cleared (PSPExp
+ * a game starts; a game left before then, on the board's virtual disc, goes back to PSPExp's own
+ * place without it: back_to_pspexp), kept if it names this game's ISO, removed either way (a game started from
+ * the XMB later goes back there). At the exit, as ARK-4's exitgame.c: the ISO mode cleared (PSPExp
  * would start with the disc still bound), then PSPExp's EBOOT (apitype 0x141, key "game") from a
  * thread of the highest priority. */
 static void back_note_read(void)
@@ -2367,6 +2368,12 @@ static void back_to_pspexp(void)
 {
     SceUID th;
     int k1 = pspSdkSetK1(0);
+    if (!g_back_eboot[0] && !g_back_looked) {   /* left before the note was read (its first seconds): a game on the
+        * board's virtual disc came from PSPExp's PSP section, back to PSPExp's own place; no memory stick
+        * read at the exit (read there, an Exit Game at 5 s hung at "please wait" and the PSP went off, 2026-10-29) */
+        const char *iso = sctrlSEGetUmdFile();
+        if (iso && !strncmp(iso, "pxd0:", 5)) strcpy(g_back_eboot, "ms0:/PSP/GAME/PSPExp/EBOOT.PBP");
+    }
     if (g_back_eboot[0] && (th = sceKernelCreateThread("PSPExpBack", back_thread, 1, 0x1000, 0, NULL)) >= 0) {
         sceKernelStartThread(th, 0, NULL);
         sceKernelWaitThreadEnd(th, NULL);

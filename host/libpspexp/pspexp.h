@@ -143,6 +143,10 @@ int pspexp_restart_psp(PspExpContext *ctx);
  * on runtimes with PSPEXP_FEATURE_BOOT_DISC (PRO custom firmware); the link then goes */
 int pspexp_boot_disc_supported(const PspExpContext *ctx);
 int pspexp_boot_disc(PspExpContext *ctx, const char *path);
+/* HOME_MODE (PSPEXP_FEATURE_HOME): 1, HOME is this program's (PSPEXP_BUTTON_HOME in the input,
+ * the PSP's own dialog off); 0, the PSP's dialog (quit PSPExp). Back to 0 at every disconnect. */
+int pspexp_home_supported(const PspExpContext *ctx);
+int pspexp_home_mode(PspExpContext *ctx, int host);
 /* when the bar last sent goes away (pspexp_time_us), 0 none: the PSP draws it at
  * each PRESENT, so a program that draws only on change should draw once after */
 uint64_t pspexp_osd_until(const PspExpContext *ctx);

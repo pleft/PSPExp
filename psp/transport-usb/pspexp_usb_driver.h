@@ -54,6 +54,9 @@ int pspexpUsbBootDisc(const char *path);
 /* PSPExp's EBOOT (argv[0]) started again through the custom firmware, as the plugin does at a
  * game's exit: returns only when it failed; -1 without one (PPSSPP). */
 int pspexpUsbRestart(const char *eboot);
+/* The system's HOME dialog: 1 on, 0 off (HOME then reaches pspexpUsbButtons alone), < 0 to read
+ * it. -1: not available (PPSSPP). */
+int pspexpUsbHomePopup(int on);
 
 #ifdef __cplusplus
 }

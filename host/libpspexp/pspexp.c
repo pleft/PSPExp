@@ -1129,6 +1129,20 @@ int pspexp_boot_disc(PspExpContext *ctx, const char *path)
     return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_BOOT_DISC, &b, sizeof(b));
 }
 
+int pspexp_home_supported(const PspExpContext *ctx)
+{
+    return ctx->state == PSPEXP_LINK_CONNECTED && (ctx->hello.features & PSPEXP_FEATURE_HOME);
+}
+
+int pspexp_home_mode(PspExpContext *ctx, int host)
+{
+    PspExpHomeMode h;
+    if (!pspexp_home_supported(ctx)) return -1;
+    memset(&h, 0, sizeof(h));
+    h.mode = host ? PSPEXP_HOME_HOST : PSPEXP_HOME_SYSTEM;
+    return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_HOME_MODE, &h, sizeof(h));
+}
+
 int pspexp_audio_stream_reset(PspExpContext *ctx)
 {
     if (pspexp_audio_local(ctx)) pspexp_la_reset(&ctx->la);

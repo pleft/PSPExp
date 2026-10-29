@@ -1317,6 +1317,16 @@ games in the same folder listed (their covers generated).
   listed too;
 - PS1 games (the PSP's own player, POPS: an EBOOT.PBP made from BIN/CUE), later.
 
+**An Exit Game in a game's first seconds (2026-10-29).** The return note is read 6 s in, so an Exit Game before then went to the XMB. Reading it at the exit instead (in the `sceKernelExitGame` hook, before PSPExp's EBOOT is started) hung the PSP at the system's "Please wait" and it switched itself off (Bomberman from the board, HOME › Exit Game at 5 s): no memory stick at the exit. Now a game left before the note was read, if its disc is the board's (`sctrlSEGetUmdFile()` starts "pxd0:"), goes back to `ms0:/PSP/GAME/PSPExp/EBOOT.PBP` without reading anything; tried at 2-3 s, PSPExp back 18 s after the start. A stick ISO from the shelf (A) left that early still goes to the XMB.
+
+## 12d. HOME: the system's dialog or the board's (started 2026-10-29)
+
+To the PSP all of PSPExp is one game, so HOME offered to quit all of it wherever it was pressed: in an app it went to the XMB, and a board game went on running on the board unseen (the button audit of 2026-10-29). The aim: HOME leaves what is on screen, one level at a time, as the PSP's own HOME does: a PSP game's HOME menu and Exit Game back to PSPExp (as before), an app or a board game back to the launcher, and in the launcher the system's "Quit?" dialog and the XMB (as before). HOME held 2 s stays the way out of PSPExp from anywhere.
+
+- **The PSP:** `HOME_MODE` (opcode 0x0011, `PspExpHomeMode`, `PSPEXP_FEATURE_HOME`): SYSTEM, the system's dialog, or HOST, the dialog off and HOME sent in INPUT as `PSPEXP_BUTTON_HOME` (read in kernel mode, which alone sees it). The dialog is the impose driver's `sceImposeSetHomePopup` (0x5595A71A, and `Get` 0x0F341BE4, the SDK's `sceImpose_driver` stubs), found through PRO's finder in the USB module (`pspexpUsbHomePopup`), as the mute already was. The setting is the system's, so the runtime puts the dialog back on at its start (a PSPExp that crashed may have left it off), when the link goes (each holder asks anew) and before it leaves (the XMB, a PSP game, a restart).
+- **Tried on the PSP-1000 (2026-10-29):** at the start "was 1, set on 0, now 1"; the board's `home board` and `home system` (console test commands) read back 0 and 1; with HOME the board's, HOME pressed in the launcher brought no dialog and each press reached the board; a PSP game started then had its HOME menu and Exit Game came back to PSPExp.
+- **Next:** the console giving HOME to itself in its apps and to a game's program, which leaves on HOME as on START + SELECT; then the manual.
+
 ## 13. Host Independence
 
 No protocol message may depend on the Onion Omega2+, Raspberry Pi, GameShell, or macOS.

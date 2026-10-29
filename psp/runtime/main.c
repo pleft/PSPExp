@@ -205,6 +205,21 @@ static volatile unsigned g_suspends, g_resumes;     /* the power service's notic
 static volatile int g_power_off_switch;             /* the switch held up: switching off, not sleeping */
 static int exit_callback(int arg1, int arg2, void *common) { g_quit_asked = 1; g_running = 0; return 0; }
 static void op_restart(void *u) { (void)u; g_restart_asked = 1; g_running = 0; }
+/* HOME_MODE: HOME the board's while it shows an app or a game (the system's dialog off, HOME sent
+ * as a button: the board leaves it), the system's dialog in the launcher. Always given back to the
+ * system when the link goes and before PSPExp leaves: the setting is the system's, not PSPExp's */
+static int g_home_host;
+static void home_set(int host)
+{
+    int r = pspexpUsbHomePopup(host ? 0 : 1);
+    if (host != g_home_host) {
+        char m[100];
+        snprintf(m, sizeof(m), "HOME: %s (set %d, now %d)", host ? "the board's, the system's dialog off" : "the system's dialog", r, pspexpUsbHomePopup(-1));
+        trace(m);
+    }
+    g_home_host = host && r >= 0;
+}
+static void op_home_mode(void *u, int host) { (void)u; home_set(host); }
 /* BOOT_DISC: a PSP game started natively once PSPExp has left (architecture §12c) */
 static char g_boot_disc[240];
 /* only an ISO or CSO that is there (Inferno, given anything else, retries its open for ever: the
@@ -602,6 +617,13 @@ int main(int argc, char *argv[])
     ops.text_begin = op_text_begin;
     if (g_eboot[0]) ops.restart = op_restart;
     if (g_eboot[0] && pspexpUsbBootDisc(NULL) == 0) ops.boot_disc = op_boot_disc;
+    {   /* (on at the start: a PSPExp that crashed may have left it off) */
+        char m[80];
+        int was = pspexpUsbHomePopup(-1), r = pspexpUsbHomePopup(1);
+        snprintf(m, sizeof(m), "HOME dialog: was %d, set on %d, now %d", was, r, pspexpUsbHomePopup(-1));
+        trace(m);
+        if (r >= 0) ops.home_mode = op_home_mode;
+    }
     sceIoRemove(LAUNCH_NOTE);   /* (a note left by a start that failed, or a game left before the plugin read it) */   /* (PRO's functions found: not in PPSSPP) */
     ops.log = op_log;
     show_status_page();   /* GU init took the display; status page while idle */
@@ -747,13 +769,17 @@ int main(int argc, char *argv[])
         }
 
         if (rt.connected) { slot_confirm(); g_unanswered = 0; }   /* (a session: the count of unanswered syncs starts again) */
+        else if (g_home_host) home_set(0);   /* (the board gone, or handing the PSP over: the next holder asks anew) */
         now = sceKernelGetSystemTimeLow();
         if (now - last_input >= 16666) {
             last_input = now;
             sceCtrlPeekBufferPositive(&pad, 1);
             if (rt.connected && !g_kb)   /* (the keyboard's buttons are its own) */   /* the volume buttons and the note button: kernel mode's to read (the board's
                                  * Bluetooth volume; the note pauses and resumes the board's music, or makes clips) */
-                pspexp_runtime_push_input(&rt, note_buttons(pad.Buttons | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE)), now),
+                /* (HOME: kernel mode's too, and only while it is the board's; user mode sets the bit
+                 * while the system's dialog shows, which is no press for the board) */
+                pspexp_runtime_push_input(&rt, note_buttons((pad.Buttons & ~PSPEXP_BUTTON_HOME) | (pspexpUsbButtons() & (PSPEXP_BUTTON_VOLUP | PSPEXP_BUTTON_VOLDOWN | PSPEXP_BUTTON_NOTE |
+                                                            (g_home_host ? PSPEXP_BUTTON_HOME : 0))), now),
                                           pad.Lx, pad.Ly);
             if (rt.connected && !g_kb && g_ge.stats.frames != g_status_at) pspexp_ge_dot_tick(&g_ge);
         }
@@ -765,6 +791,7 @@ int main(int argc, char *argv[])
     }
 
     trace(g_boot_disc[0] ? "leaving: a PSP game starts (the board's BOOT_DISC)" : g_restart_asked ? "leaving: starting again (the board's RESTART)" : g_quit_asked ? "leaving: quit from the HOME menu" : "leaving");
+    home_set(0);   /* (the XMB, a PSP game or PSPExp again: each with the system's dialog) */
     pspexp_runtime_free(&rt);
     pspexp_ge_term(&g_ge);
     pspexpUsbStop();

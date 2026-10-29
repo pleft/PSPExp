@@ -215,6 +215,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_TEXT       0x00004000u  /* answers TEXT_REQUEST: the PSP's own keyboard for typed text */
 #define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
 #define PSPEXP_FEATURE_BOOT_DISC  0x00020000u  /* answers BOOT_DISC: a PSP game started natively (PRO's ISO driver; architecture §12c) */
+#define PSPEXP_FEATURE_HOME       0x00040000u  /* answers HOME_MODE: HOME can be the host's (PSPEXP_BUTTON_HOME in INPUT) */
 #define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: Recording inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
@@ -236,6 +237,18 @@ typedef struct PspExpCaptureSet {
     uint32_t reserved[3];
 } PspExpCaptureSet;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureSet) == 16, capture_set_size);
+
+/* Host -> PSP (HOME_MODE): who HOME belongs to. SYSTEM, the PSP's own "quit?" dialog (PSPExp
+ * left for the XMB), as at the start and again at every disconnect; HOST, the dialog switched off
+ * and HOME sent in INPUT as PSPEXP_BUTTON_HOME (the host leaves the app or game it shows, back to
+ * its launcher). HOME held 2 s leaves PSPExp in either. */
+#define PSPEXP_HOME_SYSTEM 0
+#define PSPEXP_HOME_HOST   1
+typedef struct PspExpHomeMode {
+    uint32_t mode;               /* PSPEXP_HOME_* */
+    uint32_t reserved[3];
+} PspExpHomeMode;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpHomeMode) == 16, home_mode_size);
 
 /* Host -> PSP (BOOT_DISC): PSPExp leaves and the PSP starts this PSP game's disc as the XMB
  * would (an ISO or CSO path the PSP can read: "ms0:/ISO/game.iso"). Nothing answers: the link

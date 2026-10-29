@@ -568,6 +568,26 @@ int pspexpUsbMute(int set)
     return r;
 }
 
+/* The system's HOME dialog ("quit the game?") on (1) or off (0), < 0 to read it: off while the
+ * board shows an app or a game, HOME then the board's (it leaves that, back to the launcher).
+ * The same driver and finder as pspexpUsbMute (NIDs from the SDK's sceImpose_driver stubs). */
+int pspexpUsbHomePopup(int on)
+{
+    static int (*get)(void), (*put)(int);
+    static int looked;
+    int k1 = pspSdkSetK1(0), r = -1;
+    if (!looked) {
+        looked = 1;
+        if ((*(volatile u32 *)(void *)sctrlHENFindFunction >> 26) == 2) {   /* (linked: see pspexpUsbMute) */
+            get = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x0F341BE4);   /* sceImposeGetHomePopup */
+            put = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x5595A71A);   /* sceImposeSetHomePopup */
+        }
+    }
+    if (get && put) r = on < 0 ? get() : put(on ? 1 : 0);
+    pspSdkSetK1(k1);
+    return r;
+}
+
 /* A PSP game started from PSPExp's shelf, natively, as the XMB starts an ISO (PRO's Vshctrl,
  * vpbp_loadexec): the ISO's path, PRO's Inferno driver (boot config 3), a game disc, then the
  * disc's EBOOT with apitype 0x120 (architecture §12c). Through the custom firmware's finder,

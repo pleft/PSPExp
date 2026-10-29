@@ -1806,6 +1806,7 @@ static void handle_input(void)
     g_swallow &= b;          /* released: counts again */
     b &= ~g_swallow;
     pressed = b & ~g_prev_buttons;
+    if (pressed & PSPEXP_BUTTON_HOME) fprintf(stderr, "[pspexp-term] HOME pressed (the board's)\n");   /* (HOME_MODE: nothing does it yet) */
     int shift = (b & PSPEXP_BUTTON_LTRIGGER) != 0, ctrl = (b & PSPEXP_BUTTON_RTRIGGER) != 0;
     int ax = (g_ctl_nub ? g_ctl_ax : (int)in->analog_x) - 128, ay = (g_ctl_nub ? g_ctl_ay : (int)in->analog_y) - 128;
     int up = fire(V_UP, b & PSPEXP_BUTTON_UP, now, 1), down = fire(V_DOWN, b & PSPEXP_BUTTON_DOWN, now, 1);
@@ -3298,6 +3299,8 @@ static void ctl_step(uint64_t now, int connected)
         ctl_reply(reply);
     } else if (!strncmp(cmd, "psp-boot ", 9)) {   /* a PSP game's disc, started natively by the PSP (BOOT_DISC; tests: the shelf's next step) */
         ctl_reply(pspexp_boot_disc(ctx, cmd + 9) == 0 ? "ok starting it: PSPExp leaves" : "error the PSP's runtime cannot start a game (an older one, no PRO, or not connected)");
+    } else if (!strcmp(cmd, "home board") || !strcmp(cmd, "home system")) {   /* who HOME belongs to (HOME_MODE; tests) */
+        ctl_reply(pspexp_home_mode(ctx, cmd[5] == 'b') == 0 ? "ok sent" : "error the PSP's runtime cannot (an older one, no PRO, or not connected)");
     } else if (!strcmp(cmd, "psp-restart")) {   /* PSPExp on the PSP starts again (a runtime with RESTART) */
         ctl_reply(pspexp_restart_psp(ctx) == 0 ? "ok restarting" : "error the PSP's runtime cannot start itself again (an older one, or not connected)");
     } else if (!strcmp(cmd, "slots")) {
@@ -3325,7 +3328,7 @@ static void ctl_step(uint64_t now, int connected)
         launcher_set_test_mode(0);
         g_pkgchk_quiet = 0;
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, psp-boot PATH, ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, psp-boot PATH, home board|system, ping, end");
 }
 
 /* ---- the PSPExp plugin host (tools/pspexp-plugin-host) beside the console ----
