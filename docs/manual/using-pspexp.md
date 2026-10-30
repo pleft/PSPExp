@@ -20,9 +20,9 @@ buttons; the board needs no screen, keyboard or mouse.
 ## The launcher
 
 It opens on **Games**, ready to play: what you play first. Three sections
-run down the left as the **rail**, each in its own colour: **Games**
-(purple), **Apps** (teal) and **Settings** (blue); up and down move between
-them. Each section's **shelf** runs to its right: games and ROMs as discs
+run down the left as the **rail**, each with its icon in its own colour:
+**Games**, **Apps** and **Settings**; up and down move between them, and
+the one you are on glows blue. Each section's **shelf** runs to its right: games and ROMs as discs
 with their cover in the window, apps and settings as icon tiles. The one
 you are on is larger and glows; its description shows underneath, and who
 draws it: **PSP renderer** (the PSP's graphics chip, most games) or **Board
@@ -68,9 +68,9 @@ Coming back to Games from Apps or Settings, it is on the tab you left.
 
 | Button | In the launcher |
 |---|---|
-| up / down | the previous / next section on the rail; in Settings, its options (up from the first: the rail) |
+| up / down | the previous / next section on the rail |
 | left / right | move along the shelf |
-| L / R | Games: the previous / next tab; Apps and Settings: five at a time along the shelf |
+| L / R | Games and Settings: the previous / next tab; Apps: five at a time along the shelf |
 | cross | play, or open |
 | square | a game or ROM: make it a favourite, or no longer one |
 | triangle | details: description, how it draws, size, when last played |
@@ -361,20 +361,22 @@ keyboard types into it too.
 
 ## Settings
 
-Settings is one list, its options under group headings, each with its
-value on the right. **Up and down** move along it (up from the first one goes
-back to the rail); a **switch** (Clips, Box art...) changes with **cross**; a
-**choice** (Clip length, Quality) changes with **left / right**, its arrows
-showing while it is highlighted; an option with **›** opens its own page (a
-list of networks, the time zones, the Gallery); the line under the list says
-what the highlighted option does. When something is waiting, an update for
-the PSP or a restart for a new PSPExp, it comes first, under **Ready**.
+Settings works like Games: its groups are tabs that **L / R** step through
+(Network, Sound, Recording, Clock, Library, This PSP, This board), each a
+shelf of tiles, and **left / right** move along them. Under each tile is its
+value, so a group's settings read at a glance: a **switch** (Clips, Box
+art...), a value in a pill (Clip length **15 s**, Quality **High**), or words
+(the network you are on, the time zone). **Cross** changes the highlighted
+one, and the hint at the bottom says how: **Turn off**, **Next: 30 s**,
+**Open** (a list of networks, the time zones, About). When something is
+waiting, an update for the PSP or a restart for a new PSPExp, it is the first
+tab, **Ready**.
 
 | Group | |
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size; Gallery: your recordings, clips and screenshots ([Recording](recording.md)) |
+| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size ([Recording](recording.md); what they made is in Apps > Gallery) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
 | This PSP | PSPExp plugin: on to start the PSP tab's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |

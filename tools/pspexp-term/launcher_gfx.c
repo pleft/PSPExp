@@ -1267,7 +1267,7 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
             float in = cover_of(d), dl, a;
             /* shadow, and the glow of the selection */
             over_px(p, 0, 0, 0.03f, 0.55f * (1 - smooth(-2.0f, 6.0f, ds)));
-            if (big) over_px(p, 0.506f, 0.549f, 0.973f, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0));   /* (the Games section's purple, 0x818cf8) */
+            if (big) over_px(p, 0.25f, 0.63f, 1.0f, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0));
             if (in <= 0) continue;
             /* the shell: silver, lit from above, a darker rim */
             {
@@ -1301,7 +1301,7 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
                     if (g > 0) over_px(p, 1, 1, 1, 0.16f * g * a);
                 }
             }
-            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) over_px(p, 196 / 255.0f, 181 / 255.0f, 253 / 255.0f, a); }
+            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) over_px(p, 150 / 255.0f, 205 / 255.0f, 1, a); }
         }
     for (y = 0; y < T * T; y++) {
         out[y * 4 + 0] = (uint8_t)lroundf(clampf(f[y * 4 + 0], 0, 1) * 255);

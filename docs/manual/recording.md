@@ -56,7 +56,7 @@ into **Gallery**).
 
 ## The Gallery
 
-**Apps > Gallery** (or **Settings > Recording > Gallery**) shows what you
+**Apps > Gallery** shows what you
 captured. Its first page has a tile for each game, with its latest picture
 and how many screenshots and videos it holds; cross opens a game, with its
 pictures newest first, four to a row. A video shows its length in the

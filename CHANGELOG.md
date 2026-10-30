@@ -4,17 +4,17 @@
 
 - **A simpler launcher: no home screen, one Games section.** PSPExp opens
   on Games, ready to play. The rail is three sections, Games, Apps and
-  Settings, each in its own colour. Games has every game and ROM on one
+  Settings, each with its icon in its own colour, the one you are on in blue. Games has every game and ROM on one
   shelf, with tabs on **L / R**: All, PSP, your board's own games (named
   after the board, "Raspberry Pi 400") and one per system you have ROMs
   for; it replaces the Favourites, PSP, Games and Emulators sections and the
   consoles' pages. In All your favourites come first, marked by a yellow star
   before the name, then what you played last. Restart PSPExp and Power off
   are in START's menu everywhere.
-- **Settings is one list**: every option under its group's heading, its value
-  on the right; switches change with cross, choices (Clip length, Quality)
-  with left / right, in place; what is waiting (an update for the PSP)
-  comes first.
+- **Settings works like Games**: its groups are tabs on L / R, each a shelf
+  of tiles with the value under each (a switch, "15 s", "High"), so a group
+  reads at a glance; cross changes one, the hint saying how ("Turn off",
+  "Next: 30 s"); what is waiting (an update for the PSP) is the first tab.
 - **Calmer screens**: the bottom row shows at most three buttons (cross,
   triangle Details, START Menu); the top bar the clock, the bell only when
   there is news, and on the right the music, headphones, network and the
@@ -35,7 +35,7 @@
   go to `Gallery` in the board's home folder, in a folder named after the
   game (a PSP game's own title, the launcher's name for PSPExp's games).
   Videos from before, in `Videos/PSPExp`, move once into `Gallery/Earlier`.
-  **Apps > Gallery** (also Settings > Recording > Gallery) shows them: the
+  **Apps > Gallery** shows them: the
   games, each with its latest picture, then a game's pictures newest first,
   a video's length on it; L / R show all, the screenshots or the videos.
   Cross shows a screenshot full screen (left / right the next) or plays a

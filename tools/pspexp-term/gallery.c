@@ -1,5 +1,5 @@
 /*
- * The Gallery (Apps > Gallery, Settings > Recording > Gallery): what the note button made, the
+ * The Gallery (Apps > Gallery): what the note button made, the
  * screenshots, recordings and clips, a folder for each game in ~/Gallery (a Mac: ~/Movies/PSPExp;
  * the recorder's, main.c's capture_tick). Its first page the games, each with its latest
  * picture; in one, its pictures newest first. A screenshot opens full screen; a video plays in

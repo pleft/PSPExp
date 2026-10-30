@@ -558,11 +558,9 @@ so do long titles in the list.
 **The revisit (2026-10-30, from three rounds of mockups).** The launcher had
 grown to six sections plus a home screen that only repeated them. Step 1:
 **no home screen**; the launcher opens on Games. The rail is three
-sections, each with a colour carried into its highlights (`COL_GAMES`
-purple 0x818cf8, `COL_APPS` teal, `COL_SETTINGS` blue; the rail's selected
-tile and the tiles' glow in that colour, `dark_of` for their fill; the
-big disc's glow and ring in `launcher_gfx.c` are purple now, discs being
-only Games'). **Games** merges Favourites, PSP, Games and Emulators into one
+sections, each with its icon in a colour of its own (`COL_GAMES` purple
+0x818cf8, `COL_APPS` teal, `COL_SETTINGS` blue; tinted highlights were
+tried and dropped: step 2). **Games** merges Favourites, PSP, Games and Emulators into one
 shelf with tabs on L / R (`Cat.tab`, `tab_step`, `draw_tabs`; the strip
 scrolls to keep the shown tab in view and wraps round): All (`CK_ALL`:
 every game and ROM, `cmp_all`: favourites first, then by `recent_rank`,
@@ -586,21 +584,26 @@ PSP driven from the Pi's library (the PSP was off): All, favourites added
 and taken out, each tab and the wrap, Apps, Settings, a group (rail
 dimmed, circle back), back to the tab left, START's menu.
 
-Step 2, the same day: **Settings is one list** (`draw_settings`), the groups'
-pages gone. Its rows are the actions under headings (`g_heads`, id "h:...",
-never selected: `settings_fix_sel`), "Ready" first when an update or a
-restart waits, each group in its own order. A row is a switch (`row_kind`:
-clips, boxart, pspclock, plugin, ssh; drawn as a track and a knob,
-`gfx_dot`; cross flips it as before), a choice (cliplen, quality: left /
-right step it in place, `choice_step`, stopping at the ends; cross still
-cycles), a page (wifinet, sound, tz, gallery, about: a chevron) or a thing
-done. Up and down move along the rows; up from the first goes to the rail's
-section above (the list has the rail's up / down: `settings_move`); L / R
-five rows. The list scrolls in pixels (`c->scroll`) keeping the highlighted
-row with the heading above it in view; the highlighted row's `detail_line`
-shows under it. `category <group>` (notifications, the control port) opens
-Settings on that group's first row. Tried on the Mac's stand-in: the list,
-a switch, a choice stepped and back, the end of the list, up from the top.
+Step 2, the same day: **Settings as one list** (headings, values on the
+right, up / down along its rows, left / right a choice) was built first and
+dropped after a look on the PSP: its up / down were the only ones that did
+not move along the rail. Now **Settings works like Games**: its groups are
+tabs (`Cat.tab` 2: Games' are 1; `tab_step`, `draw_tabs` and the rail's
+memory of the last tab, `g_last_tab`, take a section's own), "Ready" first
+when an update or a restart waits, each group's settings in its own order,
+the first tab the one on the rail ("Settings" on the control port opens it),
+the gear the rail's icon for every tab. Each tile shows its value under its
+name (`tile_value`): a switch (`row_kind`: clips, boxart, pspclock, plugin,
+ssh; a track and a knob, `gfx_dot`), a choice's value in a pill (`choice_text`:
+"15 s", "High", blue while highlighted), else its value in words (the
+network, the zone), or a chevron for a page; the panel under the shelf
+moves down 24 px for them. Cross changes it as before (a choice steps round)
+and the hint says how: "Turn off", "Next: 30 s", "Open". The Gallery left
+Settings > Recording (it is in Apps). The section colours stayed on the
+rail's icons only: the selection is one blue everywhere (rail, tiles, the
+big disc's glow, the tab), the sections' tints having looked muddy over the
+waves on the PSP. Checked on the PSP-1000 at 1:1: Recording (a switch, two
+choices), Network, This board, Games, Apps.
 Step 3: **calmer bars and plain words.** The hint row has at most three
 (cross, triangle Details where it shows a card, START Menu); square and
 SELECT work as before, in START's menu too. The top bar: the clock (the date
@@ -1867,8 +1870,9 @@ page with six games (thumbnails of screenshots and of videos), the tabs,
 a game's page, the details, a screenshot full screen and its menu (its
 hints on a dark band), the delete question (kept), a 15 s clip played and
 back on circle, a 1 s one back at its end, HOME from a film (the Gallery)
-and from the Gallery (the launcher), the empty page, the Apps tile and
-Settings > Recording > Gallery.
+and from the Gallery (the launcher), the empty page, the Apps tile (and
+Settings > Recording > Gallery, gone again on 2026-10-30: the Gallery is in
+Apps).
 
 **Next:** the copy played in the PSP's Video menu; a phone downloading a
 capture by a QR code (a START entry); the PSP's own pictures and videos in it.
