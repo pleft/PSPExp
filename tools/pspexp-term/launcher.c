@@ -2488,27 +2488,28 @@ static void draw_tabs(const Cat *cur, int y, int alpha)
     gfx_text(FONT_BADGE, x + 7, y + 3, "R", C_SUB, alpha, 0);
 }
 
-/* a setting's value under its tile (2026-10-30, all of a group's at a glance): a switch drawn as
- * one, a choice in a pill (blue while highlighted), else its value in words (a network, a zone) */
+/* a setting's value under its tile (2026-10-30, all of a group's at a glance): on / off as a
+ * switch; anything else in the hint row's key badge (START, L, R), blue while highlighted: a
+ * choice ("15 s", "High"), a value in words (the network, the zone), "Open" for a page */
 static void tile_value(const LEntry *e, int cx, int y, int sel, int alpha)
 {
-    int k = row_kind(e);
+    int k = row_kind(e), w, mw = SHELF_PITCH - 8;
     const char *v = action_value(e);
     char t[64];
     if (k == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {
         int on = switch_on(e);
         gfx_nine(NINE_R6, cx - 12, y, 24, 12, on ? C_ACCENT : 0x3a4660, alpha);
         gfx_dot(8, on ? cx + 2 : cx - 10, y + 2, 0xffffff, alpha);
-    } else if (k == ROW_CHOICE) {
-        int w;
-        choice_text(e, 0, t, sizeof(t));
-        w = gfx_text_width(FONT_BADGE, t) + 14;
-        gfx_nine(NINE_R6, cx - w / 2, y - 1, w, 14, sel ? C_ACCENT : 0x1e2e50, alpha);
-        gfx_text(FONT_BADGE, cx - w / 2 + 7, y - 1 + (14 - gfx_line_height(FONT_BADGE)) / 2, t, 0xffffff, alpha, 0);
-    } else if (v) {
-        int w = gfx_text_width(FONT_BADGE, v), mw = SHELF_PITCH - 8;
-        gfx_text(FONT_BADGE, cx - (w > mw ? mw : w) / 2, y, v, sel ? C_TEXT : C_MUTED, alpha, mw);
-    } else if (k == ROW_PAGE) gfx_icon("chevron-right", 11, cx - 5, y, C_MUTED, alpha);
+        return;
+    }
+    if (k == ROW_CHOICE) choice_text(e, 0, t, sizeof(t));
+    else if (v) snprintf(t, sizeof(t), "%s", v);
+    else if (k == ROW_PAGE) snprintf(t, sizeof(t), "Open");
+    else return;   /* (a thing done: Restart, Refresh library) */
+    w = gfx_text_width(FONT_BADGE, t) + 10;
+    if (w > mw) w = mw;
+    gfx_nine(NINE_R6, cx - w / 2, y - 1, w, 14, sel ? C_ACCENT : 0x1e2c4a, alpha);
+    gfx_text(FONT_BADGE, cx - w / 2 + 5, y - 1 + (14 - gfx_line_height(FONT_BADGE)) / 2, t, sel ? 0xffffff : C_SUB, alpha, w - 10);
 }
 
 static void draw_list(float dt)

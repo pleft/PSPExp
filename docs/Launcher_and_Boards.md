@@ -593,10 +593,12 @@ memory of the last tab, `g_last_tab`, take a section's own), "Ready" first
 when an update or a restart waits, each group's settings in its own order,
 the first tab the one on the rail ("Settings" on the control port opens it),
 the gear the rail's icon for every tab. Each tile shows its value under its
-name (`tile_value`): a switch (`row_kind`: clips, boxart, pspclock, plugin,
-ssh; a track and a knob, `gfx_dot`), a choice's value in a pill (`choice_text`:
-"15 s", "High", blue while highlighted), else its value in words (the
-network, the zone), or a chevron for a page; the panel under the shelf
+name (`tile_value`): a switch for on / off (`row_kind`: clips, boxart,
+pspclock, plugin, ssh; a track and a knob, `gfx_dot`), anything else in the
+hint row's key badge (0x1e2c4a, blue while highlighted): a choice's value
+(`choice_text`: "15 s", "High"), a value in words (the network, the zone),
+"Open" for a page (blue pills and bare chevrons were tried first; the badge
+was chosen to match the keys and tabs); the panel under the shelf
 moves down 24 px for them. Cross changes it as before (a choice steps round)
 and the hint says how: "Turn off", "Next: 30 s", "Open". The Gallery left
 Settings > Recording (it is in Apps). The section colours stayed on the

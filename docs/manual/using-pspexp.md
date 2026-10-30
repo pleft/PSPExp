@@ -364,9 +364,11 @@ keyboard types into it too.
 Settings works like Games: its groups are tabs that **L / R** step through
 (Network, Sound, Recording, Clock, Library, This PSP, This board), each a
 shelf of tiles, and **left / right** move along them. Under each tile is its
-value, so a group's settings read at a glance: a **switch** (Clips, Box
-art...), a value in a pill (Clip length **15 s**, Quality **High**), or words
-(the network you are on, the time zone). **Cross** changes the highlighted
+value, so a group's settings read at a glance: a **switch** for what is on
+or off (Clips, Box art...), else a small badge like the buttons' at the
+bottom (Clip length **15 s**, Quality **High**, the network you are on, the
+time zone, **Open** for an option with a page of its own), blue on the one
+highlighted. **Cross** changes the highlighted
 one, and the hint at the bottom says how: **Turn off**, **Next: 30 s**,
 **Open** (a list of networks, the time zones, About). When something is
 waiting, an update for the PSP or a restart for a new PSPExp, it is the first
