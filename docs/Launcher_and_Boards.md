@@ -611,8 +611,10 @@ PSP's battery (the board's icon and the plug went). `detail_line` says what
 a game is in words, the system's name, "PSP · Europe", the board's name for
 its own games, and "played last" / "played lately" from `recent_rank` (the
 recent list has no times); the size, dump tags and renderer are in Details.
-Its colour is the section's, lighter (`light_of`). The launcher pictures in
-docs/images and on the site are to be taken again on the real PSP.
+Its colour is the section's, lighter (`light_of`). Then checked on the
+PSP-1000 at 1:1 (All, the PSP tab, Settings, Apps; its battery in the top
+bar), and docs/images' launcher-home.png and psp-section.png taken again
+there.
 
 ### 3.4 Status (2026-09-26)
 
