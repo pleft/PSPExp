@@ -2447,6 +2447,12 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         gfx_nine(NINE_R14, x, y, size, size, 0x16223c, alpha);
         if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * alpha));
         gfx_icon(ic, ip, cx - ip / 2, y + (size - ip) / 2, lift > 0.5f ? 0xffffff : 0xb9c8e0, alpha);
+        if (e->type == LT_ACTION && row_kind(e) == ROW_SWITCH && action_value(e)) {   /* a setting on / off: a dot in its corner while on, a ring while off */
+            int dx = x + size - 13, dyy = y + 7;
+            const char *v = action_value(e);
+            if (!strcmp(v, "On") || !strcmp(v, "From the board")) gfx_dot(7, dx, dyy, lift > 0.5f ? 0xffffff : C_ACCENT, alpha);
+            else { gfx_dot(7, dx, dyy, C_MUTED, alpha); gfx_dot(5, dx + 1, dyy + 1, lift > 0.5f ? 0x1e3a6e : 0x16223c, alpha); }
+        }
     }
 }
 
@@ -2488,28 +2494,55 @@ static void draw_tabs(const Cat *cur, int y, int alpha)
     gfx_text(FONT_BADGE, x + 7, y + 3, "R", C_SUB, alpha, 0);
 }
 
-/* a setting's value under its tile (2026-10-30, all of a group's at a glance): on / off as a
- * switch; anything else in the hint row's key badge (START, L, R), blue while highlighted: a
- * choice ("15 s", "High"), a value in words (the network, the zone), "Open" for a page */
-static void tile_value(const LEntry *e, int cx, int y, int sel, int alpha)
+/* Settings' panel (2026-10-30, from mockups): right of the setting's name, what it is set to and what
+ * cross does: a choice shows all its values side by side, the current one filled; on / off a
+ * switch with its word; a page its state and a chevron; a thing done a button with its name
+ * (Ready's green). Its width, for the name beside it */
+static int pill(int right, int cy, const char *t, uint32_t edge, uint32_t fill, uint32_t ink, int chevron, int alpha)
 {
-    int k = row_kind(e), w, mw = SHELF_PITCH - 8;
+    int w = gfx_text_width(FONT_SMALL, t) + 22 + (chevron ? 12 : 0), x = right - w;
+    gfx_nine(NINE_R10, x, cy - 11, w, 22, edge, alpha);
+    if (fill != edge) gfx_nine(NINE_R10, x + 1, cy - 10, w - 2, 20, fill, alpha);
+    gfx_text(FONT_SMALL, x + 11, cy - gfx_line_height(FONT_SMALL) / 2, t, ink, alpha, w - 22);
+    if (chevron) gfx_icon("chevron-right", 11, right - 19, cy - 5, ink, alpha);
+    return w;
+}
+
+static int settings_control(const LEntry *e, int right, int cy, int alpha)
+{
+    int k = row_kind(e);
     const char *v = action_value(e);
-    char t[64];
-    if (k == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {
-        int on = switch_on(e);
-        gfx_nine(NINE_R6, cx - 12, y, 24, 12, on ? C_ACCENT : 0x3a4660, alpha);
-        gfx_dot(8, on ? cx + 2 : cx - 10, y + 2, 0xffffff, alpha);
-        return;
+    if (k == ROW_CHOICE) {   /* every value, the current one filled */
+        const char *opts[3];
+        char a[3][16];
+        int n = 3, cur = 0, i, ws[3], w = 0, x;
+        if (!strcmp(e->id, "a:cliplen")) { snprintf(a[0], 16, "15 s"); snprintf(a[1], 16, "30 s"); snprintf(a[2], 16, "60 s"); cur = g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1; }
+        else { for (i = 0; i < 3; i++) snprintf(a[i], 16, "%s", CLIP_QUALITY[i]); cur = g_clip_quality; }
+        for (i = 0; i < n; i++) { opts[i] = a[i]; ws[i] = gfx_text_width(FONT_SMALL, opts[i]) + 18; w += ws[i]; }
+        x = right - w - 2;
+        gfx_nine(NINE_R10, x - 2, cy - 11, w + 4, 22, 0x30425f, alpha);
+        gfx_nine(NINE_R10, x - 1, cy - 10, w + 2, 20, 0x16223c, alpha);
+        for (i = 0; i < n; i++) {
+            if (i == cur) gfx_nine(NINE_R6, x, cy - 9, ws[i], 18, C_ACCENT, alpha);
+            gfx_text(i == cur ? FONT_BODY : FONT_SMALL, x + (ws[i] - gfx_text_width(i == cur ? FONT_BODY : FONT_SMALL, opts[i])) / 2,
+                     cy - gfx_line_height(i == cur ? FONT_BODY : FONT_SMALL) / 2, opts[i], i == cur ? 0xffffff : C_SUB, alpha, 0);
+            x += ws[i];
+        }
+        return w + 4;
     }
-    if (k == ROW_CHOICE) choice_text(e, 0, t, sizeof(t));
-    else if (v) snprintf(t, sizeof(t), "%s", v);
-    else if (k == ROW_PAGE) snprintf(t, sizeof(t), "Open");
-    else return;   /* (a thing done: Restart, Refresh library) */
-    w = gfx_text_width(FONT_BADGE, t) + 10;
-    if (w > mw) w = mw;
-    gfx_nine(NINE_R6, cx - w / 2, y - 1, w, 14, sel ? C_ACCENT : 0x1e2c4a, alpha);
-    gfx_text(FONT_BADGE, cx - w / 2 + 5, y - 1 + (14 - gfx_line_height(FONT_BADGE)) / 2, t, sel ? 0xffffff : C_SUB, alpha, w - 10);
+    if (k == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {   /* a switch and its word */
+        int on = switch_on(e), tw = gfx_text_width(FONT_BODY, on ? "On" : "Off");
+        gfx_nine(NINE_R6, right - 34, cy - 9, 34, 18, on ? C_ACCENT : 0x3a4660, alpha);
+        gfx_dot(14, on ? right - 16 : right - 32, cy - 7, 0xffffff, alpha);
+        gfx_text(FONT_BODY, right - 34 - 8 - tw, cy - gfx_line_height(FONT_BODY) / 2, on ? "On" : "Off", on ? 0xffffff : C_SUB, alpha, 0);
+        return 34 + 8 + tw;
+    }
+    if (!strcmp(e->id, "a:psp-update")) return pill(right, cy, "Install", 0x22c55e, 0x22c55e, 0xffffff, 1, alpha);   /* (Ready: green) */
+    if (!strcmp(e->id, "a:console-restart")) return pill(right, cy, "Restart PSPExp", 0x22c55e, 0x22c55e, 0xffffff, 1, alpha);
+    if (k == ROW_SWITCH) return pill(right, cy, "Install", C_ACCENT, 0x16223c, C_TEXT, 1, alpha);   /* (the plugin, not on the PSP yet) */
+    if (v) return pill(right, cy, v, 0x30425f, 0x16223c, C_TEXT, 1, alpha);   /* a page, or the GameShell's Wi-Fi: where it stands */
+    if (k == ROW_PAGE) return pill(right, cy, "Open", 0x30425f, 0x16223c, C_TEXT, 1, alpha);
+    return pill(right, cy, !strcmp(e->id, "a:rescan") ? "Refresh" : e->title, 0x8a9bbd, 0x16223c, C_TEXT, 1, alpha);   /* a thing done: its name */
 }
 
 static void draw_list(float dt)
@@ -2556,7 +2589,7 @@ static void draw_list(float dt)
     first = (int)floorf(c->scroll) - 1; if (first < 0) first = 0;
     last = (int)ceilf(c->scroll) + SHELF_SHOWN + 1; if (last > c->n) last = c->n;
 
-    gfx_set_clip(RAIL_W + 1, 26, SCREEN_W - RAIL_W - 1, DETAIL_Y - 30 + (c->kind == CK_SETTINGS ? 16 : 0));   /* (Settings: the values under the tiles) */
+    gfx_set_clip(RAIL_W + 1, 26, SCREEN_W - RAIL_W - 1, DETAIL_Y - 30);
     /* the others first, the selection last: its glow over its neighbours */
     for (i = first; i < last; i++) if (i != c->sel) {
         int cx = SHELF_X0 + (int)lroundf((i - c->scroll) * SHELF_PITCH);
@@ -2572,22 +2605,22 @@ static void draw_list(float dt)
         if (tw > mw) tw = mw;
         if (st) gfx_star(st, cx - (tw + st + 3) / 2, SHELF_LABEL + dy + (gfx_line_height(f) - st) / 2, C_STAR, alpha);
         gfx_text(f, cx - (tw - (st ? st + 3 : 0)) / 2, SHELF_LABEL + dy, t, sel ? C_TEXT : C_SUB, alpha, mw);
-        if (c->kind == CK_SETTINGS) tile_value(c->it[i], cx, SHELF_LABEL + 19 + dy, sel, alpha);
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     if (c->scroll > 0.05f) gfx_icon("chevron-left", 14, RAIL_W + 3, SHELF_Y - 7, C_MUTED, 200);
     if (c->scroll < (float)(c->n - SHELF_SHOWN) - 0.05f) gfx_icon("chevron-right", 14, SCREEN_W - 17, SHELF_Y - 7, C_MUTED, 200);
 
-    /* the selection's details, where the list's expanded row was (lower in Settings: the values) */
+    /* the selection's details, where the list's expanded row was (Settings: its control on the right) */
     if (e) {
-        int tx = DETAIL_X, py = c->kind == CK_SETTINGS ? DETAIL_Y + 24 : DETAIL_Y;
+        int tx = DETAIL_X, py = DETAIL_Y, cw = 0;
+        if (c->kind == CK_SETTINGS) cw = settings_control(e, SCREEN_W - 16, py + gfx_line_height(FONT_TITLE) / 2 + 1, alpha) + 12;
         if (e->fav) { gfx_star(15, tx, py + (gfx_line_height(FONT_TITLE) - 15) / 2, C_STAR, alpha); tx += 20; }
-        mtext(FONT_TITLE, tx, py, e->title, C_TEXT, alpha, SCREEN_W - 16 - tx, g_sel_since);
+        mtext(FONT_TITLE, tx, py, e->title, C_TEXT, alpha, SCREEN_W - 16 - tx - cw, g_sel_since);
         {
             const char *d = e->desc[0] ? e->desc : is_builtin(e) ? e->tags : "";   /* (a built-in app's is in its tags) */
             if (d[0]) gfx_text_wrapped(FONT_SMALL, DETAIL_X, py + 22, d, C_SUB, alpha, SCREEN_W - 16 - DETAIL_X, 14, 2);
             detail_line(e, s, sizeof(s));
-            mtext(FONT_SMALL, DETAIL_X, d[0] ? py + 54 : py + 24, s, 0x7fb2f5, alpha, SCREEN_W - 16 - DETAIL_X, g_sel_since);
+            mtext(FONT_SMALL, DETAIL_X, d[0] ? py + 54 : py + 24, s, c->kind == CK_SETTINGS ? C_SUB : 0x7fb2f5, alpha, SCREEN_W - 16 - DETAIL_X, g_sel_since);
         }
     }
 }
@@ -2622,7 +2655,8 @@ static void draw_hints(void)
         if (e) {
             int k = row_kind(e);
             char t[64];
-            if (k == ROW_SWITCH) snprintf(t, sizeof(t), "%s", switch_on(e) ? "Turn off" : "Turn on");
+            if (k == ROW_SWITCH && action_value(e) && !strcmp(action_value(e), "Not on the PSP")) snprintf(t, sizeof(t), "Install");
+            else if (k == ROW_SWITCH) snprintf(t, sizeof(t), "%s", switch_on(e) ? "Turn off" : "Turn on");
             else if (k == ROW_CHOICE) { char v[32]; choice_text(e, 1, v, sizeof(v)); snprintf(t, sizeof(t), "Next: %s", v); }
             else snprintf(t, sizeof(t), "%s", k == ROW_PAGE ? "Open" : "Select");
             hint_btn(x, 'x', t);

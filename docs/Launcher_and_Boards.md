@@ -592,14 +592,20 @@ tabs (`Cat.tab` 2: Games' are 1; `tab_step`, `draw_tabs` and the rail's
 memory of the last tab, `g_last_tab`, take a section's own), "Ready" first
 when an update or a restart waits, each group's settings in its own order,
 the first tab the one on the rail ("Settings" on the control port opens it),
-the gear the rail's icon for every tab. Each tile shows its value under its
-name (`tile_value`): a switch for on / off (`row_kind`: clips, boxart,
-pspclock, plugin, ssh; a track and a knob, `gfx_dot`), anything else in the
-hint row's key badge (0x1e2c4a, blue while highlighted): a choice's value
-(`choice_text`: "15 s", "High"), a value in words (the network, the zone),
-"Open" for a page (blue pills and bare chevrons were tried first; the badge
-was chosen to match the keys and tabs); the panel under the shelf
-moves down 24 px for them. Cross changes it as before (a choice steps round)
+the gear the rail's icon for every tab. Where the value shows took four
+rounds of mockups and two builds: in a list (dropped with the list), under
+each tile as switches and blue pills, then as the hint row's key badges
+(both looked bolted on), then **in the panel** (`settings_control`): right
+of the highlighted setting's name, a choice shows all its values side by
+side with the current one filled (a segmented control: 15 s / 30 s / 60 s,
+High / Standard / Small), on / off a switch with its word, a page where it
+stands and a chevron (the network, the zone; About "Open"), a thing done a
+button with its name (Refresh, Restart, Power off), Ready's green
+("Install", "Restart PSPExp"), the plugin not on the stick an "Install"
+button. The tiles stay plain; an on / off one has a dot in its corner while
+on, a ring while off (`shelf_item`), so a group still reads at a glance.
+Confirming Restart in the panel itself (an amber button, a bar running down)
+was mocked and not wanted: the second press stays as it was. Cross changes it as before (a choice steps round)
 and the hint says how: "Turn off", "Next: 30 s", "Open". The Gallery left
 Settings > Recording (it is in Apps). The section colours stayed on the
 rail's icons only: the selection is one blue everywhere (rail, tiles, the

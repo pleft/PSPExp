@@ -12,9 +12,11 @@
   before the name, then what you played last. Restart PSPExp and Power off
   are in START's menu everywhere.
 - **Settings works like Games**: its groups are tabs on L / R, each a shelf
-  of tiles with the value under each (a switch, "15 s", "High"), so a group
-  reads at a glance; cross changes one, the hint saying how ("Turn off",
-  "Next: 30 s"); what is waiting (an update for the PSP) is the first tab.
+  of tiles; an on / off option shows a dot on its tile while on. Beside the
+  highlighted option's name is what it is set to: a choice's values side by
+  side with the current one filled, a switch, where a page stands, or a
+  button; cross changes it, the hint saying how ("Next: 30 s", "Turn off").
+  What is waiting (an update for the PSP) is the first tab.
 - **Calmer screens**: the bottom row shows at most three buttons (cross,
   triangle Details, START Menu); the top bar the clock, the bell only when
   there is news, and on the right the music, headphones, network and the

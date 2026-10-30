@@ -363,16 +363,23 @@ keyboard types into it too.
 
 Settings works like Games: its groups are tabs that **L / R** step through
 (Network, Sound, Recording, Clock, Library, This PSP, This board), each a
-shelf of tiles, and **left / right** move along them. Under each tile is its
-value, so a group's settings read at a glance: a **switch** for what is on
-or off (Clips, Box art...), else a small badge like the buttons' at the
-bottom (Clip length **15 s**, Quality **High**, the network you are on, the
-time zone, **Open** for an option with a page of its own), blue on the one
-highlighted. **Cross** changes the highlighted
-one, and the hint at the bottom says how: **Turn off**, **Next: 30 s**,
-**Open** (a list of networks, the time zones, About). When something is
-waiting, an update for the PSP or a restart for a new PSPExp, it is the first
-tab, **Ready**.
+shelf of tiles, and **left / right** move along them. An option that is on
+or off has a small dot in its tile's corner while on (a ring while off), so
+a group reads at a glance. Under the tiles, beside the highlighted option's
+name, is what it is set to and what **cross** does:
+
+- a **choice** shows all its values side by side, the current one filled
+  (Clip length: **15 s** 30 s 60 s); cross moves to the next;
+- **on / off** is a switch with its word; cross flips it;
+- an option with a page of its own shows where it stands and **›** (the
+  network you are on, the time zone; About: **Open**); cross opens it;
+- something to do is a button with its name (**Refresh**, **Restart**,
+  **Power off**; Restart and Power off ask for a second press).
+
+The hint at the bottom says the same: **Next: 30 s**, **Turn off**, **Open**.
+When something is waiting, an update for the PSP or a restart for a new
+PSPExp, it is the first tab, **Ready**, with a green **Install** (or
+**Restart PSPExp**) button.
 
 | Group | |
 |---|---|
