@@ -24,7 +24,7 @@ What you get on the PSP:
 - **A media player for music and films, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
 - **Your PSP games, kept on the board**: ISO, CSO or zipped games in the
-  launcher's PSP tab, run by the PSP itself with no copying to the memory
+  launcher's PSP list, run by the PSP itself with no copying to the memory
   stick ([how](docs/manual/psp-games.md)).
 - **Recording what you play**: ♪ + L records a video with its sound on the
   board, in PSPExp or your own PSP games, and ♪ + L twice takes a screenshot;
@@ -32,7 +32,7 @@ What you get on the PSP:
 
 | | |
 |---|---|
-| <img src="docs/images/launcher-home.png" width="400" alt="The launcher: Games, every game on one shelf"> | <img src="docs/images/packages.png" width="400" alt="The Packages app"> |
+| <img src="docs/images/launcher-home.png" width="400" alt="The launcher: Games, its lists down the left, a shelf of discs"> | <img src="docs/images/packages.png" width="400" alt="The Packages app"> |
 | The launcher: Games | Packages: install games from the PSP |
 | <img src="docs/images/celeste64.png" width="400" alt="Celeste 64 on the PSP"> | <img src="docs/images/supertuxkart.png" width="400" alt="SuperTuxKart on the PSP"> |
 | Celeste 64, drawn by a Raspberry Pi's GPU | SuperTuxKart, the same way |

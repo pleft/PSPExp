@@ -63,30 +63,29 @@
 #define C_MUTED  0x7d8fae
 #define C_TILE   0x16223c
 #define C_ACCENT 0x5aa9ff
+#define C_STAR 0xfbbf24   /* a favourite's solid star, before its name */
 
-/* layout */
-/* the left rail: one tile per category, scrolled to keep the current one in view */
-#define RAIL_W      46
-#define RAIL_TOP    34
-#define RAIL_PITCH  40
-#define RAIL_TILE   32
-#define RAIL_SHOWN  5
-/* the shelf: discs (games, ROMs) or tiles (apps, settings) left to right */
-#define SHELF_X0    106     /* first item's centre */
+/* layout (2026-10-30: no rail; the sections along the top, L / R) */
+/* Games' filters down the left (Favourites, PSP, the board's, each system with ROMs: up / down) */
+#define COL_X       6
+#define COL_W       108
+#define COL_TOP     32
+#define COL_ROW     20
+#define COL_SHOWN   10
+#define GAMES_X     122     /* Games' shelf and details: right of the column */
+/* the shelf: discs (games, ROMs) or tiles (apps) left to right */
 #define SHELF_PITCH 84
-#define SHELF_SHOWN 5
 #define SHELF_Y     104     /* item centre */
 #define SHELF_LABEL 150
-#define DETAIL_X    58
 #define DETAIL_Y    174
 #define ROW         22
 #define HINT_Y      252
 
 /* ---- categories ------------------------------------------------------------------------ */
 
-/* CK_ALL: Games' first tab (every game); CK_GAMES: the board's own games; CK_SYSTEM: a system's ROMs
+/* Games' filters: CK_FAVS the favourites, CK_GAMES the board's own games, CK_SYSTEM a system's ROMs
  * (the PSP's too) */
-enum { CK_ALL, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
+enum { CK_FAVS, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
 
 /* the rail's sections, each its colour on the rail and in its highlights (2026-10-30) */
 #define COL_GAMES    0x818cf8
@@ -97,8 +96,8 @@ typedef struct Cat {
     char name[64], icon[32], noun[16];
     uint32_t col;
     int kind, sys;
-    int hidden;             /* not on the rail itself: the tabs after a section's first */
-    int tab;                /* a tab (L / R) of Games (1) or Settings (2): the rail shows its section for it, and up / down move along the rail */
+    int hidden;             /* (unused since the rail went) */
+    int tab;                /* one of Games' filters (the column on the left) */
     LEntry **it; int n;
     int sel; float scroll;
 } Cat;
@@ -141,6 +140,8 @@ static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] =
 static char g_app_req[16];   /* a built-in app to show (appview.h), taken by the console */
 
 static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp(e->id, "a:", 2); }
+static LEntry g_heads[10];    /* Settings' headings (id "h:<group>"): rows of its list that are never highlighted */
+static int is_heading(const LEntry *e) { return !strncmp(e->id, "h:", 2); }
 
 /* The board this runs on: a small icon in its own colour (status bar, About: the GameShell a D-pad,
  * the Omega2+ a microchip, a Pi 400/500 a keyboard, another Pi a circuit board, a Mac a laptop) and
@@ -183,12 +184,17 @@ static int ssh_available(void);
 static int psp_not_a_game(const LEntry *e);
 static int is_psp_sys(int s);
 
-/* where the launcher opens (no home screen since 2026-10-30): Games, All */
+/* where the launcher opens (no home screen since 2026-10-30): Games, on the favourites when there
+ * are some, else the filter of the game played last (on it), else the first one with games */
 static int start_cat(void)
 {
-    int i;
-    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_ALL) return i;
-    return 0;
+    int i, k, r, first = -1;
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].tab && g_cat[i].kind == CK_FAVS && g_cat[i].n) return i;
+    for (r = 0; r < L.nrecent; r++)
+        for (i = 0; i < g_ncat; i++) if (g_cat[i].tab && g_cat[i].kind != CK_FAVS)
+            for (k = 0; k < g_cat[i].n; k++) if (!strcmp(g_cat[i].it[k]->id, L.recent[r])) { g_cat[i].sel = k; return i; }
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].tab) { if (first < 0) first = i; if (g_cat[i].n && g_cat[i].kind != CK_FAVS) return i; }
+    return first >= 0 ? first : 0;
 }
 
 /* where an entry was in what was played lately: 0 the last; 1000 not there */
@@ -199,8 +205,8 @@ static int recent_rank(const LEntry *e)
     return 1000;
 }
 
-/* All's order: the favourites first, then by when last played, then the rest A to Z; within the
- * favourites the same (the last played of them first) */
+/* a filter's order: the favourites first, then by when last played, then the rest A to Z;
+ * within the favourites the same (the last played of them first) */
 static int cmp_all(const void *a, const void *b)
 {
     const LEntry *x = *(LEntry *const *)a, *y = *(LEntry *const *)b;
@@ -234,27 +240,30 @@ static void cats_build(void)
         g_builtin[i].type = LT_APP;
         for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
     }
-    /* the rail: Games, Apps, Settings (2026-10-30: no home screen, no Favourites, PSP or Emulators
-     * section). Games is one shelf of discs with tabs on L / R: All (every game: the favourites
-     * first, then by when last played), PSP (the PSP's own games: psp.system, there with none too:
-     * where they go), the board's own games (the tab named after the board), then each system with
-     * ROMs (made after Settings, below: tabs keep the order they are made in) */
+    /* the sections: Games, Apps, Settings (L / R along the top; 2026-10-30: no home screen, no rail).
+     * Games' filters run down the left: Favourites (there with none too: square adds them), PSP
+     * (the PSP's own games: psp.system), the board's own games (named after the board), then each
+     * system with ROMs (made after Settings, below: the column keeps the order they are made in);
+     * in each, the favourites first, then by when last played */
     board_detect();
-    c = cat_add("All", "gamepad-2", COL_GAMES, CK_ALL, "game");
+    c = cat_add("Favourites", "star", COL_GAMES, CK_FAVS, "favourite");
     c->tab = 1;
-    for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME) cat_push(c, &L.e[i]);   /* (All) */
+    for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME && L.e[i].fav) cat_push(c, &L.e[i]);
     for (s = 0; s < L.nsys; s++)
-        for (i = 0; i < L.sys[s].nroms; i++) if (!is_psp_sys(s) || !psp_not_a_game(&L.sys[s].roms_list[i])) cat_push(c, &L.sys[s].roms_list[i]);
+        for (i = 0; i < L.sys[s].nroms; i++)
+            if (L.sys[s].roms_list[i].fav && (!is_psp_sys(s) || !psp_not_a_game(&L.sys[s].roms_list[i]))) cat_push(c, &L.sys[s].roms_list[i]);
     if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
     for (s = 0; s < L.nsys; s++) if (is_psp_sys(s)) {
         c = cat_add("PSP", L.sys[s].icon[0] ? L.sys[s].icon : "disc-3", COL_GAMES, CK_SYSTEM, "game");
-        c->sys = s; c->tab = c->hidden = 1;
+        c->sys = s; c->tab = 1;
         for (i = 0; i < L.sys[s].nroms; i++) if (!psp_not_a_game(&L.sys[s].roms_list[i])) cat_push(c, &L.sys[s].roms_list[i]);   /* (a PS1 disc in the PSP folder: left out) */
+        if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
         break;
     }
     c = cat_add(g_board.name, g_board.icon, COL_GAMES, CK_GAMES, "game");
-    c->tab = c->hidden = 1;
+    c->tab = 1;
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME) cat_push(c, &L.e[i]);
+    if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
     c = cat_add("Apps", "layout-grid", COL_APPS, CK_APPS, "app");
     for (i = 0; i < NBUILTIN; i++) cat_push(c, &g_builtin[i]);
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
@@ -271,15 +280,15 @@ static void cats_build(void)
     ACTION("clips", "Clips", "history", "♪ + R saves the last seconds as a video: the board records all the time");
     ACTION("cliplen", "Clip length", "clock", "How much ♪ + R saves");
     ACTION("quality", "Quality", "gauge", "The videos' quality, and so their size");
-    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP tab's, and recording them");
+    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP list's, and recording them");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp for the PSP, or its plugin: put it on its memory stick");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
     ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
     ACTION("poweroff", "Power off", "power", "Shut this board down");
     if (ssh_available()) ACTION("ssh", "SSH", "terminal", "Log in to this board from a computer");
     ACTION("about", "About", "info", "This board, the PSP and the connection");
-    /* Settings: its groups as tabs (L / R), as Games' (2026-10-30; each opened a page of its own
-     * before): Ready first when something waits (an update for the PSP, a restart), then the rest */
+    /* Settings: one plain list (2026-10-30, with the rail gone: up / down are its own), each group
+     * under its heading, Ready first when something waits (an update for the PSP, a restart) */
     {
         static const struct { const char *name, *icon, *ids[5]; } GROUPS[] = {
             { "Network", "wifi", { "a:wifinet", "a:wifi", NULL } },
@@ -287,29 +296,33 @@ static void cats_build(void)
             { "Recording", "film", { "a:clips", "a:cliplen", "a:quality", NULL } },   /* (the Gallery is in Apps) */
             { "Clock", "clock", { "a:tz", NULL } },
             { "Library", "refresh-cw", { "a:rescan", "a:boxart", NULL } },
-            { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP tab's) */
+            { "This PSP", "gamepad-directional", { "a:plugin", "a:pspclock", NULL } },   /* (the PSP's own: its plugin, recording and the PSP list's) */
             { "This board", "circuit-board", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
         };
-        int g, k, first = 1;
-        for (g = -1; g < (int)(sizeof(GROUPS) / sizeof(GROUPS[0])); g++) {
+        int g, k, nh = 0;
+        Cat *top = cat_add("Settings", "settings", COL_SETTINGS, CK_SETTINGS, "setting");
+        for (g = -1; g < (int)(sizeof(GROUPS) / sizeof(GROUPS[0])) && nh < (int)(sizeof(g_heads) / sizeof(g_heads[0])); g++) {
             static const char *const READY[] = { "a:psp-update", "a:console-restart", NULL };
             const char *const *ids = g < 0 ? READY : GROUPS[g].ids;
-            c = NULL;
+            LEntry *h = &g_heads[nh];
+            int any = 0;
+            memset(h, 0, sizeof(*h));
+            snprintf(h->id, sizeof(h->id), "h:%s", g < 0 ? "Ready" : GROUPS[g].name);
+            snprintf(h->title, sizeof(h->title), "%s", g < 0 ? "Ready" : GROUPS[g].name);
+            h->type = LT_TOOL; h->sys = -1;
             for (k = 0; ids[k]; k++)   /* the group's settings in its own order (those this board has) */
                 for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, ids[k])) {
-                    if (!c) {   /* (a tab only with something in it; the rail's gear for each) */
-                        c = cat_add(g < 0 ? "Ready" : GROUPS[g].name, "settings", COL_SETTINGS, CK_SETTINGS, "setting");
-                        c->tab = 2; c->hidden = !first; first = 0;
-                    }
-                    cat_push(c, &g_actions[i]);
+                    if (!any++) { cat_push(top, h); nh++; }   /* (a heading only over something) */
+                    cat_push(top, &g_actions[i]);
                 }
         }
     }
     for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])); s++) {
         if (!L.sys[s].nroms || is_psp_sys(s)) continue;
         c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", COL_GAMES, CK_SYSTEM, "game");
-        c->sys = s; c->tab = c->hidden = 1;
+        c->sys = s; c->tab = 1;
         for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
+        if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
     }
     /* back to where we were */
     g_cur = -1;
@@ -322,6 +335,11 @@ static void cats_build(void)
         int found = 0;
         for (i = 0; i < c->n; i++) if (!strcmp(c->it[i]->id, keep_id)) { c->sel = i; found = 1; }
         if (!found && keep_sel > 0 && keep_sel - 1 < c->n) c->sel = keep_sel - 1;
+    }
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SETTINGS && g_cat[i].n && is_heading(g_cat[i].it[g_cat[i].sel])) {   /* (never on a heading) */
+        int k;
+        for (k = g_cat[i].sel; k < g_cat[i].n && is_heading(g_cat[i].it[k]); k++) {}
+        g_cat[i].sel = k < g_cat[i].n ? k : 0;
     }
 }
 
@@ -347,23 +365,14 @@ static void cat_icon(const Cat *c, int px, int x, int y, uint32_t rgb, int alpha
     gfx_icon(c->icon, px, x, y, rgb, alpha);
 }
 
-/* the rail's sections (the categories not hidden): how many, the k-th, and where a category
- * sits on it (a Games tab: where Games is) */
-static int rail_n(void) { int i, n = 0; for (i = 0; i < g_ncat; i++) if (!g_cat[i].hidden) n++; return n; }
-static int rail_cat(int k) { int i; for (i = 0; i < g_ncat; i++) if (!g_cat[i].hidden && k-- == 0) return i; return 0; }
-static int rail_pos(int cat)
-{
-    int i, k = 0;
-    if (g_cat[cat].hidden) { for (i = 0; i < g_ncat; i++) if (g_cat[i].tab == g_cat[cat].tab && !g_cat[i].hidden) { cat = i; break; } }   /* (a tab: where its section is) */
-    for (i = 0; i < cat; i++) if (!g_cat[i].hidden) k++;
-    return k;
-}
+/* the sections along the top: 0 Games (its filters), 1 Apps, 2 Settings */
+static int section_of(const Cat *c) { return c->tab ? 0 : c->kind == CK_APPS ? 1 : 2; }
 
 /* ---- state ------------------------------------------------------------------------------ */
 
 enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT };
 static int g_mode = M_BROWSE;
-static int g_last_tab[3] = { -1, -1, -1 };   /* Games' (1) and Settings' (2) tab last shown: the rail goes back to it */
+static int g_last_filter = -1;        /* Games' filter last shown: L / R come back to it */
 static char g_np_title[160]; static int g_np_on, g_np_paused;   /* what Music plays, as last drawn */
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
@@ -387,7 +396,7 @@ static int mtext(int font, int x, int y, const char *s, uint32_t rgb, int alpha,
     return gfx_text_marquee(font, x, y, s, rgb, alpha, max_w, g_now - since, &g_anim);
 }
 static uint64_t g_last_frame, g_sel_since;
-static float g_rail_top, g_lift[40], g_list_anim = 1, g_list_dir, g_expand[1024];
+static float g_list_anim = 1, g_list_dir, g_expand[1024];
 static char g_launch_cmd[1200], g_launch_cwd[512];
 static int g_launch_pending, g_launch_aware, g_running, g_console_req, g_files_req;
 static char g_files_path[512];   /* the folder Files opens on (Settings, a path asked for), else its own */
@@ -1023,11 +1032,18 @@ int launcher_category(const char *name)
 {
     int i;
     for (i = 0; i < g_ncat; i++)
-        if (!strcmp(g_cat[i].name, name)) { g_cur = i; if (g_cat[i].tab) g_last_tab[g_cat[i].tab] = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
-    if (!strcmp(name, "Games") || !strcmp(name, "Favourites") || !strcmp(name, "Emulators"))   /* (the sections before 2026-10-30: tests, notifications) */
-        return launcher_category("All");
-    if (!strcmp(name, "Settings"))   /* (its first tab) */
-        for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SETTINGS && !g_cat[i].hidden) return launcher_category(g_cat[i].name);
+        if (!strcmp(g_cat[i].name, name)) { g_cur = i; if (g_cat[i].tab) g_last_filter = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
+    if (!strcmp(name, "Games") || !strcmp(name, "All") || !strcmp(name, "Emulators")) {   /* (sections before 2026-10-30: tests, notifications) */
+        g_cur = start_cat(); g_last_filter = g_cur; g_sel_since = pspexp_time_us(); g_dirty = 1;
+        return 1;
+    }
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SETTINGS) {   /* a Settings group: Settings, on its first setting */
+        int k;
+        for (k = 0; k + 1 < g_cat[i].n; k++) if (is_heading(g_cat[i].it[k]) && !strcmp(g_cat[i].it[k]->title, name)) {
+            g_cur = i; g_cat[i].sel = k + 1; g_sel_since = pspexp_time_us(); g_dirty = 1;
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -1858,38 +1874,44 @@ static void show_cat(int c, int dir, uint64_t now)
 {
     if (c == g_cur) return;
     g_cur = c;
-    if (g_cat[c].tab) g_last_tab[g_cat[c].tab] = c;
+    if (g_cat[c].tab) g_last_filter = c;
     g_list_anim = 0; g_list_dir = (float)dir;
     memset(g_expand, 0, sizeof(g_expand));
     g_sel_since = now;
     g_dirty = 1;
 }
 
-/* up and down the rail: k is a position on it, wrapping */
-static void select_cat(int k, int dir, uint64_t now)
+/* L / R: the next section (d 1) or the one before (-1), round; Games on the filter it was on */
+static void section_step(int d, uint64_t now)
 {
-    int n = rail_n();
-    if (!n) return;
-    k = ((k % n) + n) % n;
-    {
-        int t = g_cat[rail_cat(k)].tab, last = t ? g_last_tab[t] : -1;
-        if (last >= 0 && last < g_ncat && g_cat[last].tab == t) show_cat(last, dir, now);   /* (a section with tabs: the tab it was on) */
-        else show_cat(rail_cat(k), dir, now);
+    int sec = (section_of(&g_cat[g_cur]) + d + 3) % 3, i;
+    if (sec == 0) {
+        if (g_last_filter >= 0 && g_last_filter < g_ncat && g_cat[g_last_filter].tab) show_cat(g_last_filter, d, now);
+        else show_cat(start_cat(), d, now);
+        return;
     }
+    for (i = 0; i < g_ncat; i++) if (!g_cat[i].tab && section_of(&g_cat[i]) == sec) { show_cat(i, d, now); return; }
 }
 
-/* a section's tabs (Games', Settings'), L / R: the next (d 1) or previous (-1), wrapping */
-static void tab_step(int d, uint64_t now)
+/* Games' column, up / down: the filter above (d -1) or below (1), stopping at its ends */
+static void filter_step(int d, uint64_t now)
 {
-    int i, k, t = g_cat[g_cur].tab;
-    for (k = 1; k < g_ncat; k++) {
-        i = ((g_cur + d * k) % g_ncat + g_ncat) % g_ncat;
-        if (g_cat[i].tab == t) { show_cat(i, d, now); return; }
-    }
+    int i;
+    for (i = g_cur + d; i >= 0 && i < g_ncat; i += d) if (g_cat[i].tab) { show_cat(i, d, now); return; }
 }
 
-/* a setting's kind (2026-10-30): a switch (drawn as one under its tile), a choice (its value in a
- * pill; cross the next), a page (cross opens it: a list, About), or a thing done */
+/* Settings' list, up / down: the next setting, past the headings, stopping at its ends; 1 when it moved */
+static int settings_step(int d, uint64_t now)
+{
+    Cat *c = &g_cat[g_cur];
+    int k;
+    for (k = c->sel + d; k >= 0 && k < c->n; k += d)
+        if (!is_heading(c->it[k])) { c->sel = k; g_sel_since = now; g_dirty = 1; return 1; }
+    return 0;
+}
+
+/* a setting's kind (2026-10-30): a switch (cross flips it), a choice (left / right step it, cross
+ * the next one round), a page (cross opens it: a list, About), or a thing done */
 enum { ROW_DO, ROW_SWITCH, ROW_CHOICE, ROW_PAGE };
 static int row_kind(const LEntry *e)
 {
@@ -1907,12 +1929,30 @@ static int switch_on(const LEntry *e)
     const char *v = action_value(e);
     return v && strcmp(v, "Off") && strcmp(v, "Not on the PSP");
 }
-/* a choice's value short, for its pill ("15 s"), and what cross makes it (d 1: the next) */
+/* a choice's value short ("15 s"), and what cross makes it (d 1: the next) */
 static void choice_text(const LEntry *e, int d, char *out, size_t n)
 {
     if (!strcmp(e->id, "a:cliplen")) { int v = g_clip_secs; if (d) v = v == 15 ? 30 : v == 30 ? 60 : 15; snprintf(out, n, "%d s", v); }
     else if (!strcmp(e->id, "a:quality")) snprintf(out, n, "%s", CLIP_QUALITY[(g_clip_quality + d) % 3]);
     else snprintf(out, n, "%s", action_value(e) ? action_value(e) : "");
+}
+
+/* a choice one step along (d 1 or -1) in place, stopping at its ends */
+static void choice_step(const LEntry *e, int d)
+{
+    static const int SECS[3] = { 15, 30, 60 };
+    if (!strcmp(e->id, "a:cliplen")) {
+        int k = g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1;
+        if (k + d < 0 || k + d > 2) return;
+        g_clip_secs = SECS[k + d];
+        lib_setting_set(&L, "clip_secs", g_clip_secs);
+    } else if (!strcmp(e->id, "a:quality")) {
+        if (g_clip_quality + d < 0 || g_clip_quality + d > 2) return;
+        g_clip_quality += d;
+        lib_setting_set(&L, "clip_quality", g_clip_quality);
+    } else return;
+    g_clips_change = 1;   /* (the recorder starts again with it) */
+    g_dirty = 1;
 }
 
 static void move_sel(int d, int wrap, uint64_t now)
@@ -2028,20 +2068,24 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     }
     if (pressed & PSPEXP_BUTTON_START) { menu_open(now); return; }
     if (pressed & PSPEXP_BUTTON_SELECT) { snprintf(g_app_req, sizeof(g_app_req), "notifications"); return; }   /* the notification centre (also in START's menu) */
-    /* up and down the rail (Games, Apps, Settings), left and right along the shelf; L / R the tabs
-     * (Games', Settings'; Apps: five along) */
-    {
-        const Cat *c = &g_cat[g_cur];
-        if (up) select_cat(rail_pos(g_cur) - 1, -1, now);
-        if (down) select_cat(rail_pos(g_cur) + 1, 1, now);
+    /* L / R the sections (Games, Apps, Settings); in Games up / down the filters and left / right
+     * along the shelf; in Apps left / right; in Settings up / down its list, left / right a choice */
+    if (pressed & PSPEXP_BUTTON_LTRIGGER) { section_step(-1, now); return; }
+    if (pressed & PSPEXP_BUTTON_RTRIGGER) { section_step(1, now); return; }
+    if (g_cat[g_cur].kind == CK_SETTINGS) {
+        e = cur_entry();
+        if (up) settings_step(-1, now);
+        if (down) settings_step(1, now);
+        if (e && (left || right) && row_kind(e) == ROW_CHOICE) choice_step(e, left ? -1 : 1);
+    } else {
+        if (g_cat[g_cur].tab && up) filter_step(-1, now);
+        if (g_cat[g_cur].tab && down) filter_step(1, now);
         if (left) move_sel(-1, (pressed & PSPEXP_BUTTON_LEFT) != 0, now);   /* wraps on a fresh press, stops while repeating */
         if (right) move_sel(1, (pressed & PSPEXP_BUTTON_RIGHT) != 0, now);
-        if (pressed & PSPEXP_BUTTON_LTRIGGER) { if (c->tab) tab_step(-1, now); else move_sel(-5, 0, now); }
-        if (pressed & PSPEXP_BUTTON_RTRIGGER) { if (c->tab) tab_step(1, now); else move_sel(5, 0, now); }
     }
     /* (circle: nothing; it went back from a Settings group's page or to the home screen) */
     e = cur_entry();
-    if (!e) return;
+    if (!e || is_heading(e)) return;
     if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
     if ((pressed & PSPEXP_BUTTON_SQUARE) && can_fav(e)) fav_toggle(e, now);
     if (pressed & PSPEXP_BUTTON_TRIANGLE) show_more(e, now);
@@ -2264,24 +2308,53 @@ static void board_detect(void)
 /* the top bar (2026-10-30: only what tells something): the clock, the bell while there is news;
  * on the right the music (loaded), Bluetooth sound, the board's network, the board's battery when
  * it has one (its icon before it), the PSP's battery */
+/* the sections along the top, between from and to: L, Games · Apps · Settings (the one shown lit), R */
+static void draw_sections(int from, int to)
+{
+    static const char *const NAME[3] = { "Games", "Apps", "Settings" }, *const ICON[3] = { "gamepad-2", "layout-grid", "settings" };
+    static const uint32_t COL[3] = { COL_GAMES, COL_APPS, COL_SETTINGS };
+    int i, w[3], total = 16 + 6 + 6 + 16, x, here = section_of(&g_cat[g_cur]);
+    for (i = 0; i < 3; i++) { w[i] = 12 + 5 + gfx_text_width(i == here ? FONT_BODY : FONT_SMALL, NAME[i]) + 18; total += w[i] + (i ? 2 : 0); }
+    x = (SCREEN_W - total) / 2;
+    if (x + total > to) x = to - total;
+    if (x < from) x = from;
+    gfx_nine(NINE_R6, x, 6, 16, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, x + 5, 7, "L", C_SUB, 255, 0);
+    x += 22;
+    for (i = 0; i < 3; i++) {
+        int on = i == here, f = on ? FONT_BODY : FONT_SMALL;
+        if (on) {
+            gfx_shadow(NINE_SHADOW10, x, 3, w[i], 20, 0x40a0ff, 140);
+            gfx_nine(NINE_R6, x, 3, w[i], 20, 0x1e3a6e, 255);
+        }
+        gfx_icon(ICON[i], 12, x + 9, 7, on ? 0xffffff : COL[i], 255);
+        gfx_text(f, x + 26, 13 - gfx_line_height(f) / 2, NAME[i], on ? 0xffffff : C_SUB, 255, 0);
+        x += w[i] + 2;
+    }
+    gfx_nine(NINE_R6, x + 4, 6, 16, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, x + 9, 7, "R", C_SUB, 255, 0);
+}
+
 static void draw_status(void)
 {
     char s[64];
     time_t t = time(NULL);
     struct tm tmv;
-    int x, w;
+    int x, w, left_end;
     PspExpPowerStatus p;
     char b[160];
     localtime_r(&t, &tmv);
     strftime(s, sizeof(s), "%H:%M", &tmv);
     w = gfx_text(FONT_TITLE, 16, 4, s, C_TEXT, 255, 0);
     x = 16 + w + 12;
+    left_end = x;
     {
         int unread = notify_unread();
         if (unread) {
             gfx_icon("bell-dot", 16, x, 6, C_ACCENT, 255);
             snprintf(s, sizeof(s), "%d", unread > 99 ? 99 : unread);
             gfx_text(FONT_BADGE, x + 19, 9, s, C_ACCENT, 255, 0);
+            left_end = x + 19 + gfx_text_width(FONT_BADGE, s) + 10;
         }
     }
     x = SCREEN_W - 16;
@@ -2322,45 +2395,44 @@ static void draw_status(void)
         x -= 16; gfx_icon("headphones", 16, x, 6, C_SUB, 255); x -= 10;
     }
     if (g_np_on) { x -= 16; gfx_icon(g_np_paused ? "pause" : "music", 16, x, 6, g_np_paused ? C_SUB : C_ACCENT, 255); }   /* music loaded: a note, a pause sign while paused */
+    draw_sections(left_end, x - 8);
 }
 
-static void draw_rail(float dt)
+/* Games' filters down the left (up / down): each its icon (a system's console picture), its name and
+ * how many; the column scrolls to keep the one shown in view */
+static const char *tab_label(const Cat *c);
+static void draw_filters(float dt)
 {
-    static float on = 1.0f;   /* 1: up / down move along it (a section's page), lit; 0: a sub-page, dimmed */
-    int i, k, first, n = rail_n(), here = rail_pos(g_cur);
-    float dim;
-    first = here - RAIL_SHOWN / 2;
-    if (first > n - RAIL_SHOWN) first = n - RAIL_SHOWN;
+    static float top;
+    int idx[48], n = 0, at = 0, i, first;
+    char cnt[16];
+    for (i = 0; i < g_ncat && n < 48; i++) if (g_cat[i].tab) { if (i == g_cur) at = n; idx[n++] = i; }
+    first = at - COL_SHOWN / 2;
+    if (first > n - COL_SHOWN) first = n - COL_SHOWN;
     if (first < 0) first = 0;
-    g_rail_top = ease(g_rail_top, (float)first, 14.0f, dt, 0.01f);
-    on = ease(on, g_cat[g_cur].hidden && !g_cat[g_cur].tab ? 0.0f : 1.0f, 12.0f, dt, 0.01f);
-    if (on > 0.01f && on < 0.99f) g_dirty = 1;   /* (still easing) */
-    dim = 0.35f + 0.65f * on;
-    if (on > 0.02f) gfx_nine(NINE_R10, 3, RAIL_TOP - 4, RAIL_W - 6, RAIL_SHOWN * RAIL_PITCH + 6, 0xffffff, (int)(on * 12));   /* (lit: a faint panel) */
-    gfx_rect(RAIL_W, RAIL_TOP, 1, RAIL_SHOWN * RAIL_PITCH, 0xffffff, (int)(8 + 14 * on));
-    gfx_set_clip(0, RAIL_TOP - 4, RAIL_W, RAIL_SHOWN * RAIL_PITCH + 6);
-    for (i = 0, k = 0; i < g_ncat; i++) {
-        Cat *c = &g_cat[i];
-        float lift;
-        int size, cy, x, y;
-        if (c->hidden) continue;
-        lift = g_lift[k] = ease(g_lift[k], k == here ? 1.0f : 0.0f, 16.0f, dt, 0.01f);
-        size = RAIL_TILE + (int)lroundf(lift * 2);
-        cy = RAIL_TOP + RAIL_PITCH / 2 + (int)lroundf((k - g_rail_top) * RAIL_PITCH) - 2;
-        x = (RAIL_W - size) / 2; y = cy - size / 2;
-        k++;
-        if (cy < RAIL_TOP - RAIL_PITCH || cy > RAIL_TOP + (RAIL_SHOWN + 1) * RAIL_PITCH) continue;
-        if (lift > 0.02f) {   /* one blue highlight everywhere (2026-10-30: the sections' tints looked muddy over the waves) */
-            gfx_shadow(NINE_SHADOW10, x, y, size, size, 0x40a0ff, (int)(lift * 200 * on));
-            gfx_nine(NINE_R10, x, y, size, size, 0x14305c, (int)(lift * 255 * dim));
+    top = ease(top, (float)first, 14.0f, dt, 0.01f);
+    if (top > 0.01f && fabsf(top - first) > 0.01f) g_dirty = 1;
+    gfx_set_clip(0, COL_TOP - 2, GAMES_X - 4, COL_SHOWN * COL_ROW + 4);
+    for (i = 0; i < n; i++) {
+        const Cat *c = &g_cat[idx[i]];
+        int y = COL_TOP + (int)lroundf((i - top) * COL_ROW), on = i == at, w;
+        if (y < COL_TOP - COL_ROW || y > COL_TOP + COL_SHOWN * COL_ROW) continue;
+        if (on) {
+            gfx_shadow(NINE_SHADOW10, COL_X, y, COL_W, COL_ROW - 2, 0x40a0ff, 150);
+            gfx_nine(NINE_R6, COL_X, y, COL_W, COL_ROW - 2, 0x1e3a6e, 255);
         }
-        cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, c->col, (int)((1 - lift) * 220 * dim));
-        if (lift > 0.02f) cat_icon(c, 18, (RAIL_W - 18) / 2, cy - 9, 0xffffff, (int)(lift * 255 * dim));
+        if (c->kind == CK_FAVS) gfx_star(11, COL_X + 6, y + 3, on ? 0xffffff : C_STAR, 255);
+        else cat_icon(c, 12, COL_X + 5, y + 3, on ? 0xffffff : C_SUB, 255);
+        snprintf(cnt, sizeof(cnt), "%d", c->n);
+        w = gfx_text_width(FONT_BADGE, cnt);
+        gfx_text(FONT_BADGE, COL_X + COL_W - 6 - w, y + 3, cnt, on ? 0xdbe8ff : C_MUTED, 255, 0);
+        gfx_text(on ? FONT_BODY : FONT_SMALL, COL_X + 22, y + (COL_ROW - 2 - gfx_line_height(on ? FONT_BODY : FONT_SMALL)) / 2,
+                 tab_label(c), on ? 0xffffff : C_SUB, 255, COL_W - 30 - w);
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
-    /* more above or below */
-    if (g_rail_top > 0.05f) gfx_icon("chevron-up", 12, (RAIL_W - 12) / 2, RAIL_TOP - 12, C_MUTED, 200);
-    if (g_rail_top < (float)(n - RAIL_SHOWN) - 0.05f) gfx_icon("chevron-down", 12, (RAIL_W - 12) / 2, RAIL_TOP + RAIL_SHOWN * RAIL_PITCH, C_MUTED, 200);
+    if (top > 0.05f) gfx_icon("chevron-up", 10, COL_X + COL_W / 2 - 5, COL_TOP - 11, C_MUTED, 200);
+    if (top < (float)(n - COL_SHOWN) - 0.05f) gfx_icon("chevron-down", 10, COL_X + COL_W / 2 - 5, COL_TOP + COL_SHOWN * COL_ROW + 1, C_MUTED, 200);
+    gfx_rect(GAMES_X - 4, COL_TOP, 1, COL_SHOWN * COL_ROW, 0xffffff, 22);
 }
 
 static void human_size(long long b, char *out, size_t n)
@@ -2405,8 +2477,8 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         else if (!strcmp(e->id, "a:quality")) snprintf(s, n, "%s", g_clip_quality == 0 ? "The sharpest: up to 17 MB a minute in a busy game"
                                                                    : g_clip_quality == 1 ? "Nearly as sharp: up to 10 MB a minute in a busy game"
                                                                    : "Softer: up to 5 MB a minute in a busy game");
-        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "The PSP tab's games start, and PSP games record"
-                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to start the PSP tab's games and record PSP games"
+        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "The PSP list's games start, and PSP games record"
+                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to start the PSP list's games and record PSP games"
                                                                   : "Not on the PSP's memory stick: cross puts it there and turns it on");
         else snprintf(s, n, "%s", e->tags);
         break;
@@ -2414,11 +2486,11 @@ static void detail_line(const LEntry *e, char *s, size_t n)
     }
 }
 
-/* a tab's name: All, PSP, the board's, a system's (its short one when the name is long:
+/* a filter's name: Favourites, PSP, the board's, a system's (its short one when the name is long:
  * "Nintendo Entertainment System" is NES) */
 static const char *tab_label(const Cat *c)
 {
-    if (c->kind == CK_SYSTEM && c->sys >= 0 && L.sys[c->sys].shortname[0] && gfx_text_width(FONT_SMALL, c->name) > 110) return L.sys[c->sys].shortname;
+    if (c->kind == CK_SYSTEM && c->sys >= 0 && L.sys[c->sys].shortname[0] && gfx_text_width(FONT_BODY, c->name) > COL_W - 46) return L.sys[c->sys].shortname;
     return c->name;
 }
 
@@ -2447,107 +2519,100 @@ static void shelf_item(const LEntry *e, int cx, int cy, float lift, int alpha)
         gfx_nine(NINE_R14, x, y, size, size, 0x16223c, alpha);
         if (lift > 0.02f) gfx_nine(NINE_R14, x, y, size, size, 0x1e3a6e, (int)(lift * alpha));
         gfx_icon(ic, ip, cx - ip / 2, y + (size - ip) / 2, lift > 0.5f ? 0xffffff : 0xb9c8e0, alpha);
-        if (e->type == LT_ACTION && row_kind(e) == ROW_SWITCH && action_value(e)) {   /* a setting on / off: a dot in its corner while on, a ring while off */
-            int dx = x + size - 13, dyy = y + 7;
-            const char *v = action_value(e);
-            if (!strcmp(v, "On") || !strcmp(v, "From the board")) gfx_dot(7, dx, dyy, lift > 0.5f ? 0xffffff : C_ACCENT, alpha);
-            else { gfx_dot(7, dx, dyy, C_MUTED, alpha); gfx_dot(5, dx + 1, dyy + 1, lift > 0.5f ? 0x1e3a6e : 0x16223c, alpha); }
+    }
+}
+
+
+/* Settings as one plain list (2026-10-30, the rail gone): headings, then the settings, each with what
+ * it is set to on the right: a switch; a choice's value (all of them side by side, the current one
+ * filled, while it is highlighted: left / right step it); where a page stands and a chevron.
+ * c->scroll is in pixels here; the highlighted one's line under the list */
+#define SET_X0   14
+#define SET_X1   (SCREEN_W - 14)
+#define SET_Y0   32
+#define SET_Y1   228
+#define SET_ROW  21
+#define SET_HEAD 16
+static void draw_settings(Cat *c, float dt, int alpha)
+{
+    int i, y, total = 0, sel_y = 0, view = SET_Y1 - SET_Y0;
+    float target;
+    LEntry *e = cur_entry();
+    char s[200];
+    for (i = 0; i < c->n; i++) {
+        if (i == c->sel) sel_y = total;
+        total += is_heading(c->it[i]) ? SET_HEAD : SET_ROW;
+    }
+    target = c->scroll;   /* the highlighted one in view, with the heading over it */
+    if (sel_y - SET_HEAD < target) target = (float)(sel_y - SET_HEAD);
+    if (sel_y + SET_ROW > target + view) target = (float)(sel_y + SET_ROW - view);
+    if (target > (float)(total - view)) target = (float)(total - view);
+    if (target < 0) target = 0;
+    c->scroll = ease(c->scroll, target, 16.0f, dt, 0.5f);
+    gfx_set_clip(0, SET_Y0 - 2, SCREEN_W, view + 4);
+    y = SET_Y0 - (int)lroundf(c->scroll);
+    for (i = 0; i < c->n; i++) {
+        LEntry *r = c->it[i];
+        int h = is_heading(r) ? SET_HEAD : SET_ROW;
+        if (y + h < SET_Y0 - 2 || y > SET_Y1 + 2) { y += h; continue; }
+        if (is_heading(r)) {   /* small capitals, muted */
+            char up[64];
+            size_t k;
+            for (k = 0; r->title[k] && k < sizeof(up) - 1; k++) up[k] = (char)toupper((unsigned char)r->title[k]);
+            up[k] = 0;
+            gfx_text(FONT_BADGE, SET_X0 + 8, y + 5, up, C_MUTED, alpha, 0);
+        } else {
+            int sel = i == c->sel, kind = row_kind(r), vx = SET_X1 - 8, rh = SET_ROW - 2, cy = y + rh / 2;
+            const char *v = action_value(r);
+            if (sel) {
+                gfx_shadow(NINE_SHADOW10, SET_X0, y, SET_X1 - SET_X0, rh, 0x40a0ff, 110 * alpha / 255);
+                gfx_nine(NINE_R6, SET_X0, y, SET_X1 - SET_X0, rh, 0x1e3a6e, alpha);
+            } else if (!strcmp(r->id, "a:psp-update") || !strcmp(r->id, "a:console-restart"))
+                gfx_nine(NINE_R6, SET_X0, y, SET_X1 - SET_X0, rh, 0x1d3b2c, alpha * 220 / 255);   /* (Ready: something to do) */
+            gfx_text(FONT_BODY, SET_X0 + 10, cy - gfx_line_height(FONT_BODY) / 2, r->title, sel ? 0xffffff : C_TEXT, alpha, 220);
+            if (kind == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {
+                int on = switch_on(r);
+                gfx_nine(NINE_R6, vx - 24, cy - 6, 24, 12, on ? C_ACCENT : 0x3a4660, alpha);
+                gfx_dot(8, on ? vx - 10 : vx - 22, cy - 4, 0xffffff, alpha);
+            } else if (kind == ROW_CHOICE && sel) {   /* every value, the current one filled */
+                char a[3][16];
+                int k, cur, ws[3], x;
+                if (!strcmp(r->id, "a:cliplen")) { snprintf(a[0], 16, "15 s"); snprintf(a[1], 16, "30 s"); snprintf(a[2], 16, "60 s"); cur = g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1; }
+                else { for (k = 0; k < 3; k++) snprintf(a[k], 16, "%s", CLIP_QUALITY[k]); cur = g_clip_quality; }
+                for (k = 0, x = vx; k < 3; k++) { ws[k] = gfx_text_width(FONT_SMALL, a[k]) + 14; x -= ws[k]; }
+                for (k = 0; k < 3; k++) {
+                    if (k == cur) gfx_nine(NINE_R6, x, cy - 7, ws[k], 14, C_ACCENT, alpha);
+                    gfx_text(FONT_SMALL, x + 7, cy - gfx_line_height(FONT_SMALL) / 2, a[k], k == cur ? 0xffffff : C_SUB, alpha, 0);
+                    x += ws[k];
+                }
+            } else {
+                char t[64] = "";
+                if (kind == ROW_CHOICE) choice_text(r, 0, t, sizeof(t));
+                else if (v) snprintf(t, sizeof(t), "%s", v);
+                if (kind == ROW_PAGE) { gfx_icon("chevron-right", 11, vx - 11, cy - 5, sel ? 0xffffff : C_SUB, alpha); vx -= 16; }
+                if (t[0]) {
+                    int w = gfx_text_width(FONT_SMALL, t);
+                    if (w > 200) w = 200;
+                    gfx_text(FONT_SMALL, vx - w, cy - gfx_line_height(FONT_SMALL) / 2, t, sel ? 0xffffff : C_SUB, alpha, 200);
+                }
+            }
         }
+        y += h;
     }
-}
-
-#define C_STAR 0xfbbf24   /* a favourite's solid star, before its name */
-
-/* a section's tabs over the shelf (Games', Settings'): L, the tabs (the one shown in blue; the
- * strip scrolls to keep it in view), R; Games' count on the right */
-static void draw_tabs(const Cat *cur, int y, int alpha)
-{
-    int idx[48], n = 0, i, at = 0, first = 0, x, limit, cw;
-    char cnt[48];
-    for (i = 0; i < g_ncat && n < 48; i++) if (g_cat[i].tab == cur->tab) { if (&g_cat[i] == cur) at = n; idx[n++] = i; }
-    if (cur->tab == 1) {
-        snprintf(cnt, sizeof(cnt), "%d %s%s", cur->n, cur->noun, cur->n == 1 ? "" : "s");
-        cw = gfx_text_width(FONT_SMALL, cnt);
-        gfx_text(FONT_SMALL, SCREEN_W - 16 - cw, y + 2, cnt, C_MUTED, alpha, 0);
-    } else cw = -12;
-    limit = SCREEN_W - 16 - cw - 12 - 20;   /* (R's badge before the count) */
-    for (;;) {   /* the first tab shown: the one shown must fit */
-        int w = DETAIL_X + 21 + (first ? 14 : 0);
-        for (i = first; i <= at; i++) w += gfx_text_width(FONT_SMALL, tab_label(&g_cat[idx[i]])) + 18 + 2;
-        if (w <= limit || first >= at) break;
-        first++;
+    gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    if (c->scroll > 0.5f) gfx_icon("chevron-up", 10, SCREEN_W / 2 - 5, SET_Y0 - 11, C_MUTED, 200);
+    if (c->scroll < (float)(total - view) - 0.5f) gfx_icon("chevron-down", 10, SCREEN_W / 2 - 5, SET_Y1 + 1, C_MUTED, 200);
+    if (e && !is_heading(e)) {   /* what the highlighted one does, or is set to */
+        detail_line(e, s, sizeof(s));
+        mtext(FONT_SMALL, SET_X0 + 10, SET_Y1 + 6, s, C_MUTED, alpha, SET_X1 - SET_X0 - 20, g_sel_since);
     }
-    x = DETAIL_X;
-    gfx_nine(NINE_R6, x, y + 2, 16, 14, 0x1e2c4a, alpha);
-    gfx_text(FONT_BADGE, x + 5, y + 3, "L", C_SUB, alpha, 0);
-    x += 21;
-    if (first) { gfx_icon("chevron-left", 12, x - 2, y + 3, C_MUTED, alpha); x += 14; }
-    for (i = first; i < n; i++) {
-        const char *t = tab_label(&g_cat[idx[i]]);
-        int w = gfx_text_width(FONT_SMALL, t) + 18, on = i == at;
-        if (x + w > limit) { gfx_icon("chevron-right", 12, x, y + 3, C_MUTED, alpha); x += 14; break; }
-        if (on) gfx_nine(NINE_R6, x, y, w, 18, C_ACCENT, alpha * 200 / 255);
-        gfx_text(FONT_SMALL, x + 9, y + 1, t, on ? 0xffffff : C_SUB, alpha, 0);
-        x += w + 2;
-    }
-    gfx_nine(NINE_R6, x + 2, y + 2, 16, 14, 0x1e2c4a, alpha);
-    gfx_text(FONT_BADGE, x + 7, y + 3, "R", C_SUB, alpha, 0);
-}
-
-/* Settings' panel (2026-10-30, from mockups): right of the setting's name, what it is set to and what
- * cross does: a choice shows all its values side by side, the current one filled; on / off a
- * switch with its word; a page its state and a chevron; a thing done a button with its name
- * (Ready's green). Its width, for the name beside it */
-static int pill(int right, int cy, const char *t, uint32_t edge, uint32_t fill, uint32_t ink, int chevron, int alpha)
-{
-    int w = gfx_text_width(FONT_SMALL, t) + 22 + (chevron ? 12 : 0), x = right - w;
-    gfx_nine(NINE_R10, x, cy - 11, w, 22, edge, alpha);
-    if (fill != edge) gfx_nine(NINE_R10, x + 1, cy - 10, w - 2, 20, fill, alpha);
-    gfx_text(FONT_SMALL, x + 11, cy - gfx_line_height(FONT_SMALL) / 2, t, ink, alpha, w - 22);
-    if (chevron) gfx_icon("chevron-right", 11, right - 19, cy - 5, ink, alpha);
-    return w;
-}
-
-static int settings_control(const LEntry *e, int right, int cy, int alpha)
-{
-    int k = row_kind(e);
-    const char *v = action_value(e);
-    if (k == ROW_CHOICE) {   /* every value, the current one filled */
-        const char *opts[3];
-        char a[3][16];
-        int n = 3, cur = 0, i, ws[3], w = 0, x;
-        if (!strcmp(e->id, "a:cliplen")) { snprintf(a[0], 16, "15 s"); snprintf(a[1], 16, "30 s"); snprintf(a[2], 16, "60 s"); cur = g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1; }
-        else { for (i = 0; i < 3; i++) snprintf(a[i], 16, "%s", CLIP_QUALITY[i]); cur = g_clip_quality; }
-        for (i = 0; i < n; i++) { opts[i] = a[i]; ws[i] = gfx_text_width(FONT_SMALL, opts[i]) + 18; w += ws[i]; }
-        x = right - w - 2;
-        gfx_nine(NINE_R10, x - 2, cy - 11, w + 4, 22, 0x30425f, alpha);
-        gfx_nine(NINE_R10, x - 1, cy - 10, w + 2, 20, 0x16223c, alpha);
-        for (i = 0; i < n; i++) {
-            if (i == cur) gfx_nine(NINE_R6, x, cy - 9, ws[i], 18, C_ACCENT, alpha);
-            gfx_text(i == cur ? FONT_BODY : FONT_SMALL, x + (ws[i] - gfx_text_width(i == cur ? FONT_BODY : FONT_SMALL, opts[i])) / 2,
-                     cy - gfx_line_height(i == cur ? FONT_BODY : FONT_SMALL) / 2, opts[i], i == cur ? 0xffffff : C_SUB, alpha, 0);
-            x += ws[i];
-        }
-        return w + 4;
-    }
-    if (k == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {   /* a switch and its word */
-        int on = switch_on(e), tw = gfx_text_width(FONT_BODY, on ? "On" : "Off");
-        gfx_nine(NINE_R6, right - 34, cy - 9, 34, 18, on ? C_ACCENT : 0x3a4660, alpha);
-        gfx_dot(14, on ? right - 16 : right - 32, cy - 7, 0xffffff, alpha);
-        gfx_text(FONT_BODY, right - 34 - 8 - tw, cy - gfx_line_height(FONT_BODY) / 2, on ? "On" : "Off", on ? 0xffffff : C_SUB, alpha, 0);
-        return 34 + 8 + tw;
-    }
-    if (!strcmp(e->id, "a:psp-update")) return pill(right, cy, "Install", 0x22c55e, 0x22c55e, 0xffffff, 1, alpha);   /* (Ready: green) */
-    if (!strcmp(e->id, "a:console-restart")) return pill(right, cy, "Restart PSPExp", 0x22c55e, 0x22c55e, 0xffffff, 1, alpha);
-    if (k == ROW_SWITCH) return pill(right, cy, "Install", C_ACCENT, 0x16223c, C_TEXT, 1, alpha);   /* (the plugin, not on the PSP yet) */
-    if (v) return pill(right, cy, v, 0x30425f, 0x16223c, C_TEXT, 1, alpha);   /* a page, or the GameShell's Wi-Fi: where it stands */
-    if (k == ROW_PAGE) return pill(right, cy, "Open", 0x30425f, 0x16223c, C_TEXT, 1, alpha);
-    return pill(right, cy, !strcmp(e->id, "a:rescan") ? "Refresh" : e->title, 0x8a9bbd, 0x16223c, C_TEXT, 1, alpha);   /* a thing done: its name */
 }
 
 static void draw_list(float dt)
 {
     Cat *c = &g_cat[g_cur];
+    /* Games right of its column (four discs); Apps the whole width (five tiles) */
+    const int DX = c->tab ? GAMES_X + 6 : 20, SHELF_X0 = c->tab ? GAMES_X + 50 : 66, SHELF_SHOWN = c->tab ? 4 : 5, LEFT = c->tab ? GAMES_X : 0;
     int i, alpha, dy, first, last;
     float target;
     char s[200];
@@ -2556,23 +2621,16 @@ static void draw_list(float dt)
     alpha = (int)(g_list_anim * 255);
     dy = (int)lroundf((1 - g_list_anim) * 16 * g_list_dir);
 
-    /* header: Games' tabs; a Settings group under Settings; else the section and its size */
-    if (c->tab) draw_tabs(c, 29, 255);   /* (the strip stays: only the shelf slides) */
-    else if (c->hidden) {
-        int x = DETAIL_X + gfx_text(FONT_BODY, DETAIL_X, 32 + dy / 2, "Settings", C_MUTED, alpha, 0) + 2;
-        gfx_icon("chevron-right", 14, x, 34 + dy / 2, C_MUTED, alpha);
-        gfx_text(FONT_TITLE, x + 16, 30 + dy / 2, c->name, C_TEXT, alpha, 260);
-    } else gfx_text(FONT_TITLE, DETAIL_X, 30 + dy / 2, c->name, C_TEXT, alpha, 300);
-    if (!c->tab && c->kind != CK_SETTINGS) {
-        snprintf(s, sizeof(s), "%d %s%s", c->n, c->noun, c->n == 1 ? "" : "s");
-        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), 34 + dy / 2, s, C_MUTED, alpha, 0);
-    }
-
+    /* (no header: the top bar names the section, Games' column the filter) */
+    if (c->kind == CK_SETTINGS) { draw_settings(c, dt, alpha); return; }
+    if (c->tab) draw_filters(dt);
     if (!c->n) {
-        int psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys);
-        gfx_text(FONT_TITLE, DETAIL_X, SHELF_Y - 10 + dy, psp ? "No PSP games yet" : c->tab == 1 ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
-        gfx_text(FONT_SMALL, DETAIL_X, SHELF_Y + 14 + dy, psp ? "Your ISO, CSO and ZIP games go in roms/psp on the board"
-                 : c->tab == 1 ? "Apps > Packages installs games and emulators; ROMs go in roms on the board" : "Installed games and apps appear here", C_MUTED, alpha, 0);
+        int psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys), favs = c->kind == CK_FAVS;
+        gfx_text(FONT_TITLE, DX, SHELF_Y - 10 + dy, favs ? "No favourites yet" : psp ? "No PSP games yet" : c->tab ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
+        gfx_text_wrapped(FONT_SMALL, DX, SHELF_Y + 14 + dy, favs ? "Square on a game, in any of the lists on the left, adds it here"
+                         : psp ? "Your ISO, CSO and ZIP games go in roms/psp on the board"
+                         : c->tab ? "Apps > Packages installs games and emulators; ROMs go in roms on the board" : "Installed games and apps appear here",
+                         C_MUTED, alpha, SCREEN_W - 16 - DX, 14, 3);
         return;
     }
 
@@ -2589,7 +2647,7 @@ static void draw_list(float dt)
     first = (int)floorf(c->scroll) - 1; if (first < 0) first = 0;
     last = (int)ceilf(c->scroll) + SHELF_SHOWN + 1; if (last > c->n) last = c->n;
 
-    gfx_set_clip(RAIL_W + 1, 26, SCREEN_W - RAIL_W - 1, DETAIL_Y - 30);
+    gfx_set_clip(LEFT, 26, SCREEN_W - LEFT, DETAIL_Y - 30);
     /* the others first, the selection last: its glow over its neighbours */
     for (i = first; i < last; i++) if (i != c->sel) {
         int cx = SHELF_X0 + (int)lroundf((i - c->scroll) * SHELF_PITCH);
@@ -2607,20 +2665,19 @@ static void draw_list(float dt)
         gfx_text(f, cx - (tw - (st ? st + 3 : 0)) / 2, SHELF_LABEL + dy, t, sel ? C_TEXT : C_SUB, alpha, mw);
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
-    if (c->scroll > 0.05f) gfx_icon("chevron-left", 14, RAIL_W + 3, SHELF_Y - 7, C_MUTED, 200);
+    if (c->scroll > 0.05f) gfx_icon("chevron-left", 14, LEFT + 3, SHELF_Y - 7, C_MUTED, 200);
     if (c->scroll < (float)(c->n - SHELF_SHOWN) - 0.05f) gfx_icon("chevron-right", 14, SCREEN_W - 17, SHELF_Y - 7, C_MUTED, 200);
 
-    /* the selection's details, where the list's expanded row was (Settings: its control on the right) */
+    /* the selection's details, where the list's expanded row was */
     if (e) {
-        int tx = DETAIL_X, py = DETAIL_Y, cw = 0;
-        if (c->kind == CK_SETTINGS) cw = settings_control(e, SCREEN_W - 16, py + gfx_line_height(FONT_TITLE) / 2 + 1, alpha) + 12;
+        int tx = DX, py = DETAIL_Y;
         if (e->fav) { gfx_star(15, tx, py + (gfx_line_height(FONT_TITLE) - 15) / 2, C_STAR, alpha); tx += 20; }
-        mtext(FONT_TITLE, tx, py, e->title, C_TEXT, alpha, SCREEN_W - 16 - tx - cw, g_sel_since);
+        mtext(FONT_TITLE, tx, py, e->title, C_TEXT, alpha, SCREEN_W - 16 - tx, g_sel_since);
         {
             const char *d = e->desc[0] ? e->desc : is_builtin(e) ? e->tags : "";   /* (a built-in app's is in its tags) */
-            if (d[0]) gfx_text_wrapped(FONT_SMALL, DETAIL_X, py + 22, d, C_SUB, alpha, SCREEN_W - 16 - DETAIL_X, 14, 2);
+            if (d[0]) gfx_text_wrapped(FONT_SMALL, DX, py + 22, d, C_SUB, alpha, SCREEN_W - 16 - DX, 14, 2);
             detail_line(e, s, sizeof(s));
-            mtext(FONT_SMALL, DETAIL_X, d[0] ? py + 54 : py + 24, s, c->kind == CK_SETTINGS ? C_SUB : 0x7fb2f5, alpha, SCREEN_W - 16 - DETAIL_X, g_sel_since);
+            mtext(FONT_SMALL, DX, d[0] ? py + 54 : py + 24, s, 0x7fb2f5, alpha, SCREEN_W - 16 - DX, g_sel_since);
         }
     }
 }
@@ -3168,7 +3225,6 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
     else if (g_ncat) {
         waves(dt);
         draw_status();
-        draw_rail(dt);
         draw_list(dt);
         draw_hints();
         if (g_mode == M_DETAILS) draw_details(dt);

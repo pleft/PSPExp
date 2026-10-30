@@ -14,64 +14,64 @@ buttons; the board needs no screen, keyboard or mouse.
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
 | START | the menu: what you can do with the highlighted item, then the screen's own (in a keyboard: done; in the terminal: Enter) |
 | SELECT, held | in the launcher: the terminal (and back) |
-| L / R | the other tab, panel or page |
+| L / R | the other section, tab, panel or page |
 | ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + L twice a screenshot, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
 
 ## The launcher
 
-It opens on **Games**, ready to play: what you play first. Three sections
-run down the left as the **rail**, each with its icon in its own colour:
-**Games**, **Apps** and **Settings**; up and down move between them, and
-the one you are on glows blue. Each section's **shelf** runs to its right: games and ROMs as discs
-with their cover in the window, apps and settings as icon tiles. The one
-you are on is larger and glows; its description shows underneath, and who
-draws it: **PSP renderer** (the PSP's graphics chip, most games) or **Board
-GPU renderer** (the board's own graphics chip, each frame sent to the PSP
-as a picture: SuperTuxKart, the Nintendo 64 on a Pi).
+Three sections run along the top: **Games**, **Apps** and **Settings**;
+**L and R** move between them (round from the last to the first). It opens
+on Games, ready to play.
 
-**Games** holds everything you play, on one shelf, with **tabs** across the
-top that **L and R** step through (round from the last to the first):
+**Games** has its lists down the left, with how many each holds; **up and
+down** move between them, and **left and right** along the shelf of discs,
+each with its cover in the window:
 
-- **All**: every game and ROM. Your **favourites** come first, each with a
-  yellow star before its name, then what you played last, then the rest
-  from A to Z. So when you switch on, cross plays your first favourite, or,
-  with none, the game you were playing;
+- **Favourites**: the games you marked with **square** (a yellow star before
+  their name, wherever they are);
 - **PSP**: your own PSP games kept on the board (ISO, CSO, or a zip holding
   one, in `roms/psp`), each with its own icon from the disc. The PSP runs
   them itself, not an emulator, and PSPExp comes back when you leave the
   game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP);
-- **your board's own games**, the tab named after it (Raspberry Pi 400,
-  GameShell): the games installed from Packages;
-- then one tab for each system you have ROMs for (Mega Drive, SNES, Game Boy
-  Advance...).
+- **your board's own games**, named after it (Raspberry Pi 400, GameShell):
+  the games installed from Packages;
+- then one list for each system you have ROMs for (Mega Drive, SNES, Game
+  Boy Advance...).
+
+In each, your favourites come first, then what you played last, then the
+rest from A to Z. It opens on your favourites, or, with none, where the game
+you played last is, on it. The one you are on is larger and glows; its
+description shows underneath, and a line saying what it is and whether you
+played it lately (its size, the file and who draws it are in **Details**,
+triangle).
 
 ```
- 12:04 (bell)2                                    music  headphones 40%  wifi  76%
- [GAMES] | L  [All]  PSP  Raspberry Pi 400  Mega Drive  >  R      56 games
- [apps]  |   (DISC)   (disc)   (disc)   (disc)   (disc)  >
- [gear]  | * Chrono Tr. * Super Ma.  Hurrican  SuperTuxKart  OpenTyrian
-         | * Chrono Trigger
-         | Super Nintendo  ·  played lately
- (X) Play  (/\) Details                                               START Menu
+ 12:04 (bell)2      L  [Games]  Apps  Settings  R        wifi  76%
+ * Favourites   2 |  (DISC)   (disc)   (disc)   (disc)  >
+   PSP         10 |  Streets of Rage 2  Sonic 2  Gunstar Heroes ...
+   Raspberry Pi 3 |
+   Mega Drive    4 | Streets of Rage 2
+   N64           4 | Mega Drive  ·  played last
+ (X) Play  (/\) Details                                      START Menu
 ```
+
+**Apps** is a shelf of tiles (left / right). **Settings** is one list
+(below).
 
 The top bar keeps to what tells you something: the clock; the **bell**, only
-while there is news (with how many); on the right a note while music is
-loaded, Bluetooth headphones and their volume, the board's network, the
-board's own battery when it has one (the GameShell's, its icon before it),
-and the PSP's battery. Under each game a line says what it is and whether
-you played it lately; its size, the file and who draws it are in **Details**
-(triangle). The bottom row shows at most three buttons; square (favourites)
-and SELECT (notifications) work everywhere, and START's menu has them too.
-
-Coming back to Games from Apps or Settings, it is on the tab you left.
+while there is news (with how many); the sections; on the right a note while
+music is loaded, Bluetooth headphones and their volume, the board's network,
+the board's own battery when it has one (the GameShell's, its icon before
+it), and the PSP's battery. The bottom row shows at most three buttons;
+square (favourites) and SELECT (notifications) work everywhere, and START's
+menu has them too.
 
 | Button | In the launcher |
 |---|---|
-| up / down | the previous / next section on the rail |
-| left / right | move along the shelf |
-| L / R | Games and Settings: the previous / next tab; Apps: five at a time along the shelf |
-| cross | play, or open |
+| L / R | the previous / next section: Games, Apps, Settings |
+| up / down | Games: the previous / next list on the left; Settings: its options |
+| left / right | along the shelf; on a Settings choice, its value |
+| cross | play, open, or change a setting |
 | square | a game or ROM: make it a favourite, or no longer one |
 | triangle | details: description, how it draws, size, when last played |
 | START | the menu: Play, Add to favourites, Details, **Search** (everything: games, apps and every ROM, by name), Notifications, Restart PSPExp and Power off the board (each asked again) |
@@ -361,25 +361,21 @@ keyboard types into it too.
 
 ## Settings
 
-Settings works like Games: its groups are tabs that **L / R** step through
-(Network, Sound, Recording, Clock, Library, This PSP, This board), each a
-shelf of tiles, and **left / right** move along them. An option that is on
-or off has a small dot in its tile's corner while on (a ring while off), so
-a group reads at a glance. Under the tiles, beside the highlighted option's
-name, is what it is set to and what **cross** does:
+Settings is one list, its options under group headings, each with what it
+is set to on the right. **Up and down** move along it; **cross** changes the
+highlighted one, and the hint at the bottom says how:
 
-- a **choice** shows all its values side by side, the current one filled
-  (Clip length: **15 s** 30 s 60 s); cross moves to the next;
-- **on / off** is a switch with its word; cross flips it;
-- an option with a page of its own shows where it stands and **›** (the
-  network you are on, the time zone; About: **Open**); cross opens it;
-- something to do is a button with its name (**Refresh**, **Restart**,
-  **Power off**; Restart and Power off ask for a second press).
+- **on / off** (Clips, Box art, SSH...) is a switch: cross flips it;
+- a **choice** (Clip length, Quality) shows all its values side by side
+  while highlighted, the current one filled: **left / right** or cross move
+  it;
+- an option with **›** opens its own page (a list of networks, the time
+  zones, About);
+- the rest do what they say (Refresh library; Restart and Power off ask for
+  a second press).
 
-The hint at the bottom says the same: **Next: 30 s**, **Turn off**, **Open**.
 When something is waiting, an update for the PSP or a restart for a new
-PSPExp, it is the first tab, **Ready**, with a green **Install** (or
-**Restart PSPExp**) button.
+PSPExp, it comes first, under **Ready**.
 
 | Group | |
 |---|---|
@@ -388,7 +384,7 @@ PSPExp, it is the first tab, **Ready**, with a green **Install** (or
 | Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size ([Recording](recording.md); what they made is in Apps > Gallery) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
-| This PSP | PSPExp plugin: on to start the PSP tab's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
+| This PSP | PSPExp plugin: on to start the PSP list's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
 | This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
 When there is something to do, it comes first, before the groups:

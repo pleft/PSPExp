@@ -627,6 +627,36 @@ PSP-1000 at 1:1 (All, the PSP tab, Settings, Apps; its battery in the top
 bar), and docs/images' launcher-home.png and psp-section.png taken again
 there.
 
+**Step 4, the same day: no rail.** Settings went through a list, tabs of
+tiles with values under them (switches, pills, then the hint row's key
+badges) and values in a panel beside the name; each was more than changing
+a setting should take. The cause was the rail: owning up / down
+everywhere, it left no section a plain list. So the rail went:
+- **The sections along the top**, `draw_sections` in the top bar between
+  the clock (and bell) and the status icons: L, Games · Apps · Settings,
+  R; **L / R** move between them (`section_step`, round), Games coming
+  back on the filter left (`g_last_filter`).
+- **Games' filters down the left** (`draw_filters`, a column of
+  `COL_SHOWN` rows that scrolls; up / down, `filter_step`): Favourites
+  (`CK_FAVS`, there with none, "Square on a game ... adds it here"), PSP,
+  the board's own games, each system with ROMs, each with its icon (a
+  system's console picture) and how many. There is no All (dropped: it
+  had no reason to exist). In each filter the favourites first, then by
+  when last played, then A to Z (`cmp_all`). The shelf is right of the
+  column, four discs (`GAMES_X`). The launcher opens on Favourites when there
+  are some, else on the filter of the game played last, on it
+  (`start_cat`).
+- **Apps** a shelf of five tiles across the width.
+- **Settings one plain list** (`draw_settings`, headings `g_heads`, never
+  highlighted): up / down its options (`settings_step`), cross changes the
+  highlighted one, left / right step a choice (`choice_step`); on the right a
+  switch, a choice's values side by side while highlighted (the current one
+  filled; else its value), a page's state and a chevron.
+The highlight is one blue everywhere; the sections' colours are on their
+icons in the top bar. Checked on the PSP-1000 at 1:1: the start (Mega
+Drive, its last played game), PSP, Mega Drive, Apps, Settings, its end,
+the empty Favourites.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

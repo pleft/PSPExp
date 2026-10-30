@@ -2,21 +2,20 @@
 
 ## Since 1.3.0
 
-- **A simpler launcher: no home screen, one Games section.** PSPExp opens
-  on Games, ready to play. The rail is three sections, Games, Apps and
-  Settings, each with its icon in its own colour, the one you are on in blue. Games has every game and ROM on one
-  shelf, with tabs on **L / R**: All, PSP, your board's own games (named
-  after the board, "Raspberry Pi 400") and one per system you have ROMs
-  for; it replaces the Favourites, PSP, Games and Emulators sections and the
-  consoles' pages. In All your favourites come first, marked by a yellow star
-  before the name, then what you played last. Restart PSPExp and Power off
-  are in START's menu everywhere.
-- **Settings works like Games**: its groups are tabs on L / R, each a shelf
-  of tiles; an on / off option shows a dot on its tile while on. Beside the
-  highlighted option's name is what it is set to: a choice's values side by
-  side with the current one filled, a switch, where a page stands, or a
-  button; cross changes it, the hint saying how ("Next: 30 s", "Turn off").
-  What is waiting (an update for the PSP) is the first tab.
+- **A simpler launcher.** No home screen and no rail: three sections along
+  the top, Games, Apps and Settings, that **L / R** move between. PSPExp
+  opens on Games, ready to play. Games has its lists down the left (up /
+  down): Favourites, PSP, your board's own games (named after the board,
+  "Raspberry Pi 400") and one per system you have ROMs for, each a shelf of
+  discs (left / right), favourites first, marked by a yellow star before the
+  name, then what you played last; it replaces the Favourites, PSP, Games
+  and Emulators sections and the consoles' pages. Restart PSPExp and Power
+  off are in START's menu everywhere.
+- **Settings is one list**: up / down along it, each option's value on the
+  right (a switch for on / off; a choice's values side by side, the current
+  one filled, left / right to change it); cross changes the highlighted one,
+  the hint saying how ("Next: 30 s", "Turn off"). What is waiting (an update
+  for the PSP) comes first.
 - **Calmer screens**: the bottom row shows at most three buttons (cross,
   triangle Details, START Menu); the top bar the clock, the bell only when
   there is news, and on the right the music, headphones, network and the
