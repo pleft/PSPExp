@@ -865,27 +865,38 @@ connection's under small headings; up / down along it, whole rows only.
 Checked on the PSP-1000 through the GameShell at 1:1.
 
 **A ROM's description (2026-10-31, `gamedb.c`).** Game details of a ROM show
-its description, developer, year and genre from OpenVGDB (v29, 2021: 53,871
-releases, 29,549 with a description), the database OpenEmu and sselph's
-scraper use. Wikipedia was tried first and dropped (by name only, the wrong
-article for "Super Mario Bros. 3"); ScreenScraper and TheGamesDB need an
-account or a key and have quotas. OpenVGDB needs neither: each board
-downloads the release's zip once (9 MB, `curl`, the database taken out with
-`bsdtar`; 42 MB in ~/.cache/pspexp-launcher; a failure retried a day later)
-the first time a ROM's details open, Box art downloads on. SQLite 3.46.1 is
-vendored to read it (tools/pspexp-term/sqlite: single-threaded, no
-extensions; the console 0.7 MB larger). A ROM is matched in a child, once,
-the answer cached in facts/<system>/<rom>.txt (".none"): by CRC32 of its data
-(an NES header's 16 bytes, a Lynx header's 64 and a copier's 512 on a SNES
-ROM left out, as OpenVGDB hashes them; a zip's from its central directory), a
-PSP game by its disc's serial (DISC_ID ULES00151 as ULES-00151), else by its
-name as words, "the" and brackets left out ("Legend of Zelda, The - A Link to
-the Past" is "The Legend of Zelda: A Link to the Past"). Measured with the
-GameShell's 35 ROMs across ten systems: 30 by MD5 at first, 34 with the
-headers stripped, the last (a translation) by name. Shown: "Developer · year
-· genre" (the first genre), the description four lines at a time (up / down,
-`gfx_text_skip`), then as many technical rows as fit. Dreamcast is not in
-OpenVGDB.
+its description, developer, year, genre and players from the LaunchBox Games
+Database (its Metadata.zip, rebuilt daily: 190,154 games; Dreamcast 917, 827
+described; PSP 2,048, 1,944). Tried before it the same day: Wikipedia (by name
+only, the wrong article for "Super Mario Bros. 3"), ScreenScraper and
+TheGamesDB (an account or a key, quotas), GameDB (identification only, no
+descriptions) and OpenVGDB (by checksum, 34 of the GameShell's 35 ROMs, but
+from 2021 and without Dreamcast). Matched by name, LaunchBox found all 35
+alone, through its other names ("Pokemon Red Version", "The GG Shinobi"), so
+it is the one source. Each board streams the zip once (`curl | bsdtar -xOf -
+Metadata.xml Files.xml`, never kept whole) through a line parser into
+launchbox.sqlite (SQLite 3.46.1 vendored, tools/pspexp-term/sqlite): the
+games of the systems PSPExp plays, their names and other names as `norm()`
+makes them (words, lower case, "the" and bracketed tags left out), and the
+No-Intro / Redump file names; 40 MB. 69 s on the GameShell, download
+included; 2.5 s on a Mac. A ROM is looked up once, in a child: by its title,
+else its file name; the answer cached in facts/<system>/<rom>.txt (".none":
+not in that copy). Game details then has two views (square, its role of
+changing a view): About, "Developer · year · genre" (the first genre) and the
+whole description, its paragraphs apart (kept: the builder joins an
+overview's lines with "\n", the facts file writes them as "\\n"; up to 12 KB,
+LaunchBox's longest being 9.3 KB), and Info, the file's rows (tags, size,
+file, player, when played). Either scrolls under the fixed title with up /
+down (16 px a step, held: on). Before, rows that did not fit under a long
+description were left out, and descriptions were cut to four lines then to
+1,200 bytes. A download stopped by the console's stop (a restart, an
+upgrade) is not marked failed (its child takes the default SIGTERM); a real
+failure is tried again 10 minutes later, curl retrying three times itself,
+and the outcome is logged ("[gamedb] ..."). PSPEXP_LAUNCHBOX_URL fetches
+another copy (tests: file:///...). Tested on a Mac (the 110 MB copy streamed
+and built in 2.5 s; Sonic Adventure, a Dreamcast game, and a PSP game found)
+and on the PSP-1000 through the GameShell (76 s; Streets of Rage 2: About
+with its paragraphs, scrolled, and Info).
 
 ### 3.4 Status (2026-09-26)
 

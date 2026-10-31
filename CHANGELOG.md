@@ -33,10 +33,11 @@
   PSP. A screenshot's white dot (♪ + L twice) now shows just after the
   picture is taken, so it is no longer in it on a still screen.
 - **Descriptions of your ROMs** in Game details, with who made them, the
-  year and the genre: from OpenVGDB, a free database the board downloads
-  once (9 MB) and then reads offline, recognising each ROM by its contents
-  (34 of 35 test ROMs across ten systems found; PSP games by their disc).
-  Up / down read a long description.
+  year and the genre: from the LaunchBox Games Database, which the board
+  downloads once (110 MB, kept as 40 MB) and then reads offline, every
+  system PSPExp plays included (Dreamcast and PSP too; all 35 test ROMs
+  across ten systems found by name). Up / down scroll the whole description;
+  square shows the file's facts (size, file, emulator) instead.
 - **Search, Game details and About** in the same look as the rest: Search
   keeps the categories over it, its results a list like a platform's with
   the covers; Game details is a screen of its own (the art, the whole title,

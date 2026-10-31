@@ -271,38 +271,6 @@ static int fonts_init(const char *dir)
 
 int gfx_line_height(int font) { return F[font].height; }
 
-/* where the text goes on after n lines of w wrapped as gfx_text_wrapped wraps them; how many lines it
- * takes in all (lines: may be NULL) */
-const char *gfx_text_skip(int font, const char *s, int w, int n, int *lines)
-{
-    int k = 0;
-    const char *at = s;
-    while (*s) {
-        size_t l = 0, cut = 0;
-        char line[256];
-        if (k == n) at = s;
-        while (s[l] && l < sizeof(line) - 5) {
-            const char *nx = s + l;
-            size_t c, cl;
-            utf8_next(&nx);
-            cl = (size_t)(nx - (s + l));
-            for (c = 0; c < cl; c++) line[l + c] = s[l + c];
-            line[l + cl] = 0;
-            if (gfx_text_width(font, line) > w) break;
-            if (s[l] == ' ') cut = l;
-            l += cl;
-        }
-        if (s[l] && cut) l = cut;
-        if (!l) l = 1;
-        s += l;
-        while (*s == ' ') s++;
-        k++;
-    }
-    if (k <= n) at = s;
-    if (lines) *lines = k;
-    return at;
-}
-
 int gfx_text_wrapped(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int w, int line_h, int max_lines)
 {
     int n = 0;

@@ -67,11 +67,14 @@ triangle has **App details**.
 - Under the highlighted game a line says what it is and whether you played
   it lately; its size, the file and who draws it are in **Details**.
 - **Game details** of a ROM also say who made it, when and what kind of game
-  it is, and describe it (up / down read the rest). They come from OpenVGDB,
-  a free game database the board downloads once (9 MB) the first time you
-  open a ROM's details; then it works offline. Your ROM is recognised by its
-  contents, so its file name does not matter. Settings > Library > Box art
-  turns these downloads off, with the covers'.
+  it is, and describe it, the whole of it (up / down scroll it); **square**
+  shows what is known about the file instead (size, file name, which
+  emulator plays it), square again the description. They come from the
+  LaunchBox Games Database, which the board downloads once (110 MB, about a
+  minute on a GameShell) the first time you open a ROM's details; then it
+  works offline. Games are found by their name, including the other names
+  they go by, so "Pokemon - Red Version (UE) [S][!]" is found too.
+  Settings > Library > Box art turns these downloads off, with the covers'.
 
 ```
  PSPExp             USB · Raspberry Pi 400           16:40  PSP 67%
