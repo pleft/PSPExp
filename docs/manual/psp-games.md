@@ -6,7 +6,7 @@ its own icon. Choose one and the PSP runs it itself, at its own speed, reading
 the game's disc from the board over the USB cable. Leave the game and you are
 back in PSPExp.
 
-![The launcher's Games, on the PSP list: your own PSP games, each with its icon](../images/psp-section.png)
+![The launcher's Games, the PSP platform open: your own PSP games, each with its icon](../images/psp-section.png)
 
 ## What you need
 
@@ -23,7 +23,7 @@ back in PSPExp.
 1. Copy your games into the **`roms/psp`** folder of the board's home folder
    (on a Raspberry Pi, `/home/pi/roms/psp`): with **Apps > Files** from a USB
    stick plugged into the board, for example.
-2. In **Games**, press **up / down** to the **PSP** list on the left.
+2. In **Games**, choose **PSP** in the grid of platforms and press cross.
 3. Choose a game and press cross. PSPExp hands the PSP over and the game
    starts as from the XMB.
 4. To come back, press **HOME** and choose **Exit Game**: PSPExp starts again

@@ -65,15 +65,15 @@
 #define C_ACCENT 0x5aa9ff
 #define C_STAR 0xfbbf24   /* a favourite's solid star, before its name */
 
-/* layout (2026-10-30: no rail; the sections along the top, L / R) */
-/* Games' filters down the left (Favourites, PSP, the board's, each system with ROMs: up / down) */
-#define COL_X       6
-#define COL_W       108
-#define COL_TOP     32
-#define COL_ROW     20
-#define COL_SHOWN   10
-#define GAMES_X     122     /* Games' shelf and details: right of the column */
-/* the shelf: discs (games, ROMs) or tiles (apps) left to right */
+/* layout (2026-10-31: no rail; the sections along the top, L / R; one choice on each screen) */
+/* a grid (Games' platforms, Apps): four across, scrolled by rows */
+#define GRID_COLS   4
+#define GRID_W      106
+#define GRID_GAP    8
+#define GRID_TOP    34
+/* a platform's shelf of discs, left to right, whole discs only */
+#define SHELF_X0    66
+#define SHELF_SHOWN 5
 #define SHELF_PITCH 84
 #define SHELF_Y     104     /* item centre */
 #define SHELF_LABEL 150
@@ -83,9 +83,9 @@
 
 /* ---- categories ------------------------------------------------------------------------ */
 
-/* Games' filters: CK_FAVS the favourites, CK_GAMES the board's own games, CK_SYSTEM a system's ROMs
- * (the PSP's too) */
-enum { CK_FAVS, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
+/* Games' platforms (CK_PLATS: the grid of them; each opens one of: CK_FAVS the favourites, CK_GAMES
+ * the board's own games, CK_SYSTEM a system's ROMs, the PSP's too) */
+enum { CK_PLATS, CK_FAVS, CK_GAMES, CK_SYSTEM, CK_APPS, CK_SETTINGS };
 
 /* the rail's sections, each its colour on the rail and in its highlights (2026-10-30) */
 #define COL_GAMES    0x818cf8
@@ -97,7 +97,7 @@ typedef struct Cat {
     uint32_t col;
     int kind, sys;
     int hidden;             /* (unused since the rail went) */
-    int tab;                /* one of Games' filters (the column on the left) */
+    int tab;                /* one of Games' platforms (opened from the grid; circle goes back to it) */
     LEntry **it; int n;
     int sel; float scroll;
 } Cat;
@@ -140,6 +140,7 @@ static const uint32_t GRAD_TERMINAL[2] = { 0x1e293b, 0x0d9488 }, GRAD_FILES[2] =
 static char g_app_req[16];   /* a built-in app to show (appview.h), taken by the console */
 
 static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp(e->id, "a:", 2); }
+static LEntry g_plats[48];    /* Games' grid: one per platform (id "f:<its name>"), opening that platform's shelf */
 static LEntry g_heads[10];    /* Settings' headings (id "h:<group>"): rows of its list that are never highlighted */
 static int is_heading(const LEntry *e) { return !strncmp(e->id, "h:", 2); }
 
@@ -184,17 +185,16 @@ static int ssh_available(void);
 static int psp_not_a_game(const LEntry *e);
 static int is_psp_sys(int s);
 
-/* where the launcher opens (no home screen since 2026-10-30): Games, on the favourites when there
- * are some, else the filter of the game played last (on it), else the first one with games */
+/* where the launcher opens (no home screen since 2026-10-30): inside the platform of the game played
+ * last, on it (switch on, cross: playing again); else Games' grid of platforms */
 static int start_cat(void)
 {
-    int i, k, r, first = -1;
-    for (i = 0; i < g_ncat; i++) if (g_cat[i].tab && g_cat[i].kind == CK_FAVS && g_cat[i].n) return i;
+    int i, k, r;
     for (r = 0; r < L.nrecent; r++)
         for (i = 0; i < g_ncat; i++) if (g_cat[i].tab && g_cat[i].kind != CK_FAVS)
             for (k = 0; k < g_cat[i].n; k++) if (!strcmp(g_cat[i].it[k]->id, L.recent[r])) { g_cat[i].sel = k; return i; }
-    for (i = 0; i < g_ncat; i++) if (g_cat[i].tab) { if (first < 0) first = i; if (g_cat[i].n && g_cat[i].kind != CK_FAVS) return i; }
-    return first >= 0 ? first : 0;
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_PLATS) return i;
+    return 0;
 }
 
 /* where an entry was in what was played lately: 0 the last; 1000 not there */
@@ -241,11 +241,12 @@ static void cats_build(void)
         for (k = 0; k < L.nfavs; k++) if (!strcmp(L.favs[k], g_builtin[i].id)) g_builtin[i].fav = 1;
     }
     /* the sections: Games, Apps, Settings (L / R along the top; 2026-10-30: no home screen, no rail).
-     * Games' filters run down the left: Favourites (there with none too: square adds them), PSP
-     * (the PSP's own games: psp.system), the board's own games (named after the board), then each
-     * system with ROMs (made after Settings, below: the column keeps the order they are made in);
-     * in each, the favourites first, then by when last played */
+     * Games is a grid of platforms (made at the end, from them), each opening its shelf: Favourites
+     * (there with none too: square adds them), PSP (the PSP's own games: psp.system), the board's own
+     * games (named after the board), then each system with ROMs; in each, the favourites first, then
+     * by when last played */
     board_detect();
+    cat_add("Games", "gamepad-2", COL_GAMES, CK_PLATS, "platform");
     c = cat_add("Favourites", "star", COL_GAMES, CK_FAVS, "favourite");
     c->tab = 1;
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME && L.e[i].fav) cat_push(c, &L.e[i]);
@@ -324,10 +325,24 @@ static void cats_build(void)
         for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
         if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
     }
+    {   /* Games' grid: the platforms, in the order made */
+        Cat *grid = &g_cat[0];
+        int np = 0;
+        for (i = 0; i < g_ncat && np < (int)(sizeof(g_plats) / sizeof(g_plats[0])); i++) if (g_cat[i].tab) {
+            LEntry *e = &g_plats[np++];
+            memset(e, 0, sizeof(*e));
+            snprintf(e->id, sizeof(e->id), "f:%s", g_cat[i].name);
+            snprintf(e->title, sizeof(e->title), "%s", g_cat[i].name);
+            snprintf(e->icon, sizeof(e->icon), "%s", g_cat[i].icon);
+            snprintf(e->desc, sizeof(e->desc), "%d %s%s", g_cat[i].n, g_cat[i].kind == CK_FAVS ? "favourite" : "game", g_cat[i].n == 1 ? "" : "s");
+            e->type = LT_TOOL; e->sys = g_cat[i].kind == CK_SYSTEM ? g_cat[i].sys : -1;
+            cat_push(grid, e);
+        }
+    }
     /* back to where we were */
     g_cur = -1;
     for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
-    if (g_cur < 0) { g_cur = start_cat(); keep_sel = 0; keep_scroll = 0; }
+    if (g_cur < 0) { g_cur = start_cat(); keep_sel = g_cat[g_cur].sel; keep_scroll = 0; }
     c = &g_cat[g_cur];
     c->sel = keep_sel < c->n ? keep_sel : (c->n ? c->n - 1 : 0);
     c->scroll = keep_scroll;
@@ -365,14 +380,15 @@ static void cat_icon(const Cat *c, int px, int x, int y, uint32_t rgb, int alpha
     gfx_icon(c->icon, px, x, y, rgb, alpha);
 }
 
-/* the sections along the top: 0 Games (its filters), 1 Apps, 2 Settings */
-static int section_of(const Cat *c) { return c->tab ? 0 : c->kind == CK_APPS ? 1 : 2; }
+/* the sections along the top: 0 Games (its grid and platforms), 1 Apps, 2 Settings */
+static int section_of(const Cat *c) { return c->tab || c->kind == CK_PLATS ? 0 : c->kind == CK_APPS ? 1 : 2; }
+static int is_plat_item(const LEntry *e) { return !strncmp(e->id, "f:", 2); }
 
 /* ---- state ------------------------------------------------------------------------------ */
 
 enum { M_BROWSE, M_SEARCH, M_DETAILS, M_ABOUT, M_PICK, M_TEXT };
 static int g_mode = M_BROWSE;
-static int g_last_filter = -1;        /* Games' filter last shown: L / R come back to it */
+static int g_last_games = -1;         /* where Games was left (its grid or a platform): L / R come back to it */
 static char g_np_title[160]; static int g_np_on, g_np_paused;   /* what Music plays, as last drawn */
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
@@ -936,8 +952,11 @@ static void run_action(LEntry *e, uint64_t now)
 
 
 static void start_entry(LEntry *e, uint64_t now);
+static void plat_open(const LEntry *e, uint64_t now);
+static int is_plat_item(const LEntry *e);
 static void launch(LEntry *e, uint64_t now)
 {
+    if (is_plat_item(e)) { plat_open(e, now); return; }   /* (a platform: its shelf) */
     if (e->type == LT_ACTION) { run_action(e, now); return; }
     if (is_builtin(e)) { lib_recent_push(&L, e->id); run_action(e, now); cats_build(); return; }
     if ((g_sheet_n = lib_controls(&L, e, g_sheet_ctl, sizeof(g_sheet_ctl))) > 0) {   /* its controls first */
@@ -1032,11 +1051,8 @@ int launcher_category(const char *name)
 {
     int i;
     for (i = 0; i < g_ncat; i++)
-        if (!strcmp(g_cat[i].name, name)) { g_cur = i; if (g_cat[i].tab) g_last_filter = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
-    if (!strcmp(name, "Games") || !strcmp(name, "All") || !strcmp(name, "Emulators")) {   /* (sections before 2026-10-30: tests, notifications) */
-        g_cur = start_cat(); g_last_filter = g_cur; g_sel_since = pspexp_time_us(); g_dirty = 1;
-        return 1;
-    }
+        if (!strcmp(g_cat[i].name, name)) { g_cur = i; if (section_of(&g_cat[i]) == 0) g_last_games = i; g_sel_since = pspexp_time_us(); g_dirty = 1; return 1; }
+    if (!strcmp(name, "All") || !strcmp(name, "Emulators")) return launcher_category("Games");   /* (sections before 2026-10-30: tests, notifications) */
     for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_SETTINGS) {   /* a Settings group: Settings, on its first setting */
         int k;
         for (k = 0; k + 1 < g_cat[i].n; k++) if (is_heading(g_cat[i].it[k]) && !strcmp(g_cat[i].it[k]->title, name)) {
@@ -1874,7 +1890,7 @@ static void show_cat(int c, int dir, uint64_t now)
 {
     if (c == g_cur) return;
     g_cur = c;
-    if (g_cat[c].tab) g_last_filter = c;
+    if (section_of(&g_cat[c]) == 0) g_last_games = c;
     g_list_anim = 0; g_list_dir = (float)dir;
     memset(g_expand, 0, sizeof(g_expand));
     g_sel_since = now;
@@ -1886,18 +1902,39 @@ static void section_step(int d, uint64_t now)
 {
     int sec = (section_of(&g_cat[g_cur]) + d + 3) % 3, i;
     if (sec == 0) {
-        if (g_last_filter >= 0 && g_last_filter < g_ncat && g_cat[g_last_filter].tab) show_cat(g_last_filter, d, now);
+        if (g_last_games >= 0 && g_last_games < g_ncat && section_of(&g_cat[g_last_games]) == 0) show_cat(g_last_games, d, now);
         else show_cat(start_cat(), d, now);
         return;
     }
-    for (i = 0; i < g_ncat; i++) if (!g_cat[i].tab && section_of(&g_cat[i]) == sec) { show_cat(i, d, now); return; }
+    for (i = 0; i < g_ncat; i++) if (section_of(&g_cat[i]) == sec) { show_cat(i, d, now); return; }
 }
 
-/* Games' column, up / down: the filter above (d -1) or below (1), stopping at its ends */
-static void filter_step(int d, uint64_t now)
+/* a grid (Games' platforms, Apps): the d-pad in two directions, stopping at its edges */
+static void grid_move(int dx, int dy, uint64_t now)
+{
+    Cat *c = &g_cat[g_cur];
+    int s = c->sel + dx + dy * GRID_COLS;
+    if (!c->n || s < 0) return;
+    if (dx && (s / GRID_COLS != c->sel / GRID_COLS)) return;   /* (left / right stay on the row) */
+    if (s >= c->n) { if (dy > 0 && c->sel / GRID_COLS < (c->n - 1) / GRID_COLS) s = c->n - 1; else return; }   /* (down to a shorter last row: its last) */
+    c->sel = s; g_sel_since = now; g_dirty = 1;
+}
+
+/* a platform from the grid (cross), and back to the grid on it (circle) */
+static void plat_open(const LEntry *e, uint64_t now)
 {
     int i;
-    for (i = g_cur + d; i >= 0 && i < g_ncat; i += d) if (g_cat[i].tab) { show_cat(i, d, now); return; }
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].tab && !strcmp(g_cat[i].name, e->title)) { show_cat(i, 1, now); return; }
+}
+static void plat_back(uint64_t now)
+{
+    int i, k;
+    const char *name = g_cat[g_cur].name;
+    for (i = 0; i < g_ncat; i++) if (g_cat[i].kind == CK_PLATS) {
+        for (k = 0; k < g_cat[i].n; k++) if (!strcmp(g_cat[i].it[k]->title, name)) g_cat[i].sel = k;
+        show_cat(i, -1, now);
+        return;
+    }
 }
 
 /* Settings' list, up / down: the next setting, past the headings, stopping at its ends; 1 when it moved */
@@ -1982,6 +2019,7 @@ static void fav_toggle(LEntry *e, uint64_t now)
 /* triangle: a game's, a ROM's, an app's Details card; what a setting or a built-in app is, in a toast */
 static void show_more(LEntry *e, uint64_t now)
 {
+    if (is_heading(e) || is_plat_item(e)) return;
     if (e->type == LT_ACTION || is_builtin(e)) toast(e->icon, e->tags, now);
     else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
 }
@@ -2077,15 +2115,20 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         if (up) settings_step(-1, now);
         if (down) settings_step(1, now);
         if (e && (left || right) && row_kind(e) == ROW_CHOICE) choice_step(e, left ? -1 : 1);
-    } else {
-        if (g_cat[g_cur].tab && up) filter_step(-1, now);
-        if (g_cat[g_cur].tab && down) filter_step(1, now);
+    } else if (g_cat[g_cur].kind == CK_PLATS || g_cat[g_cur].kind == CK_APPS) {   /* a grid */
+        if (left) grid_move(-1, 0, now);
+        if (right) grid_move(1, 0, now);
+        if (up) grid_move(0, -1, now);
+        if (down) grid_move(0, 1, now);
+    } else {   /* a platform's shelf; circle back to the grid */
         if (left) move_sel(-1, (pressed & PSPEXP_BUTTON_LEFT) != 0, now);   /* wraps on a fresh press, stops while repeating */
         if (right) move_sel(1, (pressed & PSPEXP_BUTTON_RIGHT) != 0, now);
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { plat_back(now); return; }
     }
     /* (circle: nothing; it went back from a Settings group's page or to the home screen) */
     e = cur_entry();
     if (!e || is_heading(e)) return;
+    if ((pressed & PSPEXP_BUTTON_CROSS) && is_plat_item(e)) { plat_open(e, now); return; }
     if (pressed & PSPEXP_BUTTON_CROSS) launch(e, now);
     if ((pressed & PSPEXP_BUTTON_SQUARE) && can_fav(e)) fav_toggle(e, now);
     if (pressed & PSPEXP_BUTTON_TRIANGLE) show_more(e, now);
@@ -2398,41 +2441,52 @@ static void draw_status(void)
     draw_sections(left_end, x - 8);
 }
 
-/* Games' filters down the left (up / down): each its icon (a system's console picture), its name and
- * how many; the column scrolls to keep the one shown in view */
-static const char *tab_label(const Cat *c);
-static void draw_filters(float dt)
+/* a grid (Games' platforms, Apps): four across, two rows in view, scrolled by rows; each tile its
+ * picture (a console's, the favourites' star, an app's icon), its name, and for a platform how many */
+static void draw_grid(Cat *c, float dt, int alpha)
 {
-    static float top;
-    int idx[48], n = 0, at = 0, i, first;
-    char cnt[16];
-    for (i = 0; i < g_ncat && n < 48; i++) if (g_cat[i].tab) { if (i == g_cur) at = n; idx[n++] = i; }
-    first = at - COL_SHOWN / 2;
-    if (first > n - COL_SHOWN) first = n - COL_SHOWN;
-    if (first < 0) first = 0;
-    top = ease(top, (float)first, 14.0f, dt, 0.01f);
-    if (top > 0.01f && fabsf(top - first) > 0.01f) g_dirty = 1;
-    gfx_set_clip(0, COL_TOP - 2, GAMES_X - 4, COL_SHOWN * COL_ROW + 4);
-    for (i = 0; i < n; i++) {
-        const Cat *c = &g_cat[idx[i]];
-        int y = COL_TOP + (int)lroundf((i - top) * COL_ROW), on = i == at, w;
-        if (y < COL_TOP - COL_ROW || y > COL_TOP + COL_SHOWN * COL_ROW) continue;
-        if (on) {
-            gfx_shadow(NINE_SHADOW10, COL_X, y, COL_W, COL_ROW - 2, 0x40a0ff, 150);
-            gfx_nine(NINE_R6, COL_X, y, COL_W, COL_ROW - 2, 0x1e3a6e, 255);
+    const int th = c->kind == CK_PLATS ? 86 : 78, rows_in_view = 2;
+    int i, x0 = (SCREEN_W - (GRID_COLS * GRID_W + (GRID_COLS - 1) * GRID_GAP)) / 2, row = c->sel / GRID_COLS, nrows = (c->n + GRID_COLS - 1) / GRID_COLS;
+    float target = c->scroll;
+    if (row < target) target = (float)row;
+    if (row > target + rows_in_view - 1) target = (float)(row - rows_in_view + 1);
+    c->scroll = ease(c->scroll, target, 14.0f, dt, 0.01f);
+    gfx_set_clip(0, GRID_TOP - 4, SCREEN_W, rows_in_view * (th + GRID_GAP) + 4);
+    for (i = 0; i < c->n; i++) {
+        const LEntry *e = c->it[i];
+        int x = x0 + (i % GRID_COLS) * (GRID_W + GRID_GAP), y = GRID_TOP + (int)lroundf((i / GRID_COLS - c->scroll) * (th + GRID_GAP)), on = i == c->sel;
+        uint32_t ink = on ? 0xffffff : 0xb9c8e0;
+        int done = 0;
+        if (y + th < GRID_TOP - 4 || y > GRID_TOP + rows_in_view * (th + GRID_GAP)) continue;
+        if (on) gfx_shadow(NINE_SHADOW14, x, y, GRID_W, th, 0x40a0ff, 230 * alpha / 255);
+        gfx_nine(NINE_R14, x, y, GRID_W, th, on ? 0x1e3a6e : 0x16223c, alpha);
+        if (is_plat_item(e)) {
+            const char *n = e->title;
+            if (!strcmp(e->icon, "star")) { gfx_star(30, x + (GRID_W - 30) / 2, y + 14, C_STAR, alpha); done = 1; }
+            else if (e->sys >= 0 && L.sys[e->sys].thumbs[0]) {   /* a console's picture (assets/systems) */
+                char p[600];
+                snprintf(p, sizeof(p), "%s/systems/%s.png", g_assets, L.sys[e->sys].thumbs);
+                done = gfx_picon(p, 36, x + (GRID_W - 36) / 2, y + 12, ink, alpha) != 0;
+            }
+            if (!done) gfx_icon(e->icon[0] ? e->icon : "gamepad", 30, x + (GRID_W - 30) / 2, y + 14, ink, alpha);
+            {
+                int f = on ? FONT_BODY : FONT_SMALL, w = gfx_text_width(f, n);
+                if (w > GRID_W - 10) { if (e->sys >= 0 && L.sys[e->sys].shortname[0]) n = L.sys[e->sys].shortname; w = gfx_text_width(f, n); }
+                if (w > GRID_W - 10) w = GRID_W - 10;
+                gfx_text(f, x + (GRID_W - w) / 2, y + 52, n, on ? 0xffffff : C_TEXT, alpha, GRID_W - 10);
+                w = gfx_text_width(FONT_BADGE, e->desc);
+                gfx_text(FONT_BADGE, x + (GRID_W - w) / 2, y + 68, e->desc, on ? 0xd6e4ff : C_MUTED, alpha, 0);
+            }
+        } else {   /* an app */
+            int f = on ? FONT_BODY : FONT_SMALL, w = gfx_text_width(f, e->title);
+            gfx_icon(e->icon[0] ? e->icon : type_icon(e), 28, x + (GRID_W - 28) / 2, y + 16, ink, alpha);
+            if (w > GRID_W - 10) w = GRID_W - 10;
+            gfx_text(f, x + (GRID_W - w) / 2, y + 54, e->title, on ? 0xffffff : C_TEXT, alpha, GRID_W - 10);
         }
-        if (c->kind == CK_FAVS) gfx_star(11, COL_X + 6, y + 3, on ? 0xffffff : C_STAR, 255);
-        else cat_icon(c, 12, COL_X + 5, y + 3, on ? 0xffffff : C_SUB, 255);
-        snprintf(cnt, sizeof(cnt), "%d", c->n);
-        w = gfx_text_width(FONT_BADGE, cnt);
-        gfx_text(FONT_BADGE, COL_X + COL_W - 6 - w, y + 3, cnt, on ? 0xdbe8ff : C_MUTED, 255, 0);
-        gfx_text(on ? FONT_BODY : FONT_SMALL, COL_X + 22, y + (COL_ROW - 2 - gfx_line_height(on ? FONT_BODY : FONT_SMALL)) / 2,
-                 tab_label(c), on ? 0xffffff : C_SUB, 255, COL_W - 30 - w);
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
-    if (top > 0.05f) gfx_icon("chevron-up", 10, COL_X + COL_W / 2 - 5, COL_TOP - 11, C_MUTED, 200);
-    if (top < (float)(n - COL_SHOWN) - 0.05f) gfx_icon("chevron-down", 10, COL_X + COL_W / 2 - 5, COL_TOP + COL_SHOWN * COL_ROW + 1, C_MUTED, 200);
-    gfx_rect(GAMES_X - 4, COL_TOP, 1, COL_SHOWN * COL_ROW, 0xffffff, 22);
+    if (c->scroll > 0.05f) gfx_icon("chevron-up", 10, SCREEN_W / 2 - 5, GRID_TOP - 12, C_MUTED, 200);
+    if (c->scroll < (float)(nrows - rows_in_view) - 0.05f) gfx_icon("chevron-down", 10, SCREEN_W / 2 - 5, GRID_TOP + rows_in_view * (th + GRID_GAP) - 2, C_MUTED, 200);
 }
 
 static void human_size(long long b, char *out, size_t n)
@@ -2484,14 +2538,6 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         break;
     default: snprintf(s, n, "%s", e->tags); break;
     }
-}
-
-/* a filter's name: Favourites, PSP, the board's, a system's (its short one when the name is long:
- * "Nintendo Entertainment System" is NES) */
-static const char *tab_label(const Cat *c)
-{
-    if (c->kind == CK_SYSTEM && c->sys >= 0 && L.sys[c->sys].shortname[0] && gfx_text_width(FONT_BODY, c->name) > COL_W - 46) return L.sys[c->sys].shortname;
-    return c->name;
 }
 
 /* games and ROMs are discs; apps, tools and settings tiles */
@@ -2611,8 +2657,7 @@ static void draw_settings(Cat *c, float dt, int alpha)
 static void draw_list(float dt)
 {
     Cat *c = &g_cat[g_cur];
-    /* Games right of its column (four discs); Apps the whole width (five tiles) */
-    const int DX = c->tab ? GAMES_X + 6 : 20, SHELF_X0 = c->tab ? GAMES_X + 50 : 66, SHELF_SHOWN = c->tab ? 4 : 5, LEFT = c->tab ? GAMES_X : 0;
+    const int DX = 20;
     int i, alpha, dy, first, last;
     float target;
     char s[200];
@@ -2623,7 +2668,22 @@ static void draw_list(float dt)
 
     /* (no header: the top bar names the section, Games' column the filter) */
     if (c->kind == CK_SETTINGS) { draw_settings(c, dt, alpha); return; }
-    if (c->tab) draw_filters(dt);
+    if (c->kind == CK_PLATS || c->kind == CK_APPS) {   /* a grid, and the highlighted app's line under it */
+        draw_grid(c, dt, alpha);
+        if (e && !is_plat_item(e)) {
+            const char *d = e->desc[0] ? e->desc : is_builtin(e) ? e->tags : "";
+            gfx_text_wrapped(FONT_SMALL, DX, GRID_TOP + 2 * (78 + GRID_GAP) + 6, d, C_SUB, alpha, SCREEN_W - 2 * DX, 14, 2);
+        }
+        return;
+    }
+    {   /* a platform: its picture, name and how many, over its shelf */
+        int x = DX;
+        if (c->kind == CK_FAVS) { gfx_star(14, x, 33, C_STAR, alpha); x += 20; }
+        else { cat_icon(c, 16, x, 32, C_SUB, alpha); x += 22; }
+        x += gfx_text(FONT_TITLE, x, 30, c->name, C_TEXT, alpha, 300) + 8;
+        snprintf(s, sizeof(s), "%d %s%s", c->n, c->noun, c->n == 1 ? "" : "s");
+        gfx_text(FONT_SMALL, x, 34, s, C_MUTED, alpha, 0);
+    }
     if (!c->n) {
         int psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys), favs = c->kind == CK_FAVS;
         gfx_text(FONT_TITLE, DX, SHELF_Y - 10 + dy, favs ? "No favourites yet" : psp ? "No PSP games yet" : c->tab ? "No games yet" : "Nothing here yet", C_SUB, alpha, 0);
@@ -2647,7 +2707,7 @@ static void draw_list(float dt)
     first = (int)floorf(c->scroll) - 1; if (first < 0) first = 0;
     last = (int)ceilf(c->scroll) + SHELF_SHOWN + 1; if (last > c->n) last = c->n;
 
-    gfx_set_clip(LEFT, 26, SCREEN_W - LEFT, DETAIL_Y - 30);
+    gfx_set_clip(0, 50, SHELF_X0 + (SHELF_SHOWN - 1) * SHELF_PITCH + SHELF_PITCH / 2 + 3, DETAIL_Y - 54);   /* (whole discs only: the next one's edge and name not shown) */
     /* the others first, the selection last: its glow over its neighbours */
     for (i = first; i < last; i++) if (i != c->sel) {
         int cx = SHELF_X0 + (int)lroundf((i - c->scroll) * SHELF_PITCH);
@@ -2665,7 +2725,7 @@ static void draw_list(float dt)
         gfx_text(f, cx - (tw - (st ? st + 3 : 0)) / 2, SHELF_LABEL + dy, t, sel ? C_TEXT : C_SUB, alpha, mw);
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
-    if (c->scroll > 0.05f) gfx_icon("chevron-left", 14, LEFT + 3, SHELF_Y - 7, C_MUTED, 200);
+    if (c->scroll > 0.05f) gfx_icon("chevron-left", 14, 3, SHELF_Y - 7, C_MUTED, 200);
     if (c->scroll < (float)(c->n - SHELF_SHOWN) - 0.05f) gfx_icon("chevron-right", 14, SCREEN_W - 17, SHELF_Y - 7, C_MUTED, 200);
 
     /* the selection's details, where the list's expanded row was */
@@ -2725,7 +2785,8 @@ static void draw_hints(void)
      * notifications) work as before and are in START's menu */
     const char *go = !e ? "Open" : e->type == LT_ACTION ? "Select" : e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open";
     if (e) x = hint_btn(x, 'x', go);   /* (an empty section: nothing to open) */
-    if (e && e->type != LT_ACTION && !is_builtin(e)) x = hint_btn(x, 't', "Details");   /* (a built-in app's triangle only repeats what it is) */
+    if (e && e->type != LT_ACTION && !is_builtin(e) && !is_plat_item(e)) x = hint_btn(x, 't', "Details");   /* (a built-in app's triangle only repeats what it is) */
+    if (g_cat[g_cur].tab) x = hint_btn(x, 'o', "Platforms");   /* (a platform's shelf: back to the grid) */
     hint_right(SCREEN_W - 16, "START", "Menu");
 }
 

@@ -20,42 +20,39 @@ buttons; the board needs no screen, keyboard or mouse.
 ## The launcher
 
 Three sections run along the top: **Games**, **Apps** and **Settings**;
-**L and R** move between them (round from the last to the first). It opens
-on Games, ready to play.
+**L and R** move between them (round from the last to the first). Each
+screen shows one thing to choose from.
 
-**Games** has its lists down the left, with how many each holds; **up and
-down** move between them, and **left and right** along the shelf of discs,
-each with its cover in the window:
+**Games** is a grid of your platforms, each with its console's picture and
+how many games it holds: **Favourites** (the games you marked with
+**square**, a yellow star before their name wherever they are), **PSP**,
+your board's own games (named after it: Raspberry Pi 400, GameShell), then
+each system you have ROMs for. The d-pad moves around the grid; **cross**
+opens a platform: its games as a shelf of discs, each with its cover in the
+window (left / right), the favourites first, then what you played last,
+then the rest A to Z. **Cross** plays, **triangle** shows the details,
+**circle** goes back to the platforms. PSPExp opens inside the platform of
+the game you played last, on it: switch on, press cross, and you are playing
+again.
 
-- **Favourites**: the games you marked with **square** (a yellow star before
-  their name, wherever they are);
-- **PSP**: your own PSP games kept on the board (ISO, CSO, or a zip holding
-  one, in `roms/psp`), each with its own icon from the disc. The PSP runs
-  them itself, not an emulator, and PSPExp comes back when you leave the
-  game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP);
-- **your board's own games**, named after it (Raspberry Pi 400, GameShell):
-  the games installed from Packages;
-- then one list for each system you have ROMs for (Mega Drive, SNES, Game
-  Boy Advance...).
-
-In each, your favourites come first, then what you played last, then the
-rest from A to Z. It opens on your favourites, or, with none, where the game
-you played last is, on it. The one you are on is larger and glows; its
-description shows underneath, and a line saying what it is and whether you
-played it lately (its size, the file and who draws it are in **Details**,
-triangle).
+- **PSP** holds your own PSP games kept on the board (ISO, CSO, or a zip
+  holding one, in `roms/psp`), each with its own icon from the disc. The PSP
+  runs them itself, not an emulator, and PSPExp comes back when you leave
+  the game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
+- Under a game a line says what it is and whether you played it lately; its
+  size, the file and who draws it are in **Details**.
 
 ```
  12:04 (bell)2      L  [Games]  Apps  Settings  R        wifi  76%
- * Favourites   2 |  (DISC)   (disc)   (disc)   (disc)  >
-   PSP         10 |  Streets of Rage 2  Sonic 2  Gunstar Heroes ...
-   Raspberry Pi 3 |
-   Mega Drive    4 | Streets of Rage 2
-   N64           4 | Mega Drive  ·  played last
- (X) Play  (/\) Details                                      START Menu
+  [ * ]          [ PSP ]       [ Pi 400 ]     [ Lynx ]
+  Favourites     PSP           Raspberry Pi   Atari Lynx
+  2 favourites   10 games      3 games        3 games
+  [ DC ]         [ GB ]        [ GBA ]        [ MD ]
+ (X) Open                                               START Menu
 ```
 
-**Apps** is a shelf of tiles (left / right). **Settings** is one list
+**Apps** is the same grid of tiles; cross opens one.
+ **Settings** is one list
 (below).
 
 The top bar keeps to what tells you something: the clock; the **bell**, only
@@ -69,9 +66,9 @@ menu has them too.
 | Button | In the launcher |
 |---|---|
 | L / R | the previous / next section: Games, Apps, Settings |
-| up / down | Games: the previous / next list on the left; Settings: its options |
-| left / right | along the shelf; on a Settings choice, its value |
-| cross | play, open, or change a setting |
+| d-pad | around the grid; along a platform's shelf; up / down Settings' options, left / right a choice's value |
+| cross | open, play, or change a setting |
+| circle | from a platform's games back to the platforms |
 | square | a game or ROM: make it a favourite, or no longer one |
 | triangle | details: description, how it draws, size, when last played |
 | START | the menu: Play, Add to favourites, Details, **Search** (everything: games, apps and every ROM, by name), Notifications, Restart PSPExp and Power off the board (each asked again) |

@@ -4,12 +4,13 @@
 
 - **A simpler launcher.** No home screen and no rail: three sections along
   the top, Games, Apps and Settings, that **L / R** move between. PSPExp
-  opens on Games, ready to play. Games has its lists down the left (up /
-  down): Favourites, PSP, your board's own games (named after the board,
-  "Raspberry Pi 400") and one per system you have ROMs for, each a shelf of
-  discs (left / right), favourites first, marked by a yellow star before the
-  name, then what you played last; it replaces the Favourites, PSP, Games
-  and Emulators sections and the consoles' pages. Restart PSPExp and Power
+  opens inside the platform of the game you played last, on it. Games is a
+  grid of your platforms with their consoles' pictures: Favourites, PSP,
+  your board's own games (named after the board, "Raspberry Pi 400") and
+  one per system you have ROMs for; cross opens one, its games a shelf of
+  discs, favourites first (a yellow star before the name), then what you
+  played last; circle goes back. Apps is the same grid. It replaces the
+  Favourites, PSP, Games and Emulators sections. Restart PSPExp and Power
   off are in START's menu everywhere.
 - **Settings is one list**: up / down along it, each option's value on the
   right (a switch for on / off; a choice's values side by side, the current

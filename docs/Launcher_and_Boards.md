@@ -636,7 +636,7 @@ everywhere, it left no section a plain list. So the rail went:
   the clock (and bell) and the status icons: L, Games · Apps · Settings,
   R; **L / R** move between them (`section_step`, round), Games coming
   back on the filter left (`g_last_filter`).
-- **Games' filters down the left** (`draw_filters`, a column of
+- **Games' filters down the left** (step 5 replaced it with a grid; `draw_filters`, a column of
   `COL_SHOWN` rows that scrolls; up / down, `filter_step`): Favourites
   (`CK_FAVS`, there with none, "Square on a game ... adds it here"), PSP,
   the board's own games, each system with ROMs, each with its icon (a
@@ -656,6 +656,24 @@ The highlight is one blue everywhere; the sections' colours are on their
 icons in the top bar. Checked on the PSP-1000 at 1:1: the start (Mega
 Drive, its last played game), PSP, Mega Drive, Apps, Settings, its end,
 the empty Favourites.
+
+**Step 5, 2026-10-31: one choice on each screen.** Games' list column and
+the rows-of-shelves and strip ideas after it were each two things to manage
+on one screen. Games is now the order consoles and retro frontends use:
+choose the platform, then the game. Its first screen is a grid of platforms
+(`CK_PLATS`, the cat "Games", its items `g_plats` with ids "f:<name>":
+Favourites, PSP, the board's, each system with ROMs; `draw_grid`: four
+across, two rows in view, scrolled by rows, a console's picture from
+assets/systems, the name, how many); cross opens one (`plat_open`), its
+games a shelf of whole discs (`SHELF_X0`, five, clipped before the next
+one's edge and name), circle back to the grid on it (`plat_back`). The
+d-pad in a grid moves in two directions (`grid_move`). The launcher opens
+inside the platform of the game played last, on it (`start_cat`), else on
+the grid; L / R come back to where Games was left (`g_last_games`). Apps is
+the same grid (whole tiles; it had a sixth cut at the edge). Settings stays
+the plain list. Checked on the PSP-1000 at 1:1: the start (Mega Drive, its
+last played), the grid scrolled down, a platform, PSP, Apps, Settings, back
+to Games where it was left.
 
 ### 3.4 Status (2026-09-26)
 
