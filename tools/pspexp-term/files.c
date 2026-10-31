@@ -1135,9 +1135,9 @@ void files_render(PspExpContext *ctx, uint64_t now)
         snprintf(info, sizeof(info), "%d / %d   %d x %d", at, n, g_img_w, g_img_h);
         gfx_text(FONT_SMALL, UI_SCREEN_W - 8 - gfx_text_width(FONT_SMALL, info), 3, info, UI_SUB, 255, 0);
         gfx_rect(0, UI_HINT_Y - 4, UI_SCREEN_W, UI_SCREEN_H - UI_HINT_Y + 4, 0x000000, 150);
-        x = 16;
+        x = ui_hint_home();
         if (n > 1) x = ui_hint_cap(x, "LEFT/RIGHT", "Previous / next", UI_SUB);
-        x = ui_hint_btn(x, 'o', "Close");
+        x = ui_hint_btn(x, 'o', "Back");
         notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
@@ -1152,10 +1152,10 @@ void files_render(PspExpContext *ctx, uint64_t now)
         gfx_text(FONT_SMALL, UI_SCREEN_W - 16 - gfx_text_width(FONT_SMALL, pos), 12, pos, UI_MUTED, 255, 0);
         gfx_nine(NINE_R10, 8, 34, UI_SCREEN_W - 16, 210, 0x121724, 235);
         for (i = 0; i < rows && g_vtop + i < g_vn; i++) gfx_text(FONT_SMALL, 16, 40 + i * 14, g_vlines[g_vtop + i], UI_TEXT, 255, UI_SCREEN_W - 32);
-        x = 16;
+        x = ui_hint_home();
         x = ui_hint_cap(x, "UP/DOWN", "Scroll", UI_SUB);
         x = ui_hint_cap(x, "LEFT/RIGHT", "Page", UI_SUB);
-        x = ui_hint_btn(x, 'o', "Close");
+        x = ui_hint_btn(x, 'o', "Back");
         notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
@@ -1164,7 +1164,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
     ui_app_bar("folder-open", "Files");
     draw_panel(0);
     draw_panel(1);
-    x = 12;
+    x = g_over == O_NONE ? ui_hint_home() : 12;
     {   /* what cross does to the highlighted entry */
         Panel *p = act();
         const char *go = "Open";
@@ -1200,8 +1200,8 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 't', "Details");
     }
     if (g_over == O_NONE) {
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
         x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
+        ui_hint_start("Menu");
     }
     switch (g_over) {
     case O_DRIVES: draw_drives(); break;

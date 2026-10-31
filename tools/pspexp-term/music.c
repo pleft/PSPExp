@@ -1057,6 +1057,7 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
             if (st[0]) gfx_text(FONT_SMALL, (UI_SCREEN_W - gfx_text_width(FONT_SMALL, st)) / 2, UI_SCREEN_H - 38, st, UI_ACCENT, 255, 0);
         }
         if (g_msg[0]) gfx_text(FONT_BADGE, 16, UI_SCREEN_H - 62, g_msg, 0xff9a9a, 255, UI_SCREEN_W - 32);
+        x = ui_hint_home();
         x = ui_hint_btn(x, 'x', !pi.paused && !pi.ended ? "Pause" : "Play");
         x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Film, held: seek" : "Held: seek", UI_SUB);
         x = ui_hint_btn(x, 's', "Stop");
@@ -1098,7 +1099,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     else draw_queue();
     if (g_msg[0]) gfx_text(FONT_BADGE, 16, 236, g_msg, 0xff9a9a, 255, UI_SCREEN_W - 32);
     else if (g_note[0]) gfx_text(FONT_BADGE, 16, 236, g_note, UI_ACCENT, 255, UI_SCREEN_W - 32);
-    x = 12;
+    x = g_menu.open || g_info ? 12 : ui_hint_home();
     if (g_menu.open || g_info) {
         /* (the menu draws its own hints; the box has its button) */
     } else if (g_view == V_NOW) {
@@ -1108,19 +1109,19 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
         if (g_qn > 1 || have) x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Track, held: seek" : "Held: seek", UI_SUB);
         if (have) x = ui_hint_btn(x, 's', "Stop");
         x = ui_hint_btn(x, 'o', "Library");
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+        ui_hint_start("Menu");
     } else if (g_view == V_BROWSE) {
         x = ui_hint_btn(x, 'x', g_dir[0] && g_bsel < g_nspec ? "Play" : "Open / play");
         if (g_dir[0] || g_up == UP_FOLDER) x = ui_hint_btn(x, 's', "Add");
         if (g_dir[0] && lib_entry(g_bsel)) x = ui_hint_btn(x, 't', "Info");
         if (g_dir[0] || g_up) x = ui_hint_btn(x, 'o', "Up");
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+        ui_hint_start("Menu");
     } else {
         x = ui_hint_btn(x, 'x', "Play");
         x = ui_hint_btn(x, 's', "Remove");
         x = ui_hint_btn(x, 't', "Info");
         x = ui_hint_btn(x, 'o', "Library");
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+        ui_hint_start("Menu");
     }
     if (g_info) draw_info();
     if (g_menu.open) ui_menu_draw(&g_menu);

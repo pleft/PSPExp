@@ -810,12 +810,12 @@ static void draw_picture(uint64_t now)
     gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 5, s, UI_SUB, 255, 0);
     gfx_rect(0, UI_HINT_Y - 6, UI_SCREEN_W, UI_SCREEN_H - UI_HINT_Y + 6, 0x000000, 190);   /* (the menu's hints too: on it, readable) */
     if (!g_menu.open && !g_more && !g_confirm) {
-        int x = 12;
+        int x = ui_hint_home();
         if (n > 1) x = ui_hint_cap(x, "LEFT/RIGHT", "Previous / next", UI_SUB);
         x = ui_hint_btn(x, 's', "Delete");
         x = ui_hint_btn(x, 't', "Details");
         x = ui_hint_btn(x, 'o', "Back");
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+        ui_hint_start("Menu");
     }
 }
 
@@ -918,6 +918,7 @@ static void ga_render(PspExpContext *ctx, uint64_t now)
         if (g_view == V_ALBUMS) draw_albums(); else draw_items();
         if (g_msg[0]) gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, g_msg, UI_ACCENT, 255, UI_SCREEN_W - 24);
         else if (!g_menu.open && !g_more && !g_confirm && !copying()) {
+            x = ui_hint_home();
             if (g_view == V_ALBUMS ? cur_album() >= 0 : cur_item() >= 0) {
                 x = ui_hint_btn(x, 'x', g_view == V_ALBUMS ? "Open" : g_it[cur_item()].kind == K_SHOT ? "Show" : "Play");
                 x = ui_hint_btn(x, 's', "Delete");
@@ -925,7 +926,7 @@ static void ga_render(PspExpContext *ctx, uint64_t now)
             }
             if (g_view == V_ITEMS) x = ui_hint_btn(x, 'o', "Games");
             x = ui_hint_cap(x, "L/R", "Kind", UI_SUB);
-            x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+            ui_hint_start("Menu");
         }
     }
     if (g_view == V_PICTURE && g_msg[0] && !g_menu.open) gfx_text(FONT_SMALL, 12, UI_HINT_Y - 1, g_msg, UI_ACCENT, 255, UI_SCREEN_W - 24);

@@ -681,12 +681,17 @@ the launcher's back, was what one pressed to leave; HOME, the exit, was
 shown nowhere. Letting circle close an app at its top was mocked and
 dropped: pressed a few times to climb back up, it would throw one out.
 Instead every app draws `ui_app_bar` (launcher_ui.c): a band across the top
-(`UI_BAR_H` 28) with its icon and name and "HOME Close" at the right end;
-its tabs stay on the band, right of the name, its own figures (the
-Monitor's clock, Packages' count, the Notifications' number) left of HOME
-Close where they fit. Files' panels start under it (`PANEL_Y`, ten rows);
-Media's lists too. The notification centre no longer closes on circle.
-Full-screen views (a film, a picture, the terminal) keep the whole screen.
+(`UI_BAR_H` 28) with its icon and name, its tabs on it right of the name, its
+own figures (the Monitor's clock, Packages' count, the Notifications'
+number) at the right. "HOME Close" was first put at the bar's right end:
+hints at the top and the bottom both were a mess. **The hints sit where
+their buttons are on the PSP-1000**: `ui_hint_home` puts "HOME Close" first
+on the hint row, at the left (HOME is at the bottom left), the face
+buttons' hints follow, and `ui_hint_start` puts START at the right end (START
+and SELECT are at the bottom right), in every app, its film and picture
+viewers too (their circle is "Back"), and the launcher's lists. Files'
+panels start under the bar (`PANEL_Y`, ten rows); Media's lists too. The
+notification centre no longer closes on circle. Full-screen views (a film, a picture, the terminal) keep the whole screen.
 Checked on the PSP-1000 at 1:1: Media (Library, a folder, Now playing),
 Files, Gallery, Packages, System Monitor, Notifications (circle stayed).
 

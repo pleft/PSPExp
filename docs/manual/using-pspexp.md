@@ -6,11 +6,12 @@ buttons; the board needs no screen, keyboard or mouse.
 ## The same buttons everywhere
 
 Every app (Files, Media, Gallery, Packages, System Monitor, Notifications)
-has a title bar across the top with its name, and at its right end **HOME
-Close**: the one way out of an app, as of a game. Circle only ever steps
-back inside it (pressed a few times, it stops at the app's top, never
-throws you out). The launcher has no such bar: Games, Apps and Settings
-along the top instead.
+has a title bar across the top with its name; the launcher has none (Games,
+Apps and Settings along the top instead). The hints at the bottom sit where
+their buttons are on the PSP: **HOME Close** first at the left, under the
+HOME button, the one way out of an app as of a game; **START** at the right
+end, under START. Circle only ever steps back inside an app (pressed a few
+times, it stops at the app's top, never throws you out).
 
 | Button | What it does, on every screen |
 |---|---|

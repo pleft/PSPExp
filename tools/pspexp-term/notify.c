@@ -485,8 +485,9 @@ static void c_render(PspExpContext *ctx, uint64_t now)
     x = 12;
     if (c_menu.open) ui_menu_draw(&c_menu);
     else {
+        x = ui_hint_home();
         if (c_sel < g_nn && g_n[c_sel].action[0]) x = ui_hint_btn(x, 'x', "Go there");
-        if (g_nn) { x = ui_hint_btn(x, 's', "Remove"); x = ui_hint_cap(x, "START", "Menu", UI_SUB); }
+        if (g_nn) { x = ui_hint_btn(x, 's', "Remove"); ui_hint_start("Menu"); }
     }
     notify_draw(now);
     pspexp_present(ctx);

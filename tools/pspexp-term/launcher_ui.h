@@ -24,12 +24,17 @@ int ui_hint_btn(int x, char b, const char *label);
 /* a key cap ("START", "L") and its label */
 int ui_hint_cap(int x, const char *cap, const char *label, uint32_t col);
 
-/* an app's title bar (2026-10-31): a band across the top with its icon and name, and at the right
- * end "HOME Close", the one way out of an app (circle only steps back inside it); so an app does
- * not pass for the launcher. The x where the app's own things on the bar must end (its tabs start
- * at its own x, right of the name) */
+/* an app's title bar (2026-10-31): a band across the top with its icon and name, so an app does not
+ * pass for the launcher; its tabs go on it, right of the name. The x where its own things at the
+ * right must end */
 #define UI_BAR_H 28
 int ui_app_bar(const char *icon, const char *title);
+
+/* the hint row's keys where the PSP's own buttons are (2026-10-31: the PSP-1000's HOME bottom left,
+ * START and SELECT bottom right): "HOME Close" first at the left, the one way out of an app (circle
+ * only steps back inside it), the x after it for the face buttons' hints; START at the right end */
+int  ui_hint_home(void);
+void ui_hint_start(const char *label);
 
 /* ---- a menu: what START opens everywhere (2026-10-29): the highlighted item's actions first,
  * then the screen's own; cross runs a row, circle or START closes; up / down wrap ---- */

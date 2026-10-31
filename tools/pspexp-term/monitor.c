@@ -354,13 +354,14 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
     x = 12;
     if (g_msg[0]) gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, g_msg, 0xffc766, 255, UI_SCREEN_W - 24);
     else if (!g_confirm && !g_menu.open && !g_more) {   /* (the End dialog's buttons are in it; the menu draws its own) */
+        x = ui_hint_home();
         x = ui_hint_cap(x, "L/R", g_page == PAGE_OVERVIEW ? "Programs" : "Overview", UI_SUB);
         if (g_page == PAGE_PROGRAMS) {
             x = ui_hint_btn(x, 'x', "End");
             x = ui_hint_btn(x, 's', g_sort_mem ? "By CPU" : "By memory");
             x = ui_hint_btn(x, 't', "More");
         }
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+        ui_hint_start("Menu");
     }
     if (g_more && g_s.nproc && g_sel < g_s.nproc) {   /* triangle: the program's details */
         const SysProc *pr = &g_s.proc[g_sel];

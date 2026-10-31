@@ -3163,8 +3163,8 @@ static void draw_pick(float dt)
     if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired && !g_scanning) x = hint_btn(x, 's', "Forget");
     if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
         x = hint_btn(x, 's', "New password");
-    x = hint_cap(x, "START", "Menu", C_SUB);
     x = hint_btn(x, 'o', "Back");
+    hint_right(SCREEN_W - 16, "START", "Menu");   /* (START where its button is: the right) */
     (void)x;
 }
 

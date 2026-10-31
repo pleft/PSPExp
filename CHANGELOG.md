@@ -17,9 +17,10 @@
   one filled, left / right to change it); cross changes the highlighted one,
   the hint saying how ("Next: 30 s", "Turn off"). What is waiting (an update
   for the PSP) comes first.
-- **Every app has a title bar** with its name and "HOME Close" at the right:
-  an app no longer passes for the launcher, and the way out (HOME, the
-  same as for games) is shown. Circle only steps back inside an app; the
+- **Every app has a title bar** with its name: an app no longer passes for
+  the launcher. The hints at the bottom sit where the PSP's buttons are:
+  "HOME Close" first at the left (the way out, the same as for games),
+  START at the right end. Circle only steps back inside an app; the
   Notifications list no longer closes on it either.
 - **Calmer screens**: the bottom row shows at most three buttons (cross,
   triangle Details, START Menu); the top bar the clock, the bell only when

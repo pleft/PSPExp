@@ -597,7 +597,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         }
     }
     if (g_err[0]) gfx_text(FONT_BADGE, 16, 238, g_err, 0xff9a9a, 255, UI_SCREEN_W - 32);
-    x = 12;
+    x = g_mode == S_LIST && !g_menu.open && !g_more ? ui_hint_home() : 12;
     if (p && g_mode == S_LIST && !g_menu.open && !g_more) {
         int st = status_of(p);
         if (st == ST_BROKEN) x = ui_hint_btn(x, 'x', "Retry");
@@ -608,7 +608,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     if (g_mode == S_LIST && !g_menu.open && !g_more) {   /* (a dialog's buttons are in it: the list's are not shown under it) */
         if (p) x = ui_hint_btn(x, 't', "More");
         x = ui_hint_cap(x, "L/R", "Section", UI_SUB);
-        x = ui_hint_cap(x, "START", "Menu", UI_SUB);
+        ui_hint_start("Menu");
     }
     if (g_more && p && g_mode == S_LIST) {   /* triangle: the whole description, its version, where it comes from */
         int w = 380, h = 150, bx = (UI_SCREEN_W - w) / 2, by = (UI_SCREEN_H - h) / 2 - 8;
