@@ -24,6 +24,7 @@ enum PspExpOpcode {
     PSPEXP_OP_BOOT_DISC      = 0x0010,  /* host -> PSP, PspExpBootDisc: PSPExp leaves and the PSP starts that PSP game's disc natively (PSPEXP_FEATURE_BOOT_DISC) */
     PSPEXP_OP_RESTART        = 0x000F,  /* host -> PSP, no payload: PSPExp starts itself again, its loader booting the active slot (PSPEXP_FEATURE_RESTART) */
     PSPEXP_OP_OSD_HINT       = 0x0012,  /* host -> PSP, PspExpOsdHint: a hint bar drawn by the PSP over the frames (PSPEXP_FEATURE_OSD_HINT) */
+    PSPEXP_OP_THEME          = 0x0013,  /* host -> PSP, PspExpTheme: the launcher's theme for the PSP's own pictures (PSPEXP_FEATURE_THEME) */
     PSPEXP_OP_HOME_MODE      = 0x0011,  /* host -> PSP, PspExpHomeMode: who HOME belongs to, the system's dialog or the host (PSPEXP_FEATURE_HOME) */
 
     /* GRAPHICS (0x01xx) */

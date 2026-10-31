@@ -8,6 +8,7 @@
 #include <string.h>
 #include "home_hint.h"   /* (scripts/dev/make-home-hint.py) */
 #include "lost_card.h"   /* (scripts/dev/make-lost-card.py) */
+#include "../../protocol/pspexp_theme.h"
 
 #define FB_BYTES        ((uint32_t)PSPEXP_DISPLAY_STRIDE * PSPEXP_DISPLAY_HEIGHT * 2u)
 #define VRAM_TEX_SIZE   (PSPEXP_VRAM_BYTES - ge->tex_base)
@@ -603,7 +604,7 @@ static void draw_osd(PspExpGeExecutor *ge)
     if (p > 0) op_draw_rect(ge, (int16_t)(x + 21), (int16_t)(y + 11), 1, 4, 0xFFFF, 255);
     if (p > 50) op_draw_rect(ge, (int16_t)(x + 24), (int16_t)(y + 9), 1, 8, 0xFFFF, 255);
     op_draw_rect(ge, (int16_t)bx, (int16_t)(y + 10), (int16_t)bw, 6, 0x4208, 255);
-    if (fill > 0) op_draw_rect(ge, (int16_t)bx, (int16_t)(y + 10), (int16_t)fill, 6, 0xFCD1, 255);   /* the launcher's accent */
+    if (fill > 0) op_draw_rect(ge, (int16_t)bx, (int16_t)(y + 10), (int16_t)fill, 6, ge->osd_accent, 255);   /* the launcher's accent */
     k = 0;
     if (p >= 100) num[k++] = 1;
     if (p >= 10) num[k++] = (char)(p / 10 % 10);
@@ -622,6 +623,46 @@ static void op_osd_hint(void *u, int kind, uint32_t ms)
 }
 
 typedef struct HintVertex { uint16_t u, v; int16_t x, y, z; } HintVertex;
+
+/* ---- the launcher's theme (THEME) for the PSP's own pictures: their blues turned as the launcher
+ * turns its own (protocol/pspexp_theme.h), once, into copies in RAM ---- */
+#define OSD_ACCENT 0xFCD1   /* (RGB 5650, the GE's order: red in the low bits) */
+static uint32_t g_hint_themed[HOME_HINT_TW * HOME_HINT_TH] __attribute__((aligned(16)));
+static uint32_t g_card_themed[LOST_CARD_STRIDE * LOST_CARD_H] __attribute__((aligned(16)));
+
+/* 8 bits a colour: at 4 (4444, first) a dark blue panel's (1,1,3) turned amber came out (3,3,1),
+ * olive, where the launcher's own panels are brown */
+static void theme_pictures(uint32_t *dst, const uint32_t *src, int n, float hue, float sat)
+{
+    uint32_t last_in = 0, last_out = 0;
+    int i;
+    for (i = 0; i < n; i++) {   /* GU_PSM_8888: alpha, blue, green, red from the top byte down */
+        uint32_t p = src[i];
+        float r, g, b;
+        if (!(p >> 24)) { dst[i] = p; continue; }   /* (unseen) */
+        if (i && p == last_in) { dst[i] = last_out; continue; }   /* (runs of one colour: the panel) */
+        r = (p & 255) / 255.0f; g = (p >> 8 & 255) / 255.0f; b = (p >> 16 & 255) / 255.0f;
+        pspexp_theme_px(&r, &g, &b, hue, sat);
+        last_in = p;
+        last_out = dst[i] = (p & 0xFF000000u) | (uint32_t)(b * 255 + 0.5f) << 16 | (uint32_t)(g * 255 + 0.5f) << 8 | (uint32_t)(r * 255 + 0.5f);
+    }
+    sceKernelDcacheWritebackRange(dst, (unsigned)n * 4u);   /* (the GE reads them from memory) */
+}
+
+static void op_theme(void *u, float hue, float sat)
+{
+    PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    float r = (OSD_ACCENT & 31) / 31.0f, g = (OSD_ACCENT >> 5 & 63) / 63.0f, b = (OSD_ACCENT >> 11) / 31.0f;
+    if (hue == 0.0f && sat == 1.0f) {   /* (Midnight: the pictures as made) */
+        ge->hint_tex = g_home_hint; ge->card_tex = g_lost_card; ge->osd_accent = OSD_ACCENT;
+        return;
+    }
+    theme_pictures(g_hint_themed, g_home_hint, HOME_HINT_TW * HOME_HINT_TH, hue, sat);
+    theme_pictures(g_card_themed, g_lost_card, LOST_CARD_STRIDE * LOST_CARD_H, hue, sat);
+    ge->hint_tex = g_hint_themed; ge->card_tex = g_card_themed;
+    pspexp_theme_px(&r, &g, &b, hue, sat);
+    ge->osd_accent = (uint16_t)((unsigned)(b * 31 + 0.5f) << 11 | (unsigned)(g * 63 + 0.5f) << 5 | (unsigned)(r * 31 + 0.5f));
+}
 static void draw_hint(PspExpGeExecutor *ge, int y)
 {
     HintVertex *v = (HintVertex *)sceGuGetMemory(2 * sizeof(HintVertex));
@@ -630,8 +671,8 @@ static void draw_hint(PspExpGeExecutor *ge, int y)
     leave_3d(ge);
     sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
     sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexMode(GU_PSM_4444, 0, 0, 0);
-    sceGuTexImage(0, HOME_HINT_TW, HOME_HINT_TH, HOME_HINT_TW, g_home_hint);
+    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    sceGuTexImage(0, HOME_HINT_TW, HOME_HINT_TH, HOME_HINT_TW, ge->hint_tex);
     sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
     sceGuTexFlush();
     v[0].u = 0; v[0].v = 0; v[0].x = (int16_t)x; v[0].y = (int16_t)y; v[0].z = 0;
@@ -845,8 +886,8 @@ void pspexp_ge_lost_card(PspExpGeExecutor *ge, const uint16_t *picture)
     v[1].x = PSPEXP_DISPLAY_WIDTH; v[1].y = PSPEXP_DISPLAY_HEIGHT;
     sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
     sceGuEnable(GU_TEXTURE_2D);    /* the card on it */
-    sceGuTexMode(GU_PSM_4444, 0, 0, 0);
-    sceGuTexImage(0, LOST_CARD_TW, LOST_CARD_TH, LOST_CARD_STRIDE, g_lost_card);
+    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    sceGuTexImage(0, LOST_CARD_TW, LOST_CARD_TH, LOST_CARD_STRIDE, ge->card_tex);
     sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
     sceGuTexFlush();
     t = (HintVertex *)sceGuGetMemory(2 * sizeof(HintVertex));
@@ -901,6 +942,7 @@ int pspexp_ge_init(PspExpGeExecutor *ge)
     ge->clip_x = ge->clip_y = 0; ge->clip_w = PSPEXP_DISPLAY_WIDTH; ge->clip_h = PSPEXP_DISPLAY_HEIGHT;
     ge->displayed_offset = FB_BYTES;   /* sceGuDispBuffer below */
     ge->dot_col[0] = ge->dot_col[1] = 0;
+    ge->hint_tex = g_home_hint; ge->card_tex = g_lost_card; ge->osd_accent = OSD_ACCENT;   /* (Midnight until a THEME) */
     sceKernelDcacheWritebackInvalidateRange(g_dot_px, sizeof(g_dot_px));   /* (the GE writes it: no line of it left to be written over it) */
     sceGuInit();
     sceGuStart(GU_DIRECT, ge->list);
@@ -946,6 +988,7 @@ void pspexp_ge_ops(PspExpGeExecutor *ge, PspExpRuntimeOps *ops)
     ops->draw_rect = op_draw_rect;
     ops->osd_volume = op_osd_volume;
     ops->osd_hint = op_osd_hint;
+    ops->theme = op_theme;
     ops->draw_line = op_draw_line;
     ops->present = op_present;
     ops->frame_ge_us = op_frame_ge_us;

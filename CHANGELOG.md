@@ -40,7 +40,10 @@
   > Update the PSP.
 - **Themes**: Settings > This PSP > Theme colours every screen, the
   launcher and the apps: Midnight (the blue, as before), Crimson, Emerald,
-  Violet, Amber or Graphite, each previewed as you move to it.
+  Violet, Amber or Graphite, each previewed as you move to it. What the
+  PSP draws itself follows it too (the "HOME again to quit" bar, the
+  volume bar, the card when the board goes): needs Settings > Update the
+  PSP.
 - **Descriptions of your ROMs** in Game details, with who made them, the
   year and the genre: from the LaunchBox Games Database, which the board
   downloads once (110 MB, kept as 40 MB) and then reads offline, every

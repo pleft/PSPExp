@@ -159,6 +159,11 @@ int pspexp_capture_request(PspExpContext *ctx, int what, uint32_t tag);
 /* OSD_HINT (PSPEXP_FEATURE_OSD_HINT): the PSP's hint bar (PSPEXP_HINT_*) over its frames for ms (0:
  * gone). The library shows "HOME again to quit" itself at a first HOME in HOST mode. */
 int pspexp_osd_hint(PspExpContext *ctx, uint32_t kind, uint32_t ms);
+/* THEME (PSPEXP_FEATURE_THEME): the launcher's theme for the pictures the PSP draws itself (the hint
+ * bar, the volume bar, the card when the board goes): PSPExp's blues turned by hue (a turn is 1.0),
+ * their saturation times sat (protocol/pspexp_theme.h). Kept and sent again at every connection;
+ * -1 when not sent now (no PSP, or one without it) */
+int pspexp_theme(PspExpContext *ctx, float hue, float sat);
 /* when the bar last sent goes away (pspexp_time_us), 0 none: the PSP draws it at
  * each PRESENT, so a program that draws only on change should draw once after */
 uint64_t pspexp_osd_until(const PspExpContext *ctx);

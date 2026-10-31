@@ -29,6 +29,10 @@ typedef struct PspExpGeExecutor {
     int in_frame;
     int osd_percent; uint32_t osd_until;   /* the volume bar (OSD_VOLUME) */
     int hint_kind; uint32_t hint_until;    /* a hint bar (OSD_HINT) */
+    /* the PSP's own pictures in the launcher's theme (THEME): the hint bar and the card (8888, their
+     * blues turned: copies in RAM, or the pictures as made for Midnight), the volume bar's fill (5650) */
+    const uint32_t *hint_tex, *card_tex;
+    uint16_t osd_accent;
     int keyboard;                          /* the PSP's keyboard owns the screen: frames drawn, not shown */
     int tex_enabled;
     PspExpCacheEntry *cur_atlas;

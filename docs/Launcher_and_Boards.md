@@ -918,6 +918,16 @@ released first: the PSP keeps an id's first picture) and lets the discs go
 keeps it, circle puts the old one back. The terminal keeps its own themes.
 Checked on the PSP-1000 through the Pi 400 at 1:1, all six.
 
+The pictures the PSP draws itself (the "HOME again to quit" bar, the
+volume bar's fill, the card when the board goes) stayed blue in every
+theme: the PSP had never been told. The transform now lives in
+`protocol/pspexp_theme.h`, shared by `launcher_gfx.c` and the PSP's GE
+executor, and the console sends the theme's hue and saturation (`THEME`,
+`pspexp_theme`) when it starts, when it changes, and again at every
+connection; the PSP turns its pictures once into copies in RAM and keeps
+them across connections (the card shows with no board). A console on
+Midnight turns them back. Architecture, "Themes on the PSP".
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

@@ -1,5 +1,6 @@
 /* The launcher's drawing layer (see launcher_gfx.h). */
 #include "launcher_gfx.h"
+#include "../../protocol/pspexp_theme.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,35 +75,11 @@ static const struct { const char *name; float hue, sat; } THEMES[] = {
 #define NTHEMES ((int)(sizeof(THEMES) / sizeof(THEMES[0])))
 static int g_theme;
 
-static float hue2rgb(float p, float q, float t)
-{
-    if (t < 0) t += 1;
-    if (t > 1) t -= 1;
-    if (t < 1.0f / 6) return p + (q - p) * 6 * t;
-    if (t < 0.5f) return q;
-    if (t < 2.0f / 3) return p + (q - p) * (2.0f / 3 - t) * 6;
-    return p;
-}
-
-/* r, g, b (0..1) through the theme, in place */
+/* r, g, b (0..1) through the theme, in place (protocol/pspexp_theme.h: the PSP turns its own
+ * pictures the same way, THEME) */
 static void theme_px(float *r, float *g, float *b)
 {
-    float mx, mn, h, s, l, d;
-    if (!g_theme) return;
-    mx = fmaxf(*r, fmaxf(*g, *b)); mn = fminf(*r, fminf(*g, *b)); l = (mx + mn) / 2; d = mx - mn;
-    if (d < 1e-6f) return;
-    s = l > 0.5f ? d / (2 - mx - mn) : d / (mx + mn);
-    if (mx == *r) h = (*g - *b) / d + (*g < *b ? 6 : 0);
-    else if (mx == *g) h = (*b - *r) / d + 2;
-    else h = (*r - *g) / d + 4;
-    h /= 6;
-    if (h <= 0.48f || h >= 0.78f || s <= 0.12f) return;   /* (not one of PSPExp's blues) */
-    h += THEMES[g_theme].hue; h -= floorf(h);
-    s *= THEMES[g_theme].sat;
-    {
-        float q = l < 0.5f ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
-        *r = hue2rgb(p, q, h + 1.0f / 3); *g = hue2rgb(p, q, h); *b = hue2rgb(p, q, h - 1.0f / 3);
-    }
+    if (g_theme) pspexp_theme_px(r, g, b, THEMES[g_theme].hue, THEMES[g_theme].sat);
 }
 
 /* 0xRRGGBB through the theme; the last few remembered (the same colours come every frame) */
@@ -1731,6 +1708,7 @@ int gfx_init(PspExpContext *ctx, const char *assets)
     buttons_make();
     backdrop_make();
     waves_make();
+    pspexp_theme(G, THEMES[g_theme].hue, THEMES[g_theme].sat);   /* (the PSP may keep another console's: say this one) */
     return 0;
 }
 
@@ -1746,6 +1724,7 @@ void gfx_set_theme(int k)
     if (k < 0 || k >= NTHEMES || k == g_theme) return;
     g_theme = k;
     if (!G) return;   /* (before gfx_init: made in its colours there) */
+    pspexp_theme(G, THEMES[k].hue, THEMES[k].sat);   /* the PSP's own pictures too (and at each connection) */
     for (i = 0; i < 6; i++) pspexp_release(G, (uint16_t)(ID_BACKDROP + i));   /* (the PSP keeps an id's first picture: let them go first) */
     for (i = 0; i < 2; i++) pspexp_release(G, (uint16_t)(ID_WAVE + i));
     backdrop_make();

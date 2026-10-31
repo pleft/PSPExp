@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # The bar the PSP shows after a first HOME in an app or a game ("HOME again to quit"), drawn in the
-# launcher's look (Inter, its badge pill) and written as a 4444 texture for the GE executor:
+# launcher's look (Inter, its badge pill) and written as an 8888 texture for the GE executor:
 #   python3 scripts/dev/make-home-hint.py   ->  psp/executor-ge/home_hint.h
 # (PIL; the fonts are the launcher's, tools/pspexp-term/assets). Run again after changing the text
 # or the style, and commit the header with it.
@@ -42,13 +42,13 @@ px = []
 for y in range(TH):
     for x in range(TW):
         r, g, b, al = im.getpixel((x, y))
-        px.append((al >> 4) << 12 | (b >> 4) << 8 | (g >> 4) << 4 | (r >> 4))   # GU_PSM_4444: ABGR
+        px.append(al << 24 | b << 16 | g << 8 | r)   # GU_PSM_8888: ABGR (8 bits a colour: a theme turns them on the PSP, 4 lost its dark blues' hue)
 with open(OUT, "w") as f:
-    f.write("/* made by scripts/dev/make-home-hint.py: the PSP's \"HOME again to quit\" bar, GU_PSM_4444 */\n")
+    f.write("/* made by scripts/dev/make-home-hint.py: the PSP's \"HOME again to quit\" bar, GU_PSM_8888 */\n")
     f.write("#define HOME_HINT_TW %d\n#define HOME_HINT_TH %d\n#define HOME_HINT_W %d\n#define HOME_HINT_H %d\n" % (TW, TH, W, H))
-    f.write("static const unsigned short g_home_hint[HOME_HINT_TW * HOME_HINT_TH] __attribute__((aligned(16))) = {\n")
-    for i in range(0, len(px), 16):
-        f.write("    " + ", ".join("0x%04x" % v for v in px[i:i + 16]) + ",\n")
+    f.write("static const uint32_t g_home_hint[HOME_HINT_TW * HOME_HINT_TH] __attribute__((aligned(16))) = {\n")
+    for i in range(0, len(px), 8):
+        f.write("    " + ", ".join("0x%08x" % v for v in px[i:i + 8]) + ",\n")
     f.write("};\n")
 im.crop((0, 0, W, H)).save(os.path.join(os.environ.get("HINT_PREVIEW_DIR", "/tmp"), "home-hint.png"))
 print("%s: %dx%d in a %dx%d texture" % (OUT, W, H, TW, TH))

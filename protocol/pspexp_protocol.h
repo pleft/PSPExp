@@ -216,6 +216,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_RESTART    0x00008000u  /* answers RESTART: PSPExp starts again (a runtime just put in its spare slot boots) */
 #define PSPEXP_FEATURE_BOOT_DISC  0x00020000u  /* answers BOOT_DISC: a PSP game started natively (PRO's ISO driver; architecture §12c) */
 #define PSPEXP_FEATURE_OSD_HINT   0x00080000u  /* OSD_HINT: the PSP draws a hint bar ("HOME again to quit") over the frames */
+#define PSPEXP_FEATURE_THEME      0x00200000u  /* THEME: the PSP's own pictures (hint bar, volume bar, the card when the board goes) take the launcher's theme */
 #define PSPEXP_FEATURE_HOME       0x00040000u  /* answers HOME_MODE: HOME can be the host's (PSPEXP_BUTTON_HOME in INPUT) */
 #define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: Recording inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
@@ -379,6 +380,17 @@ typedef struct PspExpOsdHint {
     uint32_t reserved[2];
 } PspExpOsdHint;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpOsdHint) == 16, osd_hint_size);
+
+/* Host -> PSP (THEME): the launcher's theme, for the pictures the PSP draws itself (the hint bar,
+ * the volume bar, the card when the board goes): PSPExp's blues turned by hue_milli/1000 of a turn,
+ * their saturation times sat_milli/1000 (protocol/pspexp_theme.h; Midnight, the blues as they are:
+ * 0 and 1000). Kept across connections, until another comes: the card shows with no board */
+typedef struct PspExpTheme {
+    int16_t  hue_milli;
+    uint16_t sat_milli;
+    uint32_t reserved[3];
+} PspExpTheme;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpTheme) == 16, theme_size);
 
 /* Host -> PSP, reply to HELLO. */
 typedef struct PspExpHelloAck {

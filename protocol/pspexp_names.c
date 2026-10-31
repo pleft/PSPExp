@@ -66,6 +66,8 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_AUDIO_STREAM_RESET: return "AUDIO_STREAM_RESET";
     case PSPEXP_OP_AUDIO_CODED_STREAM: return "AUDIO_CODED_STREAM";
     case PSPEXP_OP_OSD_VOLUME: return "OSD_VOLUME";
+    case PSPEXP_OP_OSD_HINT: return "OSD_HINT";
+    case PSPEXP_OP_THEME: return "THEME";
     case PSPEXP_OP_RESTART: return "RESTART";
     case PSPEXP_OP_BOOT_DISC: return "BOOT_DISC";
     case PSPEXP_OP_CAPTURE_SET: return "CAPTURE_SET";

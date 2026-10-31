@@ -109,6 +109,7 @@ typedef struct PspExpRuntimeOps {
      * it). With it, HELLO advertises PSPEXP_FEATURE_OSD. */
     void (*osd_volume)(void *user, int percent);
     void (*osd_hint)(void *user, int kind, uint32_t ms);   /* OSD_HINT (NULL: not offered) */
+    void (*theme)(void *user, float hue, float sat);        /* THEME (protocol/pspexp_theme.h; NULL: not offered) */
     /* Optional: PSPExp starts itself again (RESTART), its loader booting the active slot, so a
      * runtime just installed in the spare slot runs. With it, HELLO advertises
      * PSPEXP_FEATURE_RESTART. */

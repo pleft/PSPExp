@@ -65,6 +65,7 @@ struct PspExpContext {
     PspExpLocalAudio la;                /* sound on the board's output (Bluetooth): pspexp_local_audio.c */
     int la_was;
     uint64_t osd_until;                 /* the PSP's volume bar shows until then */
+    PspExpTheme theme; int theme_set;   /* the launcher's theme, sent again at each connection (pspexp_theme) */
     uint64_t home_armed_until;          /* a first HOME: a second before then goes through (home_twice) */
     int home_was, home_pass;
     PspExpStats stats;
@@ -713,6 +714,8 @@ static void on_hello(PspExpContext *ctx, const PspExpMessage *m)
                 r->state = PSPEXP_RES_PENDING;
             }
     }
+    if (ctx->theme_set && (ctx->hello.features & PSPEXP_FEATURE_THEME))   /* (a PSP started again has the default) */
+        pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_THEME, &ctx->theme, sizeof(ctx->theme));
 }
 
 static void handle(PspExpContext *ctx, const PspExpMessage *m)
@@ -1142,6 +1145,16 @@ int pspexp_osd_volume(PspExpContext *ctx, int percent)
 }
 
 uint64_t pspexp_osd_until(const PspExpContext *ctx) { return ctx->osd_until; }
+
+int pspexp_theme(PspExpContext *ctx, float hue, float sat)
+{
+    memset(&ctx->theme, 0, sizeof(ctx->theme));
+    ctx->theme.hue_milli = (int16_t)(hue * 1000.0f + (hue < 0 ? -0.5f : 0.5f));
+    ctx->theme.sat_milli = (uint16_t)(sat * 1000.0f + 0.5f);
+    ctx->theme_set = 1;
+    if (!(ctx->hello.features & PSPEXP_FEATURE_THEME) || ctx->state != PSPEXP_LINK_CONNECTED) return -1;
+    return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_THEME, &ctx->theme, sizeof(ctx->theme));
+}
 
 int pspexp_restart_supported(const PspExpContext *ctx)
 {
