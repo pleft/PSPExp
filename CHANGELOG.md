@@ -25,6 +25,10 @@
   options: Add to favourites, Game details, and Sort by (Favourites and
   recent, Recently played, Title A-Z); each platform keeps its view and its
   order. Square no longer adds a favourite.
+- **Button sounds**: a soft click answers each press in the launcher and
+  the apps (a tick as you move, rising for cross, falling for circle, a pop
+  for a panel), played by the PSP over the music; **Settings > Sound >
+  Button sounds** turns them off.
 - **The same buttons in every app**: **triangle** opens the highlighted
   thing's options in a panel at the right (Details first, then what you can
   do: copy, delete, remove, add to the queue, stop...) in Files, the

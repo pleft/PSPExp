@@ -449,6 +449,8 @@ PLAY_SOUND id=72 volume=220 pan=-48
 
 The PSP plays cached sounds on its hardware audio channels, so frequent sound effects are extremely inexpensive on the transport. The number of simultaneous SFX voices is a capability (initially 7 hardware channels, leaving one for the stream); whether voices map one-to-one onto hardware channels or through a software mixer feeding one channel is an implementation choice for v0.3, not a protocol matter.
 
+**The console's button sounds** (2026-10-31, `tools/pspexp-term/sfx.c`): the first user of cached sounds in PSPExp itself. Five short mono sounds (a 14 ms tick, two 22 ms ticks, a rising and a falling two-note, a 45 ms rising pop; peaks 11-16 % of full scale, 15 KB in all) are synthesised at 44.1 kHz, uploaded as ids 7000-7004 at each connection, and played at volume 255 by `handle_input` for the launcher, the apps and Files (one a press: cross, circle, triangle / START / SELECT, L / R / square, a step). The PSP's mixer adds voices to the stream, so they play over the music with no delay; with the stream on Bluetooth (`pspexp_audio_local`) they are not played. Checked on the PSP-1000: no resource or protocol errors over a run of presses.
+
 ### Streamed audio
 
 Music or arbitrary application audio can be decoded (and, if the host prefers, pre-mixed) on the host and transferred as a buffered PCM stream. At 44.1 kHz stereo 16-bit this is ≈ 176 KB/s, about 2% of the planning USB budget. The stream may be delivered at any rate the PSP's SRC channel accepts (8–48 kHz), which lets a constrained host send lower-rate music and have the hardware resample it.

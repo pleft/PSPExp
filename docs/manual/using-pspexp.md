@@ -11,7 +11,11 @@ Apps, Media and Settings along the top instead). The hints at the bottom sit whe
 their buttons are on the PSP: **HOME Close** first at the left, under the
 HOME button, the one way out of an app as of a game; **START** at the right
 end, under START. Circle only ever steps back inside an app (pressed a few
-times, it stops at the app's top, never throws you out).
+times, it stops at the app's top, never throws you out). A soft click
+answers each press in the launcher and the apps (a tick as you move, a
+rising one for cross, a falling one for circle); **Settings > Sound >
+Button sounds** turns them off. They are not played while the sound goes to
+Bluetooth headphones.
 
 | Button | What it does, on every screen |
 |---|---|

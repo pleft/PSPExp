@@ -123,6 +123,7 @@ static int g_nactions;
 static const char *g_wifi_cmd;    /* pspexp-wifi-mode, when installed */
 static int g_nofetch;             /* box art downloads off */
 static int g_psp_clock = 1, g_clock_req;   /* set the PSP's clock from the board; asked for now */
+static int g_button_sounds = 1;            /* Settings > Sound > Button sounds (sfx.h) */
 static int g_clips_keep, g_clips_change;   /* the recorder keeps the last seconds (off by default: it costs); just changed */
 static int g_clip_secs = 30, g_clip_quality;   /* Settings > Recording: the clip's length (15, 30, 60), the quality (0 high, 1 standard, 2 small) */
 static const int CLIP_CRF[3] = { 18, 23, 28 };
@@ -358,6 +359,7 @@ static void cats_build(void)
     if (board_wifi_kind() != BOARD_WIFI_NONE)
         ACTION("wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
     if (bt_available()) ACTION("sound", "Sound output", "headphones", "The PSP, or Bluetooth headphones or a speaker paired with this board");
+    ACTION("clicks", "Button sounds", "volume-2", "A soft click as you move and press buttons");
     ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
     ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
@@ -377,7 +379,7 @@ static void cats_build(void)
         static const struct { const char *name, *icon, *desc, *ids[5]; } GROUPS[] = {
             { "Ready", "check-circle", "Waiting for you: an update, a restart", { "a:psp-update", "a:console-restart", NULL } },
             { "Network", "wifi", "The board's Wi-Fi", { "a:wifinet", "a:wifi", NULL } },
-            { "Sound", "headphones", "Where the sound plays", { "a:sound", NULL } },
+            { "Sound", "headphones", "Where the sound plays, button sounds", { "a:sound", "a:clicks", NULL } },
             { "Recording", "film", "Clips, their length and the videos' quality", { "a:clips", "a:cliplen", "a:quality", NULL } },
             { "Clock", "clock", "The board's time zone", { "a:tz", NULL } },
             { "Library", "refresh-cw", "Refreshing it, box art downloads", { "a:rescan", "a:boxart", NULL } },
@@ -891,6 +893,7 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
     if (!strcmp(a, "ssh")) return g_ssh_on ? "On" : "Off";
+    if (!strcmp(a, "clicks")) return g_button_sounds ? "On" : "Off";
     return NULL;
 }
 
@@ -963,6 +966,9 @@ static void run_action(LEntry *e, uint64_t now)
         toast(e->icon, g_nofetch ? "Box art downloads off" : "Box art downloads on", now);
     } else if (!strcmp(a, "ssh")) {
         ssh_action(now);
+    } else if (!strcmp(a, "clicks")) {
+        g_button_sounds = !g_button_sounds;
+        lib_setting_set(&L, "button_sounds", g_button_sounds);
     } else if (!strcmp(a, "wifi")) {
         int to_psp = !wifi_mode_psp();
         char cmd[400];
@@ -2023,7 +2029,7 @@ static void view_toggle(Cat *c)
 enum { ROW_DO, ROW_SWITCH, ROW_CHOICE, ROW_PAGE };
 static int row_kind(const LEntry *e)
 {
-    static const char *const SW[] = { "a:clips", "a:boxart", "a:pspclock", "a:plugin", "a:ssh", NULL },
+    static const char *const SW[] = { "a:clips", "a:boxart", "a:pspclock", "a:plugin", "a:ssh", "a:clicks", NULL },
                              *const CH[] = { "a:cliplen", "a:quality", NULL },
                              *const PG[] = { "a:wifinet", "a:sound", "a:tz", "a:about", NULL };
     int i;
@@ -2139,6 +2145,7 @@ void launcher_power_off(uint64_t now)
         run_action(&g_actions[i], now);
     }
 }
+int launcher_button_sounds(void) { return g_button_sounds; }
 int launcher_board_battery(char *label, size_t n, int *pct, int *chg)
 {
     if (g_bat < 0) return 0;
@@ -2458,7 +2465,7 @@ static void draw_status(void)
     gfx_text(FONT_BODY, 12, ty, "PSPExp", C_TEXT, 255, 0);
     board_detect();
     snprintf(how, sizeof(how), "%s", g_link);
-    how[strcspn(how, " ")] = 0;   /* "USB", "Wi-Fi 192.168.50.2": the way, not the address */
+    how[strcspn(how, " ,")] = 0;   /* "USB", "Wi-Fi, PSP at ...": the way, not the address */
     if (!strcmp(how, "not")) snprintf(s, sizeof(s), "Not connected · %s", g_board.name);
     else snprintf(s, sizeof(s), "%s · %s", how, g_board.name);
     w = gfx_text_width(FONT_SMALL, s);
@@ -3359,6 +3366,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     g_nofetch = getenv("PSPEXP_LAUNCHER_NO_FETCH") != NULL || !lib_setting_int(&L, "boxart", 1);
     g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
     g_clips_keep = lib_setting_int(&L, "clips", 0);
+    g_button_sounds = lib_setting_int(&L, "button_sounds", 1);
     g_clip_secs = lib_setting_int(&L, "clip_secs", 30);
     if (g_clip_secs != 15 && g_clip_secs != 60) g_clip_secs = 30;
     g_clip_quality = lib_setting_int(&L, "clip_quality", 0);

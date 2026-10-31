@@ -57,6 +57,7 @@
 #include "music.h"
 #include "notify.h"
 #include "quick.h"
+#include "sfx.h"
 #include "psp_native.h"
 #include "psp_plugin.h"
 #include "btaudio.h"
@@ -1542,6 +1543,7 @@ static int try_connect(void)
     pspexp_set_transport(ctx, t);
     if (pspexp_connect(ctx, 3000) < 0) { pspexp_set_transport(ctx, NULL); return 0; }
     fprintf(stderr, "[pspexp-term] PSP connected\n");
+    sfx_connected();   /* (the button sounds go to it again) */
     g_home_sent = -1;   /* (the PSP gives HOME back to its dialog at every disconnect) */
     T.dirty = 1;
     {
@@ -1863,6 +1865,17 @@ static void handle_input(void)
     if (g_app || g_view_files || g_view_launcher) pressed = (pressed & ~(uint32_t)PSPEXP_BUTTON_SELECT) | (g_select_tap ? PSPEXP_BUTTON_SELECT : 0);
     /* the PSP's note button: the music paused or resumed, from anywhere (runtimes that send it: 2026-10-06) */
     if ((pressed & PSPEXP_BUTTON_NOTE) && g_launch_pid <= 0) { music_toggle(); launcher_invalidate(); if (g_app) g_redraw_app = 1; }
+    if ((g_app || g_view_files || g_view_launcher) && launcher_button_sounds() && !launcher_running_title()) {
+        /* button sounds (sfx.h), one a press, the most telling: cross in, circle back, a panel, a
+         * category / tab / view, a step (held: each repeat) */
+        int s = -1;
+        if (pressed & PSPEXP_BUTTON_CROSS) s = SFX_OPEN;
+        else if (pressed & PSPEXP_BUTTON_CIRCLE) s = SFX_BACK;
+        else if (pressed & (PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START | PSPEXP_BUTTON_SELECT)) s = SFX_PANEL;
+        else if (pressed & (PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER | PSPEXP_BUTTON_SQUARE)) s = SFX_SWITCH;
+        else if (up || down || left || right) s = SFX_MOVE;
+        if (s >= 0) sfx_play(ctx, s);
+    }
     if (quick_is_open()) {   /* START's Quick controls over whatever is shown: its input until it closes */
         quick_input(pressed, up, down);
         g_redraw_app = 1; T.dirty = 1;

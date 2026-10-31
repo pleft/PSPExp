@@ -807,6 +807,15 @@ Notifications, its Terminal (and HOME back), Files' menu, Select items with
 two marked and their menu, and triangle in the Gallery, Media, Packages,
 the System Monitor and Notifications.
 
+**Button sounds (2026-10-31).** A soft click on each press in the launcher
+and the apps (`sfx.c`, architecture §8): played by the PSP's mixer over the
+music, chosen in main.c's `handle_input` by the button (cross rising, circle
+falling, triangle / START / SELECT a pop, L / R / square two ticks, a step a
+tick, each repeat of a held direction too); Settings > Sound > Button sounds
+(`a:clicks`, the library's `button_sounds`, on by default). The status line
+also read "Wi-Fi," over TCP (the link's description is "Wi-Fi, PSP at ..."):
+it now stops at the comma too.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the
