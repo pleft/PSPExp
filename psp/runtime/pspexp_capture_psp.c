@@ -13,7 +13,8 @@
  * A receiver keeping recordings only (PSPEXP_CAPTURE_RECORDINGS: the last 30 seconds off in the
  * board's settings) gets the frames and the sound only while a ♪+L recording runs: nothing is
  * copied or sent otherwise, the events aside. A screenshot (♪ + L twice, either mode) is one frame
- * marked as such (the frame header's word at 28, bit 0): the next one the GE finishes, or, when
+ * marked as such (the frame header's word at 28, bit 0; the board's number for one it asked for
+ * from bit 8: CAPTURE_REQUEST): the next one the GE finishes, or, when
  * nothing new is drawn within 0.15 s (the launcher), the one on screen.
  */
 #include <pspkernel.h>
@@ -39,6 +40,7 @@ static volatile int g_state[2];            /* 0 free, 1 the GE copying into it, 
 static volatile uint32_t g_ftime[2];
 static volatile uint32_t g_fflag[2];        /* the frame header's flags: 1 a screenshot */
 static volatile int g_shot;                 /* a screenshot asked for, not yet taken */
+static volatile uint32_t g_shot_tag;        /* its flags (1, the board's number from bit 8) */
 static uint32_t g_shot_at;
 static volatile int g_copying = -1;
 static uint32_t g_last_frame, g_fseq, g_out_seq;
@@ -145,7 +147,7 @@ static void *cap_target(void *u)
     if (!g_shot && (!streaming() || now - g_last_frame < FRAME_GAP_US)) return NULL;
     if (!g_frame[0]) return NULL;
     for (k = 0; k < 2; k++)
-        if (g_state[k] == 0) { g_state[k] = 1; g_copying = k; g_fflag[k] = g_shot ? 1 : 0; g_shot = 0; return g_frame[k]; }
+        if (g_state[k] == 0) { g_state[k] = 1; g_copying = k; g_fflag[k] = g_shot ? g_shot_tag : 0; g_shot = 0; return g_frame[k]; }
     return NULL;
 }
 static void cap_done(void *u, uint32_t t)
@@ -216,16 +218,17 @@ static int grab(uint32_t flags)
 }
 void pspexp_capture_psp_grab(void) { grab(0); }
 
-void pspexp_capture_psp_shot(void)
+void pspexp_capture_psp_shot(uint32_t tag)
 {
     if (!g_on || !g_frame[0]) return;
     g_shot_at = sceKernelGetSystemTimeLow();
+    g_shot_tag = 1u | (tag << 8);
     g_shot = 1;
 }
 
 void pspexp_capture_psp_tick(void)
 {
-    if (g_shot && sceKernelGetSystemTimeLow() - g_shot_at > 150000 && grab(1) == 0) g_shot = 0;   /* (nothing new drawn: the screen as it is) */
+    if (g_shot && sceKernelGetSystemTimeLow() - g_shot_at > 150000 && grab(g_shot_tag) == 0) g_shot = 0;   /* (nothing new drawn: the screen as it is) */
 }
 
 int pspexp_capture_psp_on(void) { return g_on; }

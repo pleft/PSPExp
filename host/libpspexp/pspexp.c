@@ -86,6 +86,7 @@ struct PspExpContext {
     /* Recording inside PSPExp: the receiver's socket while the PSP captures (-1 none); the
      * mode its hello gave (0: not yet: the PSP not asked) */
     int cap_fd, cap_mode, cap_got;
+    int cap_recording;   /* CAPTURE_STATE: a recording under way (0 at each HELLO) */
     uint8_t cap_hello[32];
     uint64_t cap_dropped, cap_tried;
 };
@@ -723,10 +724,14 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
     case PSPEXP_OP_HELLO:
         ctx->power_at = 0;   /* (another PSP, or the same after a restart) */
         ctx->text_pending = 0;   /* (a keyboard that PSP had open is gone with it) */
+        ctx->cap_recording = 0;  /* (the PSP tells again when one starts) */
         on_hello(ctx, m);
         break;
     case PSPEXP_OP_CAPTURE_DATA:
         capture_data(ctx, m);
+        break;
+    case PSPEXP_OP_CAPTURE_STATE:
+        if (m->length >= sizeof(PspExpCaptureState)) ctx->cap_recording = ((const PspExpCaptureState *)m->payload)->recording != 0;
         break;
     case PSPEXP_OP_TEXT_RESULT:
         if (m->length >= sizeof(PspExpTextResult)) {
@@ -1161,6 +1166,23 @@ int pspexp_boot_disc(PspExpContext *ctx, const char *path)
     memset(&b, 0, sizeof(b));
     snprintf(b.path, sizeof(b.path), "%s", path);
     return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_BOOT_DISC, &b, sizeof(b));
+}
+
+int pspexp_capture_mode(const PspExpContext *ctx)
+{
+    if (ctx->state != PSPEXP_LINK_CONNECTED || ctx->cap_fd < 0 || !(ctx->hello.features & PSPEXP_FEATURE_CAPTURE_REQ)) return 0;
+    return ctx->cap_mode;
+}
+
+int pspexp_capture_recording(const PspExpContext *ctx) { return pspexp_capture_mode(ctx) ? ctx->cap_recording : 0; }
+
+int pspexp_capture_request(PspExpContext *ctx, int what, uint32_t tag)
+{
+    PspExpCaptureRequest q;
+    if (!pspexp_capture_mode(ctx) || what < PSPEXP_CAPREQ_CLIP || what > PSPEXP_CAPREQ_SHOT) return -1;
+    memset(&q, 0, sizeof(q));
+    q.what = (uint32_t)what; q.tag = tag & 0xFFFFFFu;
+    return pspexp_send_raw(ctx, PSPEXP_CH_DEBUG, PSPEXP_OP_CAPTURE_REQUEST, &q, sizeof(q));
 }
 
 int pspexp_home_supported(const PspExpContext *ctx)

@@ -1,16 +1,20 @@
 /* Quick controls: see quick.h */
 #include "quick.h"
+#include "../../protocol/pspexp_protocol.h"   /* PSPEXP_CAPTURE_* */
 #include "launcher.h"
 #include "launcher_ui.h"
 #include "notify.h"
 #include <stdio.h>
 #include <string.h>
 
-enum { Q_NOTIFY = 1, Q_TERMINAL, Q_INFO, Q_NETWORK, Q_SOUND, Q_RESTART, Q_POWER, Q_RESTART_YES, Q_POWER_YES, Q_CANCEL };
+enum { Q_RECORD = 1, Q_CLIP, Q_NOTIFY, Q_TERMINAL, Q_INFO, Q_NETWORK, Q_SOUND, Q_RESTART, Q_POWER, Q_RESTART_YES, Q_POWER_YES, Q_CANCEL };
 
 static UiMenu g_q;
 static int g_taken;
 static const char *g_group;
+static int g_cap_mode, g_cap_rec;
+
+void quick_set_capture(int mode, int recording) { g_cap_mode = mode; g_cap_rec = recording; }
 
 static const char *battery_icon(int pct, int chg)
 {
@@ -26,7 +30,14 @@ void quick_open(void)
     launcher_status_info(&st);
     if (unread) snprintf(n, sizeof(n), "%d", unread > 99 ? 99 : unread);
     ui_menu_begin(&g_q, "Quick controls");
-    ui_menu_add(&g_q, Q_NOTIFY, unread ? "bell-dot" : "bell", "Notifications", n[0] ? n : NULL, 0, 0);
+    if (g_cap_mode) {   /* the recorder, as ♪ + L and ♪ + R do it (the PSP's own dot answers) */
+        ui_menu_add(&g_q, Q_RECORD, g_cap_rec ? "circle-x" : "video", g_cap_rec ? "Stop recording" : "Start recording", "♪ + L", 0, 0);
+        if (g_cap_mode == PSPEXP_CAPTURE_ALL) {
+            snprintf(label, sizeof(label), "Save the last %d seconds", launcher_clip_secs());
+            ui_menu_add(&g_q, Q_CLIP, "history", label, "♪ + R", 0, 0);
+        }
+    }
+    ui_menu_add(&g_q, Q_NOTIFY, unread ? "bell-dot" : "bell", "Notifications", n[0] ? n : NULL, g_q.n > 0, 0);
     ui_menu_add(&g_q, Q_TERMINAL, "square-terminal", "Terminal", NULL, 0, 1);
     /* how things stand (the status line keeps the clock and the PSP's battery) */
     ui_menu_add(&g_q, Q_INFO, !strcmp(st.link, "USB") ? "usb" : !strcmp(st.link, "Wi-Fi") ? "wifi" : "unplug", "PSP link", st.link, 1, 0);
@@ -55,6 +66,8 @@ int quick_is_open(void) { return g_q.open; }
 void quick_input(uint32_t pressed, int up, int down)
 {
     switch (ui_menu_input(&g_q, pressed, up, down)) {
+    case Q_RECORD: g_taken = QK_RECORD; break;
+    case Q_CLIP: g_taken = QK_CLIP; break;
     case Q_NOTIFY: g_taken = QK_NOTIFY; break;
     case Q_TERMINAL: g_taken = QK_TERMINAL; break;
     case Q_INFO: { int sel = g_q.sel; quick_open(); g_q.sel = sel; break; }   /* (it only says: open again, read anew) */

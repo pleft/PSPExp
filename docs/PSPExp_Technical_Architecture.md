@@ -587,6 +587,34 @@ there, the receiver's hello saying which; the PSP then sends what it shows and p
 bytes being the receiver's own packets, cut anywhere. A new link (HELLO)
 turns it off.
 
+CAPTURE_REQUEST and CAPTURE_STATE (DEBUG 0x050A and 0x050B, 2026-10-31,
+runtimes with `PSPEXP_FEATURE_CAPTURE_REQ`): the host asks for what the note
+button would do (`PspExpCaptureRequest`: `what` 1 a clip, 2 a recording
+started, 3 stopped, 4 a screenshot; `tag`, a screenshot's number, 24 bits),
+and the PSP does it as the button would, at its next reading
+(`pspexp_note_request`: a start while recording, a stop while not, a clip
+without the last seconds kept: nothing). It tells the host whenever a
+recording starts or stops, by the button or a request (`PspExpCaptureState`;
+none assumed at each HELLO). A requested screenshot carries its number in
+the "PXCF" header's flags (bit 0 a screenshot, bits 8-31 the number) and
+shows no dot; the receiver saves it as `/tmp/pspexp-shots/request-<n>.png`,
+never in the Gallery (written as `.tmp.png`, then renamed: whole when it
+appears). Uses: Quick controls' Start / Stop recording and Save the last N
+seconds (the stage 4 prerequisite: the receiver ignores the board's own
+FIFO requests with Clips off; now the PSP starts it, as with ♪ + L), and the
+console's `shot NAME`, which no longer goes through the memory stick when the
+PSP can be asked (`libpspexp`: `pspexp_capture_mode`, `_recording`,
+`_request`; an older runtime, or no receiver: the stick's BMP as before).
+Measured on the PSP-1000 through the GameShell: 1.33-1.35 s a screenshot
+(five in a row), against 2.8-3.2 s through the stick (390 KB written, read
+back and deleted each time); most of the 1.3 s is ffmpeg starting on the
+GameShell to encode the PNG. Tested first under PPSSPP with the receiver and
+a console on the Mac (screenshot, state, start, a second start ignored,
+stop: a 4 s MP4, a clip ignored with recordings only). The screenshot's
+white dot (♪ + L twice) now waits 0.2 s (`WHITE_WAIT_US`): on a still screen
+the picture is taken 0.15 s after the press, and the dot drawn by then was in
+it.
+
 Future extensions could add networking, compute/RPC, or other services without changing the fundamental graphics architecture.
 
 *The FILE channel (6), added 2026-09-28:*

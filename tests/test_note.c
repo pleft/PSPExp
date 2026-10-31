@@ -107,7 +107,9 @@ int main(void)
     step(NOTE | L, 0, 1);
     step(NOTE, 0, 1);
     step(NOTE | L, 0, 1);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_WHITE); CHECK_EQ(o.buttons, 0);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE); CHECK_EQ(o.buttons, 0);   /* (the dot waits: not in the picture) */
+    for (i = 0; i < 13; i++) step(NOTE, 0, 1);
+    CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_WHITE);
     CHECK_EQ(until_event(NOTE, 1), 0);                   /* no recording afterwards */
     CHECK_EQ(n.recording, 0);
     for (i = 0; i < 10; i++) step(0, 0, 1);
@@ -115,7 +117,9 @@ int main(void)
     step(NOTE, 0, 1); step(NOTE | L, 0, 1);
     CHECK_EQ(until_event(NOTE, 1), 1u << PSPEXP_NOTE_REC_START);
     step(NOTE, 0, 1); step(NOTE | L, 0, 1); step(NOTE, 0, 1); step(NOTE | L, 0, 1);
-    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_WHITE);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+    for (i = 0; i < 13; i++) step(0, 0, 1);
+    CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_WHITE);
     for (i = 0; i < 45; i++) step(0, 0, 1);
     CHECK_EQ(n.recording, 1); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
     /* two L presses farther apart than the double-tap time: two recording toggles, no screenshot */
@@ -191,6 +195,50 @@ int main(void)
     pspexp_note_init(&n);
     step(0, -1, 1); step(NOTE, -1, 1); step(0, -1, 1);
     CHECK_EQ(o.set_mute, -1); CHECK_EQ(o.buttons, NOTE);
+
+    /* the board's requests (CAPTURE_REQUEST): as the buttons would, at the next step */
+    pspexp_note_init(&n);
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    pspexp_note_request(&n, PSPEXP_NOTE_SHOT, 42);
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_SHOT); CHECK_EQ(o.shot_tag, 42); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE);   /* (the board's own: no dot) */
+    for (i = 0; i < 20; i++) { step(0, 0, PSPEXP_CAPTURE_RECORDINGS); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_NONE); }
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 0); CHECK_EQ(o.shot_tag, 0);   /* (once) */
+    pspexp_note_request(&n, PSPEXP_NOTE_REC_START, 0);
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_START); CHECK(n.recording); CHECK(o.rec_at != 0);
+    pspexp_note_request(&n, PSPEXP_NOTE_REC_START, 0);   /* already recording: nothing */
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 0); CHECK(n.recording);
+    for (i = 0; i < 40; i++) step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_RED);
+    pspexp_note_request(&n, PSPEXP_NOTE_CLIP, 0);   /* recordings only: no clip */
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 0);
+    pspexp_note_request(&n, PSPEXP_NOTE_REC_STOP, 0);
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_REC_STOP); CHECK(!n.recording);
+    pspexp_note_request(&n, PSPEXP_NOTE_REC_STOP, 0);   /* not recording: nothing */
+    step(0, 0, PSPEXP_CAPTURE_RECORDINGS);
+    CHECK_EQ(o.events, 0);
+    pspexp_note_request(&n, PSPEXP_NOTE_CLIP, 0);   /* the last seconds kept: a clip, the green dot */
+    step(0, 0, PSPEXP_CAPTURE_ALL);
+    CHECK_EQ(o.events, 1u << PSPEXP_NOTE_CLIP); CHECK_EQ(o.dot, PSPEXP_NOTE_DOT_GREEN);
+    /* a ♪ + L recording stopped by the board, then the board's start while ♪ + L stops: one change only */
+    pspexp_note_init(&n);
+    step(0, 0, 1);
+    pspexp_note_request(&n, PSPEXP_NOTE_REC_START, 0); step(0, 0, 1);
+    CHECK(n.recording);
+    step(NOTE, 0, 1); step(NOTE | L, 0, 1);
+    pspexp_note_request(&n, PSPEXP_NOTE_REC_START, 0);
+    seen = (int)until_event(NOTE, 1);
+    CHECK_EQ(seen, 1u << PSPEXP_NOTE_REC_STOP); CHECK(!n.recording);
+    /* no receiver: requests dropped */
+    pspexp_note_init(&n);
+    pspexp_note_request(&n, PSPEXP_NOTE_SHOT, 7); step(0, 0, 0);
+    CHECK_EQ(o.events, 0);
+    step(0, 0, 1); CHECK_EQ(o.events, 0);
 
     return test_summary("note");
 }

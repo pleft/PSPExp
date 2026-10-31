@@ -12,9 +12,12 @@
 
 #include <stdint.h>
 
-enum { QK_NONE, QK_NOTIFY, QK_TERMINAL, QK_RESTART, QK_POWEROFF, QK_SETTINGS };
+enum { QK_NONE, QK_NOTIFY, QK_TERMINAL, QK_RESTART, QK_POWEROFF, QK_SETTINGS, QK_RECORD, QK_CLIP };
 
 void quick_open(void);
+/* the recorder as the link knows it (main.c, each turn): the receiver's PSPEXP_CAPTURE_* while the
+ * PSP can be asked (0: it cannot: Start recording and Save clip not offered), a recording under way */
+void quick_set_capture(int mode, int recording);
 int  quick_is_open(void);
 void quick_input(uint32_t pressed, int up, int down);
 void quick_draw(void);

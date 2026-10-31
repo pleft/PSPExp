@@ -219,6 +219,8 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_HOME       0x00040000u  /* answers HOME_MODE: HOME can be the host's (PSPEXP_BUTTON_HOME in INPUT) */
 #define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: Recording inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
+#define PSPEXP_FEATURE_CAPTURE_REQ 0x00100000u /* answers CAPTURE_REQUEST and sends CAPTURE_STATE: the host asks for a
+                                                  screenshot, a recording or a clip */
 #define PSPEXP_FEATURE_AUDIO_MP3  0x00001000u  /* AUDIO_CODED_STREAM with MP3 frames: decoded on the PSP (its Media Engine) */
 #define PSPEXP_FEATURE_PATCH      0x00000020u  /* answers RESOURCE_PATCH: part of a resident texture replaced.
                                                   A host must not send it otherwise (older runtimes drop it) */
@@ -238,6 +240,30 @@ typedef struct PspExpCaptureSet {
     uint32_t reserved[3];
 } PspExpCaptureSet;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureSet) == 16, capture_set_size);
+
+/* Host -> PSP (CAPTURE_REQUEST, with PSPEXP_FEATURE_CAPTURE_REQ): what the note button would do,
+ * asked by the host (Quick controls, a test's screenshot), done as the button would, with its dot:
+ * a clip (the last seconds kept only), a recording started or stopped (only when that changes it),
+ * a screenshot, its frame marked with `tag` (the "PXCF" header's word at 28: bit 0 a screenshot,
+ * bits 8-31 the host's number; 0 for ♪ + L twice). Nothing without a receiver. */
+#define PSPEXP_CAPREQ_CLIP       1
+#define PSPEXP_CAPREQ_REC_START  2
+#define PSPEXP_CAPREQ_REC_STOP   3
+#define PSPEXP_CAPREQ_SHOT       4
+typedef struct PspExpCaptureRequest {
+    uint32_t what;               /* PSPEXP_CAPREQ_* */
+    uint32_t tag;                /* a screenshot's number (24 bits) */
+    uint32_t reserved[2];
+} PspExpCaptureRequest;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureRequest) == 16, capture_request_size);
+
+/* PSP -> host (CAPTURE_STATE, with PSPEXP_FEATURE_CAPTURE_REQ): a recording started or stopped,
+ * by the note button or a request; 0 assumed at every connection */
+typedef struct PspExpCaptureState {
+    uint32_t recording;
+    uint32_t reserved[3];
+} PspExpCaptureState;
+PSPEXP_STATIC_ASSERT(sizeof(PspExpCaptureState) == 16, capture_state_size);
 
 /* Host -> PSP (HOME_MODE): who HOME belongs to. SYSTEM, the PSP's own "quit?" dialog (PSPExp
  * left for the XMB), as at the start and again at every disconnect; HOST, the dialog switched off

@@ -27,6 +27,11 @@
   options: Add to favourites, Game details, and Sort by (Favourites and
   recent, Recently played, Title A-Z); each platform keeps its view and its
   order. Square no longer adds a favourite.
+- **Record from Quick controls**: **Start recording** / **Stop recording**
+  (as ♪ + L) and, with Clips on, **Save the last 30 seconds** (as ♪ + R),
+  the PSP's dot answering as for the buttons. Needs Settings > Update the
+  PSP. A screenshot's white dot (♪ + L twice) now shows just after the
+  picture is taken, so it is no longer in it on a still screen.
 - **Button sounds**: a soft click answers each press in the launcher and
   the apps (a tick as you move, rising for cross, falling for circle, a pop
   for a panel), played by the PSP over the music; **Settings > Sound >

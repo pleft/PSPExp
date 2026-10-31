@@ -14,8 +14,9 @@ void pspexp_capture_psp_audio(const short *pcm, int frames);
 void pspexp_capture_psp_event(int type);
 /* the same, stamped with the PSP's time at (µs): a ♪ + L decided after the double-tap time */
 void pspexp_capture_psp_event_at(int type, uint32_t at);
-/* a screenshot: the next frame the GE finishes, marked as one (sent in either mode) */
-void pspexp_capture_psp_shot(void);
+/* a screenshot: the next frame the GE finishes, marked as one (sent in either mode); tag: the board's
+ * number for it (CAPTURE_REQUEST), in the frame header's flags from bit 8 (0: ♪ + L twice) */
+void pspexp_capture_psp_shot(uint32_t tag);
 /* each turn of the main loop: a screenshot still waiting after 0.15 s takes the screen as it is */
 void pspexp_capture_psp_tick(void);
 /* the receiver's PSPEXP_CAPTURE_* (0: none) */

@@ -2618,7 +2618,7 @@ static void pkg_check_tick(uint64_t now)
 
 static uint64_t g_ctl_frame_us;        /* when the last frame went to the PSP */
 static int g_ctl_on;
-enum { CS_IDLE, CS_PRESS, CS_SETTLE, CS_WAIT, CS_IDLEWAIT, CS_SHOT, CS_STOP, CS_RELINK };
+enum { CS_IDLE, CS_PRESS, CS_SETTLE, CS_WAIT, CS_IDLEWAIT, CS_SHOT, CS_LINKSHOT, CS_STOP, CS_RELINK };
 static int g_ctl_relink;               /* drop the link now: the main loop does it (it owns the retry timer) */
 static struct { int st; uint64_t t0, until, limit; unsigned shot; char name[128]; } C;
 
@@ -2819,6 +2819,25 @@ static void ctl_step(uint64_t now, int connected)
         if (C.t0 == 1 && connected) { C.st = CS_IDLE; ctl_reply("ok back"); return; }
         if (now > C.limit) { C.st = CS_IDLE; ctl_reply(C.t0 == 1 ? "error the PSP did not come back" : "error the link did not drop"); }
         return;
+    case CS_LINKSHOT: {   /* the receiver's PNG of the frame asked for (CAPTURE_REQUEST), renamed as asked */
+        char got[600], out[700];
+        const char *shots = getenv("PSPEXP_TERM_SHOTS");
+        if (now < C.until) return;
+        snprintf(got, sizeof(got), "/tmp/pspexp-shots/request-%u.png", C.shot);
+        if (access(got, F_OK) == 0) {
+            if (!shots || !*shots) shots = "/tmp/pspexp-shots";
+            mkdir(shots, 0755);
+            snprintf(out, sizeof(out), "%s/%s.png", shots, C.name[0] ? C.name : "shot");
+            if (rename(got, out) == 0) snprintf(reply, sizeof(reply), "ok %s", out);
+            else snprintf(reply, sizeof(reply), "ok %s", got);
+            C.st = CS_IDLE; ctl_reply(reply);
+            return;
+        }
+        if (!connected) { C.st = CS_IDLE; ctl_reply("error the PSP went away"); return; }
+        if (now > C.limit) { C.st = CS_IDLE; ctl_reply("error no screenshot from the receiver (pspexp-plugin-host)"); return; }
+        C.until = now + 100000u;
+        return;
+    }
     case CS_SHOT:
         if (now < C.until) return;
         if (!connected) { C.st = CS_IDLE; ctl_reply("error the PSP went away"); return; }
@@ -2855,8 +2874,21 @@ static void ctl_step(uint64_t now, int connected)
                  st->last_present_latency_us, st->last_ge_us, st->last_execute_us, st->reconnects, (unsigned long long)st->bytes_sent, (unsigned long long)st->bytes_received);
         ctl_reply(reply);
     } else if (!strncmp(cmd, "shot", 4)) {
-        if (!connected || !pspexp_fs_supported(ctx)) { ctl_reply("error screenshots need a connected PSP that shares its memory stick"); return; }
+        char *c;
         snprintf(C.name, sizeof(C.name), "%s", cmd[4] == ' ' ? cmd + 5 : "");
+        for (c = C.name; *c; c++) if (!isalnum((unsigned char)*c) && *c != '-' && *c != '_' && *c != '.') *c = '_';
+        if (connected && pspexp_capture_mode(ctx)) {   /* the PSP's own capture, saved by the receiver on the board:
+                                                         * nothing written on the memory stick (2026-10-31) */
+            static unsigned tag;
+            char old[600];
+            tag = tag % 0xFFFFFu + 1u;
+            C.shot = ((unsigned)getpid() & 0xFu) << 20 | tag;
+            snprintf(old, sizeof(old), "/tmp/pspexp-shots/request-%u.png", C.shot);
+            unlink(old);
+            if (pspexp_capture_request(ctx, PSPEXP_CAPREQ_SHOT, C.shot) == 0) { C.st = CS_LINKSHOT; C.until = now + 150000u; C.limit = now + 6000000u; return; }
+        }
+        /* an older runtime, or no receiver: the PSP writes it on its memory stick, read back from there */
+        if (!connected || !pspexp_fs_supported(ctx)) { ctl_reply("error screenshots need a connected PSP with a receiver on the board, or that shares its memory stick"); return; }
         C.shot = 9000u + (C.shot + 1 - 9000u) % 500u;
         pspexp_request_screenshot(ctx, (uint16_t)C.shot);
         C.st = CS_SHOT; C.until = now + 150000u; C.limit = now + 6000000u;
@@ -2940,13 +2972,20 @@ static void ctl_step(uint64_t now, int connected)
         if (lv < 0 || !f[2][0]) ctl_reply("error notify LEVEL|ICON|TITLE|DETAIL|ACTION|KEY (LEVEL: info, done, fail, attention, warning, hint)");
         else if (!g_launcher_on) ctl_reply("error notifications need --launcher");
         else { unsigned id = notify(lv, f[1], f[2], f[3], f[4], f[5]); snprintf(reply, sizeof(reply), "ok %u", id); ctl_reply(reply); }
+    } else if (!strncmp(cmd, "capture", 7)) {   /* the recorder through the PSP (CAPTURE_REQUEST), as Quick controls does */
+        const char *a = cmd[7] == ' ' ? cmd + 8 : "state";
+        int what = !strcmp(a, "start") ? PSPEXP_CAPREQ_REC_START : !strcmp(a, "stop") ? PSPEXP_CAPREQ_REC_STOP : !strcmp(a, "clip") ? PSPEXP_CAPREQ_CLIP : 0;
+        if (what && pspexp_capture_request(ctx, what, 0) < 0) { ctl_reply("error the PSP cannot be asked (not connected, no receiver, or an older runtime)"); return; }
+        if (!what && strcmp(a, "state")) { ctl_reply("error capture start|stop|clip|state"); return; }
+        snprintf(reply, sizeof(reply), "ok mode=%d recording=%d%s", pspexp_capture_mode(ctx), pspexp_capture_recording(ctx), what ? " (asked)" : "");
+        ctl_reply(reply);
     } else if (!strcmp(cmd, "ping")) {
         ctl_reply("ok pong");
     } else if (!strcmp(cmd, "end")) {   /* the run is over: Restart, Power off and Wi-Fi work again */
         launcher_set_test_mode(0);
         g_pkgchk_quiet = 0;
         ctl_reply("ok");
-    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, psp-boot PATH, home board|system, ping, end");
+    } else ctl_reply("error commands: press|hold BUTTONS [ms], nub X Y [ms], wait MS, idle [MS], state, stats, shot NAME, capture start|stop|clip|state, open launcher|terminal|files [PATH], category NAME, select TITLE, type TEXT, fs ..., stop, relink, clock [force], notify ..., psp-restart, psp-boot PATH, home board|system, ping, end");
 }
 
 /* ---- the PSPExp plugin host (tools/pspexp-plugin-host) beside the console ----
@@ -3348,6 +3387,7 @@ int main(int argc, char **argv)
             }
         }
         home_mode_tick();
+        quick_set_capture(pspexp_capture_mode(ctx), pspexp_capture_recording(ctx));   /* (Quick controls' recorder rows) */
         handle_input();
         if (g_launcher_on && g_launch_pid <= 0) {
             char cmd[1024], cwd[512];
@@ -3380,6 +3420,8 @@ int main(int argc, char **argv)
             case QK_NOTIFY: app_show(app_find("notifications")); break;
             case QK_TERMINAL: terminal_show(); break;
             case QK_SETTINGS: launcher_show(); launcher_category(quick_settings_group()); break;
+            case QK_RECORD: pspexp_capture_request(ctx, pspexp_capture_recording(ctx) ? PSPEXP_CAPREQ_REC_STOP : PSPEXP_CAPREQ_REC_START, 0); break;
+            case QK_CLIP: pspexp_capture_request(ctx, PSPEXP_CAPREQ_CLIP, 0); break;
             case QK_RESTART: fprintf(stderr, "[pspexp-term] restarting (Quick controls)\n"); g_quit = 1; break;
             case QK_POWEROFF: launcher_power_off(now); break;
             default: break;

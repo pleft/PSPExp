@@ -81,6 +81,8 @@ enum PspExpOpcode {
     PSPEXP_OP_DEBUG_SCREENSHOT = 0x0507, /* host -> PSP, PspExpScreenshot: dump the displayed frame to a file */
     PSPEXP_OP_CAPTURE_SET    = 0x0508,  /* host -> PSP, PspExpCaptureSet: recording on or off (PSPEXP_FEATURE_CAPTURE) */
     PSPEXP_OP_CAPTURE_DATA   = 0x0509,  /* PSP -> host, PspExpCaptureData + bytes: the next bytes of the capture stream */
+    PSPEXP_OP_CAPTURE_REQUEST = 0x050A, /* host -> PSP, PspExpCaptureRequest: a screenshot, a recording, a clip (PSPEXP_FEATURE_CAPTURE_REQ) */
+    PSPEXP_OP_CAPTURE_STATE  = 0x050B,  /* PSP -> host, PspExpCaptureState: a recording started or stopped (PSPEXP_FEATURE_CAPTURE_REQ) */
 
     /* FILE (0x06xx), only with PSPEXP_FEATURE_FILES: host -> PSP PspExpFsRequest,
      * PSP -> host FS_REPLY */

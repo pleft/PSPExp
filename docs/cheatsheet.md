@@ -105,7 +105,8 @@ cable pull, so pull the cable to read it after a session.
 | **integration tests on a real PSP** (on a board's console; report + the PSP's screenshots in `build/psp-tests/`) | `tests/psp/run.py --host <user@board> [link stick launcher files terminal]` |
 | **every game on the real PSP** from the launcher (starts, fps, sound, nub, HOME, the PSP still there; ~35 s a game; results in /tmp/pspexp-all-games) | on the board, PSP connected: `tests/psp/all-games.sh` / `tests/psp/all-games.sh "Nintendo 64::Super Mario 64" /opt/pspexp/apps/quake/quake.entry` |
 | the media servers Media finds (UPnP / DLNA), a server's folder | `pspexp-term --upnp`, `pspexp-term --upnp 1 0` (server 1's top; a folder by its id) |
-| drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` / `--ctl "fs ls ms0:/"` / `--ctl "volume-bar 40"` |
+| drive a running console by hand (buttons, state, screenshots, the stick) | on the board: `pspexp-term --ctl "press cross"` / `--ctl state` / `--ctl "shot NAME"` (`/tmp/pspexp-shots/NAME.png`, the PSP's own capture, nothing on the stick; an older runtime: `NAME.bmp` through the stick) / `--ctl "fs ls ms0:/"` / `--ctl "volume-bar 40"` |
+| the recorder through the PSP, as Quick controls does | `pspexp-term --ctl "capture start"` / `stop` / `clip` / `state` (`mode=`: 0 cannot be asked, 1 clips kept, 2 recordings only; `recording=`) |
 | benchmark the SDL layer's texture uploads (Doom timedemo, four modes) | `scripts/dev/bench-shim.sh` / `scripts/dev/bench-shim.sh --seconds 40 <board host>` |
 | Warcraft I and II on a board | Apps > Packages, or on the board `pspexp-pkg install warcraft warcraft2`; your copy's data in `~/Warcraft` (DATA.WAR) / `~/Warcraft2` |
 

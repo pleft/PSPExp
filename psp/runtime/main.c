@@ -506,6 +506,10 @@ static void show_status_page(void)
 /* the note button with the PSPExp plugin host there (runtime/pspexp_note.c): ♪+R a clip, ♪+L a
  * recording, the dot; the board gets the buttons it should see */
 static PspExpNote g_note;
+static PspExpRuntime *g_rtp;     /* (for CAPTURE_STATE) */
+static int g_rec_sent;           /* the recording the board was last told of (it assumes none at each connection) */
+/* the board asks for what the note button would do (CAPTURE_REQUEST): done at the next reading */
+static void op_capture_request(void *user, int what, uint32_t tag) { (void)user; pspexp_note_request(&g_note, what, tag); }
 static uint32_t note_buttons(uint32_t buttons, uint32_t now)
 {
     static const uint16_t dot[4] = { 0, 0x4606, 0x211C, 0xFFFF };   /* none, green, red, white (RGB 5650: the plugin's colours) */
@@ -521,7 +525,7 @@ static uint32_t note_buttons(uint32_t buttons, uint32_t now)
     for (e = PSPEXP_NOTE_CLIP; e <= PSPEXP_NOTE_SHOT; e++)
         if (o.events & (1u << e)) {
             if (e == PSPEXP_NOTE_REC_STOP) pspexp_capture_psp_recording(0);   /* (recordings only: nothing sent after the stop) */
-            if (e == PSPEXP_NOTE_SHOT) pspexp_capture_psp_shot();
+            if (e == PSPEXP_NOTE_SHOT) pspexp_capture_psp_shot(o.shot_tag);
             else if (e == PSPEXP_NOTE_CLIP) pspexp_capture_psp_event(e);
             else pspexp_capture_psp_event_at(e, o.rec_at);   /* (stamped with the first L: the recording starts there) */
             {
@@ -532,6 +536,10 @@ static uint32_t note_buttons(uint32_t buttons, uint32_t now)
         }
     pspexp_capture_psp_tick();
     pspexp_capture_psp_recording(g_note.recording);   /* (after the start event: nothing sent before it) */
+    if (g_rtp && (cap ? g_note.recording : 0) != g_rec_sent) {   /* the board told: Quick controls' Start or Stop recording */
+        g_rec_sent = cap ? g_note.recording : 0;
+        pspexp_runtime_capture_state(g_rtp, g_rec_sent);
+    }
     if ((o.events & (1u << PSPEXP_NOTE_REC_START)) && cap == PSPEXP_CAPTURE_RECORDINGS) pspexp_capture_psp_grab();   /* (before the red dot) */
     g_ge.rec_dot = dot[o.dot];
     return o.buttons;
@@ -607,6 +615,7 @@ int main(int argc, char *argv[])
     g_link_sema = sceKernelCreateSema("PSPExpLinkWrite", 0, 1, 1, NULL);
     pspexp_capture_psp_init(&g_ge, link_write, link_lock, link_unlock);   /* Recording inside PSPExp */
     pspexp_capture_psp_ops(&ops);
+    ops.capture_request = op_capture_request;
     pspexp_note_init(&g_note);
     ops.now_us = op_now;
     ops.screenshot = op_screenshot;
@@ -734,6 +743,7 @@ int main(int argc, char *argv[])
             gen = link_generation();
             connected = 1;
             pspexp_runtime_connect(&rt);      /* queues HELLO */
+            g_rtp = &rt; g_rec_sent = 0;
             trace(g_link == LINK_TCP ? "link up (tcp), HELLO queued" : "link up (usb), HELLO queued");
         }
 

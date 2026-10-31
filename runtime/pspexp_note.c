@@ -14,6 +14,7 @@
 #define KEEP_US 500000u      /* (the mute may toggle again on the release) */
 #define FORGET_US 8000000u   /* the receiver waits as long for the next program holding the PSP */
 #define WHITE_US 600000u
+#define WHITE_WAIT_US 200000u   /* (a still screen's picture is taken 0.15 s after the press: the dot not in it) */
 
 static uint32_t stamp(uint32_t t) { return t ? t : 1; }   /* (0: none) */
 static int until(uint32_t now, uint32_t end) { return end && (int32_t)(now - end) < 0; }
@@ -24,12 +25,20 @@ void pspexp_note_init(PspExpNote *n)
     n->mute_before = n->mute_wanted = -1;
 }
 
+void pspexp_note_request(PspExpNote *n, int what, uint32_t tag)
+{
+    if (what < PSPEXP_NOTE_CLIP || what > PSPEXP_NOTE_SHOT) return;
+    n->req |= 1u << what;
+    if (what == PSPEXP_NOTE_SHOT) n->req_tag = tag;
+}
+
 void pspexp_note_step(PspExpNote *n, uint32_t b, int mute, int capture, uint32_t now, PspExpNoteOut *out)
 {
     out->events = 0;
     out->set_mute = -1;
     out->refused = 0;
     out->rec_at = 0;
+    out->shot_tag = 0;
     if (!capture) {   /* every button as read; a recording forgotten once the receiver has surely ended it */
         if (!n->off_since) n->off_since = stamp(now);
         else if (now - n->off_since >= FORGET_US) n->recording = 0;
@@ -66,7 +75,8 @@ void pspexp_note_step(PspExpNote *n, uint32_t b, int mute, int capture, uint32_t
                 if (n->l_first && now - n->l_first < PSPEXP_NOTE_DOUBLE_US) {
                     n->l_first = 0;
                     out->events |= 1u << PSPEXP_NOTE_SHOT;
-                    n->white_until = stamp(now + WHITE_US);
+                    n->white_from = stamp(now + WHITE_WAIT_US);
+                    n->white_until = stamp(now + WHITE_WAIT_US + WHITE_US);
                 } else n->l_first = stamp(now);
             }
         } else {
@@ -95,9 +105,30 @@ void pspexp_note_step(PspExpNote *n, uint32_t b, int mute, int capture, uint32_t
             out->rec_at = n->l_first;
             n->l_first = 0;
         }
+        /* the board's requests: as the buttons would (a start while recording, a stop while not:
+         * nothing; a clip without the last seconds kept: nothing) */
+        if ((n->req & (1u << PSPEXP_NOTE_CLIP)) && capture == PSPEXP_CAPTURE_ALL) {
+            out->events |= 1u << PSPEXP_NOTE_CLIP;
+            n->green_until = stamp(now + GREEN_US);
+        }
+        if ((n->req & (1u << PSPEXP_NOTE_REC_START)) && !n->recording && !(out->events & (1u << PSPEXP_NOTE_REC_STOP))) {
+            n->recording = 1;
+            out->events |= 1u << PSPEXP_NOTE_REC_START;
+            out->rec_at = stamp(now);
+        } else if ((n->req & (1u << PSPEXP_NOTE_REC_STOP)) && n->recording && !(out->events & (1u << PSPEXP_NOTE_REC_START))) {
+            n->recording = 0;
+            out->events |= 1u << PSPEXP_NOTE_REC_STOP;
+            out->rec_at = stamp(now);
+        }
+        if (n->req & (1u << PSPEXP_NOTE_SHOT)) {
+            out->events |= 1u << PSPEXP_NOTE_SHOT;
+            out->shot_tag = n->req_tag;   /* (no dot: the board's own picture) */
+        }
     }
+    n->req = 0; n->req_tag = 0;   /* (without a receiver: dropped) */
     n->was = b;
     if (!until(now, n->green_until)) n->green_until = 0;
-    if (!until(now, n->white_until)) n->white_until = 0;
-    out->dot = n->white_until ? PSPEXP_NOTE_DOT_WHITE : n->recording ? PSPEXP_NOTE_DOT_RED : n->green_until ? PSPEXP_NOTE_DOT_GREEN : PSPEXP_NOTE_DOT_NONE;
+    if (!until(now, n->white_until)) n->white_until = n->white_from = 0;
+    if (n->white_from && !until(now, n->white_from)) n->white_from = 0;
+    out->dot = n->white_until && !n->white_from ? PSPEXP_NOTE_DOT_WHITE : n->recording ? PSPEXP_NOTE_DOT_RED : n->green_until ? PSPEXP_NOTE_DOT_GREEN : PSPEXP_NOTE_DOT_NONE;
 }

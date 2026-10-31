@@ -110,7 +110,7 @@ Settings.
 | square | in a platform's games: Focus or Grid |
 | triangle | a game's options (favourite, Game details, Sort by), an app's App details |
 | SELECT | in Games, **Search** (games, apps and every ROM, by name) |
-| START | **Quick controls**: Notifications, Terminal; the PSP link, the board's network and Wi-Fi strength, the sound and the headphones' volume, the board's battery when it has one; Restart PSPExp and Power off the board (each asked again) |
+| START | **Quick controls**: Start / Stop recording and Save the last seconds (as ♪ + L and ♪ + R); Notifications, Terminal; the PSP link, the board's network and Wi-Fi strength, the sound and the headphones' volume, the board's battery when it has one; Restart PSPExp and Power off the board (each asked again) |
 
 ## Notifications
 

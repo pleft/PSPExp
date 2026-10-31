@@ -830,6 +830,21 @@ rows of 25. Packages reading its list let START through too (it swallowed
 every button meanwhile). Checked on the PSP-1000 at 1:1: Quick controls over
 Apps and Packages, Network from Packages to Settings › Network.
 
+**Stage 4, its first part: recording from Quick controls (2026-10-31).** The
+proposal's prerequisite: with Clips off the receiver ignored the board's own
+requests, only ♪ + L on the PSP started a recording. Now the board asks the
+PSP (CAPTURE_REQUEST, architecture §9's capture messages) and the PSP does
+what ♪ + L, ♪ + R would; it reports the recording's state back
+(CAPTURE_STATE). Quick controls, when the PSP can be asked
+(`quick_set_capture`, each turn from main.c): **Start recording** or **Stop
+recording** (the state the PSP reported, "♪ + L" beside it) and, with Clips
+on, **Save the last N seconds** ("♪ + R"); first in the panel, as in the
+proposal's mockup. Never by switching Clips on. Checked on the PSP-1000
+through the GameShell after Update the PSP: Start recording turned into Stop
+recording while one ran. The same request makes the console's `shot` a
+capture: no memory stick (architecture §9). Left for stage 4: launch
+progress, connection recovery, empty states.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

@@ -70,6 +70,8 @@ const char *pspexp_opcode_name(uint16_t opcode)
     case PSPEXP_OP_BOOT_DISC: return "BOOT_DISC";
     case PSPEXP_OP_CAPTURE_SET: return "CAPTURE_SET";
     case PSPEXP_OP_CAPTURE_DATA: return "CAPTURE_DATA";
+    case PSPEXP_OP_CAPTURE_REQUEST: return "CAPTURE_REQUEST";
+    case PSPEXP_OP_CAPTURE_STATE: return "CAPTURE_STATE";
     case PSPEXP_OP_TEXT_REQUEST: return "TEXT_REQUEST";
     case PSPEXP_OP_TEXT_RESULT: return "TEXT_RESULT";
     case PSPEXP_OP_BENCH_START: return "BENCH_START";

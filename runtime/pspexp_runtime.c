@@ -147,7 +147,7 @@ static void send_hello(PspExpRuntime *rt)
                  (rt->ops.audio_decode ? PSPEXP_FEATURE_AUDIO_MP3 : 0) | (rt->ops.osd_volume ? PSPEXP_FEATURE_OSD : 0) | (rt->ops.osd_hint ? PSPEXP_FEATURE_OSD_HINT : 0) |
                  (rt->ops.text_begin ? PSPEXP_FEATURE_TEXT : 0) | (rt->ops.restart ? PSPEXP_FEATURE_RESTART : 0) | (rt->ops.boot_disc ? PSPEXP_FEATURE_BOOT_DISC : 0) |
                  (rt->ops.home_mode ? PSPEXP_FEATURE_HOME : 0) |
-                 (rt->ops.capture_set ? PSPEXP_FEATURE_CAPTURE : 0) |
+                 (rt->ops.capture_set ? PSPEXP_FEATURE_CAPTURE : 0) | (rt->ops.capture_set && rt->ops.capture_request ? PSPEXP_FEATURE_CAPTURE_REQ : 0) |
                  (rt->ops.draw3d ? PSPEXP_FEATURE_3D | PSPEXP_FEATURE_3D16 : 0) | (rt->ops.texture_patch ? PSPEXP_FEATURE_PATCH : 0) |
                  (rt->ops.draw3d && rt->ops.draw3d_indexed ? PSPEXP_FEATURE_3D_INDEXED : 0) |
                  (rt->ops.draw3d && rt->ops.morph3d ? PSPEXP_FEATURE_3D_MORPH : 0) |
@@ -169,6 +169,14 @@ void pspexp_runtime_disconnect(PspExpRuntime *rt)
 {
     release_all(rt);
     if (rt->ops.capture_set) rt->ops.capture_set(rt->ops.user, 0);   /* (the next host asks anew) */
+}
+
+void pspexp_runtime_capture_state(PspExpRuntime *rt, int recording)
+{
+    PspExpCaptureState st;
+    memset(&st, 0, sizeof(st));
+    st.recording = recording ? 1u : 0u;
+    pspexp_writer_message(&rt->out, PSPEXP_CH_DEBUG, PSPEXP_OP_CAPTURE_STATE, 0, &st, sizeof(st));
 }
 
 static void send_error(PspExpRuntime *rt, uint16_t code, const PspExpMessage *m, uint32_t detail)
@@ -1028,6 +1036,14 @@ static void dispatch(PspExpRuntime *rt, const PspExpMessage *m)
         if (pspexp_message_expect(m, sizeof(*c)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
         c = (const PspExpCaptureSet *)m->payload;
         rt->ops.capture_set(rt->ops.user, c->on <= PSPEXP_CAPTURE_RECORDINGS ? (int)c->on : PSPEXP_CAPTURE_ALL);
+        return;
+    }
+    case PSPEXP_OP_CAPTURE_REQUEST: {
+        const PspExpCaptureRequest *q;
+        if (!rt->ops.capture_request) { send_error(rt, PSPEXP_ERR_BAD_OPCODE, m, 0); return; }   /* (not advertised) */
+        if (pspexp_message_expect(m, sizeof(*q)) < 0) { send_error(rt, PSPEXP_ERR_BAD_LENGTH, m, 0); return; }
+        q = (const PspExpCaptureRequest *)m->payload;
+        if (q->what >= PSPEXP_CAPREQ_CLIP && q->what <= PSPEXP_CAPREQ_SHOT) rt->ops.capture_request(rt->ops.user, (int)q->what, q->tag & 0xFFFFFFu);
         return;
     }
     case PSPEXP_OP_DEBUG_SCREENSHOT: {

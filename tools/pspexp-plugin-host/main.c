@@ -212,20 +212,35 @@ static void game_dir(const char *title, char *out, size_t n)
     mkdir(out, 0755);
 }
 
-/* a screenshot: the frame as PNG in the game's folder (ffmpeg's encoder: the boards have it) */
-static void shot_save(const uint8_t *rgb)
+/* a screenshot: the frame as PNG in the game's folder (ffmpeg's encoder: the boards have it); one the
+ * board asked for with a number (CAPTURE_REQUEST: a test's, the console's `shot`) in
+ * /tmp/pspexp-shots/request-<number>.png instead, never in the Gallery */
+static void shot_save(const uint8_t *rgb, uint32_t tag)
 {
     char dir[1100], name[1300], cmd[1500], when[64];
     time_t tt = time(NULL);
     FILE *f;
-    if (!g_clips) return;
-    strftime(when, sizeof(when), "%Y-%m-%d-%H.%M.%S", localtime(&tt));
-    game_dir(g_title, dir, sizeof(dir));
-    snprintf(name, sizeof(name), "%s/screenshot-%s.png", dir, when);
+    if (tag) {
+        mkdir("/tmp/pspexp-shots", 0755);
+        snprintf(name, sizeof(name), "/tmp/pspexp-shots/request-%u.tmp.png", (unsigned)tag);   /* (ffmpeg goes by the ending) */
+    } else {
+        if (!g_clips) return;
+        strftime(when, sizeof(when), "%Y-%m-%d-%H.%M.%S", localtime(&tt));
+        game_dir(g_title, dir, sizeof(dir));
+        snprintf(name, sizeof(name), "%s/screenshot-%s.png", dir, when);
+    }
     snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -i - -frames:v 1 '%s'", W, H, name);
     if (!(f = popen(cmd, "w"))) { fprintf(stderr, "pspexp-plugin-host: no ffmpeg for the screenshot\n"); return; }
     fwrite(rgb, 1, (size_t)W * H * 3, f);
-    if (pclose(f) == 0) fprintf(stderr, "pspexp-plugin-host: saved %s\n", name);
+    if (pclose(f) == 0) {
+        if (tag) {   /* (whole before its name appears: the console waits for it) */
+            char done[1300];
+            snprintf(done, sizeof(done), "/tmp/pspexp-shots/request-%u.png", (unsigned)tag);
+            rename(name, done);
+            snprintf(name, sizeof(name), "%s", done);
+        }
+        fprintf(stderr, "pspexp-plugin-host: saved %s\n", name);
+    }
     else fprintf(stderr, "pspexp-plugin-host: the screenshot %s was not made\n", name);
 }
 static char g_segdir[1100];
@@ -753,9 +768,9 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (!frames) { ch_first = changes; ch_at = changes; }
         frames++; bytes += 32 + len; ch_last = changes;
         double n = now();
-        int shot = (get32(hdr + 28) & 1) != 0;   /* (a screenshot: ♪ + L twice on the PSP) */
+        int shot = (get32(hdr + 28) & 1) != 0;   /* (a screenshot: ♪ + L twice on the PSP, or the board's request: its number from bit 8) */
         if (ff || dir || shot) to_rgb(px, (int)fmt, (int)w, rgb);
-        if (shot && g_clips) shot_save(rgb);
+        if (shot) shot_save(rgb, get32(hdr + 28) >> 8);
         if (ff) {   /* the previous frame held until this one's time, then this one */
             uint64_t due = at > 0 ? (uint64_t)(at * 30 / 1e6) : 0;
             int bad = 0;

@@ -92,11 +92,16 @@ first.
 **Settings > Recording > Clip length** makes a clip 15, 30 (at first) or 60
 seconds long.
 
+**Quick controls** (START, anywhere in PSPExp) has the same: **Start
+recording** (or **Stop recording** while one runs) and, with Clips on,
+**Save the last 30 seconds**; the PSP's dot answers as for the buttons.
+(It needs the PSP updated with this version: Settings > Update the PSP.)
+
 | Press | What happens | You see, bottom right |
 |---|---|---|
 | ♪ + L | a recording starts | a red dot, while it records |
 | ♪ + L again | the recording stops and is saved | the red dot goes |
-| ♪ + L twice, quickly | a screenshot | a white dot, for a moment |
+| ♪ + L twice, quickly | a screenshot | a white dot, for a moment (just after, so it is not in the picture) |
 | ♪ + R | the last 30 seconds are saved (Clips on; Clip length changes it) | a green dot, for a second |
 
 ## Quality

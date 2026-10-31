@@ -119,6 +119,10 @@ typedef struct PspExpRuntimeOps {
      * The platform then copies its frames and sound and sends CAPTURE_DATA itself. With it,
      * HELLO advertises PSPEXP_FEATURE_CAPTURE. */
     void (*capture_set)(void *user, int on);   /* PSPEXP_CAPTURE_* */
+    /* Optional: the host asks for what the note button would do (CAPTURE_REQUEST: PSPEXP_CAPREQ_*,
+     * a screenshot's number). With it (and capture_set), HELLO advertises PSPEXP_FEATURE_CAPTURE_REQ;
+     * the platform then tells the host when a recording starts or stops: pspexp_runtime_capture_state */
+    void (*capture_request)(void *user, int what, uint32_t tag);
     /* Optional: open the PSP's own keyboard (TEXT_REQUEST) with a title and the text the
      * field starts with (UTF-8), for at most max_chars characters; returns 0 when it is
      * shown, < 0 when it cannot be. The answer comes later: pspexp_runtime_text_done.
@@ -233,6 +237,8 @@ void pspexp_runtime_push_input(PspExpRuntime *rt, uint32_t buttons, uint8_t anal
 /* The keyboard opened by ops.text_begin was closed: queues TEXT_RESULT with
  * status PSPEXP_TEXT_* and the text typed (UTF-8; NULL for none). */
 void pspexp_runtime_text_done(PspExpRuntime *rt, unsigned status, const char *utf8);
+/* a recording started (1) or stopped (0), for the host (CAPTURE_STATE; with capture_request) */
+void pspexp_runtime_capture_state(PspExpRuntime *rt, int recording);
 
 /* Pending PSP -> host bytes. Send them, then call _out_consume(). Produces
  * pending benchmark uplink blocks one at a time when the queue is empty. */

@@ -147,6 +147,15 @@ int pspexp_boot_disc(PspExpContext *ctx, const char *path);
  * the PSP's own dialog off); 0, the PSP's dialog (quit PSPExp). Back to 0 at every disconnect. */
 int pspexp_home_supported(const PspExpContext *ctx);
 int pspexp_home_mode(PspExpContext *ctx, int host);
+/* Recording inside PSPExp, asked by this program (CAPTURE_REQUEST, PSPEXP_FEATURE_CAPTURE_REQ): what the
+ * PSP's note button would do, done by the PSP as the button would (PSPEXP_CAPREQ_*: a clip, a recording
+ * started or stopped, a screenshot with tag, its "PXCF" flags' bits 8-31, which the receiver saves as
+ * /tmp/pspexp-shots/request-<tag>.png). capture_mode: the receiver's PSPEXP_CAPTURE_* while the PSP can
+ * be asked (0: it cannot: no receiver, an older runtime); capture_recording: what the PSP said last
+ * (CAPTURE_STATE). request: 0 sent, -1 not */
+int pspexp_capture_mode(const PspExpContext *ctx);
+int pspexp_capture_recording(const PspExpContext *ctx);
+int pspexp_capture_request(PspExpContext *ctx, int what, uint32_t tag);
 /* OSD_HINT (PSPEXP_FEATURE_OSD_HINT): the PSP's hint bar (PSPEXP_HINT_*) over its frames for ms (0:
  * gone). The library shows "HOME again to quit" itself at a first HOME in HOST mode. */
 int pspexp_osd_hint(PspExpContext *ctx, uint32_t kind, uint32_t ms);

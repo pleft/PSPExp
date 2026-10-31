@@ -117,9 +117,13 @@ class Run:
     def shot(self, name, caption):
         lines = self.ctl("shot " + name, timeout=30)
         remote = lines[0].split()[1]
+        png = os.path.join(self.out, name + ".png")
+        if remote.endswith(".png"):   # the PSP's own capture, saved by the receiver on the board (no memory stick)
+            self.t.fetch(remote, png)
+            self.shots.append((os.path.basename(png), caption))
+            return
         bmp = os.path.join(self.out, name + ".bmp")
         self.t.fetch(remote, bmp)
-        png = os.path.join(self.out, name + ".png")
         if shutil.which("sips"):
             subprocess.run(["sips", "-s", "format", "png", bmp, "--out", png], capture_output=True)
             os.remove(bmp)
