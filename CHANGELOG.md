@@ -32,6 +32,11 @@
   the PSP's dot answering as for the buttons. Needs Settings > Update the
   PSP. A screenshot's white dot (♪ + L twice) now shows just after the
   picture is taken, so it is no longer in it on a still screen.
+- **Search, Game details and About** in the same look as the rest: Search
+  keeps the categories over it, its results a list like a platform's with
+  the covers; Game details is a screen of its own (the art, the whole title,
+  the description, what is known), back where you were with circle; About
+  is a list under Settings > This board, one fact a row.
 - **Button sounds**: a soft click answers each press in the launcher and
   the apps (a tick as you move, rising for cross, falling for circle, a pop
   for a panel), played by the PSP over the music; **Settings > Sound >

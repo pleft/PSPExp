@@ -109,7 +109,7 @@ Settings.
 | circle | back one level: from a platform's games to the platforms, from a group's settings to the groups |
 | square | in a platform's games: Focus or Grid |
 | triangle | a game's options (favourite, Game details, Sort by), an app's App details |
-| SELECT | in Games, **Search** (games, apps and every ROM, by name) |
+| SELECT | in Games, **Search** (games, apps and every ROM, by name): type with the keyboard (square deletes), the first matches above it; START shows the results as a list like a platform's, with their covers (cross plays, triangle Options); circle goes back to the keyboard to change it, then back where you were |
 | START | **Quick controls**: Start / Stop recording and Save the last seconds (as ♪ + L and ♪ + R); Notifications, Terminal; the PSP link, the board's network and Wi-Fi strength, the sound and the headphones' volume, the board's battery when it has one; Restart PSPExp and Power off the board (each asked again) |
 
 ## Notifications

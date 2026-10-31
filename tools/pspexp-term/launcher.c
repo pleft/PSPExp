@@ -455,7 +455,10 @@ static int g_mode = M_BROWSE;
 static char g_sec_at[NSEC][64];       /* the level each category was left on (by name): L / R come back to it */
 static float g_overlay_a;             /* search / details / about fade-in */
 static uint64_t g_about_at;
+static int g_about_sel;         /* About's highlighted row */
+static float g_about_scroll;
 static void about_collect(void);
+static void about_input(uint32_t pressed, int up, int down, uint64_t now);
 
 static int g_dirty = 1, g_anim;
 static uint64_t g_now, g_open_at;   /* this frame's time; when the details card or About page opened */
@@ -1010,6 +1013,7 @@ static void run_action(LEntry *e, uint64_t now)
         about_collect();
         g_about_at = now;
         g_open_at = now;
+        g_about_sel = 0; g_about_scroll = 0;
         g_mode = M_ABOUT;
         g_overlay_a = 0;
         g_dirty = 1;
@@ -1587,8 +1591,8 @@ static const char *KB[KB_ROWS][KB_COLS] = {
     { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "SPC", "DEL", "GO" },
 };
 static char g_q[40];
-static int g_kx, g_ky, g_sfocus, g_ssel, g_nres, g_caret;
-static float g_sscroll;
+static int g_kx, g_ky, g_sfocus, g_nres, g_caret;
+static Cat g_scat;   /* the results as a list like a platform's games (its highlight and scroll: draw_focus) */
 static LEntry **g_res;
 
 static int word_starts(const char *title, const char *q)
@@ -1625,7 +1629,7 @@ static void search_update(void)
     char q[40];
     snprintf(q, sizeof(q), "%s", g_q);
     { size_t l = strlen(q); while (l && q[l - 1] == ' ') q[--l] = 0; }
-    free(g_res); g_res = NULL; g_nres = 0; g_ssel = 0; g_sscroll = 0;
+    free(g_res); g_res = NULL; g_nres = 0; g_scat.it = NULL; g_scat.n = 0; g_scat.sel = 0; g_scat.scroll = 0;
     if (!q[0]) return;
     for (s = -1; s < L.nsys; s++) {
         LEntry *arr = s < 0 ? L.e : L.sys[s].roms_list;
@@ -1644,13 +1648,27 @@ static void search_update(void)
     g_res = (LEntry **)malloc((size_t)(n ? n : 1) * sizeof(LEntry *));
     for (k = 0; k < n; k++) g_res[k] = h[k].e;
     g_nres = n;
+    g_scat.it = g_res; g_scat.n = n; g_scat.tab = 1; g_scat.kind = CK_GAMES;
+    snprintf(g_scat.name, sizeof(g_scat.name), "Search");
     free(h);
+}
+
+/* the results again (a favourite changed: its star), on the same entry */
+static void search_update_keep(void)
+{
+    char id[160] = "";
+    int i, sel = g_scat.sel;
+    float sc = g_scat.scroll;
+    if (g_nres && sel < g_nres) snprintf(id, sizeof(id), "%s", g_res[sel]->id);
+    search_update();
+    for (i = 0; i < g_nres; i++) if (!strcmp(g_res[i]->id, id)) { g_scat.sel = i; g_scat.scroll = sc; break; }
 }
 
 static void search_open(uint64_t now)
 {
     g_mode = M_SEARCH; g_overlay_a = 0;
     g_sfocus = 0;
+    g_kx = g_ky = 0;   /* (the keyboard on A; the last search kept, to correct it) */
     (void)now;
     search_update();
     g_dirty = 1;
@@ -1671,8 +1689,16 @@ static void toast(const char *icon, const char *s, uint64_t now);
 static void board_refresh(void);
 static void cats_build(void);
 
+static void panel_open(LEntry *e);
+static void panel_input(uint32_t pressed, int up, int down, uint64_t now);
+static int has_panel(const LEntry *e);
+/* Search: typing (the keyboard: cross a key, square deletes, START or GO the results, circle back
+ * where it was opened), or its results, a list like a platform's (cross plays, triangle Options,
+ * circle back to the keyboard to correct it, START Quick controls) */
 static void search_input(uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
+    g_dirty = 1;
+    if (g_tri.open) { panel_input(pressed, up, down, now); if (g_mode == M_SEARCH) search_update_keep(); return; }
     if (g_sfocus == 0) {
         if (left) g_kx = (g_kx + KB_COLS - 1) % KB_COLS;
         if (right) g_kx = (g_kx + 1) % KB_COLS;
@@ -1680,37 +1706,33 @@ static void search_input(uint32_t pressed, int up, int down, int left, int right
         if (down) g_ky = (g_ky + 1) % KB_ROWS;
         if (pressed & PSPEXP_BUTTON_CROSS) {
             const char *k = KB[g_ky][g_kx];
-            if (!strcmp(k, "GO")) { if (g_nres) g_sfocus = 1; }
+            if (!strcmp(k, "GO")) { if (g_nres) { g_sfocus = 1; g_scat.scroll = (float)g_scat.sel; g_sel_since = now; } }
             else search_type(k);
         }
         if (pressed & PSPEXP_BUTTON_SQUARE) search_type("DEL");
-        if ((pressed & PSPEXP_BUTTON_START) && g_nres) g_sfocus = 1;
-        if (pressed & PSPEXP_BUTTON_CIRCLE) { g_mode = M_BROWSE; }   /* (back where it was opened) */
-    } else {
-        if ((up || down) && g_nres) g_sel_since = now;
-        if (up && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_UP) ? (g_ssel + g_nres - 1) % g_nres : (g_ssel > 0 ? g_ssel - 1 : 0);
-        if (down && g_nres) g_ssel = (pressed & PSPEXP_BUTTON_DOWN) ? (g_ssel + 1) % g_nres : (g_ssel + 1 < g_nres ? g_ssel + 1 : g_ssel);
-        if ((pressed & PSPEXP_BUTTON_CROSS) && g_nres) { LEntry *e = g_res[g_ssel]; g_mode = M_BROWSE; launch(e, now); }
-        if ((pressed & PSPEXP_BUTTON_SQUARE) && g_nres) {
-            char id[160];
-            int on;
-            snprintf(id, sizeof(id), "%s", g_res[g_ssel]->id);
-            on = lib_fav_toggle(&L, id);
-            cats_build();
-            toast("star", on ? "Added to favourites" : "Removed from favourites", now);
-        }
-        if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_START)) g_sfocus = 0;
+        if ((pressed & PSPEXP_BUTTON_START) && g_nres) { g_sfocus = 1; g_scat.scroll = (float)g_scat.sel; g_sel_since = now; }   /* (a keyboard's START: done) */
+        if (pressed & PSPEXP_BUTTON_CIRCLE) g_mode = M_BROWSE;   /* (back where it was opened) */
+        return;
     }
-    g_dirty = 1;
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); return; }
+    if (up && g_scat.sel > 0) { g_scat.sel--; g_sel_since = now; }
+    if (down && g_scat.sel < g_nres - 1) { g_scat.sel++; g_sel_since = now; }
+    if (pressed & PSPEXP_BUTTON_CIRCLE) { g_sfocus = 0; return; }   /* back to the keyboard: the search corrected */
+    if (!g_nres) return;
+    if (pressed & PSPEXP_BUTTON_CROSS) { LEntry *e = g_res[g_scat.sel]; g_mode = M_BROWSE; launch(e, now); return; }
+    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && has_panel(g_res[g_scat.sel])) panel_open(g_res[g_scat.sel]);
 }
 
-/* details: a card over the list with everything known about the entry */
+/* details: everything known about the entry, a screen of its own; and where it was opened from
+ * (the list, or Search's results) */
 static LEntry *g_det;
+static int g_det_back = M_BROWSE;
 
 static void details_input(uint32_t pressed, uint64_t now)
 {
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
     if (pressed & PSPEXP_BUTTON_CROSS) { LEntry *e = g_det; g_mode = M_BROWSE; launch(e, now); }
-    else if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE)) g_mode = M_BROWSE;
+    else if (pressed & PSPEXP_BUTTON_CIRCLE) g_mode = g_det_back;
     g_dirty = 1;
 }
 
@@ -2093,6 +2115,7 @@ static void show_more(LEntry *e, uint64_t now)
 {
     (void)now;
     if (is_level_item(e) || !strncmp(e->id, "m:", 2) || e->type == LT_ACTION) return;
+    g_det_back = g_mode == M_SEARCH ? M_SEARCH : M_BROWSE;
     g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1;
 }
 
@@ -2103,12 +2126,12 @@ static int has_panel(const LEntry *e)
 }
 static void panel_open(LEntry *e)
 {
-    Cat *c = &g_cat[g_cur];
+    Cat *c = g_mode == M_SEARCH ? &g_scat : &g_cat[g_cur];   /* (Search's results: no order of a platform's) */
     g_tri_e = e;
     ui_menu_begin(&g_tri, e->title);
     if (can_fav(e)) ui_menu_add(&g_tri, PN_FAV, "star", e->fav ? "Remove favourite" : "Add to favourites", NULL, 0, 0);
     ui_menu_add(&g_tri, PN_DETAILS, "info", can_fav(e) ? "Game details" : "App details", NULL, 0, 0);
-    if (can_fav(e) && c->tab) ui_menu_add(&g_tri, PN_SORT, "arrow-up-down", "Sort by", SORT_NAME[c->sort], 0, 1);
+    if (can_fav(e) && c->tab && c != &g_scat) ui_menu_add(&g_tri, PN_SORT, "arrow-up-down", "Sort by", SORT_NAME[c->sort], 0, 1);
     g_dirty = 1;
 }
 static void panel_input(uint32_t pressed, int up, int down, uint64_t now)
@@ -2199,10 +2222,7 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         return;
     }
     if (g_mode == M_TEXT) { text_input(pressed, up, down, left, right, now); return; }
-    if (g_mode == M_ABOUT) {
-        if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_mode = M_BROWSE; g_dirty = 1; }
-        return;
-    }
+    if (g_mode == M_ABOUT) { about_input(pressed, up, down, now); return; }
     if (g_vl.open) { vlist_input(pressed, up, down); return; }
     if (g_tri.open) { panel_input(pressed, up, down, now); return; }
     if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
@@ -2580,21 +2600,26 @@ static void detail_line(const LEntry *e, char *s, size_t n)
 /* where you are, at the left: the path, the levels above muted with a chevron after each, the level
  * shown last, white and larger ("Games", "Games > Mega Drive", "Settings > Recording"); the
  * highlight's place in the list at the right */
-static void draw_location(int alpha)
+
+static void location_line(const char *parent, const char *here, const char *right, int alpha)
 {
-    Cat *c = &g_cat[g_cur];
-    char s[160];
-    int p = cat_parent(c), x = 16, cy = LOC_Y + (BROWSE_Y - LOC_Y) / 2;
-    if (p >= 0) {
-        x += gfx_text(FONT_BODY, x, cy - gfx_line_height(FONT_BODY) / 2, g_cat[p].name, C_SUB, alpha, 0) + 4;
+    int x = 16, cy = LOC_Y + (BROWSE_Y - LOC_Y) / 2;
+    if (parent && parent[0]) {
+        x += gfx_text(FONT_BODY, x, cy - gfx_line_height(FONT_BODY) / 2, parent, C_SUB, alpha, 0) + 4;
         gfx_icon("chevron-right", 12, x, cy - 6, C_MUTED, alpha);
         x += 16;
     }
-    gfx_text(FONT_TITLE, x, cy - gfx_line_height(FONT_TITLE) / 2, c->name, C_TEXT, alpha, 330 - x);
-    if (c->n) {
-        snprintf(s, sizeof(s), "%d / %d", c->sel + 1, c->n);
-        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), cy - gfx_line_height(FONT_SMALL) / 2, s, C_MUTED, alpha, 0);
-    }
+    gfx_text(FONT_TITLE, x, cy - gfx_line_height(FONT_TITLE) / 2, here, C_TEXT, alpha, 330 - x);
+    if (right && right[0]) gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, right), cy - gfx_line_height(FONT_SMALL) / 2, right, C_MUTED, alpha, 0);
+}
+
+static void draw_location(int alpha)
+{
+    Cat *c = &g_cat[g_cur];
+    char s[32] = "";
+    int p = cat_parent(c);
+    if (c->n) snprintf(s, sizeof(s), "%d / %d", c->sel + 1, c->n);
+    location_line(p >= 0 ? g_cat[p].name : NULL, c->name, s, alpha);
 }
 
 /* the highlight: a translucent blue fill and a brighter edge at its left */
@@ -2681,16 +2706,16 @@ static void draw_focus(Cat *c, float dt, int alpha, int dx)
         if (y + h < BROWSE_Y || y > BROWSE_Y + BROWSE_H) continue;
         if (on) {
             int f = title_font(e->title), lt = gfx_line_height(f), ls = gfx_line_height(FONT_BODY), ty = y + (h - lt - ls) / 2;
-            if (games) game_art(e, ART_CX + dx, y + h / 2, 88, 50, 48, 1, alpha);
-            else row_icon(e, 32, IX + 4, y + (h - 32) / 2, 0xffffff, alpha);
+            if (games && can_fav(e)) game_art(e, ART_CX + dx, y + h / 2, 88, 50, 48, 1, alpha);
+            else row_icon(e, 32, games ? ART_CX + dx - 16 : IX + 4, y + (h - 32) / 2, 0xffffff, alpha);
             if (e->fav) { gfx_star(15, tx, ty + (lt - 15) / 2, C_STAR, alpha); tx += 20; }
             mtext(f, tx, ty, e->title, 0xffffff, alpha, TW - (tx - TX), g_sel_since);
             row_sub(c, e, s, sizeof(s));
             mtext(FONT_BODY, TX, ty + lt, s, C_SUB, alpha, TW, g_sel_since);
         } else {
             int sub = is_level_item(e) && e->desc[0], lt = gfx_line_height(FONT_TITLE), ls = sub ? gfx_line_height(FONT_SMALL) : 0, ty = y + (h - lt - ls) / 2;
-            if (games) game_art(e, ART_CX + dx, y + h / 2, 52, 30, 30, 0, alpha);
-            else row_icon(e, 22, IX + 9, y + (h - 22) / 2, 0xb9c8e0, alpha);
+            if (games && can_fav(e)) game_art(e, ART_CX + dx, y + h / 2, 52, 30, 30, 0, alpha);
+            else row_icon(e, 22, games ? ART_CX + dx - 11 : IX + 9, y + (h - 22) / 2, 0xb9c8e0, alpha);
             if (e->fav) { gfx_star(12, tx, ty + (lt - 12) / 2, C_STAR, alpha); tx += 17; }
             gfx_text(FONT_TITLE, tx, ty, e->title, C_TEXT, alpha * 200 / 255, TW - (tx - TX));
             if (sub) gfx_text(FONT_SMALL, TX, ty + lt - 1, e->desc, C_MUTED, alpha, TW);
@@ -2832,7 +2857,6 @@ static int hint_right(int x, const char *badge, const char *label)
     return x;
 }
 
-static int hint_cap(int x, const char *cap, const char *label, uint32_t col);
 
 static int hint_w(const char *label) { return 18 + gfx_text_width(FONT_SMALL, label) + 14; }
 
@@ -2860,16 +2884,6 @@ static void draw_hints(void)
     if (c->tab && c->n && x + hint_w(c->view ? "Focus" : "Grid") <= r - 8) hint_btn(x, 's', c->view ? "Focus" : "Grid");
 }
 
-/* a small key cap with a label, for hint rows */
-static int hint_cap(int x, const char *cap, const char *label, uint32_t col)
-{
-    int bw = gfx_text_width(FONT_BADGE, cap) + 10;
-    gfx_nine(NINE_R6, x, HINT_Y, bw, 14, 0x1e2c4a, 255);
-    gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, cap, C_SUB, 255, 0);
-    x += bw + 5;
-    return x + gfx_text(FONT_SMALL, x, HINT_Y - 1, label, col, 255, 0) + 14;
-}
-
 static int hint_btn(int x, char b, const char *label)
 {
     gfx_button(b, x, HINT_Y);
@@ -2879,94 +2893,79 @@ static int hint_btn(int x, char b, const char *label)
 
 /* ---- the search screen ---------------------------------------------------------------------- */
 
-#define S_FIELD_Y 12
-#define S_RES_Y   52
-#define S_ROWS    4
-#define S_KB_Y    150
+/* Search, in the shell (2026-10-31): under "Games > Search", the field, the first matches and the
+ * keyboard while typing; its results, once gone to, a list like a platform's games (draw_focus) */
+#define S_FIELD_Y 84
+#define S_RES_Y   112
+#define S_ROWS    2
+#define S_KB_Y    164
 #define KEY_W     32
-#define KEY_H     25
+#define KEY_H     22
 #define KEY_GAP   2
 
 static void draw_search(float dt)
 {
-    int i, a, fx = 16, fw = SCREEN_W - 32, x, y, kb_a;
-    char s[64];
-    float target;
+    int i, a, fx = 16, fw = SCREEN_W - 32, x, y;
+    char s[64] = "";
     g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
     a = (int)(g_overlay_a * 255);
-    /* the field */
-    gfx_shadow(NINE_SHADOW10, fx, S_FIELD_Y + 3, fw, 30, 0x000000, a * 120 / 255);
-    gfx_nine(NINE_R10, fx, S_FIELD_Y, fw, 30, 0x172540, a);
-    gfx_icon("search", 16, fx + 11, S_FIELD_Y + 7, g_q[0] ? C_ACCENT : C_MUTED, a);
-    x = fx + 36;
-    if (g_q[0]) x += gfx_text(FONT_TITLE, x, S_FIELD_Y + (30 - gfx_line_height(FONT_TITLE)) / 2, g_q, C_TEXT, a, fw - 120);
-    else gfx_text(FONT_BODY, x, S_FIELD_Y + (30 - gfx_line_height(FONT_BODY)) / 2, "Search games, apps and ROMs", C_MUTED, a, 0);
-    if (g_sfocus == 0 && !g_caret) gfx_rect(x + 1, S_FIELD_Y + 7, 2, 16, C_ACCENT, a);
-    if (g_q[0]) {
-        snprintf(s, sizeof(s), g_nres == 1 ? "1 result" : "%d results", g_nres);
-        gfx_text(FONT_SMALL, fx + fw - 12 - gfx_text_width(FONT_SMALL, s), S_FIELD_Y + (30 - gfx_line_height(FONT_SMALL)) / 2, s, C_MUTED, a, 0);
-    }
-    /* results */
-    if (!g_q[0]) {
-        gfx_icon("text-search", 24, SCREEN_W / 2 - 12, S_RES_Y + 14, C_MUTED, a * 200 / 255);
-        { const char *m = "Type with the keyboard below"; gfx_text(FONT_SMALL, (SCREEN_W - gfx_text_width(FONT_SMALL, m)) / 2, S_RES_Y + 46, m, C_MUTED, a, 0); }
-    } else if (!g_nres) {
-        gfx_icon("search-x", 24, SCREEN_W / 2 - 12, S_RES_Y + 14, C_MUTED, a * 200 / 255);
-        { const char *m = "No matches"; gfx_text(FONT_BODY, (SCREEN_W - gfx_text_width(FONT_BODY, m)) / 2, S_RES_Y + 46, m, C_SUB, a, 0); }
-    } else {
-        target = (float)(g_ssel - 1);
-        if (target > (float)(g_nres - S_ROWS)) target = (float)(g_nres - S_ROWS);
-        if (target < 0) target = 0;
-        g_sscroll = ease(g_sscroll, target, 16.0f, dt, 0.02f);
-        gfx_set_clip(fx - 4, S_RES_Y - 2, fw + 8, S_ROWS * ROW + 4);
-        for (i = 0; i < g_nres; i++) {
-            LEntry *e = g_res[i];
-            int ry = S_RES_Y + (int)lroundf((i - g_sscroll) * ROW), sel = i == g_ssel, right = fx + fw - 10;
-            const char *b = type_badge(e);
-            if (ry < S_RES_Y - ROW || ry > S_RES_Y + S_ROWS * ROW) continue;
-            if (sel) {
-                gfx_nine(NINE_R10, fx, ry, fw, ROW, 0xffffff, g_sfocus ? 26 : 12);
-                if (g_sfocus) gfx_rect(fx, ry + 6, 3, ROW - 12, C_ACCENT, a);
-            }
-            gfx_icon(e->type == LT_ROM ? "gamepad" : e->type == LT_APP ? "app-window" : e->type == LT_TOOL ? "wand-sparkles" : "gamepad-2", 14, fx + 12, ry + (ROW - 14) / 2,
-                     sel && g_sfocus ? 0xffffff : C_MUTED, a);
-            right -= gfx_text_width(FONT_BADGE, b);
-            gfx_text(FONT_BADGE, right, ry + (ROW - gfx_line_height(FONT_BADGE)) / 2 + 1, b, C_MUTED, a, 0);
-            if (e->fav) { right -= 18; gfx_icon("star", 12, right, ry + (ROW - 12) / 2, 0xfbbf24, a); }
-            if (sel && g_sfocus) mtext(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, C_TEXT, a, right - fx - 44, g_sel_since);
-            else gfx_text(FONT_BODY, fx + 34, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, C_SUB, a, right - fx - 44);
+    if (g_q[0]) snprintf(s, sizeof(s), g_nres == 1 ? "1 result" : "%d results", g_nres);
+    if (g_sfocus && g_nres) {   /* the results: as a platform's games */
+        char here[80];
+        snprintf(here, sizeof(here), "Search: %s", g_q);
+        snprintf(s, sizeof(s), "%d / %d", g_scat.sel + 1, g_nres);
+        location_line("Games", here, s, a);
+        draw_focus(&g_scat, dt, a, 0);
+        x = 12;
+        {
+            LEntry *e = g_res[g_scat.sel];
+            int r = hint_right(SCREEN_W - 12, "START", "Quick");
+            x = hint_btn(x, 'x', can_fav(e) ? "Play" : "Open");
+            x = hint_btn(x, 'o', "Keyboard");
+            if (has_panel(e) && x + hint_w("Options") <= r - 8) hint_btn(x, 't', "Options");
         }
-        gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+        ui_menu_draw(&g_tri);
+        return;
     }
-    /* keyboard */
-    kb_a = g_sfocus ? a * 110 / 255 : a;
+    location_line("Games", "Search", s, a);
+    /* the field */
+    gfx_nine(NINE_R10, fx, S_FIELD_Y, fw, 24, 0x172540, a);
+    gfx_icon("search", 14, fx + 10, S_FIELD_Y + 5, g_q[0] ? C_ACCENT : C_MUTED, a);
+    x = fx + 32;
+    if (g_q[0]) x += gfx_text(FONT_TITLE, x, S_FIELD_Y + (24 - gfx_line_height(FONT_TITLE)) / 2, g_q, C_TEXT, a, fw - 60);
+    else gfx_text(FONT_BODY, x, S_FIELD_Y + (24 - gfx_line_height(FONT_BODY)) / 2, "Games, apps and ROMs, by name", C_MUTED, a, 0);
+    if (!g_caret) gfx_rect(x + 1, S_FIELD_Y + 5, 2, 14, C_ACCENT, a);
+    /* the first matches */
+    if (g_q[0] && !g_nres) gfx_text(FONT_BODY, fx + 10, S_RES_Y + 8, "No matches", C_SUB, a, 0);
+    for (i = 0; i < g_nres && i < S_ROWS; i++) {
+        LEntry *e = g_res[i];
+        int ry = S_RES_Y + i * ROW, right = fx + fw - 10, tx = fx + 10;
+        const char *b = e->type == LT_ROM && e->sys >= 0 ? L.sys[e->sys].name : type_badge(e);
+        right -= gfx_text_width(FONT_SMALL, b);
+        gfx_text(FONT_SMALL, right, ry + (ROW - gfx_line_height(FONT_SMALL)) / 2, b, C_MUTED, a, 0);
+        if (e->fav) { gfx_star(11, tx, ry + (ROW - 11) / 2, C_STAR, a); tx += 16; }
+        gfx_text(FONT_BODY, tx, ry + (ROW - gfx_line_height(FONT_BODY)) / 2, e->title, C_SUB, a, right - tx - 10);
+    }
+    /* the keyboard */
     x = (SCREEN_W - (KB_COLS * KEY_W + (KB_COLS - 1) * KEY_GAP)) / 2;
     for (y = 0; y < KB_ROWS; y++)
         for (i = 0; i < KB_COLS; i++) {
             const char *k = KB[y][i];
-            int kx = x + i * (KEY_W + KEY_GAP), ky = S_KB_Y + y * (KEY_H + KEY_GAP), foc = !g_sfocus && y == g_ky && i == g_kx;
+            int kx = x + i * (KEY_W + KEY_GAP), ky = S_KB_Y + y * (KEY_H + KEY_GAP), foc = y == g_ky && i == g_kx;
             uint32_t fg = foc ? 0xffffff : C_TEXT;
-            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, KEY_W, KEY_H, C_ACCENT, kb_a * 120 / 255);
-            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x3d8bff : 0x222a3b, foc ? kb_a : kb_a * 235 / 255);
-            if (!strcmp(k, "SPC")) gfx_icon("space", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, fg, kb_a);
-            else if (!strcmp(k, "DEL")) gfx_icon("delete", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, fg, kb_a);
-            else if (!strcmp(k, "GO")) gfx_icon("corner-down-left", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, g_nres ? fg : C_MUTED, kb_a);
-            else gfx_text(FONT_BODY, kx + (KEY_W - gfx_text_width(FONT_BODY, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_BODY)) / 2, k, fg, kb_a, 0);
+            if (foc) gfx_shadow(NINE_SHADOW10, kx, ky + 2, KEY_W, KEY_H, C_ACCENT, a * 120 / 255);
+            gfx_nine(NINE_R6, kx, ky, KEY_W, KEY_H, foc ? 0x3d8bff : 0x222a3b, foc ? a : a * 235 / 255);
+            if (!strcmp(k, "SPC")) gfx_icon("space", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, fg, a);
+            else if (!strcmp(k, "DEL")) gfx_icon("delete", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, fg, a);
+            else if (!strcmp(k, "GO")) gfx_icon("corner-down-left", 14, kx + (KEY_W - 14) / 2, ky + (KEY_H - 14) / 2, g_nres ? fg : C_MUTED, a);
+            else gfx_text(FONT_BODY, kx + (KEY_W - gfx_text_width(FONT_BODY, k)) / 2, ky + (KEY_H - gfx_line_height(FONT_BODY)) / 2, k, fg, a, 0);
         }
-    /* hints */
-    x = 16;
-    if (!g_sfocus) {
-        x = hint_btn(x, 'x', "Type");
-        x = hint_btn(x, 's', "Delete");
-        x = hint_btn(x, 'o', "Close");
-        if (g_nres) hint_cap(SCREEN_W - 16 - gfx_text_width(FONT_BADGE, "START") - 15 - gfx_text_width(FONT_SMALL, "Results"), "START", "Results", C_SUB);
-    } else {
-        LEntry *e = g_nres ? g_res[g_ssel] : NULL;
-        x = hint_btn(x, 'x', e && (e->type == LT_ROM || e->type == LT_GAME) ? "Play" : "Open");
-        x = hint_btn(x, 's', e && e->fav ? "Unfavourite" : "Favourite");
-        x = hint_btn(x, 'o', "Keyboard");
-    }
-    (void)x;
+    /* hints: a keyboard's (START done, as in every keyboard) */
+    x = 12;
+    x = hint_btn(x, 'x', "Type");
+    x = hint_btn(x, 's', "Delete");
+    x = hint_btn(x, 'o', "Back");
+    if (g_nres) hint_right(SCREEN_W - 12, "START", "Results");
 }
 
 /* ---- the details card -------------------------------------------------------------------------- */
@@ -2977,44 +2976,49 @@ static void info_row(int x, int y, const char *icon, const char *text, int w, in
     mtext(FONT_SMALL, x + 22, y + (16 - gfx_line_height(FONT_SMALL)) / 2, text, C_SUB, a, w - 22, g_open_at);
 }
 
+/* Game details (App details), in the shell (2026-10-31): under "<list> > Details", the art at the left (a
+ * PSP game in its disc), the whole title, what it is, its description, then what is known: tags, size,
+ * file, who plays or draws it, when played; ○ back where it was opened (the list, Search's results) */
 static void draw_details(float dt)
 {
     LEntry *e = g_det;
-    int a, cx = 24, cy = 24, cw = SCREEN_W - 48, ch = 216, tx, ty, tw, i;
+    int a, tx = 16 + COVER_SIZE + 16, ty = BROWSE_Y + 2, tw = SCREEN_W - 16 - tx, i, bottom = HINT_Y - 6, lh;
     char s[400];
     if (!e) return;
-    g_overlay_a = ease(g_overlay_a, 1.0f, 18.0f, dt, 0.01f);
+    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
     a = (int)(g_overlay_a * 255);
-    gfx_rect(0, 0, SCREEN_W, SCREEN_H, 0x05070c, a * 170 / 255);
-    cy += (int)lroundf((1 - g_overlay_a) * 10);
-    gfx_shadow(NINE_SHADOW14, cx, cy + 6, cw, ch, 0x000000, a * 200 / 255);
-    gfx_nine(NINE_R14, cx, cy, cw, ch, 0x14203a, a * 250 / 255);
-    if (can_fav(e)) game_art(e, cx + 16 + COVER_SIZE / 2, cy + 16 + COVER_SIZE / 2, COVER_SIZE, COVER_SIZE, DISC_BIG, 0, a);   /* (a PSP game in its disc) */
-    else draw_cover(e, cx + 16, cy + 16, a);
-    tx = cx + 16 + COVER_SIZE + 18; ty = cy + 16; tw = cx + cw - 16 - tx;
-    mtext(title_font(e->title), tx, ty, e->title, C_TEXT, a, tw, g_open_at);
-    ty += gfx_line_height(FONT_H1) + 2;
+    location_line(g_det_back == M_SEARCH ? "Search" : g_cat[g_cur].name, "Details", NULL, a);
+    if (can_fav(e)) game_art(e, 16 + COVER_SIZE / 2, BROWSE_Y + 4 + COVER_SIZE / 2, COVER_SIZE, COVER_SIZE, 104, 0, a);   /* (a PSP game in its disc) */
+    else draw_cover(e, 16, BROWSE_Y + 4, a);
+    {
+        int f = title_font(e->title), x = tx;
+        if (e->fav) { gfx_star(15, x, ty + (gfx_line_height(f) - 15) / 2, C_STAR, a); x += 20; }
+        mtext(f, x, ty, e->title, C_TEXT, a, tw - (x - tx), g_open_at);
+        ty += gfx_line_height(f) + 1;
+    }
     switch (e->type) {
     case LT_ROM: snprintf(s, sizeof(s), "%s game", L.sys[e->sys].name); break;
-    case LT_APP: snprintf(s, sizeof(s), "App"); break;
+    case LT_APP: snprintf(s, sizeof(s), "%s", is_builtin(e) ? "App, built into PSPExp" : "App"); break;
     case LT_TOOL: snprintf(s, sizeof(s), "Tool"); break;
-    default: snprintf(s, sizeof(s), "Game"); break;
+    default: board_detect(); snprintf(s, sizeof(s), "%s game", g_board.name); break;
     }
-    {   /* the description, over the lines left above the rows below it (three to five) */
-        int lh = gfx_line_height(FONT_BODY) + 1;
-        int rows = e->type == LT_ROM ? 3 + (e->tags[0] != 0) : 2 + (e->tags[0] != 0) + (e->pkg[0] == 0);
-        int lines = (cy + ch - 30 - 6 - ty - rows * 20) / lh;
-        lines = lines < 3 ? 3 : lines > 5 ? 5 : lines;
-        ty += gfx_text_wrapped(FONT_BODY, tx, ty, e->desc[0] ? e->desc : is_builtin(e) ? e->tags : s, C_SUB, a, tw, lh, lines) * lh + 8;
+    gfx_text(FONT_BODY, tx, ty, s, 0x7fb2f5, a, tw);
+    ty += gfx_line_height(FONT_BODY) + 4;
+    lh = gfx_line_height(FONT_BODY) + 1;
+    {
+        const char *d = e->desc[0] ? e->desc : is_builtin(e) ? e->tags : "";
+        if (d[0]) ty += gfx_text_wrapped(FONT_BODY, tx, ty, d, C_SUB, a, tw, lh, 3) * lh + 6;
     }
-    if (is_builtin(e)) info_row(tx, ty, "package", "Built into PSPExp", tw, a);
+    /* what is known, as many rows as fit above the hints */
+#define ROW_IF(icon, text) do { if (ty + 16 <= bottom) { info_row(tx, ty, icon, text, tw, a); ty += 17; } } while (0)
+    if (is_builtin(e)) { /* (nothing more: it is PSPExp's own) */ }
     else if (e->type == LT_ROM) {
         const char *base = strrchr(e->exec, '/');
         char sz[32];
         human_size(e->size, sz, sizeof(sz));
-        if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
-        info_row(tx, ty, "hard-drive", sz, tw, a); ty += 20;
-        info_row(tx, ty, "file-text", base ? base + 1 : e->exec, tw, a); ty += 20;
+        if (e->tags[0]) ROW_IF("tag", e->tags);
+        ROW_IF("hard-drive", sz);
+        ROW_IF("file-text", base ? base + 1 : e->exec);
         {   /* the player: pspexp-retro and its core, by the core's file name; else the command's first word */
             const char *x = L.sys[e->sys].exec, *r = strstr(x, "pspexp-retro "), *sp;
             const char *gl = graphics_label(L.sys[e->sys].graphics);
@@ -3025,27 +3029,24 @@ static void draw_details(float dt)
                 snprintf(s, sizeof(s), "%s%spspexp-retro, %s", gl, gl[0] ? ": " : "", cb ? cb + 1 : core);
             } else { sp = strchr(x, ' '); snprintf(s, sizeof(s), "%s%s%.*s", gl, gl[0] ? ": " : "", sp ? (int)(sp - x) : (int)strlen(x), x); }
         }
-        info_row(tx, ty, "cpu", s, tw, a); ty += 20;
+        ROW_IF("cpu", s);
     } else {
         if (!e->pspexp) snprintf(s, sizeof(s), "Shown through the mirror");
         else if (graphics_label(e->graphics)[0]) snprintf(s, sizeof(s), "%s", graphics_label(e->graphics));
         else snprintf(s, sizeof(s), "PSP renderer; HOME quits");
-        info_row(tx, ty, !e->pspexp ? "monitor" : !strncmp(e->graphics, "opengl", 6) || !strcmp(e->graphics, "board-gpu") ? "box" : !strcmp(e->graphics, "sdl") ? "image" : "zap", s, tw, a); ty += 20;
-        if (e->tags[0]) { info_row(tx, ty, "tag", e->tags, tw, a); ty += 20; }
-        if (!e->pkg[0]) { info_row(tx, ty, "folder-open", e->dir[0] ? e->dir : "/", tw, a); ty += 20; }   /* (a package's: its own folder) */
+        ROW_IF(!e->pspexp ? "monitor" : !strncmp(e->graphics, "opengl", 6) || !strcmp(e->graphics, "board-gpu") ? "box" : !strcmp(e->graphics, "sdl") ? "image" : "zap", s);
+        if (e->tags[0]) ROW_IF("tag", e->tags);
         if (e->pkg[0]) snprintf(s, sizeof(s), "Package %s", e->pkg);
         else snprintf(s, sizeof(s), "library/%s.entry", e->id + 2);
-        info_row(tx, ty, "package", s, tw, a); ty += 20;
+        ROW_IF("package", s);
     }
     for (i = 0; i < L.nrecent; i++) if (!strcmp(L.recent[i], e->id)) break;
-    /* (rows that would reach the buttons along the foot are left out: a long description) */
-    if (i < L.nrecent && ty + 16 <= cy + ch - 34) { snprintf(s, sizeof(s), i == 0 ? "Played last" : "Played recently (#%d)", i + 1); info_row(tx, ty, "history", s, tw, a); ty += 20; }
-    if (e->fav && ty + 16 <= cy + ch - 34) { info_row(tx, ty, "star", "Favourite", tw, a); }
-    /* buttons along the card's foot */
+    if (i < L.nrecent) { snprintf(s, sizeof(s), i == 0 ? "Played last" : "Played recently (#%d)", i + 1); ROW_IF("history", s); }
+#undef ROW_IF
     {
-        int bx = tx, by = cy + ch - 30;
-        gfx_button('x', bx, by); bx += 18; bx += gfx_text(FONT_SMALL, bx, by - 1, e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open", C_SUB, a, 0) + 14;
-        gfx_button('o', bx, by); bx += 18; gfx_text(FONT_SMALL, bx, by - 1, "Close", C_SUB, a, 0);
+        int x = hint_btn(12, 'x', can_fav(e) ? "Play" : "Open");
+        hint_btn(x, 'o', "Back");
+        hint_right(SCREEN_W - 12, "START", "Quick");
     }
 }
 
@@ -3145,15 +3146,6 @@ int launcher_handover_spinner(int *x, int *y, uint32_t *bg, uint32_t *fg)
 
 /* ---- the about page --------------------------------------------------------------------------------- */
 
-static int g_about_pitch = 28;   /* a row's height: 26 when the board's card has more storage lines */
-static int about_row(int x, int y, int w, const char *icon, const char *label, const char *value, int a)
-{
-    if (!value || !value[0]) return y;
-    gfx_icon(icon, 14, x, y + 3, C_MUTED, a);
-    gfx_text(FONT_BADGE, x + 22, y, label, C_MUTED, a, w - 22);
-    mtext(FONT_BODY, x + 22, y + 11, value, C_TEXT, a, w - 22, g_open_at);
-    return y + g_about_pitch;
-}
 
 /* the picker: time zones or networks, a list over the backdrop */
 #define P_LIST_Y 48
@@ -3238,91 +3230,103 @@ static void draw_text(float dt)
     ui_kbd_draw(&g_kbd, "lock", title, "Type the password", g_caret, (int)(g_overlay_a * 255));
 }
 
-static void draw_about(float dt)
+/* About, in the shell (2026-10-31): under "This board > About", a list of what is known, the board's
+ * and then the PSP's and the connection's, a label at the left and its value at the right; up / down
+ * move along it (a long value scrolls on the highlighted row), circle back */
+typedef struct AboutRow { const char *icon; char label[24], value[240]; int head; } AboutRow;
+
+static int about_rows(AboutRow *r, int max)
 {
     About *b = &g_about;
     const PspExpHello *h = g_ctx ? pspexp_caps(g_ctx) : NULL;
     const PspExpStats *st = g_ctx ? pspexp_stats(g_ctx) : NULL;
-    int a, cw = (SCREEN_W - 16 * 2 - 12) / 2, cx1 = 16, cx2 = 16 + cw + 12, cy = 42, ch = 200, y;
-    char psp[96] = "", mem[96] = "", rtt[48] = "", host[128];
-    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
-    a = (int)(g_overlay_a * 255);
-    snprintf(host, sizeof(host), "%s", b->host);
-    gfx_icon("info", 20, 16, 12, C_ACCENT, a);
-    gfx_text(FONT_TITLE, 44, 11, "About this console", C_TEXT, a, 0);
-    gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, host), 15, host, C_MUTED, a, 0);
-
-    gfx_shadow(NINE_SHADOW10, cx1, cy + 4, cw, ch, 0x000000, a * 120 / 255);
-    gfx_nine(NINE_R10, cx1, cy, cw, ch, 0x14203a, a * 240 / 255);
-    gfx_text(FONT_BADGE, cx1 + 12, cy + 9, "THIS BOARD", C_ACCENT, a, 0);
-    y = cy + 26;
-    g_about_pitch = b->ndisks > 1 ? 26 : 28;   /* (six rows and the storage lines in the card's 200) */
+    int n = 0, k;
+#define AB_ITEM(ic, lb, ...) do { if (n < max) { r[n].icon = (ic); r[n].head = 0; snprintf(r[n].label, sizeof(r[n].label), "%s", (lb)); \
+                               snprintf(r[n].value, sizeof(r[n].value), __VA_ARGS__); if (r[n].value[0]) n++; } } while (0)
+#define AB_HEAD(lb) do { if (n < max) { r[n].icon = ""; r[n].head = 1; snprintf(r[n].label, sizeof(r[n].label), "%s", (lb)); r[n].value[0] = 0; n++; } } while (0)
     board_detect();
-    y = about_row(cx1 + 12, y, cw - 24, g_board.icon, "BOARD", b->board, a);
+    AB_HEAD("THIS BOARD");
+    AB_ITEM(g_board.icon, "Board", "%s", b->board);
+    AB_ITEM("zap", "Chip", "%s%s%s", b->soc, b->soc[0] ? ", " : "", b->cpu);
+    AB_ITEM("layers", "Memory", "%s", b->mem);
+    for (k = 0; k < b->ndisks; k++) AB_ITEM("hard-drive", k ? "" : "Storage", "%s", b->disks[k]);
+    AB_ITEM("square-terminal", "System", "%s, %s", b->os[0] ? b->os : "Linux", b->kernel);
+    AB_ITEM("package", "PSPExp", "%s", PSPEXP_VERSION);
+    AB_ITEM("globe", "Network", "%s", b->net);
+    AB_ITEM(g_bat >= 0 ? "battery-full" : "zap", "Power", "%s%s%s%s%s", b->power, b->temp[0] ? ", " : "", b->temp, b->uptime[0] ? ", up " : "", b->uptime);
+    AB_ITEM("folder-open", "Library", "%s", b->library);
+    AB_HEAD("PSP AND CONNECTION");
     {
-        char chip[160];
-        snprintf(chip, sizeof(chip), "%s%s%s", b->soc, b->soc[0] ? ", " : "", b->cpu);
-        y = about_row(cx1 + 12, y, cw - 24, "zap", "CHIP", chip, a);
+        char rtt[48] = "";
+        if (st && st->last_present_latency_us) snprintf(rtt, sizeof(rtt), "%.1f ms a frame", st->last_present_latency_us / 1000.0);
+        AB_ITEM("link", "Link", "%s%s%s", g_link, rtt[0] ? ", " : "", rtt);
     }
-    y = about_row(cx1 + 12, y, cw - 24, "layers", "MEMORY", b->mem, a);
-    if (b->ndisks) {   /* one line per device */
-        int k;
-        gfx_icon("hard-drive", 14, cx1 + 12, y + 3, C_MUTED, a);
-        gfx_text(FONT_BADGE, cx1 + 34, y, "STORAGE", C_MUTED, a, cw - 46);
-        for (k = 0; k < b->ndisks; k++)
-            mtext(FONT_BODY, cx1 + 34, y + 11 + k * 17, b->disks[k], C_TEXT, a, cw - 46, g_open_at);
-        y += g_about_pitch + (b->ndisks - 1) * 17;
-    }
-    {
-        char sys[200];
-        snprintf(sys, sizeof(sys), "%s, %s", b->os[0] ? b->os : "Linux", b->kernel);
-        y = about_row(cx1 + 12, y, cw - 24, "square-terminal", "SYSTEM", sys, a);
-    }
-    /* this launcher's version: the board's side (the console, the launcher, the SDL layer); the PSP's
-     * side has its own row in the other card */
-    y = about_row(cx1 + 12, y, cw - 24, "package", "LAUNCHER", PSPEXP_VERSION, a);
-    g_about_pitch = 28;
-
-    gfx_shadow(NINE_SHADOW10, cx2, cy + 4, cw, ch, 0x000000, a * 120 / 255);
-    gfx_nine(NINE_R10, cx2, cy, cw, ch, 0x14203a, a * 240 / 255);
-    gfx_text(FONT_BADGE, cx2 + 12, cy + 9, "PSP AND CONNECTION", C_ACCENT, a, 0);
     if (h && h->protocol) {
         char v[96];
         short_version(g_psp_ver, v, sizeof(v));
         /* the runtime: its slot and version (read from the stick on connecting), and an update waiting */
         if (g_psp_slot == 'a' || g_psp_slot == 'b')
-            snprintf(psp, sizeof(psp), "slot %c, %s%s", g_psp_slot, v[0] ? v : "version unknown",
-                     g_psp_pending ? "; an update waits: restart PSPExp on the PSP" : "");
-        else if (g_psp_slot == '-') snprintf(psp, sizeof(psp), "runtime %u, installed without slots", h->runtime_version);
-        else snprintf(psp, sizeof(psp), "runtime %u", h->runtime_version);
-        snprintf(mem, sizeof(mem), "%u KB VRAM, %u KB RAM", (unsigned)(h->vram_budget / 1024), (unsigned)(h->ram_budget / 1024));
+            AB_ITEM("gamepad-2", "On the PSP", "slot %c, %s%s", g_psp_slot, v[0] ? v : "version unknown", g_psp_pending ? "; an update waits: restart PSPExp on the PSP" : "");
+        else if (g_psp_slot == '-') AB_ITEM("gamepad-2", "On the PSP", "runtime %u, installed without slots", h->runtime_version);
+        else AB_ITEM("gamepad-2", "On the PSP", "runtime %u", h->runtime_version);
+        AB_ITEM("layers", "PSP memory", "%u KB VRAM, %u KB RAM", (unsigned)(h->vram_budget / 1024), (unsigned)(h->ram_budget / 1024));
     }
-    if (st && st->last_present_latency_us) snprintf(rtt, sizeof(rtt), "%.1f ms a frame", st->last_present_latency_us / 1000.0);
-    y = cy + 26;
     {
-        char link[220], bat[160];
-        PspExpPowerStatus p;
-        int pct;
-        snprintf(link, sizeof(link), "%s%s%s", g_link, rtt[0] ? ", " : "", rtt);
-        y = about_row(cx2 + 12, y, cw - 24, "link", "LINK", link, a);
-        y = about_row(cx2 + 12, y, cw - 24, "gamepad-2", "PSPEXP ON THE PSP", psp, a);
-        pct = psp_battery(bat, sizeof(bat), &p) ? p.percent : -1;
-        y = about_row(cx2 + 12, y, cw - 24, pct < 0 ? "battery" : (p.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) ? "battery-charging" : pct > 70 ? "battery-full" : pct > 35 ? "battery-medium" : pct > 12 ? "battery-low" : "battery-warning",
-                      "PSP BATTERY", bat, a);
+        char bat[160];
+        PspExpPowerStatus pw;
+        if (psp_battery(bat, sizeof(bat), &pw))
+            AB_ITEM((pw.flags & (PSPEXP_POWER_CHARGING | PSPEXP_POWER_EXTERNAL)) ? "battery-charging" : pw.percent > 70 ? "battery-full" : pw.percent > 35 ? "battery-medium" : pw.percent > 12 ? "battery-low" : "battery-warning",
+                "PSP battery", "%s", bat);
     }
-    y = about_row(cx2 + 12, y, cw - 24, "layers", "PSP MEMORY", mem, a);
-    y = about_row(cx2 + 12, y, cw - 24, "globe", "NETWORK", b->net, a);
-    {
-        char pw[140];
-        snprintf(pw, sizeof(pw), "%s%s%s%s%s", b->power, b->temp[0] ? ", " : "", b->temp, b->uptime[0] ? ", up " : "", b->uptime);
-        about_row(cx2 + 12, y, cw - 24, g_bat >= 0 ? "battery-full" : "zap", "BOARD POWER", pw, a);
-    }
+#undef AB_ITEM
+#undef AB_HEAD
+    return n;
+}
 
-    gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, b->library), HINT_Y - 1, b->library, C_MUTED, a, SCREEN_W - 100);
-    {
-        int x = 16;
-        gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Back", C_SUB, 255, 0);
+static void about_input(uint32_t pressed, int up, int down, uint64_t now)
+{
+    AboutRow r[24];
+    int n = about_rows(r, 24), k;
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
+    if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS)) { g_mode = M_BROWSE; g_dirty = 1; return; }
+    for (k = g_about_sel + (down ? 1 : up ? -1 : 0); (up || down) && k >= 0 && k < n; k += down ? 1 : -1)
+        if (!r[k].head) { g_about_sel = k; g_sel_since = now; g_dirty = 1; break; }
+}
+
+#define AB_ROW 22
+static void draw_about(float dt)
+{
+    AboutRow r[24];
+    int n = about_rows(r, 24), a, i, y, view = BROWSE_H / AB_ROW, top = BROWSE_Y + (BROWSE_H - BROWSE_H / AB_ROW * AB_ROW) / 2;   /* (whole rows only) */
+    float target;
+    g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
+    a = (int)(g_overlay_a * 255);
+    if (g_about_sel >= n || r[g_about_sel].head) for (g_about_sel = 0; g_about_sel < n && r[g_about_sel].head; g_about_sel++) {}
+    location_line("This board", "About", NULL, a);
+    target = g_about_scroll;
+    if (g_about_sel - 1 < target) target = (float)(g_about_sel - 1);   /* (the heading over it in view) */
+    if (g_about_sel > target + view - 1) target = (float)(g_about_sel - view + 1);
+    if (target > (float)(n - view)) target = (float)(n - view);
+    if (target < 0) target = 0;
+    g_about_scroll = ease(g_about_scroll, target, 16.0f, dt, 0.01f);
+    gfx_set_clip(0, top, SCREEN_W, view * AB_ROW);
+    for (i = 0; i < n; i++) {
+        int sel = i == g_about_sel, cy;
+        y = top + (int)lroundf((i - g_about_scroll) * AB_ROW);
+        cy = y + AB_ROW / 2;
+        if (y + AB_ROW < BROWSE_Y || y > BROWSE_Y + BROWSE_H) continue;
+        if (r[i].head) { gfx_text(FONT_BADGE, 22, cy - 2, r[i].label, C_MUTED, a, 0); continue; }
+        if (sel) highlight(12, y + 1, SCREEN_W - 24, AB_ROW - 2, a);
+        if (r[i].icon[0]) gfx_icon(r[i].icon, 14, 24, cy - 7, sel ? 0xffffff : C_MUTED, a);
+        gfx_text(FONT_BODY, 46, cy - gfx_line_height(FONT_BODY) / 2, r[i].label, sel ? 0xffffff : C_SUB, a, 120);
+        if (sel) mtext(FONT_BODY, 170, cy - gfx_line_height(FONT_BODY) / 2, r[i].value, 0xffffff, a, SCREEN_W - 24 - 170, g_sel_since);
+        else gfx_text(FONT_BODY, 170, cy - gfx_line_height(FONT_BODY) / 2, r[i].value, C_TEXT, a, SCREEN_W - 24 - 170);
     }
+    gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    if (g_about_scroll > 0.05f) gfx_icon("chevron-up", 10, SCREEN_W / 2 - 5, BROWSE_Y - 9, C_MUTED, 200);
+    if (g_about_scroll < (float)(n - view) - 0.05f) gfx_icon("chevron-down", 10, SCREEN_W / 2 - 5, BROWSE_Y + BROWSE_H - 6, C_MUTED, 200);
+    hint_btn(12, 'o', "Back");
+    hint_right(SCREEN_W - 12, "START", "Quick");
 }
 
 void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
@@ -3340,18 +3344,20 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
     gfx_backdrop();
     if (g_running) draw_running();
     else if (g_sheet) draw_sheet();
-    else if (g_mode == M_SEARCH) draw_search(dt);
-    else if (g_mode == M_ABOUT) draw_about(dt);
     else if (g_mode == M_PICK) draw_pick(dt);
     else if (g_mode == M_TEXT) draw_text(dt);
-    else if (g_ncat) {
+    else if (g_ncat) {   /* the shell: the status line and the categories over the level, Search, Details, About */
         waves(dt);
         draw_status();
         draw_ribbon();
-        draw_browse(dt);
-        draw_hints();
-        ui_menu_draw(&g_tri);
-        if (g_mode == M_DETAILS) draw_details(dt);
+        if (g_mode == M_SEARCH) draw_search(dt);
+        else if (g_mode == M_DETAILS) draw_details(dt);
+        else if (g_mode == M_ABOUT) draw_about(dt);
+        else {
+            draw_browse(dt);
+            draw_hints();
+            ui_menu_draw(&g_tri);
+        }
     }
     if (g_menu.open && g_mode == M_PICK) ui_menu_draw(&g_menu);   /* the picker's menu, with its own hints */
     notify_draw(now);

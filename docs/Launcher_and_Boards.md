@@ -845,6 +845,25 @@ recording while one ran. The same request makes the console's `shot` a
 capture: no memory stick (architecture §9). Left for stage 4: launch
 progress, connection recovery, empty states.
 
+**The older screens in the shell (2026-10-31).** Search, Game details and
+About were full screens of their own; now the status line and the ribbon
+stay over them and the location line says where they are (`location_line`,
+shared with the levels). Search ("Games › Search"): the field, the first two
+matches and the keyboard (3 rows of 22, the key cursor on A at each opening,
+the last search kept to correct it); START or GO goes to the results
+("Games › Search: su"), drawn by `draw_focus` from a `Cat` of their own
+(`g_scat`: the covers, the enlarged highlight; apps in it their icon), cross
+plays, triangle the panel (no Sort by), circle back to the keyboard, circle
+again back where Search was opened. Game details ("<list> › Details", opened
+from triangle's panel, `g_det_back`: back to the list or to Search): the art
+in 128 x 128 at its shape (a PSP game's disc 104 across), the whole title,
+what it is, three lines of description, then as many rows of what is known
+as fit above the hints. About ("This board › About"): a list of 22 px rows
+(`about_rows`: label and icon at the left, the value from x 170, a long one
+scrolling on the highlighted row), the board's facts, then the PSP's and the
+connection's under small headings; up / down along it, whole rows only.
+Checked on the PSP-1000 through the GameShell at 1:1.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the
