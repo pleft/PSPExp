@@ -864,6 +864,29 @@ scrolling on the highlighted row), the board's facts, then the PSP's and the
 connection's under small headings; up / down along it, whole rows only.
 Checked on the PSP-1000 through the GameShell at 1:1.
 
+**A ROM's description (2026-10-31, `gamedb.c`).** Game details of a ROM show
+its description, developer, year and genre from OpenVGDB (v29, 2021: 53,871
+releases, 29,549 with a description), the database OpenEmu and sselph's
+scraper use. Wikipedia was tried first and dropped (by name only, the wrong
+article for "Super Mario Bros. 3"); ScreenScraper and TheGamesDB need an
+account or a key and have quotas. OpenVGDB needs neither: each board
+downloads the release's zip once (9 MB, `curl`, the database taken out with
+`bsdtar`; 42 MB in ~/.cache/pspexp-launcher; a failure retried a day later)
+the first time a ROM's details open, Box art downloads on. SQLite 3.46.1 is
+vendored to read it (tools/pspexp-term/sqlite: single-threaded, no
+extensions; the console 0.7 MB larger). A ROM is matched in a child, once,
+the answer cached in facts/<system>/<rom>.txt (".none"): by CRC32 of its data
+(an NES header's 16 bytes, a Lynx header's 64 and a copier's 512 on a SNES
+ROM left out, as OpenVGDB hashes them; a zip's from its central directory), a
+PSP game by its disc's serial (DISC_ID ULES00151 as ULES-00151), else by its
+name as words, "the" and brackets left out ("Legend of Zelda, The - A Link to
+the Past" is "The Legend of Zelda: A Link to the Past"). Measured with the
+GameShell's 35 ROMs across ten systems: 30 by MD5 at first, 34 with the
+headers stripped, the last (a translation) by name. Shown: "Developer · year
+· genre" (the first genre), the description four lines at a time (up / down,
+`gfx_text_skip`), then as many technical rows as fit. Dreamcast is not in
+OpenVGDB.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

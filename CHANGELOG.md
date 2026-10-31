@@ -32,6 +32,11 @@
   the PSP's dot answering as for the buttons. Needs Settings > Update the
   PSP. A screenshot's white dot (♪ + L twice) now shows just after the
   picture is taken, so it is no longer in it on a still screen.
+- **Descriptions of your ROMs** in Game details, with who made them, the
+  year and the genre: from OpenVGDB, a free database the board downloads
+  once (9 MB) and then reads offline, recognising each ROM by its contents
+  (34 of 35 test ROMs across ten systems found; PSP games by their disc).
+  Up / down read a long description.
 - **Search, Game details and About** in the same look as the rest: Search
   keeps the categories over it, its results a list like a platform's with
   the covers; Game details is a screen of its own (the art, the whole title,

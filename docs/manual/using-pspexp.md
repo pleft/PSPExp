@@ -66,6 +66,12 @@ triangle has **App details**.
   plugin](plugin.md) must be on: Settings > This PSP).
 - Under the highlighted game a line says what it is and whether you played
   it lately; its size, the file and who draws it are in **Details**.
+- **Game details** of a ROM also say who made it, when and what kind of game
+  it is, and describe it (up / down read the rest). They come from OpenVGDB,
+  a free game database the board downloads once (9 MB) the first time you
+  open a ROM's details; then it works offline. Your ROM is recognised by its
+  contents, so its file name does not matter. Settings > Library > Box art
+  turns these downloads off, with the covers'.
 
 ```
  PSPExp             USB · Raspberry Pi 400           16:40  PSP 67%

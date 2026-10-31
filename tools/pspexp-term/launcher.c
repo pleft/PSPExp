@@ -20,6 +20,7 @@
 #include "launcher_board.h"
 #include "launcher_ui.h"
 #include "quick.h"
+#include "gamedb.h"
 #ifdef __APPLE__
 #include "launcher_mac.h"
 #endif
@@ -362,7 +363,7 @@ static void cats_build(void)
     ACTION("clicks", "Button sounds", "volume-2", "A soft click as you move and press buttons");
     ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
     ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
-    ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Download covers for ROMs from libretro-thumbnails");
+    ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Covers for ROMs from libretro-thumbnails, their descriptions from OpenVGDB");
     ACTION("clips", "Clips", "history", "♪ + R saves the last seconds as a video: the board records all the time");
     ACTION("cliplen", "Clip length", "clock", "How much ♪ + R saves");
     ACTION("quality", "Quality", "gauge", "The videos' quality, and so their size");
@@ -1727,10 +1728,14 @@ static void search_input(uint32_t pressed, int up, int down, int left, int right
  * (the list, or Search's results) */
 static LEntry *g_det;
 static int g_det_back = M_BROWSE;
+static int g_det_line, g_det_lines;   /* the description's first line shown (up / down), and how many it has */
 
-static void details_input(uint32_t pressed, uint64_t now)
+#define DET_DESC_LINES 4
+static void details_input(uint32_t pressed, int up, int down, uint64_t now)
 {
     if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
+    if (up && g_det_line > 0) g_det_line--;   /* the description, a line at a time */
+    if (down && g_det_line + DET_DESC_LINES < g_det_lines) g_det_line++;
     if (pressed & PSPEXP_BUTTON_CROSS) { LEntry *e = g_det; g_mode = M_BROWSE; launch(e, now); }
     else if (pressed & PSPEXP_BUTTON_CIRCLE) g_mode = g_det_back;
     g_dirty = 1;
@@ -2117,6 +2122,7 @@ static void show_more(LEntry *e, uint64_t now)
     if (is_level_item(e) || !strncmp(e->id, "m:", 2) || e->type == LT_ACTION) return;
     g_det_back = g_mode == M_SEARCH ? M_SEARCH : M_BROWSE;
     g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1;
+    g_det_line = g_det_lines = 0;
 }
 
 /* the entries with triangle's panel: games, and apps (built in or installed) */
@@ -2213,7 +2219,7 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         return;
     }
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
-    if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
+    if (g_mode == M_DETAILS) { details_input(pressed, up, down, now); return; }
     if (g_mode == M_PICK) {   /* a list (Wi-Fi, Sound, Time zone): triangle its menu (Forget, New password: square's until
                                * 2026-10-31; Scan again), START Quick controls */
         if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
@@ -2431,6 +2437,7 @@ int launcher_needs_frame(uint64_t now)
         }
     }
     fetch_poll(now);
+    if (gamedb_poll()) g_dirty = 1;   /* (OpenVGDB downloaded, or a ROM's facts found: Game details again) */
     status_poll(now);
     if (g_confirm[0] && now > g_confirm_until) g_confirm[0] = 0;
     if ((g_mode == M_SEARCH || g_mode == M_TEXT) && !launcher_still(now) && (int)((now / 530000u) & 1) != g_caret) { g_caret = (int)((now / 530000u) & 1); g_dirty = 1; }
@@ -2581,7 +2588,7 @@ static void detail_line(const LEntry *e, char *s, size_t n)
     case LT_ACTION:
         if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
         else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
-        else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only" : "Covers for ROMs from libretro-thumbnails");
+        else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only, no descriptions" : "Covers from libretro-thumbnails, descriptions from OpenVGDB");
         else if (!strcmp(e->id, "a:clips")) snprintf(s, n, g_clips_keep ? "♪ + R saves the last %d seconds: the board records all the time"
                                                                      : "Turn on for ♪ + R: the last %d seconds as a video", g_clip_secs);
         else if (!strcmp(e->id, "a:cliplen")) snprintf(s, n, "♪ + R saves the last %d seconds%s", g_clip_secs, g_clips_keep ? "" : " (with Clips on)");
@@ -2884,6 +2891,16 @@ static void draw_hints(void)
     if (c->tab && c->n && x + hint_w(c->view ? "Focus" : "Grid") <= r - 8) hint_btn(x, 's', c->view ? "Focus" : "Grid");
 }
 
+/* a key's name in a cap ("UP/DOWN") and what it does, on the hint row */
+static int hint_cap(int x, const char *cap, const char *label, uint32_t col)
+{
+    int bw = gfx_text_width(FONT_BADGE, cap) + 10;
+    gfx_nine(NINE_R6, x, HINT_Y, bw, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, x + 5, HINT_Y + (14 - gfx_line_height(FONT_BADGE)) / 2, cap, C_SUB, 255, 0);
+    x += bw + 5;
+    return x + gfx_text(FONT_SMALL, x, HINT_Y - 1, label, col, 255, 0) + 14;
+}
+
 static int hint_btn(int x, char b, const char *label)
 {
     gfx_button(b, x, HINT_Y);
@@ -3005,7 +3022,27 @@ static void draw_details(float dt)
     gfx_text(FONT_BODY, tx, ty, s, 0x7fb2f5, a, tw);
     ty += gfx_line_height(FONT_BODY) + 4;
     lh = gfx_line_height(FONT_BODY) + 1;
-    {
+    if (e->type == LT_ROM && e->sys >= 0) {   /* a ROM's: from OpenVGDB (gamedb.h): who made it, when, what kind; its description */
+        static GameFacts g;
+        int r = gamedb_facts(e->exec, L.sys[e->sys].id, e->title, !g_nofetch, &g);
+        if (r > 0) {
+            char f[300] = "";
+            const char *who = g.developer[0] ? g.developer : g.publisher;
+            char genre[96];
+            snprintf(genre, sizeof(genre), "%.*s", (int)strcspn(g.genre, ","), g.genre);   /* (the first: "Role-Playing") */
+            snprintf(f, sizeof(f), "%s%s%s%s%s", who, who[0] && g.year[0] ? "  ·  " : "", g.year, (who[0] || g.year[0]) && genre[0] ? "  ·  " : "", genre);
+            if (f[0]) { gfx_text(FONT_SMALL, tx, ty, f, C_SUB, a, tw); ty += gfx_line_height(FONT_SMALL) + 4; }
+            if (g.desc[0]) {   /* four lines of it at a time, up / down along it */
+                const char *from = gfx_text_skip(FONT_BODY, g.desc, tw, g_det_line, &g_det_lines);
+                if (g_det_line > 0) gfx_icon("chevron-up", 10, tx + tw - 10, ty - 10, C_MUTED, a);
+                ty += gfx_text_wrapped(FONT_BODY, tx, ty, from, C_SUB, a, tw, lh, DET_DESC_LINES) * lh + 6;
+                if (g_det_line + DET_DESC_LINES < g_det_lines) gfx_icon("chevron-down", 10, tx + tw - 10, ty - 8, C_MUTED, a);
+            }
+        } else if (r == 0 && gamedb_busy()) {
+            gfx_text(FONT_SMALL, tx, ty, gamedb_busy() == 1 ? "Getting the game database (9 MB, once)..." : "Looking it up...", C_MUTED, a, tw);
+            ty += gfx_line_height(FONT_SMALL) + 6;
+        }
+    } else {
         const char *d = e->desc[0] ? e->desc : is_builtin(e) ? e->tags : "";
         if (d[0]) ty += gfx_text_wrapped(FONT_BODY, tx, ty, d, C_SUB, a, tw, lh, 3) * lh + 6;
     }
@@ -3045,7 +3082,8 @@ static void draw_details(float dt)
 #undef ROW_IF
     {
         int x = hint_btn(12, 'x', can_fav(e) ? "Play" : "Open");
-        hint_btn(x, 'o', "Back");
+        x = hint_btn(x, 'o', "Back");
+        if (g_det_lines > DET_DESC_LINES) hint_cap(x, "UP/DOWN", "Read more", C_SUB);
         hint_right(SCREEN_W - 12, "START", "Quick");
     }
 }

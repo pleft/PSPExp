@@ -12,6 +12,11 @@ These keep the licence of the project they come from or change; PSPExp's MIT lic
 - tools/pspexp-retro/libretro.h: the libretro API, MIT (notice in the file).
 - tools/pspexp-term/stb/: stb_image and stb_truetype, public domain or MIT
   (notice in the files).
+- tools/pspexp-term/sqlite/: SQLite 3.46.1's amalgamation, public domain
+  (its README.md).
+- OpenVGDB (github.com/OpenVGDB/OpenVGDB): the game database Game details reads
+  (descriptions, developers, years); not in this repository or its packages:
+  each board downloads it from OpenVGDB's own release.
 - tools/pspexp-term/assets/: the Inter, Lucide and Spleen fonts, each under
   the licence in the -LICENSE.txt file beside it; assets/systems/, the
   systems' icons, CC BY 4.0 (their LICENSE.txt).

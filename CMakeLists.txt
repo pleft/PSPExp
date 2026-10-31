@@ -207,7 +207,7 @@ if(PSPEXP_HAVE_USB)
   target_compile_definitions(pspexp-bench PRIVATE PSPEXP_HAVE_USB=1)
 endif()
 
-add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/player.c tools/pspexp-term/music.c tools/pspexp-term/tags.c tools/pspexp-term/upnp.c tools/pspexp-term/modplay.c tools/pspexp-term/notify.c tools/pspexp-term/btaudio.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/apps.c tools/pspexp-term/monitor.c tools/pspexp-term/gallery.c tools/pspexp-term/quick.c tools/pspexp-term/sfx.c tools/pspexp-term/sysinfo.c tools/pspexp-term/store.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
+add_executable(pspexp-term tools/pspexp-term/main.c tools/pspexp-term/term_menu.c tools/pspexp-term/launcher_ui.c tools/pspexp-term/files.c tools/pspexp-term/player.c tools/pspexp-term/music.c tools/pspexp-term/tags.c tools/pspexp-term/upnp.c tools/pspexp-term/modplay.c tools/pspexp-term/notify.c tools/pspexp-term/btaudio.c tools/pspexp-term/files_ops.c tools/pspexp-term/files_psp.c tools/pspexp-term/control.c tools/pspexp-term/apps.c tools/pspexp-term/monitor.c tools/pspexp-term/gallery.c tools/pspexp-term/quick.c tools/pspexp-term/sfx.c tools/pspexp-term/gamedb.c tools/pspexp-term/sqlite/sqlite3.c tools/pspexp-term/sysinfo.c tools/pspexp-term/store.c tools/pspexp-term/term_fonts.c tools/pspexp-term/term_themes.c tools/pspexp-term/launcher.c tools/pspexp-term/launcher_board.c
   tools/pspexp-term/launcher_lib.c tools/pspexp-term/launcher_gfx.c tools/pspexp-term/psp_native.c tools/pspexp-term/psp_plugin.c)
 target_compile_definitions(pspexp-term PRIVATE PSPEXP_LAUNCHER_ASSET_DIR="${CMAKE_SOURCE_DIR}/tools/pspexp-term/assets")
 # the console's version, for About: generated at every build (cmake/pspexp_version.cmake)
@@ -306,3 +306,7 @@ if(PSPEXP_BUILD_TESTS)
     add_test(NAME glsl_plan COMMAND ${CMAKE_SOURCE_DIR}/tests/run_glsl_plan.sh ${CMAKE_BINARY_DIR})
   endif()
 endif()
+# SQLite (public domain, vendored unchanged: tools/pspexp-term/sqlite/README.md), for OpenVGDB in
+# Game details: single-threaded, no extensions loaded, its own warnings not ours
+set_source_files_properties(tools/pspexp-term/sqlite/sqlite3.c PROPERTIES
+    COMPILE_OPTIONS "-w" COMPILE_DEFINITIONS "SQLITE_THREADSAFE=0;SQLITE_OMIT_LOAD_EXTENSION;SQLITE_DEFAULT_MEMSTATUS=0")

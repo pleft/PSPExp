@@ -52,6 +52,8 @@ int  gfx_text_width(int font, const char *s);
 /* s word-wrapped at spaces into lines of at most w pixels, line_h apart,
  * at most max_lines (the last one cut, with "..."); the lines drawn */
 int  gfx_text_wrapped(int font, int x, int y, const char *s, uint32_t rgb, int alpha, int w, int line_h, int max_lines);
+/* where s goes on after n of its lines wrapped to w as above; how many lines it takes (may be NULL) */
+const char *gfx_text_skip(int font, const char *s, int w, int n, int *lines);
 int  gfx_line_height(int font);
 
 void gfx_rect(int x, int y, int w, int h, uint32_t rgb, int alpha);
