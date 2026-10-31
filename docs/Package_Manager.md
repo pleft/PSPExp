@@ -238,6 +238,12 @@ nub=keys
 graphics=sdl
 ```
 
+A system may name its own core, `core=` in its `[system]`, over the
+package's: the Mega Drive recipe's 32X plays with PicoDrive
+(`core=picodrive_libretro.so`, `pspexp-libretro-picodrive` on every board),
+its other systems with Genesis Plus GX. An `env=PSPEXP_RETRO_SYSTEM=~/roms/segacd/bios`
+points pspexp-retro at a system's BIOS folder (it expands the `~/`).
+
 A system may instead run a program of its own: `exec=` in `[system]`, with
 `%ROM%` where the ROM goes, and no `core=` (the Nintendo 64,
 `recipes/n64/recipe`: `exec=/usr/games/pspexp-n64 %ROM%`, Mupen64Plus drawn by

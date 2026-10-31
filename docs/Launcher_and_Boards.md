@@ -1321,7 +1321,9 @@ itself (on the Mac it plays in a window).
   `~/.local/share/pspexp-retro/saves/<rom>.srm`, written every 10 s when it
   changed and at exit, also when the SDL layer ends the player (an exit
   handler: HOME's 2 s way out, 2026-10-29). BIOS files for systems that need them go in
-  `~/.config/pspexp-retro/system/`.
+  `~/.config/pspexp-retro/system/`, or where `PSPEXP_RETRO_SYSTEM` says
+  (`~/` is the home folder: a recipe's `env=`, which nothing else expands;
+  the Sega CD's `~/roms/segacd/bios`, beside its discs, 2026-11-01).
 - **Core options.** The core's defaults, overridden by `KEY=value` lines in
   `~/.config/pspexp-retro/<core>.opt` or `PSPEXP_RETRO_OPT="k=v;k=v"`.
   `PSPEXP_RETRO_ASPECT=pixel` gives square pixels.

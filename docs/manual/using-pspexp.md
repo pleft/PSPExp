@@ -219,7 +219,7 @@ and **Settings > Update PSP** puts the PSP's side up to date too.
 ## Emulators and ROMs
 
 An emulator package adds a **system**: NES, SNES, Mega Drive (with Master
-System and Game Gear), Game Boy and Game Boy Color, Game Boy Advance,
+System, Game Gear, Sega CD and 32X), Game Boy and Game Boy Color, Game Boy Advance,
 Atari Lynx, WonderSwan, and on a Raspberry Pi the Nintendo 64. It appears
 under **Emulators** once there are ROMs in
 its folder in the board's home folder:
@@ -229,6 +229,8 @@ its folder in the board's home folder:
 | NES | `roms/nes` |
 | SNES | `roms/snes` |
 | Mega Drive / Master System / Game Gear | `roms/md`, `roms/sms`, `roms/gg` |
+| Sega CD | `roms/segacd` (.chd, or .cue with its tracks); your console's BIOS in `roms/segacd/bios` (`bios_CD_U.bin`, `bios_CD_E.bin` or `bios_CD_J.bin`, the disc's region) |
+| 32X | `roms/32x` (.32x) |
 | Game Boy / Color | `roms/gb`, `roms/gbc` |
 | Game Boy Advance | `roms/gba` |
 | Atari Lynx | `roms/lynx` |

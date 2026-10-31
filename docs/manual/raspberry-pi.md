@@ -72,7 +72,9 @@ the Dreamcast, the Nintendo DS and the Sega Saturn)
 and appear as their own tiles once you have ROMs for them.
 
 **ROMs** go in folders in your home folder on the Pi: `roms/nes`,
-`roms/snes`, `roms/md`, `roms/gb` and `roms/gbc`, `roms/gba`, `roms/lynx`,
+`roms/snes`, `roms/md` (and `roms/sms`, `roms/gg`), `roms/32x`, `roms/segacd` for Sega CD discs (`.chd`, or `.cue` with their tracks)
+with the BIOS from your own console in `roms/segacd/bios` (`bios_CD_U.bin`, `bios_CD_E.bin` or
+`bios_CD_J.bin`, the disc's region), `roms/gb` and `roms/gbc`, `roms/gba`, `roms/lynx`,
 `roms/ws`, `roms/n64`, `roms/nds` for Nintendo DS games (`.nds`), `roms/dreamcast` for Dreamcast discs (`.chd`, `.gdi` or
 `.cdi`; no BIOS needed for either), and `roms/saturn` for Saturn discs (`.chd`, `.cue` or `.iso`)
 with the Saturn's BIOS from your own console in `roms/saturn/bios` (`mpr-17933.bin`, and

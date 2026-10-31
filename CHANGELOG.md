@@ -43,6 +43,11 @@
   Violet, Amber or Graphite, each previewed as you move to it. What the
   PSP draws itself follows it too (the "HOME again to quit" bar, the
   volume bar, the card when the board goes): needs Settings > Update PSP.
+- **Sega CD and 32X**, with the Mega Drive package: Sega CD discs in
+  `roms/segacd` (.chd, or .cue with its tracks), with your console's BIOS
+  in `roms/segacd/bios`; 32X games in `roms/32x`, played by PicoDrive
+  (now on the Raspberry Pi too). Apps > Packages updates Mega Drive to
+  bring them.
 - **Descriptions of your ROMs** in Game details, with who made them, the
   year and the genre: from the LaunchBox Games Database, which the board
   downloads once (110 MB, kept as 40 MB) and then reads offline, every

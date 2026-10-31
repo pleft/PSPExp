@@ -799,8 +799,14 @@ int main(int argc, char **argv)
 #endif
     if (C.api_version() != RETRO_API_VERSION) die("%s: libretro API %u, the player speaks %u", argv[1], C.api_version(), RETRO_API_VERSION);
 
-    /* directories: BIOS files in ~/.config/pspexp-retro/system, saves apart */
-    snprintf(P.system_dir, sizeof(P.system_dir), "%s", getenv("PSPEXP_RETRO_SYSTEM") ? getenv("PSPEXP_RETRO_SYSTEM") : "");
+    /* directories: BIOS files in ~/.config/pspexp-retro/system, or where a system says
+     * (PSPEXP_RETRO_SYSTEM, "~/" its home: a recipe's env=, which nothing expands; the Sega CD's
+     * ~/roms/segacd/bios, beside its discs), saves apart */
+    {
+        const char *sd = getenv("PSPEXP_RETRO_SYSTEM");
+        if (sd && sd[0] == '~' && sd[1] == '/') snprintf(P.system_dir, sizeof(P.system_dir), "%s/%s", home, sd + 2);
+        else snprintf(P.system_dir, sizeof(P.system_dir), "%s", sd ? sd : "");
+    }
     if (!P.system_dir[0]) snprintf(P.system_dir, sizeof(P.system_dir), "%s/.config/pspexp-retro/system", home);
     snprintf(P.save_dir, sizeof(P.save_dir), "%s", getenv("PSPEXP_RETRO_SAVES") ? getenv("PSPEXP_RETRO_SAVES") : "");
     if (!P.save_dir[0]) snprintf(P.save_dir, sizeof(P.save_dir), "%s/.local/share/pspexp-retro/saves", home);
