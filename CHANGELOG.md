@@ -19,6 +19,12 @@
   Quick controls (Notifications, Terminal, Restart PSPExp, Power off),
   **SELECT** Search in Games; holding SELECT no longer opens the terminal
   (Apps or Quick controls do).
+- **Games with their art**: a platform's games show their box art at its
+  own shape, a PSP game in its disc. **Square** switches a platform between
+  Focus (one game large) and a Grid of six; **triangle** opens a game's
+  options: Add to favourites, Game details, and Sort by (Favourites and
+  recent, Recently played, Title A-Z); each platform keeps its view and its
+  order. Square no longer adds a favourite.
 - **Every app has a title bar** with its name: an app no longer passes for
   the launcher. The hints at the bottom sit where the PSP's buttons are:
   "HOME Close" first at the left (the way out, the same as for games),

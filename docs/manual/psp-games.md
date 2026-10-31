@@ -6,7 +6,7 @@ its own icon. Choose one and the PSP runs it itself, at its own speed, reading
 the game's disc from the board over the USB cable. Leave the game and you are
 back in PSPExp.
 
-![The launcher's Games, the PSP platform open: your own PSP games](../images/psp-section.png)
+![The launcher's Games, the PSP platform open: your own PSP games, each in its disc with its icon](../images/psp-section.png)
 
 ## What you need
 

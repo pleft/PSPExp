@@ -752,6 +752,36 @@ This board, Quick controls; Media > Music opened Media in ~/Music, HOME back
 on Music; Gallery and Files back on their entries; Search opened and
 closed; L / R back to where each category was left.
 
+**Stage 2: the Games views (2026-10-31).** A platform's games show their
+art: `gfx_art` (launcher_gfx.c) fits a game's art inside a box at the size
+it is shown, keeping its proportions (box art portrait or landscape),
+box-filtered, the corners rounded; without art the generated cover, made
+at 128 and scaled down (its lettering is laid out for 128). An LRU of 28
+(`ID_ART`, 64 ids, a fresh id each as for the covers), four new ones a
+frame: a grid of new art fills in over a few frames (`g_anim` keeps them
+coming). PSP games alone stay in the UMD-like disc, now at any size
+(`gfx_disc_d`: the texture D + 24 a side; 20 slots). Focus: the highlighted
+game's art in 88 x 50 (a disc 48 across), the others' in 52 x 30 (30), the
+names from x 124. Grid (`draw_grid`, square, `view_toggle`): three across,
+rows of 83 (art 58 tall, one 16 px name cut short, a favourite's star before
+it), two rows in view, the highlight a blue cell with the blue edge round
+the art (the disc's glow); left / right one along (on across a row's end),
+up / down a row. Triangle's panel (`panel_draw`, `g_pn`) along the right
+from x 292, the game still in view: Add to favourites / Remove favourite,
+Game details (the details card, which now shows a PSP game in its disc,
+another its art at its shape, its title in the 16 px font when not ASCII;
+square no longer toggles the favourite there), Sort by (its three values,
+the current one ticked: `SORT_FAVS` the favourites first then by when last
+played then A to Z, `SORT_RECENT`, `SORT_TITLE`; `plat_sort`, the same game
+kept highlighted); on an app App details (a built-in one: its line and
+"Built into PSPExp"). Each platform keeps its view and order in the
+library's settings (`view_<name>`, `sort_<name>`, the name's other
+characters as "_"). An empty Favourites says triangle adds them. Checked on
+the PSP-1000 at 1:1: PSP in Focus and Grid, Super Nintendo in Focus and Grid
+(portrait and landscape art, generated covers), the panel, Sort by Title
+A-Z, a favourite added and the Favourites list, Game details, App details,
+and a panel closed by a jump to another level.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

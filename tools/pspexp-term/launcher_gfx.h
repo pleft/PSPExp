@@ -77,6 +77,12 @@ void gfx_cover_forget(const char *key);
 #define DISC_BIG   86
 #define DISC_TEX   128
 int  gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha);
+/* a disc D across (the game lists: smaller ones); big: with the selection's glow */
+int  gfx_disc_d(const CoverSpec *c, int cx, int cy, int D, int big, int alpha);
+/* a game's art fitted inside bw x bh (at most 256 a side) at its own proportions, centred in it,
+ * the corners rounded; no art: the generated cover, square. frame: the selection's edge round it in
+ * that colour (0 none). 1 drawn; 0 not yet (a few new ones a frame: draw again next frame) */
+int  gfx_art(const CoverSpec *c, int x, int y, int bw, int bh, uint32_t frame, int alpha);
 void gfx_disc_forget(const char *key);
 /* a solid five-pointed star px across (the favourites'), tinted rgb; px */
 int  gfx_star(int px, int x, int y, uint32_t rgb, int alpha);

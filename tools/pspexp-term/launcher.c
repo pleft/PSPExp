@@ -73,6 +73,18 @@
 #define FOCUS_ROW   36
 #define FOCUS_SEL   56
 #define FOCUS_AT    (BROWSE_Y + FOCUS_ROW)
+/* a platform's games: the art column in Focus; Grid three across, two rows of 83 in view */
+#define ART_CX      64      /* the art's centre */
+#define GAME_TX     124     /* the names' left */
+#define GRID_COLS   3
+#define GRID_X0     12
+#define GRID_W      148
+#define GRID_GAP    8
+#define GRID_ROW    83
+#define GRID_ART    58
+/* triangle's panel, along the right */
+#define PANEL_X     292
+#define PANEL_ROW   34
 /* a Settings group's list */
 #define SET_X0      12
 #define SET_X1      (SCREEN_W - 12)
@@ -97,6 +109,7 @@ typedef struct Cat {
     uint32_t col;
     int kind, sys;
     int tab;                /* one of Games' platforms (opened from their list; circle goes back to it) */
+    int view, sort;         /* a platform's: Focus (0) or Grid (1); its order (SORT_*); kept per platform */
     LEntry **it; int n;
     int sel; float scroll;
 } Cat;
@@ -207,20 +220,44 @@ static int recent_rank(const LEntry *e)
     return 1000;
 }
 
-/* a filter's order: the favourites first, then by when last played, then the rest A to Z;
- * within the favourites the same (the last played of them first) */
-static int cmp_all(const void *a, const void *b)
+/* a platform's order (triangle > Sort by), kept per platform in the library's settings: the favourites
+ * first, then by when last played (the unplayed A to Z); by when last played alone; A to Z */
+enum { SORT_FAVS, SORT_RECENT, SORT_TITLE, NSORT };
+static const char *const SORT_NAME[NSORT] = { "Favourites and recent", "Recently played", "Title A-Z" };
+static int g_sort_mode;
+static int cmp_sorted(const void *a, const void *b)
 {
     const LEntry *x = *(LEntry *const *)a, *y = *(LEntry *const *)b;
     int rx = recent_rank(x), ry = recent_rank(y);
-    if (x->fav != y->fav) return x->fav ? -1 : 1;
-    if (rx != ry) return rx < ry ? -1 : 1;
+    if (g_sort_mode == SORT_FAVS && x->fav != y->fav) return x->fav ? -1 : 1;
+    if (g_sort_mode != SORT_TITLE && rx != ry) return rx < ry ? -1 : 1;
     return strcasecmp(x->title, y->title);
+}
+/* the settings' key for a platform's view or order ("view_Super_Nintendo") */
+static void plat_key(const char *what, const char *name, char *out, size_t n)
+{
+    size_t k = (size_t)snprintf(out, n, "%s_", what), i;
+    for (i = 0; name[i] && k + 1 < n; i++) out[k++] = isalnum((unsigned char)name[i]) ? name[i] : '_';
+    out[k < n ? k : n - 1] = 0;
+}
+static void plat_sort(Cat *c)
+{
+    char key[96];
+    plat_key("view", c->name, key, sizeof(key)); c->view = lib_setting_int(&L, key, 0) != 0;
+    plat_key("sort", c->name, key, sizeof(key)); c->sort = lib_setting_int(&L, key, SORT_FAVS);
+    if (c->sort < 0 || c->sort >= NSORT) c->sort = SORT_FAVS;
+    g_sort_mode = c->sort;
+    if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_sorted);
 }
 
 /* each level's place, kept over a rebuild (a game played moves up its list; a package installed):
  * its name, the entry highlighted (by id) and where that was */
 static struct { char name[64], id[160]; int sel; float scroll; } g_keep[40];
+/* triangle's panel (panel_draw): open, at Sort by's values, its highlight, its rows, for which entry */
+enum { PN_FAV = 1, PN_DETAILS, PN_SORT };
+static struct { int open, sort, sel, n, id[4]; LEntry *e; } g_pn;
+/* a choice's values beside its setting (vlist_open): open, its highlight, the current one, how many */
+static struct { int open, sel, cur, n; const LEntry *e; char v[3][24]; } g_vl;
 
 static void cats_build(void)
 {
@@ -252,24 +289,24 @@ static void cats_build(void)
     for (s = 0; s < L.nsys; s++)
         for (i = 0; i < L.sys[s].nroms; i++)
             if (L.sys[s].roms_list[i].fav && (!is_psp_sys(s) || !psp_not_a_game(&L.sys[s].roms_list[i]))) cat_push(c, &L.sys[s].roms_list[i]);
-    if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
+    plat_sort(c);
     for (s = 0; s < L.nsys; s++) if (is_psp_sys(s)) {
         c = cat_add("PSP", L.sys[s].icon[0] ? L.sys[s].icon : "disc-3", COL_GAMES, CK_SYSTEM, "game");
         c->sys = s; c->tab = 1;
         for (i = 0; i < L.sys[s].nroms; i++) if (!psp_not_a_game(&L.sys[s].roms_list[i])) cat_push(c, &L.sys[s].roms_list[i]);   /* (a PS1 disc in the PSP folder: left out) */
-        if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
+        plat_sort(c);
         break;
     }
     c = cat_add(g_board.name, g_board.icon, COL_GAMES, CK_GAMES, "game");
     c->tab = 1;
     for (i = 0; i < L.n; i++) if (L.e[i].type == LT_GAME) cat_push(c, &L.e[i]);
-    if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
+    plat_sort(c);
     for (s = 0; s < L.nsys && g_ncat < (int)(sizeof(g_cat) / sizeof(g_cat[0])) - 12; s++) {
         if (!L.sys[s].nroms || is_psp_sys(s)) continue;
         c = cat_add(L.sys[s].name, L.sys[s].icon[0] ? L.sys[s].icon : "gamepad", COL_GAMES, CK_SYSTEM, "game");
         c->sys = s; c->tab = 1;
         for (i = 0; i < L.sys[s].nroms; i++) cat_push(c, &L.sys[s].roms_list[i]);
-        if (c->n > 1) qsort(c->it, (size_t)c->n, sizeof(c->it[0]), cmp_all);
+        plat_sort(c);
     }
     {   /* Games' list: the platforms, in the order made */
         Cat *top = &g_cat[0];
@@ -384,7 +421,7 @@ static void cats_build(void)
     }
     g_cur = -1;
     for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
-    if (g_cur < 0) { g_cur = start_cat(); g_cat[g_cur].scroll = (float)g_cat[g_cur].sel; }
+    if (g_cur < 0) { g_cur = start_cat(); g_cat[g_cur].scroll = (float)g_cat[g_cur].sel; g_pn.open = 0; }
 }
 
 static LEntry *cur_entry(void)
@@ -1080,6 +1117,7 @@ int launcher_category(const char *name)
     for (i = 0; i < g_ncat; i++)
         if (!strcmp(g_cat[i].name, name)) {   /* a category, a platform, a Settings group */
             g_cur = i;
+            g_pn.open = g_vl.open = 0;   /* (a panel or a choice's values were over the level left) */
             snprintf(g_sec_at[section_of(&g_cat[i])], sizeof(g_sec_at[0]), "%s", name);
             g_sel_since = pspexp_time_us(); g_dirty = 1;
             return 1;
@@ -1668,16 +1706,6 @@ static LEntry *g_det;
 static void details_input(uint32_t pressed, uint64_t now)
 {
     if (pressed & PSPEXP_BUTTON_CROSS) { LEntry *e = g_det; g_mode = M_BROWSE; launch(e, now); }
-    else if (pressed & PSPEXP_BUTTON_SQUARE) {
-        char id[160];
-        int on;
-        snprintf(id, sizeof(id), "%s", g_det->id);
-        on = lib_fav_toggle(&L, id);
-        cats_build();
-        g_det = lib_find(&L, id);
-        if (!g_det) g_mode = M_BROWSE;
-        toast("star", on ? "Added to favourites" : "Removed from favourites", now);
-    }
     else if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE)) g_mode = M_BROWSE;
     g_dirty = 1;
 }
@@ -1910,6 +1938,15 @@ static void text_input(uint32_t pressed, int up, int down, int left, int right, 
 
 /* ---- input -------------------------------------------------------------------------------- */
 
+/* a level's scroll settled on its highlight (it comes in still, not scrolling to it): a list's on
+ * the highlight; a grid's on its row, the last row on the second line */
+static void cat_settle(Cat *c)
+{
+    int row = c->sel / GRID_COLS, last = (c->n + GRID_COLS - 1) / GRID_COLS - 2;
+    if (c->tab && c->view) c->scroll = (float)(row < last ? row : last > 0 ? last : 0);
+    else c->scroll = (float)c->sel;
+}
+
 /* to another level (dir 1: in, or the next category; -1 back, or the one before), on its highlight */
 static void show_cat(int c, int dir, uint64_t now)
 {
@@ -1917,7 +1954,7 @@ static void show_cat(int c, int dir, uint64_t now)
     g_cur = c;
     snprintf(g_sec_at[section_of(&g_cat[c])], sizeof(g_sec_at[0]), "%s", g_cat[c].name);
     g_list_anim = 0; g_list_dir = (float)dir;
-    g_cat[c].scroll = (float)g_cat[c].sel;   /* (it comes in settled, not scrolling to its highlight) */
+    cat_settle(&g_cat[c]);
     g_sel_since = now;
     g_dirty = 1;
 }
@@ -1961,6 +1998,28 @@ static void focus_move(int d, uint64_t now)
     c->sel = s; g_sel_since = now; g_dirty = 1;
 }
 
+/* a grid: left / right one along (on from a row's end to the next row), up / down a row; down to a
+ * shorter last row: its last */
+static void grid_step(int d, uint64_t now)
+{
+    Cat *c = &g_cat[g_cur];
+    int s = c->sel + d;
+    if (s < 0) return;
+    if (s >= c->n) { if (d == GRID_COLS && c->sel / GRID_COLS < (c->n - 1) / GRID_COLS) s = c->n - 1; else return; }
+    c->sel = s; g_sel_since = now; g_dirty = 1;
+}
+
+/* square in a platform: Focus <-> Grid on the same game, kept for the platform */
+static void view_toggle(Cat *c)
+{
+    char key[96];
+    c->view = !c->view;
+    plat_key("view", c->name, key, sizeof(key));
+    lib_setting_set(&L, key, c->view);
+    cat_settle(c);
+    g_dirty = 1;
+}
+
 /* a setting's kind: a switch (cross flips it in place), a choice (cross opens its values), a page
  * (cross opens it: a list, About), or a thing done */
 enum { ROW_DO, ROW_SWITCH, ROW_CHOICE, ROW_PAGE };
@@ -1983,7 +2042,6 @@ static int switch_on(const LEntry *e)
 
 /* a choice's values in a small list beside it, the current one ticked: up / down move, cross sets
  * the one highlighted, circle leaves it as it was */
-static struct { int open, sel, cur, n; const LEntry *e; char v[3][24]; } g_vl;
 static const int CLIP_SECS[3] = { 15, 30, 60 };
 static void vlist_open(const LEntry *e)
 {
@@ -2029,9 +2087,52 @@ static void fav_toggle(LEntry *e, uint64_t now)
 /* triangle: a game's, a ROM's, an installed app's Details card; what a built-in app is, in a toast */
 static void show_more(LEntry *e, uint64_t now)
 {
+    (void)now;
     if (is_level_item(e) || !strncmp(e->id, "m:", 2) || e->type == LT_ACTION) return;
-    if (is_builtin(e)) toast(e->icon, e->tags, now);
-    else { g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1; }
+    g_det = e; g_mode = M_DETAILS; g_overlay_a = 0; g_open_at = now; g_dirty = 1;
+}
+
+/* the entries with triangle's panel: games, and apps (built in or installed) */
+static int has_panel(const LEntry *e)
+{
+    return can_fav(e) || (!is_level_item(e) && strncmp(e->id, "m:", 2) && e->type != LT_ACTION);
+}
+static void panel_open(LEntry *e)
+{
+    memset(&g_pn, 0, sizeof(g_pn));
+    g_pn.e = e; g_pn.open = 1;
+    if (can_fav(e)) g_pn.id[g_pn.n++] = PN_FAV;
+    g_pn.id[g_pn.n++] = PN_DETAILS;
+    if (can_fav(e) && g_cat[g_cur].tab) g_pn.id[g_pn.n++] = PN_SORT;
+    g_dirty = 1;
+}
+static void panel_input(uint32_t pressed, int up, int down, uint64_t now)
+{
+    Cat *c = &g_cat[g_cur];
+    g_dirty = 1;
+    if (up && g_pn.sel > 0) g_pn.sel--;
+    if (down && g_pn.sel < g_pn.n - 1) g_pn.sel++;
+    if (pressed & PSPEXP_BUTTON_CIRCLE) {
+        if (g_pn.sort) { int k; g_pn.sort = 0; for (g_pn.n = 0, k = 0; k < 4 && g_pn.id[k]; k++) { g_pn.n++; if (g_pn.id[k] == PN_SORT) g_pn.sel = k; } }
+        else g_pn.open = 0;
+        return;
+    }
+    if (!(pressed & PSPEXP_BUTTON_CROSS)) return;
+    if (g_pn.sort) {   /* the order: kept for the platform, the same game highlighted */
+        char key[96];
+        plat_key("sort", c->name, key, sizeof(key));
+        lib_setting_set(&L, key, g_pn.sel);
+        g_pn.open = 0;
+        cats_build();
+        cat_settle(&g_cat[g_cur]);
+        return;
+    }
+    switch (g_pn.id[g_pn.sel]) {
+    case PN_FAV: g_pn.open = 0; fav_toggle(g_pn.e, now); break;
+    case PN_DETAILS: g_pn.open = 0; show_more(g_pn.e, now); break;
+    case PN_SORT: g_pn.sort = 1; g_pn.n = NSORT; g_pn.sel = c->sort; break;
+    default: break;
+    }
 }
 
 static void quick_open(uint64_t now)
@@ -2113,14 +2214,22 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         return;
     }
     if (g_vl.open) { vlist_input(pressed, up, down); return; }
+    if (g_pn.open) { panel_input(pressed, up, down, now); return; }
     if (pressed & PSPEXP_BUTTON_START) { quick_open(now); return; }
     c = &g_cat[g_cur];
     if ((pressed & PSPEXP_BUTTON_SELECT) && section_of(c) == SEC_GAMES) { search_open(now); return; }
     /* L / R the categories, from any level; the d-pad only the list on screen; cross in, circle back */
     if (pressed & PSPEXP_BUTTON_LTRIGGER) { section_step(-1, now); return; }
     if (pressed & PSPEXP_BUTTON_RTRIGGER) { section_step(1, now); return; }
-    if (up) focus_move(-1, now);
-    if (down) focus_move(1, now);
+    if (c->tab && c->view) {   /* a platform's grid */
+        if (left) grid_step(-1, now);
+        if (right) grid_step(1, now);
+        if (up) grid_step(-GRID_COLS, now);
+        if (down) grid_step(GRID_COLS, now);
+    } else {
+        if (up) focus_move(-1, now);
+        if (down) focus_move(1, now);
+    }
     if ((pressed & PSPEXP_BUTTON_CIRCLE) && cat_parent(c) >= 0) { level_back(now); return; }
     if (!(e = cur_entry())) return;
     if (pressed & PSPEXP_BUTTON_CROSS) {
@@ -2128,8 +2237,8 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         else launch(e, now);
         return;
     }
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && can_fav(e)) fav_toggle(e, now);
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) show_more(e, now);
+    if ((pressed & PSPEXP_BUTTON_SQUARE) && c->tab) view_toggle(c);
+    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && has_panel(e)) panel_open(e);
 }
 
 /* ---- status sources ------------------------------------------------------------------------ */
@@ -2281,6 +2390,7 @@ static void library_changed(uint64_t now)
     lib_reload(&L);
     cats_build();
     g_det = NULL;
+    g_pn.open = 0;   /* (its entry may be gone) */
     if (g_mode == M_DETAILS) g_mode = M_BROWSE;
     if (g_mode == M_SEARCH) search_update();
     toast("package", "Library updated", now);
@@ -2516,6 +2626,21 @@ static void row_icon(const LEntry *e, int px, int x, int y, uint32_t ink, int al
     gfx_icon(e->icon[0] ? e->icon : type_icon(e), px, x, y, ink, alpha);
 }
 
+/* a game's picture centred at (cx, cy): a PSP game in its disc, D across (the glow when highlighted);
+ * another its art at its own proportions inside bw x bh, the blue edge round it when highlighted.
+ * Art not made yet this frame: another frame comes */
+static void game_art(const LEntry *e, int cx, int cy, int bw, int bh, int D, int on, int alpha)
+{
+    CoverSpec cs;
+    char png[700] = "";
+    memset(&cs, 0, sizeof(cs));
+    cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e);
+    if (e->art[0]) cs.art = e->art;
+    else if (e->type == LT_ROM && e->sys >= 0) cs.art = rom_art(e, png, sizeof(png));
+    if (e->type == LT_ROM && is_psp_sys(e->sys)) { cs.round = 1; gfx_disc_d(&cs, cx, cy, D, on, alpha); return; }
+    if (!gfx_art(&cs, cx - bw / 2, cy - bh / 2, bw, bh, on ? C_ACCENT : 0, alpha)) g_anim = 1;
+}
+
 /* only plain letters in the big font (its atlas has ASCII alone): another title in the 16 px one */
 static int title_font(const char *s)
 {
@@ -2536,14 +2661,14 @@ static void row_sub(const Cat *c, const LEntry *e, char *s, size_t n)
  * line (a platform's with how many games) */
 static void draw_focus(Cat *c, float dt, int alpha, int dx)
 {
-    const int IX = 22 + dx, TX = 70 + dx, TW = SCREEN_W - 24 - 70;
+    const int games = c->tab, IX = 22 + dx, TX = (games ? GAME_TX : 70) + dx, TW = SCREEN_W - 24 - (games ? GAME_TX : 70);
     int i, first, last;
     char s[200];
     c->scroll = ease(c->scroll, (float)c->sel, 16.0f, dt, 0.01f);
     if (!c->n) {
         int favs = c->kind == CK_FAVS, psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys);
         gfx_text(FONT_TITLE, 24 + dx, FOCUS_AT + 6, favs ? "No favourites yet" : psp ? "No PSP games yet" : "Nothing here yet", C_SUB, alpha, 0);
-        gfx_text_wrapped(FONT_SMALL, 24 + dx, FOCUS_AT + 30, favs ? "Square on a game adds it here"
+        gfx_text_wrapped(FONT_SMALL, 24 + dx, FOCUS_AT + 30, favs ? "Triangle on a game, then Add to favourites, puts it here"
                          : psp ? "Your ISO, CSO and ZIP games go in roms/psp on the board"
                          : "Apps > Packages installs games and emulators; ROMs go in roms on the board",
                          C_MUTED, alpha, SCREEN_W - 48, 14, 3);
@@ -2563,20 +2688,98 @@ static void draw_focus(Cat *c, float dt, int alpha, int dx)
         if (y + h < BROWSE_Y || y > BROWSE_Y + BROWSE_H) continue;
         if (on) {
             int f = title_font(e->title), lt = gfx_line_height(f), ls = gfx_line_height(FONT_BODY), ty = y + (h - lt - ls) / 2;
-            row_icon(e, 32, IX + 4, y + (h - 32) / 2, 0xffffff, alpha);
+            if (games) game_art(e, ART_CX + dx, y + h / 2, 88, 50, 48, 1, alpha);
+            else row_icon(e, 32, IX + 4, y + (h - 32) / 2, 0xffffff, alpha);
             if (e->fav) { gfx_star(15, tx, ty + (lt - 15) / 2, C_STAR, alpha); tx += 20; }
             mtext(f, tx, ty, e->title, 0xffffff, alpha, TW - (tx - TX), g_sel_since);
             row_sub(c, e, s, sizeof(s));
             mtext(FONT_BODY, TX, ty + lt, s, C_SUB, alpha, TW, g_sel_since);
         } else {
             int sub = is_level_item(e) && e->desc[0], lt = gfx_line_height(FONT_TITLE), ls = sub ? gfx_line_height(FONT_SMALL) : 0, ty = y + (h - lt - ls) / 2;
-            row_icon(e, 22, IX + 9, y + (h - 22) / 2, 0xb9c8e0, alpha);
+            if (games) game_art(e, ART_CX + dx, y + h / 2, 52, 30, 30, 0, alpha);
+            else row_icon(e, 22, IX + 9, y + (h - 22) / 2, 0xb9c8e0, alpha);
             if (e->fav) { gfx_star(12, tx, ty + (lt - 12) / 2, C_STAR, alpha); tx += 17; }
             gfx_text(FONT_TITLE, tx, ty, e->title, C_TEXT, alpha * 200 / 255, TW - (tx - TX));
             if (sub) gfx_text(FONT_SMALL, TX, ty + lt - 1, e->desc, C_MUTED, alpha, TW);
         }
     }
     gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+}
+
+/* a platform's games as a grid (square): three across, two rows in view, scrolled by rows; each its
+ * art (a PSP game its disc) and its name on one line, cut short (the whole of it in Game details) */
+static void draw_grid(Cat *c, float dt, int alpha, int dx)
+{
+    int i, row = c->sel / GRID_COLS, nrows = (c->n + GRID_COLS - 1) / GRID_COLS;
+    float target = c->scroll;
+    if (row < target) target = (float)row;
+    if (row > target + 1) target = (float)(row - 1);
+    c->scroll = ease(c->scroll, target, 14.0f, dt, 0.01f);
+    gfx_set_clip(0, BROWSE_Y, SCREEN_W, BROWSE_H);
+    for (i = 0; i < c->n; i++) {
+        const LEntry *e = c->it[i];
+        int x = GRID_X0 + dx + (i % GRID_COLS) * (GRID_W + GRID_GAP), y = BROWSE_Y + (int)lroundf((i / GRID_COLS - c->scroll) * GRID_ROW), on = i == c->sel;
+        int tw, st = e->fav ? 12 : 0, ty = y + 3 + GRID_ART + 2;
+        if (y + GRID_ROW < BROWSE_Y || y > BROWSE_Y + BROWSE_H) continue;
+        if (on) {
+            gfx_shadow(NINE_SHADOW10, x, y + 1, GRID_W, GRID_ROW - 2, 0x40a0ff, 80 * alpha / 255);
+            gfx_nine(NINE_R10, x, y + 1, GRID_W, GRID_ROW - 2, 0x1e3a6e, 225 * alpha / 255);
+        }
+        game_art(e, x + GRID_W / 2, y + 3 + GRID_ART / 2, GRID_W - 12, GRID_ART, GRID_ART - 4, on, alpha);
+        tw = gfx_text_width(FONT_TITLE, e->title) + (st ? st + 4 : 0);
+        if (tw > GRID_W - 8) tw = GRID_W - 8;
+        if (st) gfx_star(st, x + (GRID_W - tw) / 2, ty + (gfx_line_height(FONT_TITLE) - st) / 2, C_STAR, alpha);
+        gfx_text(FONT_TITLE, x + (GRID_W - tw) / 2 + (st ? st + 4 : 0), ty, e->title, on ? 0xffffff : C_SUB, alpha, tw - (st ? st + 4 : 0));
+    }
+    gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
+    if (c->scroll > 0.05f) gfx_icon("chevron-up", 10, SCREEN_W / 2 - 5, BROWSE_Y - 9, C_MUTED, 200);
+    if (c->scroll < (float)(nrows - 2) - 0.05f) gfx_icon("chevron-down", 10, SCREEN_W / 2 - 5, BROWSE_Y + BROWSE_H - 6, C_MUTED, 200);
+}
+
+/* triangle's panel along the right, over the list (the game stays in view at the left): a game's
+ * Add / Remove favourite, Game details, Sort by (its values, the current one ticked, a level in);
+ * an app's App details. Cross chooses, circle closes (or back from Sort by) */
+static int hint_btn(int x, char b, const char *label);
+static void panel_draw(void)
+{
+    const int X = PANEL_X, W = SCREEN_W - PANEL_X;
+    int k, y = 44, cur = g_cat[g_cur].sort;
+    if (!g_pn.open) return;
+    gfx_shadow(NINE_SHADOW14, X - 4, -10, W + 20, SCREEN_H + 20, 0x000000, 210);
+    gfx_rect(X, 0, W, SCREEN_H, 0x101a30, 248);
+    gfx_rect(X, 0, 1, SCREEN_H, 0x2a3a5e, 255);
+    gfx_text(FONT_TITLE, X + 14, 14, g_pn.sort ? "Sort by" : g_pn.e->title, C_TEXT, 255, W - 28);
+    for (k = 0; k < g_pn.n; k++, y += PANEL_ROW) {
+        int on = k == g_pn.sel, cy = y + PANEL_ROW / 2;
+        uint32_t ink = on ? 0xffffff : C_SUB;
+        if (on) highlight(X + 8, y + 2, W - 16, PANEL_ROW - 4, 255);
+        if (g_pn.sort) {
+            if (k == cur) gfx_icon("check", 14, X + 20, cy - 7, on ? 0xffffff : C_ACCENT, 255);
+            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, SORT_NAME[k], ink, 255, W - 56);
+            continue;
+        }
+        switch (g_pn.id[k]) {
+        case PN_FAV:
+            gfx_icon("star", 16, X + 18, cy - 8, ink, 255);
+            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, g_pn.e->fav ? "Remove favourite" : "Add to favourites", ink, 255, W - 56);
+            break;
+        case PN_DETAILS:
+            gfx_icon("info", 16, X + 18, cy - 8, ink, 255);
+            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, can_fav(g_pn.e) ? "Game details" : "App details", ink, 255, W - 56);
+            break;
+        case PN_SORT:
+            gfx_icon("arrow-up-down", 16, X + 18, cy - 8, ink, 255);
+            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2 - 6, "Sort by", ink, 255, W - 70);
+            gfx_text(FONT_SMALL, X + 42, cy + 1, SORT_NAME[cur], on ? 0xd6e4ff : C_MUTED, 255, W - 70);
+            gfx_icon("chevron-right", 12, SCREEN_W - 26, cy - 6, ink, 255);
+            break;
+        default: break;
+        }
+    }
+    {
+        int x = hint_btn(X + 14, 'x', "Select");
+        hint_btn(x, 'o', g_pn.sort ? "Back" : "Close");
+    }
 }
 
 /* a Settings group: its settings, each with what it is set to at the right (a switch; a choice's
@@ -2655,6 +2858,7 @@ static void draw_browse(float dt)
     dx = (int)lroundf((1 - g_list_anim) * 16 * g_list_dir);
     draw_location(alpha);
     if (c->kind == CK_SETTINGS) draw_settings(c, dt, alpha, dx);
+    else if (c->tab && c->view && c->n) draw_grid(c, dt, alpha, dx);
     else draw_focus(c, dt, alpha, dx);
 }
 
@@ -2677,7 +2881,6 @@ static int hint_right(int x, const char *badge, const char *label)
 }
 
 static int hint_cap(int x, const char *cap, const char *label, uint32_t col);
-static int hint_btn(int x, char b, const char *label);
 
 static int hint_w(const char *label) { return 18 + gfx_text_width(FONT_SMALL, label) + 14; }
 
@@ -2690,7 +2893,7 @@ static void draw_hints(void)
     Cat *c = &g_cat[g_cur];
     LEntry *e = cur_entry();
     const char *go = NULL;
-    if (g_menu.open) return;   /* (Quick controls draws its own) */
+    if (g_menu.open || g_pn.open) return;   /* (Quick controls and triangle's panel draw their own) */
     if (g_vl.open) { x = hint_btn(x, 'x', "Select"); hint_btn(x, 'o', "Cancel"); return; }
     r = hint_right(SCREEN_W - 12, "START", "Quick");
     if (section_of(c) == SEC_GAMES) r = hint_right(r - 14, "SELECT", "Search");
@@ -2701,7 +2904,8 @@ static void draw_hints(void)
     } else if (e) go = can_fav(e) ? "Play" : "Open";
     if (go) x = hint_btn(x, 'x', go);
     if (cat_parent(c) >= 0 && x + hint_w("Back") <= r - 8) x = hint_btn(x, 'o', "Back");
-    if (e && (can_fav(e) || (e->type == LT_APP && !is_builtin(e))) && x + hint_w("Details") <= r - 8) hint_btn(x, 't', "Details");
+    if (e && has_panel(e) && x + hint_w("Options") <= r - 8) x = hint_btn(x, 't', "Options");
+    if (c->tab && c->n && x + hint_w(c->view ? "Focus" : "Grid") <= r - 8) hint_btn(x, 's', c->view ? "Focus" : "Grid");
 }
 
 /* a small key cap with a label, for hint rows */
@@ -2833,17 +3037,10 @@ static void draw_details(float dt)
     cy += (int)lroundf((1 - g_overlay_a) * 10);
     gfx_shadow(NINE_SHADOW14, cx, cy + 6, cw, ch, 0x000000, a * 200 / 255);
     gfx_nine(NINE_R14, cx, cy, cw, ch, 0x14203a, a * 250 / 255);
-    if (can_fav(e)) {   /* games and ROMs in their disc */
-        CoverSpec cs;
-        char png[700] = "";
-        memset(&cs, 0, sizeof(cs));
-        cs.key = e->id; cs.title = e->title; cs.badge = type_badge(e); cs.icon = type_icon(e); cs.round = 1;
-        if (e->art[0]) cs.art = e->art;
-        else if (e->type == LT_ROM && e->sys >= 0) cs.art = rom_art(e, png, sizeof(png));
-        gfx_disc(&cs, cx + 16 + COVER_SIZE / 2, cy + 16 + COVER_SIZE / 2, 1, a);
-    } else draw_cover(e, cx + 16, cy + 16, a);
+    if (can_fav(e)) game_art(e, cx + 16 + COVER_SIZE / 2, cy + 16 + COVER_SIZE / 2, COVER_SIZE, COVER_SIZE, DISC_BIG, 0, a);   /* (a PSP game in its disc) */
+    else draw_cover(e, cx + 16, cy + 16, a);
     tx = cx + 16 + COVER_SIZE + 18; ty = cy + 16; tw = cx + cw - 16 - tx;
-    mtext(FONT_H1, tx, ty, e->title, C_TEXT, a, tw, g_open_at);
+    mtext(title_font(e->title), tx, ty, e->title, C_TEXT, a, tw, g_open_at);
     ty += gfx_line_height(FONT_H1) + 2;
     switch (e->type) {
     case LT_ROM: snprintf(s, sizeof(s), "%s game", L.sys[e->sys].name); break;
@@ -2856,9 +3053,10 @@ static void draw_details(float dt)
         int rows = e->type == LT_ROM ? 3 + (e->tags[0] != 0) : 2 + (e->tags[0] != 0) + (e->pkg[0] == 0);
         int lines = (cy + ch - 30 - 6 - ty - rows * 20) / lh;
         lines = lines < 3 ? 3 : lines > 5 ? 5 : lines;
-        ty += gfx_text_wrapped(FONT_BODY, tx, ty, e->desc[0] ? e->desc : s, C_SUB, a, tw, lh, lines) * lh + 8;
+        ty += gfx_text_wrapped(FONT_BODY, tx, ty, e->desc[0] ? e->desc : is_builtin(e) ? e->tags : s, C_SUB, a, tw, lh, lines) * lh + 8;
     }
-    if (e->type == LT_ROM) {
+    if (is_builtin(e)) info_row(tx, ty, "package", "Built into PSPExp", tw, a);
+    else if (e->type == LT_ROM) {
         const char *base = strrchr(e->exec, '/');
         char sz[32];
         human_size(e->size, sz, sizeof(sz));
@@ -2895,7 +3093,6 @@ static void draw_details(float dt)
     {
         int bx = tx, by = cy + ch - 30;
         gfx_button('x', bx, by); bx += 18; bx += gfx_text(FONT_SMALL, bx, by - 1, e->type == LT_ROM || e->type == LT_GAME ? "Play" : "Open", C_SUB, a, 0) + 14;
-        gfx_button('s', bx, by); bx += 18; bx += gfx_text(FONT_SMALL, bx, by - 1, e->fav ? "Unfavourite" : "Favourite", C_SUB, a, 0) + 14;
         gfx_button('o', bx, by); bx += 18; gfx_text(FONT_SMALL, bx, by - 1, "Close", C_SUB, a, 0);
     }
 }
@@ -3203,6 +3400,7 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
         draw_ribbon();
         draw_browse(dt);
         draw_hints();
+        panel_draw();
         if (g_mode == M_DETAILS) draw_details(dt);
     }
     if (g_menu.open && (g_mode == M_BROWSE || g_mode == M_PICK)) ui_menu_draw(&g_menu);   /* START's menu, with its own hints */
@@ -3231,7 +3429,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     cats_build();
     g_cur = start_cat();   /* on the game played last, in its platform's list */
     snprintf(g_sec_at[SEC_GAMES], sizeof(g_sec_at[0]), "%s", g_cat[g_cur].name);
-    g_cat[g_cur].scroll = (float)g_cat[g_cur].sel;
+    cat_settle(&g_cat[g_cur]);
     /* screenshots and tests: open a page without replaying keys, which a slow
      * link can drop (a lost press in System could land on Power off) */
     {

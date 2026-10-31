@@ -42,7 +42,7 @@
 #define ID_VIDEO      5010 /* + 0..7: a film's picture, in tiles, two sets used in turn */
 #define COVER_SLOTS   10
 #define ID_DISC       4200 /* + pool index */
-#define DISC_SLOTS    14
+#define DISC_SLOTS    20
 #define DISC_IDS      40
 #define COVER_IDS     32
 #define ID_THUMB      4400 /* + pool index: the Gallery's thumbnails */
@@ -51,6 +51,10 @@
 #define THUMB_LOADS   3    /* new thumbnails decoded a frame: the rest the frames after */
 #define ID_STAR       4460 /* + size slot: the favourites' solid star */
 #define STAR_SLOTS    8
+#define ID_ART        4500 /* + pool index: games' art at its own size (lists, grids) */
+#define ART_SLOTS     28
+#define ART_IDS       64
+#define ART_LOADS     4    /* new pictures made a frame: the rest the frames after */
 
 #define SCREEN_W 480
 #define SCREEN_H 272
@@ -1214,7 +1218,7 @@ void gfx_cover_forget(const char *key)
  * Rendered here at its final size with its soft shadow; the large one (the
  * selection) also with its blue glow and a light ring round the window. The
  * PSP draws it 1:1, as everything else. */
-typedef struct DiscSlot { char key[200], art[320]; uint16_t id; int big, from_art, art_missing; uint64_t used; } DiscSlot;
+typedef struct DiscSlot { char key[200], art[320]; uint16_t id; int d, big, from_art, art_missing; uint64_t used; } DiscSlot;
 static DiscSlot dslot[DISC_SLOTS];
 static int next_disc_id;
 
@@ -1325,9 +1329,15 @@ static uint16_t disc_fresh_id(void)
 
 int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
 {
-    int i, best = -1, T = DISC_TEX;
+    return gfx_disc_d(c, cx, cy, big ? DISC_BIG : DISC_SMALL, big, alpha);
+}
+
+/* a disc D across (its texture D + 24 a side: the shadow below, the glow round it) */
+int gfx_disc_d(const CoverSpec *c, int cx, int cy, int D, int big, int alpha)
+{
+    int i, best = -1, T = (D + 24 + 1) & ~1;
     if (alpha <= 0) return 0;
-    for (i = 0; i < DISC_SLOTS; i++) if (dslot[i].key[0] && dslot[i].big == big && !strcmp(dslot[i].key, c->key)) { best = i; break; }
+    for (i = 0; i < DISC_SLOTS; i++) if (dslot[i].key[0] && dslot[i].big == big && dslot[i].d == D && !strcmp(dslot[i].key, c->key)) { best = i; break; }
     /* art that appeared since replaces the generated cover (art_appeared) */
     if (best >= 0 && !dslot[best].from_art && art_appeared(dslot[best].art, dslot[best].art_missing, c->art)) {
         dslot[best].key[0] = 0; pspexp_release(G, dslot[best].id);
@@ -1340,19 +1350,137 @@ int gfx_disc(const CoverSpec *c, int cx, int cy, int big, int alpha)
         dslot[best].from_art = load_art(c->art, cov, COVER_SIZE) == 0;
         dslot[best].art_missing = !dslot[best].from_art && art_missing(c->art);
         if (!dslot[best].from_art) cover_generate(c, cov, COVER_SIZE);
-        disc_render(cov, px, T, big ? DISC_BIG : DISC_SMALL, big);
+        disc_render(cov, px, T, D, big);
         if (dslot[best].key[0] && dslot[best].id) pspexp_release(G, dslot[best].id);
         dslot[best].id = disc_fresh_id();   /* fresh id: the old one may still be on screen */
         upload_rgba(dslot[best].id, px, T, T);
         free(cov); free(px);
         snprintf(dslot[best].key, sizeof(dslot[best].key), "%s", c->key);
         snprintf(dslot[best].art, sizeof(dslot[best].art), "%s", c->art ? c->art : "");
-        dslot[best].big = big;
+        dslot[best].big = big; dslot[best].d = D;
     }
 draw:
     dslot[best].used = ++cover_clock;
     quad(dslot[best].id, cx - T / 2, cy - T / 2 + 2, T, T, 0, 0, T, T, c4444(0xffffff, alpha));
     return dslot[best].from_art;
+}
+
+/* ---- art at its own size and proportions (2026-10-31: the game lists and grids) ------------------ */
+
+/* A game's art fitted inside a box at the size it is shown, keeping its proportions (box art
+ * portrait or landscape, a title screen), box-filtered, the corners a little rounded; without art
+ * the generated cover, square. Kept in an LRU, each with a fresh id (cover_fresh_id); a few new
+ * ones a frame, so a grid of new art fills in over the next frames. */
+typedef struct ArtSlot { char key[200], art[320]; uint16_t id; int w, h, from_art, art_missing; uint64_t used; } ArtSlot;
+static ArtSlot aslot[ART_SLOTS];
+static int next_art_id;
+static unsigned art_frame, art_loads;
+
+static uint16_t art_fresh_id(void)
+{
+    for (;;) {
+        uint16_t id = (uint16_t)(ID_ART + (next_art_id++ % ART_IDS));
+        int i;
+        for (i = 0; i < ART_SLOTS; i++) if (aslot[i].key[0] && aslot[i].id == id) break;
+        if (i == ART_SLOTS) return id;
+    }
+}
+
+/* src (sw x sh RGBA) into dst (dw x dh), each pixel the average of what it covers */
+static void box_scale(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh)
+{
+    int x, y;
+    for (y = 0; y < dh; y++)
+        for (x = 0; x < dw; x++) {
+            int i0 = x * sw / dw, i1 = (x + 1) * sw / dw, j0 = y * sh / dh, j1 = (y + 1) * sh / dh, i, j, n = 0;
+            float acc[4] = { 0, 0, 0, 0 };
+            uint8_t *p = dst + ((size_t)y * dw + x) * 4;
+            if (i1 <= i0) i1 = i0 + 1;
+            if (j1 <= j0) j1 = j0 + 1;
+            for (j = j0; j < j1 && j < sh; j++) for (i = i0; i < i1 && i < sw; i++) {
+                const uint8_t *q = src + ((size_t)j * sw + i) * 4;
+                acc[0] += q[0]; acc[1] += q[1]; acc[2] += q[2]; acc[3] += q[3]; n++;
+            }
+            if (!n) n = 1;
+            p[0] = (uint8_t)(acc[0] / n); p[1] = (uint8_t)(acc[1] / n); p[2] = (uint8_t)(acc[2] / n); p[3] = (uint8_t)(acc[3] / n);
+        }
+}
+
+/* the picture for a slot: *out (*w x *h, malloc'd); 1 from the art, 0 generated */
+static int art_render(const CoverSpec *c, int bw, int bh, uint8_t **out, int *w, int *h)
+{
+    uint8_t *file, *img = NULL;
+    size_t len;
+    int iw = 0, ih = 0, n, x, y, from = 0;
+    float r;
+    if (c->art && c->art[0] && read_file(c->art, &file, &len) == 0) {
+        img = stbi_load_from_memory(file, (int)len, &iw, &ih, &n, 4);
+        free(file);
+    }
+    if (img && iw > 0 && ih > 0) {
+        float sc = (float)bw / iw < (float)bh / ih ? (float)bw / iw : (float)bh / ih;
+        *w = (int)lroundf(iw * sc); *h = (int)lroundf(ih * sc);
+        if (*w < 1) *w = 1;
+        if (*h < 1) *h = 1;
+        *out = (uint8_t *)malloc((size_t)*w * *h * 4);
+        box_scale(img, iw, ih, *out, *w, *h);
+        from = 1;
+    } else {   /* (generated at its own size, then made smaller: its lettering is laid out for 128) */
+        uint8_t *cov = (uint8_t *)calloc(COVER_SIZE * COVER_SIZE, 4);
+        *w = *h = bw < bh ? bw : bh;
+        cover_generate(c, cov, COVER_SIZE);
+        *out = (uint8_t *)malloc((size_t)*w * *h * 4);
+        box_scale(cov, COVER_SIZE, COVER_SIZE, *out, *w, *h);
+        free(cov);
+    }
+    if (img) stbi_image_free(img);
+    r = *w < 40 || *h < 40 ? 2.0f : 4.0f;
+    for (y = 0; y < *h; y++)
+        for (x = 0; x < *w; x++) {   /* rounded corners and the covers' faint 1 px light edge */
+            float d = sd_rbox(x + 0.5f, y + 0.5f, *w / 2.0f, *h / 2.0f, *w / 2.0f, *h / 2.0f, r);
+            uint8_t *p = *out + ((size_t)y * *w + x) * 4;
+            blend_px(p, 1, 1, 1, cover_of(fabsf(d + 0.5f) - 0.5f) * 0.10f);
+            p[3] = (uint8_t)lroundf(p[3] * cover_of(d));
+        }
+    return from;
+}
+
+int gfx_art(const CoverSpec *c, int x, int y, int bw, int bh, uint32_t frame, int alpha)
+{
+    char key[200];
+    int i, best = 0, ax, ay;
+    if (alpha <= 0 || bw <= 0 || bh <= 0 || bw > 256 || bh > 256) return 0;
+    snprintf(key, sizeof(key), "%dx%d:%s", bw, bh, c->key);
+    for (i = 0; i < ART_SLOTS; i++) if (aslot[i].key[0] && !strcmp(aslot[i].key, key)) break;
+    if (i < ART_SLOTS && !aslot[i].from_art && art_appeared(aslot[i].art, aslot[i].art_missing, c->art)) {   /* art that came since */
+        pspexp_release(G, aslot[i].id); aslot[i].key[0] = 0; i = ART_SLOTS;
+    }
+    if (i == ART_SLOTS) {
+        uint8_t *px = NULL;
+        int w, h;
+        if (art_frame != g_frame_no) { art_frame = g_frame_no; art_loads = 0; }
+        if (art_loads >= ART_LOADS) return 0;
+        art_loads++;
+        for (i = 1; i < ART_SLOTS; i++) if (!aslot[i].key[0] || aslot[i].used < aslot[best].used) best = i;
+        i = best;
+        if (aslot[i].key[0]) pspexp_release(G, aslot[i].id);
+        aslot[i].from_art = art_render(c, bw, bh, &px, &w, &h);
+        aslot[i].art_missing = !aslot[i].from_art && art_missing(c->art);
+        aslot[i].id = art_fresh_id();
+        upload_rgba(aslot[i].id, px, w, h);
+        free(px);
+        aslot[i].w = w; aslot[i].h = h;
+        snprintf(aslot[i].key, sizeof(aslot[i].key), "%s", key);
+        snprintf(aslot[i].art, sizeof(aslot[i].art), "%s", c->art ? c->art : "");
+    }
+    aslot[i].used = ++cover_clock;
+    ax = x + (bw - aslot[i].w) / 2; ay = y + (bh - aslot[i].h) / 2;
+    if (frame) {   /* the selection's edge round it */
+        gfx_shadow(NINE_SHADOW10, ax - 2, ay - 2, aslot[i].w + 4, aslot[i].h + 4, frame, 150 * alpha / 255);
+        gfx_nine(NINE_R6, ax - 2, ay - 2, aslot[i].w + 4, aslot[i].h + 4, frame, alpha);
+    }
+    quad(aslot[i].id, ax, ay, aslot[i].w, aslot[i].h, 0, 0, aslot[i].w, aslot[i].h, c4444(0xffffff, alpha));
+    return 1;
 }
 
 /* ---- solid shapes the icon font has only as outlines: the favourites' star, a switch's knob ------ */
@@ -1508,6 +1636,8 @@ int gfx_cache_ids_distinct(void)
         if (cslot[i].key[0] && cslot[j].key[0] && cslot[i].id == cslot[j].id) return 0;
     for (i = 0; i < DISC_SLOTS; i++) for (j = i + 1; j < DISC_SLOTS; j++)
         if (dslot[i].key[0] && dslot[j].key[0] && dslot[i].id == dslot[j].id) return 0;
+    for (i = 0; i < ART_SLOTS; i++) for (j = i + 1; j < ART_SLOTS; j++)
+        if (aslot[i].key[0] && aslot[j].key[0] && aslot[i].id == aslot[j].id) return 0;
     for (i = 0; i < THUMB_SLOTS; i++) for (j = i + 1; j < THUMB_SLOTS; j++)
         if (tslot[i].key[0] && tslot[j].key[0] && !tslot[i].failed && !tslot[j].failed && tslot[i].id == tslot[j].id) return 0;
     return 1;

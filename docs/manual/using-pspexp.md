@@ -18,8 +18,8 @@ times, it stops at the app's top, never throws you out).
 | HOME | leave what is on screen: in an app or a game, press it twice (the first shows "HOME again to quit" for 3 seconds), and the launcher comes back; in the launcher, the PSP's own "Quit?" (to the XMB); in your own PSP games, the PSP's HOME menu (Exit Game: back to PSPExp); held 2 s, PSPExp quits from anywhere |
 | cross | choose: open, play, confirm, type the highlighted key |
 | circle | back one step: cancel, the folder above; it never closes an app (HOME does; in the terminal: Esc) |
-| triangle | show more: details, a hidden password (in the terminal: Space) |
-| square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
+| triangle | show more: in the launcher a game's or an app's options, elsewhere details, a hidden password (in the terminal: Space) |
+| square | in a platform's games, the other view (Focus or Grid); elsewhere mark or remove: mark a file, delete a letter, remove a package, forget a device, stop the music |
 | START | in the launcher, **Quick controls**; in an app, its menu (in a keyboard: done; in the terminal: Enter) |
 | SELECT | in the launcher's Games, **Search** |
 | L / R | the other category, tab, panel or page |
@@ -38,14 +38,23 @@ categories a line says where you are ("Games / Super Nintendo") and where
 in the list ("2 / 6").
 
 **Games** lists your platforms, each with its console's picture and how
-many games it holds: **Favourites** (the games you marked with **square**,
-a yellow star before their name wherever they are), **PSP**, your board's
+many games it holds: **Favourites** (the games you added with **triangle >
+Add to favourites**, a yellow star before their name wherever they are), **PSP**, your board's
 own games (named after it: Raspberry Pi 400, GameShell), then each system
-you have ROMs for. Cross opens a platform: its games, the favourites first,
-then what you played last, then the rest A to Z. **Cross** plays,
-**triangle** shows the details, circle goes back to the platforms. PSPExp
-opens on the game you played last, in its platform: switch on, press cross,
-and you are playing again.
+you have ROMs for. Cross opens a platform: its games, each with its box art
+at its own shape (a PSP game in its UMD-like disc), the favourites first,
+then what you played last, then the rest A to Z. **Cross** plays, circle
+goes back to the platforms. PSPExp opens on the game you played last, in
+its platform: switch on, press cross, and you are playing again.
+
+**Square** switches a platform between **Focus** (one game large, the
+others in a list under it) and **Grid** (six at a time, three across, names
+cut short) on the same game; each platform keeps its own. **Triangle**
+opens a game's options at the right: **Add to favourites** (or Remove
+favourite), **Game details** (the whole title, description, size, file,
+who draws it) and **Sort by**: Favourites and recent (the first order
+above), Recently played, or Title A-Z, kept for that platform. On an app,
+triangle has **App details**.
 
 - **PSP** holds your own PSP games kept on the board (ISO, CSO, or a zip
   holding one, in `roms/psp`). The PSP runs them itself, not an emulator,
@@ -59,11 +68,11 @@ and you are playing again.
  (L)   Games      Apps      Media      Settings                 (R)
  Games / Super Nintendo                                      1 / 5
 
- |[pad] Chrono Trigger
+ |[art] Chrono Trigger
  |      Super Nintendo · played lately
-  [pad] Donkey Kong Country
-  [pad] Street Fighter II Turbo
- (X) Play  (O) Back  (/\) Details            SELECT Search  START Quick
+  [art] Donkey Kong Country
+  [art] Street Fighter II Turbo
+ (X) Play  (O) Back  (/\) Options  ([]) Grid    SELECT Search  START Quick
 ```
 
 **Apps**: Files, Packages, Terminal and System Monitor, then the apps you
@@ -90,8 +99,8 @@ is in Quick controls.
 | d-pad | up / down the list |
 | cross | open, play, or change a setting |
 | circle | back one level: from a platform's games to the platforms, from a group's settings to the groups |
-| square | a game or ROM: make it a favourite, or no longer one |
-| triangle | a game's or an installed app's details: description, how it draws, size, when last played |
+| square | in a platform's games: Focus or Grid |
+| triangle | a game's options (favourite, Game details, Sort by), an app's App details |
 | SELECT | in Games, **Search** (games, apps and every ROM, by name) |
 | START | **Quick controls**: Notifications, Terminal, the board's battery when it has one, Restart PSPExp and Power off the board (each asked again) |
 
