@@ -463,6 +463,7 @@ static void about_collect(void);
 static void about_input(uint32_t pressed, int up, int down, uint64_t now);
 
 static int g_dirty = 1, g_anim;
+static char g_shown_value[96];   /* the highlighted setting's value as last drawn (launcher.shown: tests) */
 static uint64_t g_now, g_open_at;   /* this frame's time; when the details card or About page opened */
 
 /* the last button press: 30 s after it the launcher goes still (scrolling text at its start, no
@@ -914,6 +915,7 @@ static int g_test_mode;
 static void run_action(LEntry *e, uint64_t now)
 {
     const char *a = e->id + 2;
+    g_dirty = 1;   /* (its value on screen changes: not all actions toast, which draws again too) */
     if (g_test_mode && (!strcmp(a, "reboot") || !strcmp(a, "poweroff") || !strcmp(a, "wifi"))) {
         toast("lock", "Not during a test run", now);   /* a test never takes the board away */
         return;
@@ -1231,7 +1233,9 @@ void launcher_state(char *out, size_t n)
     for (i = 0; i < g_ncat && l < n; i++) l += (size_t)snprintf(out + l, n - l, "%s%s", i ? "|" : "", g_cat[i].name);
     if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.systems=");   /* the sections that are emulated systems (with ROMs) */
     for (i = 0, e = NULL; i < g_ncat && l < n; i++) if (g_cat[i].kind == CK_SYSTEM) l += (size_t)snprintf(out + l, n - l, "%s%s", e ? "|" : "", g_cat[i].name), e = (LEntry *)1;
-    if (l < n) snprintf(out + l, n - l, "\nlauncher.toast=%s\n", notify_showing());   /* (the banner or the hint shown: tests read it) */
+    if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.toast=%s\n", notify_showing());   /* (the banner or the hint shown: tests read it) */
+    /* what the screen shows, not what the setting holds: a change never drawn is a failure */
+    if (l < n) snprintf(out + l, n - l, "launcher.shown=%s\n", g_shown_value);
 }
 
 int launcher_system_for(const char *path, char *name, size_t n)
@@ -2795,6 +2799,7 @@ static void draw_settings(Cat *c, float dt, int alpha, int dx)
         LEntry *r = c->it[i];
         int sel = i == c->sel, kind = row_kind(r), vx = SET_X1 - 12 + dx, cy;
         const char *v = action_value(r);
+        if (sel) snprintf(g_shown_value, sizeof(g_shown_value), "%s", v ? v : "");
         y = top + i * SET_ROW;
         cy = y + SET_ROW / 2;
         if (y + SET_ROW < SET_Y0 || y > SET_Y0 + view * SET_ROW) continue;

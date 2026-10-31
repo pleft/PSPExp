@@ -338,6 +338,58 @@ def suite_launcher(r):
     r.check("every section draws (screenshots)", walk)
 
 
+# switches a test may flip and flip back: not the PSPExp plugin (it writes the stick's game.txt),
+# SSH (a server), Wi-Fi or anything that takes the board away
+SAFE_SWITCHES = ["Button sounds", "Clips", "Box art", "PSP clock"]
+
+
+def suite_settings(r):
+    """each safe switch, cross twice: the value DRAWN (launcher.shown, not the setting held) turns
+    and turns back. A change the launcher forgot to draw stays on screen as it was (2026-10-31:
+    Button sounds, no toast, so no redraw, until the d-pad moved)"""
+    def to_groups():
+        s = r.to_category("Settings")
+        for _ in range(3):   # (circle: back up a level; it never closes anything in the launcher)
+            if "This PSP" in s["launcher.items"].split("|"):
+                return s
+            r.press("circle", idle=False)
+            r.ctl("idle 800")
+            s = r.state()
+        raise Fail("Settings' groups not reached (items %s)" % s["launcher.items"])
+
+    def shown_after(cmd):
+        r.ctl(cmd)
+        r.ctl("idle 800")
+        return r.state()["launcher.shown"]
+
+    def switches():
+        groups = to_groups()["launcher.items"].split("|")
+        done = []
+        for g in groups:
+            s = to_groups()
+            r.ctl("select " + g)
+            s = r.state()
+            r.expect(s["launcher.selected"] == g, "%s not highlighted (%s)" % (g, s["launcher.selected"]))
+            r.press("cross", idle=False)   # (a group: its settings)
+            r.ctl("idle 800")
+            items = r.state()["launcher.items"].split("|")
+            for name in [x for x in SAFE_SWITCHES if x in items]:
+                r.ctl("select " + name)
+                s = r.state()
+                r.expect(s["launcher.selected"] == name and s["launcher.mode"] == "browse",
+                         "%s not highlighted (%s, %s): no cross pressed" % (name, s["launcher.selected"], s["launcher.mode"]))
+                was = s["launcher.shown"]
+                now = shown_after("press cross")
+                back = shown_after("press cross")
+                r.expect(now != was, "%s: cross did not change what the screen shows (still %r)" % (name, was))
+                r.expect(back == was, "%s: a second cross shows %r, not %r as before" % (name, back, was))
+                done.append("%s %s>%s>%s" % (name, was, now, back))
+        r.expect(done, "no safe switch found in Settings")
+        r.note("switches drawn: " + "; ".join(done))
+    r.check("Settings: cross on a switch redraws its value", switches)
+    to_groups()
+
+
 def suite_files(r):
     t = r.t
     t.sh("rm -rf %s/board && mkdir -p %s/board" % (BOARD_DIR, BOARD_DIR))
@@ -700,7 +752,7 @@ def suite_apps(r):
     r.ctl("open launcher")
 
 
-SUITES = [("link", suite_link), ("stick", suite_stick), ("launcher", suite_launcher),
+SUITES = [("link", suite_link), ("stick", suite_stick), ("launcher", suite_launcher), ("settings", suite_settings),
           ("files", suite_files), ("terminal", suite_terminal), ("apps", suite_apps), ("relink", suite_relink), ("games", suite_games)]
 
 

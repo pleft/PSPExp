@@ -1682,7 +1682,7 @@ console). The commands:
 | `press BUTTONS [ms]`, `hold ...` | buttons as if pressed on the PSP (`l+r+right`) |
 | `nub X Y [ms]` | the nub (0-255) |
 | `wait MS`, `idle [MS]` | a pause; until nothing is drawn for 0.4 s |
-| `state` | the view; the launcher's section, entries and highlight; both file-manager panels (path, drive, entries, selection), the open menu or message; the terminal's text |
+| `state` | the view; the launcher's section, entries and highlight (and `launcher.shown`, the highlighted setting's value as last drawn); both file-manager panels (path, drive, entries, selection), the open menu or message; the terminal's text |
 | `stats` | frames, latency, GE time, errors |
 | `shot NAME` | the PSP saves its screen next to its EBOOT; the console fetches it over the FILE channel into `/tmp/pspexp-shots/NAME.bmp` (or `$PSPEXP_TERM_SHOTS`) and deletes it from the stick |
 | `open launcher|terminal|files [PATH]` | switches the view |
@@ -1712,6 +1712,13 @@ the Mac.
   size and date; rename; errors; clean-up.
 - **launcher:** the sections; Apps starts with Terminal and Files; a
   screenshot of every section.
+- **settings:** every switch safe to flip (Button sounds, Clips, Box art,
+  PSP clock; not the PSPExp plugin, SSH or Wi-Fi) gets cross twice: the value
+  drawn (`launcher.shown`, not the setting held) must turn and turn back.
+  It ends as it began. Added 2026-10-31 after Button sounds changed with no
+  redraw (it shows no toast, the only thing that drew again) until the
+  d-pad moved; the suite failed on that console and passed with the fix
+  (an action now always draws again).
 - **files:** open at a board folder; the other panel onto the PSP through
   the drive list; copy two files with triangle > Copy (checked byte for
   byte); open a picture and a text file from the stick; delete with its
