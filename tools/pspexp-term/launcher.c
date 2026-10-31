@@ -19,6 +19,7 @@
 #include "launcher_lib.h"
 #include "launcher_board.h"
 #include "launcher_ui.h"
+#include "quick.h"
 #ifdef __APPLE__
 #include "launcher_mac.h"
 #endif
@@ -82,9 +83,6 @@
 #define GRID_GAP    8
 #define GRID_ROW    83
 #define GRID_ART    58
-/* triangle's panel, along the right */
-#define PANEL_X     292
-#define PANEL_ROW   34
 /* a Settings group's list */
 #define SET_X0      12
 #define SET_X1      (SCREEN_W - 12)
@@ -253,9 +251,10 @@ static void plat_sort(Cat *c)
 /* each level's place, kept over a rebuild (a game played moves up its list; a package installed):
  * its name, the entry highlighted (by id) and where that was */
 static struct { char name[64], id[160]; int sel; float scroll; } g_keep[40];
-/* triangle's panel (panel_draw): open, at Sort by's values, its highlight, its rows, for which entry */
-enum { PN_FAV = 1, PN_DETAILS, PN_SORT };
-static struct { int open, sort, sel, n, id[4]; LEntry *e; } g_pn;
+/* triangle's panel (the shared one, ui_menu): for which entry; at Sort by's values */
+enum { PN_FAV = 1, PN_DETAILS, PN_SORT, PN_SORT0 };
+static UiMenu g_tri;
+static LEntry *g_tri_e;
 /* a choice's values beside its setting (vlist_open): open, its highlight, the current one, how many */
 static struct { int open, sel, cur, n; const LEntry *e; char v[3][24]; } g_vl;
 
@@ -421,7 +420,7 @@ static void cats_build(void)
     }
     g_cur = -1;
     for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
-    if (g_cur < 0) { g_cur = start_cat(); g_cat[g_cur].scroll = (float)g_cat[g_cur].sel; g_pn.open = 0; }
+    if (g_cur < 0) { g_cur = start_cat(); g_cat[g_cur].scroll = (float)g_cat[g_cur].sel; g_tri.open = 0; }
 }
 
 static LEntry *cur_entry(void)
@@ -487,9 +486,8 @@ static LEntry g_sheet_e;
 static char g_sheet_ctl[1200];
 static uint64_t g_confirm_until;
 static char g_confirm[32];
-static UiMenu g_menu;   /* START's Quick controls (quick_open), the picker's (pick_menu_open) */
-enum { MN_NOTIFY = 1, MN_TERMINAL, MN_INFO, MN_RESTART, MN_POWER, MN_RESTART_YES, MN_POWER_YES, MN_CANCEL,
-       MN_PICK_GO, MN_PICK_SQUARE, MN_PICK_SCAN };
+static UiMenu g_menu;   /* the picker's (pick_menu_open); START's Quick controls are quick.c's */
+enum { MN_PICK_GO = 1, MN_PICK_SQUARE, MN_PICK_SCAN };
 static int g_bat = -2, g_chg, g_wifi = -2, g_minute = -1;
 static int g_snd_on, g_snd_vol = -1;   /* the sound on Bluetooth, its volume (btaudio.h) */
 static int g_wired;   /* the default route goes over a cable (Ethernet, USB networking) */
@@ -1117,7 +1115,7 @@ int launcher_category(const char *name)
     for (i = 0; i < g_ncat; i++)
         if (!strcmp(g_cat[i].name, name)) {   /* a category, a platform, a Settings group */
             g_cur = i;
-            g_pn.open = g_vl.open = 0;   /* (a panel or a choice's values were over the level left) */
+            g_tri.open = 0; g_vl.open = 0;   /* (a panel or a choice's values were over the level left) */
             snprintf(g_sec_at[section_of(&g_cat[i])], sizeof(g_sec_at[0]), "%s", name);
             g_sel_since = pspexp_time_us(); g_dirty = 1;
             return 1;
@@ -2099,91 +2097,64 @@ static int has_panel(const LEntry *e)
 }
 static void panel_open(LEntry *e)
 {
-    memset(&g_pn, 0, sizeof(g_pn));
-    g_pn.e = e; g_pn.open = 1;
-    if (can_fav(e)) g_pn.id[g_pn.n++] = PN_FAV;
-    g_pn.id[g_pn.n++] = PN_DETAILS;
-    if (can_fav(e) && g_cat[g_cur].tab) g_pn.id[g_pn.n++] = PN_SORT;
+    Cat *c = &g_cat[g_cur];
+    g_tri_e = e;
+    ui_menu_begin(&g_tri, e->title);
+    if (can_fav(e)) ui_menu_add(&g_tri, PN_FAV, "star", e->fav ? "Remove favourite" : "Add to favourites", NULL, 0, 0);
+    ui_menu_add(&g_tri, PN_DETAILS, "info", can_fav(e) ? "Game details" : "App details", NULL, 0, 0);
+    if (can_fav(e) && c->tab) ui_menu_add(&g_tri, PN_SORT, "arrow-up-down", "Sort by", SORT_NAME[c->sort], 0, 1);
     g_dirty = 1;
 }
 static void panel_input(uint32_t pressed, int up, int down, uint64_t now)
 {
     Cat *c = &g_cat[g_cur];
+    int id = ui_menu_input(&g_tri, pressed, up, down), k;
     g_dirty = 1;
-    if (up && g_pn.sel > 0) g_pn.sel--;
-    if (down && g_pn.sel < g_pn.n - 1) g_pn.sel++;
-    if (pressed & PSPEXP_BUTTON_CIRCLE) {
-        if (g_pn.sort) { int k; g_pn.sort = 0; for (g_pn.n = 0, k = 0; k < 4 && g_pn.id[k]; k++) { g_pn.n++; if (g_pn.id[k] == PN_SORT) g_pn.sel = k; } }
-        else g_pn.open = 0;
-        return;
-    }
-    if (!(pressed & PSPEXP_BUTTON_CROSS)) return;
-    if (g_pn.sort) {   /* the order: kept for the platform, the same game highlighted */
+    if (id >= PN_SORT0) {   /* the order: kept for the platform, the same game highlighted */
         char key[96];
         plat_key("sort", c->name, key, sizeof(key));
-        lib_setting_set(&L, key, g_pn.sel);
-        g_pn.open = 0;
+        lib_setting_set(&L, key, id - PN_SORT0);
         cats_build();
         cat_settle(&g_cat[g_cur]);
         return;
     }
-    switch (g_pn.id[g_pn.sel]) {
-    case PN_FAV: g_pn.open = 0; fav_toggle(g_pn.e, now); break;
-    case PN_DETAILS: g_pn.open = 0; show_more(g_pn.e, now); break;
-    case PN_SORT: g_pn.sort = 1; g_pn.n = NSORT; g_pn.sel = c->sort; break;
+    switch (id) {
+    case PN_FAV: fav_toggle(g_tri_e, now); break;
+    case PN_DETAILS: show_more(g_tri_e, now); break;
+    case PN_SORT:   /* its values, a level in, the current one ticked */
+        ui_menu_begin(&g_tri, "Sort by");
+        for (k = 0; k < NSORT; k++) ui_menu_add(&g_tri, PN_SORT0 + k, k == c->sort ? "check" : "", SORT_NAME[k], NULL, 0, 0);
+        g_tri.sel = c->sort;
+        break;
     default: break;
     }
 }
 
-static void quick_open(uint64_t now)
+/* Quick controls' Power off, asked again there: the board's own action (a test run keeps the board) */
+void launcher_power_off(uint64_t now)
 {
-    char n[16] = "";
-    int unread = notify_unread();
-    (void)now;
-    if (unread) snprintf(n, sizeof(n), "%d", unread > 99 ? 99 : unread);
-    ui_menu_begin(&g_menu, "Quick controls");
-    ui_menu_add(&g_menu, MN_NOTIFY, unread ? "bell-dot" : "bell", "Notifications", n[0] ? n : NULL, 0, 0);
-    ui_menu_add(&g_menu, MN_TERMINAL, "square-terminal", "Terminal", NULL, 0, 0);
-    if (g_bat >= 0) {   /* the board's own battery (the GameShell's) */
-        char l[80], v[24];
-        board_detect();
-        snprintf(l, sizeof(l), "%s battery", g_board.name);
-        snprintf(v, sizeof(v), "%d%%%s", g_bat, g_chg ? ", charging" : "");
-        ui_menu_add(&g_menu, MN_INFO, g_chg ? "battery-charging" : "battery", l, v, 0, 0);
+    int i;
+    for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, "a:poweroff")) {
+        snprintf(g_confirm, sizeof(g_confirm), "poweroff"); g_confirm_until = now + 1000000u;
+        run_action(&g_actions[i], now);
     }
-    ui_menu_add(&g_menu, MN_RESTART, "refresh-cw", "Restart PSPExp", NULL, 1, 1);
-    ui_menu_add(&g_menu, MN_POWER, "power", "Power off the board", NULL, 0, 1);
-    g_dirty = 1;
+}
+int launcher_board_battery(char *label, size_t n, int *pct, int *chg)
+{
+    if (g_bat < 0) return 0;
+    board_detect();
+    snprintf(label, n, "%s battery", g_board.name);
+    *pct = g_bat; *chg = g_chg;
+    return 1;
 }
 
 static void menu_choose(int id, uint64_t now)
 {
     g_dirty = 1;
     switch (id) {
-    case MN_NOTIFY: snprintf(g_app_req, sizeof(g_app_req), "notifications"); break;
-    case MN_TERMINAL: g_console_req = 1; break;
-    case MN_RESTART:   /* asked again, in the menu */
-        ui_menu_begin(&g_menu, "Restart PSPExp?");
-        ui_menu_add(&g_menu, MN_RESTART_YES, "refresh-cw", "Restart", NULL, 0, 0);
-        ui_menu_add(&g_menu, MN_CANCEL, "x", "Cancel", NULL, 0, 0);
-        break;
-    case MN_POWER:
-        ui_menu_begin(&g_menu, "Power off the board?");
-        ui_menu_add(&g_menu, MN_POWER_YES, "power", "Power off", NULL, 0, 0);
-        ui_menu_add(&g_menu, MN_CANCEL, "x", "Cancel", NULL, 0, 0);
-        break;
     case MN_PICK_GO: pick_input(PSPEXP_BUTTON_CROSS, 0, 0, now); break;
     case MN_PICK_SQUARE: pick_input(PSPEXP_BUTTON_SQUARE, 0, 0, now); break;
     case MN_PICK_SCAN: scan_start(); break;
-    case MN_RESTART_YES: g_console_restart_req = 1; toast("refresh-cw", "Restarting PSPExp...", now); break;
-    case MN_POWER_YES: {   /* the Settings action, its "again" already given */
-        int i;
-        for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, "a:poweroff")) {
-            snprintf(g_confirm, sizeof(g_confirm), "poweroff"); g_confirm_until = now + 1000000u;
-            run_action(&g_actions[i], now);
-        }
-        break;
-    }
     default: break;
     }
 }
@@ -2199,7 +2170,7 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         else if (pressed & PSPEXP_BUTTON_CIRCLE) { g_sheet = 0; g_dirty = 1; }
         return;
     }
-    if (g_menu.open) {   /* Quick controls (or the picker's menu) */
+    if (g_menu.open) {   /* the picker's menu */
         int id = ui_menu_input(&g_menu, pressed, up, down);
         if (id >= 0) menu_choose(id, now);
         g_dirty = 1;
@@ -2207,15 +2178,21 @@ void launcher_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     }
     if (g_mode == M_SEARCH) { search_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_DETAILS) { details_input(pressed, now); return; }
-    if (g_mode == M_PICK) { pick_input(pressed, up, down, now); return; }
+    if (g_mode == M_PICK) {   /* a list (Wi-Fi, Sound, Time zone): triangle its menu (Forget, New password: square's until
+                               * 2026-10-31; Scan again), START Quick controls */
+        if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
+        if ((pressed & PSPEXP_BUTTON_TRIANGLE) && g_pick_kind != PICK_TZ) { pick_menu_open(); return; }   /* (a time zone's would only be Set) */
+        pick_input(pressed & ~(uint32_t)(PSPEXP_BUTTON_SQUARE | PSPEXP_BUTTON_START), up, down, now);
+        return;
+    }
     if (g_mode == M_TEXT) { text_input(pressed, up, down, left, right, now); return; }
     if (g_mode == M_ABOUT) {
         if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { g_mode = M_BROWSE; g_dirty = 1; }
         return;
     }
     if (g_vl.open) { vlist_input(pressed, up, down); return; }
-    if (g_pn.open) { panel_input(pressed, up, down, now); return; }
-    if (pressed & PSPEXP_BUTTON_START) { quick_open(now); return; }
+    if (g_tri.open) { panel_input(pressed, up, down, now); return; }
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); g_dirty = 1; return; }
     c = &g_cat[g_cur];
     if ((pressed & PSPEXP_BUTTON_SELECT) && section_of(c) == SEC_GAMES) { search_open(now); return; }
     /* L / R the categories, from any level; the d-pad only the list on screen; cross in, circle back */
@@ -2390,7 +2367,7 @@ static void library_changed(uint64_t now)
     lib_reload(&L);
     cats_build();
     g_det = NULL;
-    g_pn.open = 0;   /* (its entry may be gone) */
+    g_tri.open = 0;   /* (its entry may be gone) */
     if (g_mode == M_DETAILS) g_mode = M_BROWSE;
     if (g_mode == M_SEARCH) search_update();
     toast("package", "Library updated", now);
@@ -2740,47 +2717,6 @@ static void draw_grid(Cat *c, float dt, int alpha, int dx)
  * Add / Remove favourite, Game details, Sort by (its values, the current one ticked, a level in);
  * an app's App details. Cross chooses, circle closes (or back from Sort by) */
 static int hint_btn(int x, char b, const char *label);
-static void panel_draw(void)
-{
-    const int X = PANEL_X, W = SCREEN_W - PANEL_X;
-    int k, y = 44, cur = g_cat[g_cur].sort;
-    if (!g_pn.open) return;
-    gfx_shadow(NINE_SHADOW14, X - 4, -10, W + 20, SCREEN_H + 20, 0x000000, 210);
-    gfx_rect(X, 0, W, SCREEN_H, 0x101a30, 248);
-    gfx_rect(X, 0, 1, SCREEN_H, 0x2a3a5e, 255);
-    gfx_text(FONT_TITLE, X + 14, 14, g_pn.sort ? "Sort by" : g_pn.e->title, C_TEXT, 255, W - 28);
-    for (k = 0; k < g_pn.n; k++, y += PANEL_ROW) {
-        int on = k == g_pn.sel, cy = y + PANEL_ROW / 2;
-        uint32_t ink = on ? 0xffffff : C_SUB;
-        if (on) highlight(X + 8, y + 2, W - 16, PANEL_ROW - 4, 255);
-        if (g_pn.sort) {
-            if (k == cur) gfx_icon("check", 14, X + 20, cy - 7, on ? 0xffffff : C_ACCENT, 255);
-            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, SORT_NAME[k], ink, 255, W - 56);
-            continue;
-        }
-        switch (g_pn.id[k]) {
-        case PN_FAV:
-            gfx_icon("star", 16, X + 18, cy - 8, ink, 255);
-            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, g_pn.e->fav ? "Remove favourite" : "Add to favourites", ink, 255, W - 56);
-            break;
-        case PN_DETAILS:
-            gfx_icon("info", 16, X + 18, cy - 8, ink, 255);
-            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, can_fav(g_pn.e) ? "Game details" : "App details", ink, 255, W - 56);
-            break;
-        case PN_SORT:
-            gfx_icon("arrow-up-down", 16, X + 18, cy - 8, ink, 255);
-            gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2 - 6, "Sort by", ink, 255, W - 70);
-            gfx_text(FONT_SMALL, X + 42, cy + 1, SORT_NAME[cur], on ? 0xd6e4ff : C_MUTED, 255, W - 70);
-            gfx_icon("chevron-right", 12, SCREEN_W - 26, cy - 6, ink, 255);
-            break;
-        default: break;
-        }
-    }
-    {
-        int x = hint_btn(X + 14, 'x', "Select");
-        hint_btn(x, 'o', g_pn.sort ? "Back" : "Close");
-    }
-}
 
 /* a Settings group: its settings, each with what it is set to at the right (a switch; a choice's
  * value; where a page stands and a chevron); under them what the highlighted one does, and in
@@ -2893,7 +2829,7 @@ static void draw_hints(void)
     Cat *c = &g_cat[g_cur];
     LEntry *e = cur_entry();
     const char *go = NULL;
-    if (g_menu.open || g_pn.open) return;   /* (Quick controls and triangle's panel draw their own) */
+    if (g_menu.open || g_tri.open || quick_is_open()) return;   /* (the panels draw their own) */
     if (g_vl.open) { x = hint_btn(x, 'x', "Select"); hint_btn(x, 'o', "Cancel"); return; }
     r = hint_right(SCREEN_W - 12, "START", "Quick");
     if (section_of(c) == SEC_GAMES) r = hint_right(r - 14, "SELECT", "Search");
@@ -3269,13 +3205,11 @@ static void draw_pick(float dt)
         gfx_set_clip(0, 0, SCREEN_W, SCREEN_H);
     }
     x = 16;
-    if (g_menu.open) return;   /* (the menu draws its own hints) */
+    if (g_menu.open || quick_is_open()) return;   /* (the panels draw their own hints) */
     if (!g_scanning || g_pick_kind == PICK_TZ) x = hint_btn(x, 'x', g_pick_kind == PICK_TZ ? "Set" : g_pick_kind == PICK_BT ? "Use" : "Join");   /* (cross waits for the scan) */
-    if (g_pick_kind == PICK_BT && g_pick_sel > 0 && g_pick_sel - 1 < g_pick_n - 1 && g_bt[g_pick_sel - 1].paired && !g_scanning) x = hint_btn(x, 's', "Forget");
-    if (g_pick_kind == PICK_WIFI && g_pick_n && !g_scanning && g_nets[g_pick_sel].secure && g_nets[g_pick_sel].saved)
-        x = hint_btn(x, 's', "New password");
     x = hint_btn(x, 'o', "Back");
-    hint_right(SCREEN_W - 16, "START", "Menu");   /* (START where its button is: the right) */
+    if (g_pick_kind != PICK_TZ) x = hint_btn(x, 't', "Options");
+    hint_right(SCREEN_W - 16, "START", "Quick");   /* (START where its button is: the right) */
     (void)x;
 }
 
@@ -3400,10 +3334,10 @@ void launcher_render(PspExpContext *ctx, uint64_t now, int psp_connected)
         draw_ribbon();
         draw_browse(dt);
         draw_hints();
-        panel_draw();
+        ui_menu_draw(&g_tri);
         if (g_mode == M_DETAILS) draw_details(dt);
     }
-    if (g_menu.open && (g_mode == M_BROWSE || g_mode == M_PICK)) ui_menu_draw(&g_menu);   /* START's menu, with its own hints */
+    if (g_menu.open && g_mode == M_PICK) ui_menu_draw(&g_menu);   /* the picker's menu, with its own hints */
     notify_draw(now);
     pspexp_present(ctx);
     g_dirty = 0;

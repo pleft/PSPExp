@@ -8,6 +8,7 @@
 #include "files_psp.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "quick.h"
 #include "launcher.h"
 #include "tags.h"
 #include "upnp.h"
@@ -579,7 +580,8 @@ static void library_add(void)
 
 /* START's menu, for the view shown: the highlighted song's (or folder's) first, then the play order;
  * keep: the same row selected (Shuffle and Repeat change in it, the menu stays) */
-enum { MM_GO = 1, MM_ADD, MM_REMOVE, MM_STOP, MM_SHUFFLE, MM_REPEAT, MM_CLEAR };
+enum { MM_GO = 1, MM_ADD, MM_REMOVE, MM_STOP, MM_SHUFFLE, MM_REPEAT, MM_CLEAR, MM_INFO };
+static void info_open(void);
 static void media_menu(int keep)
 {
     static const char *rep[3] = { "Off", "All", "One" };
@@ -603,16 +605,19 @@ static void media_menu(int keep)
             snprintf(g_menu.title, sizeof(g_menu.title), "%s", e->is_dir ? e->name : t->title[0] ? t->title : e->name);
             ui_menu_add(&g_menu, MM_GO, e->is_dir ? "folder-open" : "play", e->is_dir ? "Open" : "Play", NULL, 0, 0);
             ui_menu_add(&g_menu, MM_ADD, "list", "Add to the queue", NULL, 0, 0);
+            ui_menu_add(&g_menu, MM_INFO, "info", "Info", NULL, 0, 0);
         }
         item = 1;
     } else if (g_view == V_NOW && player_info(&pi)) {
         snprintf(g_menu.title, sizeof(g_menu.title), "%s", pi.title);
         ui_menu_add(&g_menu, MM_STOP, "circle-x", "Stop", NULL, 0, 0);
+        ui_menu_add(&g_menu, MM_INFO, "info", "Info", NULL, 0, 0);
         item = 1;
     } else if (g_view == V_QUEUE && g_qn && g_qsel < g_qn) {
         snprintf(g_menu.title, sizeof(g_menu.title), "%s", track_name(g_qsel));
         ui_menu_add(&g_menu, MM_GO, "play", "Play", NULL, 0, 0);
         if (g_qsel != g_at) ui_menu_add(&g_menu, MM_REMOVE, "trash-2", "Remove from the queue", NULL, 0, 0);
+        ui_menu_add(&g_menu, MM_INFO, "info", "Info", NULL, 0, 0);
         item = 1;
     }
     ui_menu_add(&g_menu, MM_SHUFFLE, "shuffle", "Shuffle", g_shuffle ? "On" : "Off", item, 0);
@@ -634,6 +639,7 @@ static void media_choose(int id)
     case MM_ADD: library_add(); break;
     case MM_REMOVE: queue_remove(g_qsel); break;
     case MM_STOP: music_stop(); break;
+    case MM_INFO: info_open(); break;
     case MM_SHUFFLE: shuffle_toggle(); media_menu(1); break;
     case MM_REPEAT: g_repeat = (g_repeat + 1) % 3; media_menu(1); break;
     case MM_CLEAR: queue_clear(); break;
@@ -666,10 +672,11 @@ static void info_open(void)
     g_info = 1; g_dirty = 1;
 }
 
-/* Buttons (2026-10-29, architecture §12d): L / R the tabs (Now playing, Library, Queue); in Now playing
- * and a film left / right the previous / next track, held a seek; circle back to the Library, never
- * out (HOME); START the menu (the song's, then the play order); triangle what the song is; square
- * stop, add, or remove; SELECT free. */
+/* Buttons (2026-10-31, the launcher design proposal's shared roles): L / R the tabs (Now playing,
+ * Library, Queue); in Now playing and a film left / right the previous / next track, held a seek;
+ * circle back to the Library, never out (HOME); triangle the menu (the song's: play, add, stop,
+ * remove, its info; then the play order: square's and triangle's own until then); START Quick
+ * controls; square and SELECT free. */
 static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, int right, uint64_t now)
 {
     static uint64_t lr_since, lr_seek_at;
@@ -709,14 +716,13 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (g_view == V_BROWSE && !g_dir[0]) places_load();
         return;
     }
-    if (pressed & PSPEXP_BUTTON_START) { media_menu(0); return; }
-    if (pressed & PSPEXP_BUTTON_TRIANGLE) { info_open(); return; }
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); return; }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) { media_menu(0); return; }
     switch (g_view) {
     case V_NOW:
         if (pressed & PSPEXP_BUTTON_CROSS) music_toggle();
         if (up && g_mod_ch0 > 0) g_mod_ch0--;   /* a module: its channels, when they do not all fit */
         if (down) g_mod_ch0++;                   /* (draw_module keeps it in range) */
-        if (pressed & PSPEXP_BUTTON_SQUARE) music_stop();
         if ((pressed & PSPEXP_BUTTON_CIRCLE) && g_back) { music_stop(); g_exit = 1; }   /* back to the Gallery */
         else if (pressed & PSPEXP_BUTTON_CIRCLE) { music_leave(); g_view = V_BROWSE; if (!g_dir[0]) places_load(); }   /* back to the Library (a film paused) */
         break;
@@ -732,7 +738,6 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
                 else up_play(g_bsel);
             }
             if (pressed & PSPEXP_BUTTON_CIRCLE) up_back();
-            if ((pressed & PSPEXP_BUTTON_SQUARE) && g_up == UP_FOLDER) library_add();
             break;
         }
         if (up && g_bsel > 0) g_bsel--;
@@ -741,7 +746,6 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (right) g_bsel = g_bsel + 6 < n ? g_bsel + 6 : (n ? n - 1 : 0);
         if (pressed & PSPEXP_BUTTON_CROSS) browse_choose();
         if (pressed & PSPEXP_BUTTON_CIRCLE) browse_up();
-        if (pressed & PSPEXP_BUTTON_SQUARE) library_add();
         break;
     }
     case V_QUEUE:
@@ -750,7 +754,6 @@ static void mu_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (left) g_qsel = g_qsel > 6 ? g_qsel - 6 : 0;
         if (right) g_qsel = g_qsel + 6 < g_qn ? g_qsel + 6 : (g_qn ? g_qn - 1 : 0);
         if ((pressed & PSPEXP_BUTTON_CROSS) && g_qn) play_at(g_qsel);
-        if (pressed & PSPEXP_BUTTON_SQUARE) queue_remove(g_qsel);
         if (pressed & PSPEXP_BUTTON_CIRCLE) { g_view = V_BROWSE; if (!g_dir[0]) places_load(); }
         break;
     }
@@ -1078,8 +1081,9 @@ static int draw_film(PspExpContext *ctx, uint64_t now)
         x = ui_hint_home();
         x = ui_hint_btn(x, 'x', !pi.paused && !pi.ended ? "Pause" : "Play");
         x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Film, held: seek" : "Held: seek", UI_SUB);
-        x = ui_hint_btn(x, 's', "Stop");
         x = ui_hint_btn(x, 'o', g_back ? "Gallery" : "Library");
+        x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     }
     notify_draw(now);
     pspexp_present(ctx);
@@ -1125,21 +1129,19 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
         int have = player_info(&pi);
         x = ui_hint_btn(x, 'x', have && !pi.paused && !pi.ended ? "Pause" : "Play");
         if (g_qn > 1 || have) x = ui_hint_cap(x, "LEFT/RIGHT", g_qn > 1 ? "Track, held: seek" : "Held: seek", UI_SUB);
-        if (have) x = ui_hint_btn(x, 's', "Stop");
         x = ui_hint_btn(x, 'o', "Library");
-        ui_hint_start("Menu");
+        x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     } else if (g_view == V_BROWSE) {
         x = ui_hint_btn(x, 'x', g_dir[0] && g_bsel < g_nspec ? "Play" : "Open / play");
-        if (g_dir[0] || g_up == UP_FOLDER) x = ui_hint_btn(x, 's', "Add");
-        if (g_dir[0] && lib_entry(g_bsel)) x = ui_hint_btn(x, 't', "Info");
         if (g_dir[0] || g_up) x = ui_hint_btn(x, 'o', "Up");
-        ui_hint_start("Menu");
+        x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     } else {
         x = ui_hint_btn(x, 'x', "Play");
-        x = ui_hint_btn(x, 's', "Remove");
-        x = ui_hint_btn(x, 't', "Info");
         x = ui_hint_btn(x, 'o', "Library");
-        ui_hint_start("Menu");
+        x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     }
     if (g_info) draw_info();
     if (g_menu.open) ui_menu_draw(&g_menu);

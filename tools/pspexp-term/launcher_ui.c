@@ -64,35 +64,45 @@ int ui_menu_input(UiMenu *m, uint32_t pressed, int up, int down)
     if (!m->open || !m->n) { m->open = 0; return UIM_CLOSE; }
     if (up) m->sel = (m->sel + m->n - 1) % m->n;
     if (down) m->sel = (m->sel + 1) % m->n;
-    if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_START)) { m->open = 0; return UIM_CLOSE; }
+    if (pressed & (PSPEXP_BUTTON_CIRCLE | PSPEXP_BUTTON_TRIANGLE | PSPEXP_BUTTON_START)) { m->open = 0; return UIM_CLOSE; }
     if (pressed & PSPEXP_BUTTON_CROSS) { m->open = 0; return m->it[m->sel].id; }
     return UIM_NONE;
 }
 
 void ui_menu_draw(const UiMenu *m)
 {
-    int i, seps = 0, w = 270, h, x, y, ry;
+    const int X = UI_PANEL_X, W = UI_SCREEN_W - UI_PANEL_X, Y0 = 42, RH = 26, ROWS = 7;
+    int i, top, x;
     if (!m->open) return;
-    for (i = 0; i < m->n; i++) seps += m->it[i].sep;
-    h = 30 + m->n * 20 + seps * 7;
-    x = (UI_SCREEN_W - w) / 2; y = (UI_SCREEN_H - h) / 2 - 8;
-    gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
-    gfx_nine(NINE_R14, x, y, w, h, 0x1b2a46, 250);
-    gfx_text(FONT_BODY, x + 14, y + 8, m->title, UI_TEXT, 255, w - 28);
-    ry = y + 28;
-    for (i = 0; i < m->n; i++) {
+    top = m->sel - ROWS + 1 > 0 ? m->sel - ROWS + 1 : 0;   /* (the highlight in view, the rows below it next) */
+    gfx_rect(0, 0, X, UI_SCREEN_H, 0x05070c, 110);   /* what it is over, still in view, dimmed: the panel has the buttons */
+    gfx_shadow(NINE_SHADOW14, X - 4, -10, W + 20, UI_SCREEN_H + 20, 0x000000, 210);
+    gfx_rect(X, 0, W, UI_SCREEN_H, 0x101a30, 248);
+    gfx_rect(X, 0, 1, UI_SCREEN_H, 0x2a3a5e, 255);
+    gfx_text(FONT_TITLE, X + 14, 12, m->title, UI_TEXT, 255, W - 28);
+    for (i = top; i < m->n && i < top + ROWS; i++) {
         const UiMenuItem *it = &m->it[i];
-        int on = i == m->sel, right = x + w - 14;
-        if (it->sep) { gfx_rect(x + 12, ry + 1, w - 24, 1, 0x34466b, 255); ry += 7; }
-        if (on) gfx_nine(NINE_R6, x + 6, ry - 2, w - 12, 19, UI_ACCENT, 90);
-        if (it->icon[0]) gfx_icon(it->icon, 13, x + 14, ry + 1, on ? 0xffffff : UI_ACCENT, 255);
-        if (it->more) { gfx_icon("chevron-right", 13, right - 13, ry + 1, on ? 0xffffff : UI_SUB, 255); right -= 18; }
-        if (it->value[0]) { int vw = gfx_text_width(FONT_SMALL, it->value); gfx_text(FONT_SMALL, right - vw, ry, it->value, on ? 0xffffff : UI_SUB, 255, 0); right -= vw + 8; }
-        gfx_text(FONT_SMALL, x + 36, ry, it->label, on ? 0xffffff : UI_TEXT, 255, right - x - 36);
-        ry += 20;
+        int on = i == m->sel, y = Y0 + (i - top) * RH, cy = y + RH / 2, right = UI_SCREEN_W - 14;
+        uint32_t ink = on ? 0xffffff : UI_SUB;
+        if (it->sep && i > top) gfx_rect(X + 14, y - 1, W - 28, 1, 0x2a3a5e, 255);
+        if (on) {
+            gfx_shadow(NINE_SHADOW10, X + 8, y + 2, W - 16, RH - 4, 0x40a0ff, 80);
+            gfx_nine(NINE_R10, X + 8, y + 2, W - 16, RH - 4, 0x1e3a6e, 225);
+            gfx_rect(X + 8, y + 7, 3, RH - 14, UI_ACCENT, 255);
+        }
+        if (it->icon[0]) gfx_icon(it->icon, 14, X + 20, cy - 7, on ? 0xffffff : UI_ACCENT, 255);
+        if (it->more) { gfx_icon("chevron-right", 12, right - 12, cy - 6, ink, 255); right -= 16; }
+        if (it->value[0]) {
+            int vw = gfx_text_width(FONT_SMALL, it->value);
+            gfx_text(FONT_SMALL, right - vw, cy - gfx_line_height(FONT_SMALL) / 2, it->value, on ? 0xd6e4ff : UI_MUTED, 255, 0);
+            right -= vw + 8;
+        }
+        gfx_text(FONT_BODY, X + 42, cy - gfx_line_height(FONT_BODY) / 2, it->label, on ? 0xffffff : UI_TEXT, 255, right - X - 42);
     }
-    i = ui_hint_btn(12, 'x', "Choose");
-    ui_hint_btn(i, 'o', "Close");
+    if (top > 0) gfx_icon("chevron-up", 10, X + W / 2 - 5, Y0 - 10, UI_MUTED, 200);
+    if (top + ROWS < m->n) gfx_icon("chevron-down", 10, X + W / 2 - 5, Y0 + ROWS * RH, UI_MUTED, 200);
+    x = ui_hint_btn(X + 14, 'x', "Select");
+    ui_hint_btn(x, 'o', "Close");
 }
 
 /* ---- the text keyboard ------------------------------------------------------------ */

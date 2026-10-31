@@ -96,6 +96,10 @@ int  launcher_take_clips_change(void);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);
+/* Quick controls (quick.c): the board's own battery ("GameShell battery"; 0 when it has none), and
+ * its Power off, already asked again */
+int  launcher_board_battery(char *label, size_t n, int *pct, int *chg);
+void launcher_power_off(uint64_t now);
 /* the PSP's runtime, read from its stick on each connection (About): the slot
  * running ('a' / 'b'; '-' an install without slots; 0 not known), a finished
  * update waiting for a restart (its slot, 0 none), and the running slot's version */

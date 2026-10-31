@@ -20,6 +20,7 @@
 #include "notify.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "quick.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -369,7 +370,7 @@ static int st_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
  * its whole description (2026-10-29: START is the menu everywhere, triangle "more") */
 static UiMenu g_menu;
 static int g_more;
-enum { PM_INSTALL = 1, PM_REMOVE, PM_REFRESH };
+enum { PM_INSTALL = 1, PM_REMOVE, PM_REFRESH, PM_DETAILS };
 static int can_install(const Pkg *p) { return p && (p->avail[0] || !strcmp(p->st, "broken")) && strcmp(p->st, "local") && (strcmp(p->id, "pspexp") || !strcmp(p->st, "update")); }
 static int can_remove(const Pkg *p) { return p && (p->inst[0] || !strcmp(p->st, "broken") || !strcmp(p->st, "local")); }
 static const char *install_word(const Pkg *p)   /* (as the list's chips: status_of) */
@@ -390,6 +391,7 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (id == PM_INSTALL && can_install(p)) start_install(p);
         else if (id == PM_REMOVE && can_remove(p)) g_mode = S_CONFIRM;
         else if (id == PM_REFRESH) { if (g_local) load_catalogue(); else catalogue_job("update", NULL); }
+        else if (id == PM_DETAILS && p) g_more = 1;
         return;
     }
     switch (g_mode) {
@@ -415,11 +417,12 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     }
     /* (PSPExp itself, "pspexp": only an update; installed is current, nothing to reinstall) */
     if ((pressed & PSPEXP_BUTTON_CROSS) && can_install(p)) start_install(p);
-    /* square removes (square deletes everywhere: a letter, a Bluetooth pairing); triangle shows more */
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && can_remove(p)) g_mode = S_CONFIRM;
-    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && p) g_more = 1;
-    if (pressed & PSPEXP_BUTTON_START) {
+    /* START: Quick controls; triangle: the package's actions (its details, install, remove; removing
+     * was square's until 2026-10-31), then the list's */
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); return; }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) {
         ui_menu_begin(&g_menu, p ? p->title : "Packages");
+        if (p) ui_menu_add(&g_menu, PM_DETAILS, "info", "Details", NULL, 0, 0);
         if (can_install(p)) ui_menu_add(&g_menu, PM_INSTALL, "download", install_word(p), NULL, 0, 0);
         if (can_remove(p)) ui_menu_add(&g_menu, PM_REMOVE, "trash-2", "Remove", NULL, 0, 0);
         ui_menu_add(&g_menu, PM_REFRESH, "refresh-cw", "Refresh the catalogue", NULL, g_menu.n > 0, 0);
@@ -603,12 +606,11 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         if (st == ST_BROKEN) x = ui_hint_btn(x, 'x', "Retry");
         else if (st != ST_LOCAL && p->avail[0] && (strcmp(p->id, "pspexp") || st == ST_UPDATE))
             x = ui_hint_btn(x, 'x', st == ST_NEW ? "Install" : st == ST_UPDATE ? "Update" : "Reinstall");
-        if (p->inst[0] || st == ST_BROKEN || st == ST_LOCAL) x = ui_hint_btn(x, 's', "Remove");
     }
     if (g_mode == S_LIST && !g_menu.open && !g_more) {   /* (a dialog's buttons are in it: the list's are not shown under it) */
-        if (p) x = ui_hint_btn(x, 't', "More");
+        x = ui_hint_btn(x, 't', "Options");
         x = ui_hint_cap(x, "L/R", "Section", UI_SUB);
-        ui_hint_start("Menu");
+        ui_hint_start("Quick");
     }
     if (g_more && p && g_mode == S_LIST) {   /* triangle: the whole description, its version, where it comes from */
         int w = 380, h = 150, bx = (UI_SCREEN_W - w) / 2, by = (UI_SCREEN_H - h) / 2 - 8;

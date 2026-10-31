@@ -66,9 +66,8 @@ corner (a clock for a clip, a camera for a recording).
 |---|---|
 | L / R | All, Screenshots, Videos |
 | Cross | open a game; show a screenshot full screen (left / right: the previous and next), or play a video (back in the Gallery when it ends, or on circle) |
-| Square | delete (it asks first): the one highlighted, or on the first page a game's (what the tab shows) |
-| Triangle | details: when, how big, how long, where the file is |
-| START | the menu: copy to the PSP, delete, newest or oldest first |
+| Triangle | the options: Details (when, how big, how long, where the file is), Copy to the PSP, Delete (it asks first: the one highlighted, or on the first page a game's, what the tab shows), newest or oldest first |
+| START | Quick controls |
 | Circle | back to the games |
 
 **Copy to the PSP** puts screenshots in the memory stick's **PICTURE**
@@ -80,7 +79,7 @@ turned into ones it can on the way, which takes a few seconds each.
 - **Media has them too:** **Library > Gallery**, and Files on the board.
 - **Copy one to a computer:** copy it to the PSP as above, then connect the
   PSP to the computer in USB mode as usual; or in Files, show the PSP's
-  memory stick in the other panel and choose **START > Copy**.
+  memory stick in the other panel and choose **triangle > Copy**.
 
 ## The last 30 seconds (Clips)
 

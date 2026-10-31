@@ -19,6 +19,7 @@
 #include "launcher.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "quick.h"
 #include "music.h"
 #include "notify.h"
 #include "player.h"
@@ -62,7 +63,7 @@ static int g_pic_ok;                          /* the picture shown is loaded */
 
 /* overlays: START's menu, triangle's details, square's question, a copy's progress, a message */
 static UiMenu g_menu;
-enum { GM_DELETE = 1, GM_COPY, GM_SORT, GM_PLAY };
+enum { GM_DELETE = 1, GM_COPY, GM_SORT, GM_PLAY, GM_DETAILS };
 static int g_more, g_confirm;
 static char g_msg[200];
 static uint64_t g_msg_until;
@@ -560,10 +561,12 @@ static void menu_open(void)
         ui_menu_begin(&g_menu, kind_word(g_it[i].kind, 0));
         g_menu.title[0] = (char)(g_menu.title[0] - 32);   /* "Screenshot" */
         if (g_view == V_ITEMS) ui_menu_add(&g_menu, GM_PLAY, g_it[i].kind == K_SHOT ? "image" : "circle-play", g_it[i].kind == K_SHOT ? "Show" : "Play", NULL, 0, 0);
+        ui_menu_add(&g_menu, GM_DETAILS, "info", "Details", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_COPY, "memory-stick", "Copy to the PSP", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_DELETE, "trash-2", "Delete", NULL, 0, 0);
     } else {
         ui_menu_begin(&g_menu, g_al[a].name);
+        ui_menu_add(&g_menu, GM_DETAILS, "info", "Details", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_COPY, "memory-stick", g_tab == T_ALL ? "Copy all to the PSP" : g_tab == T_SHOTS ? "Copy its screenshots to the PSP" : "Copy its videos to the PSP", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_DELETE, "trash-2", g_tab == T_ALL ? "Delete all" : g_tab == T_SHOTS ? "Delete its screenshots" : "Delete its videos", NULL, 0, 0);
     }
@@ -586,6 +589,7 @@ static void ga_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     if (g_menu.open) {
         int id = ui_menu_input(&g_menu, pressed, up, down);
         if (id == GM_DELETE) g_confirm = 1;
+        else if (id == GM_DETAILS) g_more = 1;
         else if (id == GM_PLAY) open_item(now);
         else if (id == GM_COPY) {
             if (g_view == V_ALBUMS) { int a = cur_album(); if (a >= 0) { int keep_sel = g_isel; items_load(a); g_isel = keep_sel; copy_start(a, -1); g_album = -1; } }
@@ -598,9 +602,8 @@ static void ga_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (left) picture_step(-1);
         if (right) picture_step(1);
         if (pressed & PSPEXP_BUTTON_CIRCLE) { g_view = V_ITEMS; gfx_image_free(); }
-        if (pressed & PSPEXP_BUTTON_SQUARE) g_confirm = 1;
-        if (pressed & PSPEXP_BUTTON_TRIANGLE) g_more = 1;
-        if (pressed & PSPEXP_BUTTON_START) menu_open();
+        if (pressed & PSPEXP_BUTTON_TRIANGLE) menu_open();   /* (its details, copy, delete: square's until 2026-10-31) */
+        if (pressed & PSPEXP_BUTTON_START) quick_open();
         return;
     }
     if (pressed & (PSPEXP_BUTTON_LTRIGGER | PSPEXP_BUTTON_RTRIGGER)) {   /* the tabs */
@@ -613,7 +616,8 @@ static void ga_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         g_atop = g_itop = 0;
         return;
     }
-    if (pressed & PSPEXP_BUTTON_START) { menu_open(); return; }
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); return; }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) { menu_open(); return; }   /* what is highlighted: details, copy, delete; then the order */
     if (g_view == V_ALBUMS) {
         const int C = 3;
         if (left && g_asel > 0) g_asel--;
@@ -622,8 +626,6 @@ static void ga_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (down && g_asel + C < g_nashown) g_asel += C;
         else if (down && g_asel / C < (g_nashown - 1) / C) g_asel = g_nashown - 1;
         if ((pressed & PSPEXP_BUTTON_CROSS) && cur_album() >= 0) { items_load(cur_album()); g_isel = 0; g_itop = 0; g_view = V_ITEMS; }
-        if ((pressed & PSPEXP_BUTTON_SQUARE) && cur_album() >= 0) g_confirm = 1;
-        if ((pressed & PSPEXP_BUTTON_TRIANGLE) && cur_album() >= 0) g_more = 1;
         /* (circle: nothing here, it never leaves an app: HOME does) */
     } else {
         const int C = 4;
@@ -633,8 +635,6 @@ static void ga_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (down && g_isel + C < g_nishown) g_isel += C;
         else if (down && g_isel / C < (g_nishown - 1) / C) g_isel = g_nishown - 1;
         if (pressed & PSPEXP_BUTTON_CROSS) open_item(now);
-        if ((pressed & PSPEXP_BUTTON_SQUARE) && cur_item() >= 0) g_confirm = 1;
-        if ((pressed & PSPEXP_BUTTON_TRIANGLE) && cur_item() >= 0) g_more = 1;
         if (pressed & PSPEXP_BUTTON_CIRCLE) { g_view = V_ALBUMS; g_album = -1; albums_load(); }
     }
 }
@@ -812,10 +812,9 @@ static void draw_picture(uint64_t now)
     if (!g_menu.open && !g_more && !g_confirm) {
         int x = ui_hint_home();
         if (n > 1) x = ui_hint_cap(x, "LEFT/RIGHT", "Previous / next", UI_SUB);
-        x = ui_hint_btn(x, 's', "Delete");
-        x = ui_hint_btn(x, 't', "Details");
         x = ui_hint_btn(x, 'o', "Back");
-        ui_hint_start("Menu");
+        x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     }
 }
 
@@ -921,12 +920,11 @@ static void ga_render(PspExpContext *ctx, uint64_t now)
             x = ui_hint_home();
             if (g_view == V_ALBUMS ? cur_album() >= 0 : cur_item() >= 0) {
                 x = ui_hint_btn(x, 'x', g_view == V_ALBUMS ? "Open" : g_it[cur_item()].kind == K_SHOT ? "Show" : "Play");
-                x = ui_hint_btn(x, 's', "Delete");
-                x = ui_hint_btn(x, 't', "Details");
             }
             if (g_view == V_ITEMS) x = ui_hint_btn(x, 'o', "Games");
+            x = ui_hint_btn(x, 't', "Options");
             x = ui_hint_cap(x, "L/R", "Kind", UI_SUB);
-            ui_hint_start("Menu");
+            ui_hint_start("Quick");
         }
     }
     if (g_view == V_PICTURE && g_msg[0] && !g_menu.open) gfx_text(FONT_SMALL, 12, UI_HINT_Y - 1, g_msg, UI_ACCENT, 255, UI_SCREEN_W - 24);

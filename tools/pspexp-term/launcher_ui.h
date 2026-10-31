@@ -36,8 +36,13 @@ int ui_app_bar(const char *icon, const char *title);
 int  ui_hint_home(void);
 void ui_hint_start(const char *label);
 
-/* ---- a menu: what START opens everywhere (2026-10-29): the highlighted item's actions first,
- * then the screen's own; cross runs a row, circle or START closes; up / down wrap ---- */
+/* ---- a menu: what triangle opens in every app (2026-10-31, the design proposal; START's until
+ * then): the highlighted item's actions first, then the screen's own; and START's Quick controls.
+ * A panel along the right (from UI_PANEL_X, the whole height), what it is about still in view at
+ * the left; cross runs a row, circle, triangle or START closes; up / down wrap; more rows than fit
+ * scroll ---- */
+
+#define UI_PANEL_X 256
 
 #define UI_MENU_MAX 14
 typedef struct UiMenuItem {
@@ -54,7 +59,7 @@ void ui_menu_begin(UiMenu *m, const char *title);   /* empty, open, its first ro
 void ui_menu_add(UiMenu *m, int id, const char *icon, const char *label, const char *value, int sep, int more);
 /* the id chosen (cross), UIM_CLOSE (circle, START: it is closed), UIM_NONE */
 int  ui_menu_input(UiMenu *m, uint32_t pressed, int up, int down);
-/* in the middle of the screen, and its two hints on the hint row (the caller draws none of its own) */
+/* the panel, and its two hints at its foot (the caller draws none of its own) */
 void ui_menu_draw(const UiMenu *m);
 
 /* ---- the text keyboard: three pages of 13 x 3 keys and a control row ---- */

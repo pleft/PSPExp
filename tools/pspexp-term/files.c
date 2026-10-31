@@ -7,6 +7,7 @@
 #include "files_psp.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "quick.h"
 #include "launcher.h"
 #include "music.h"
 
@@ -569,13 +570,15 @@ static void open_file(Panel *p, const FEntry *e)
 /* ---- menus ------------------------------------------------------------------- */
 
 typedef struct MItem { const char *icon, *label; int id; } MItem;
-enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE, A_ZIP, A_MORE,
+enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE, A_ZIP, A_MORE, A_SELECT,
        P_HIDDEN, P_SORT, P_SAME, P_SWAP, P_TERMINAL, P_MUSIC,
        X_OTHER, X_HERE, X_LIST, X_INSTALL };
-/* START's menu (2026-10-29: START is the menu everywhere): the file's (or the marked ones') actions,
- * and "Folder and view" for the rest; triangle is Details, as everywhere. (Triangle opened these
- * and START the options, two menus; one menu with all of them would have been too long.) */
+/* triangle's menu (2026-10-31, the shared roles: START's until then): the file's (or the marked
+ * ones') actions, Details and Select items first, and "Folder and view" for the rest (two menus: one
+ * with all of them would be too long) */
+static int g_selecting;   /* Select items: cross marks rather than opens */
 static const MItem ACTIONS[] = {
+    { "info", "Details", A_DETAILS }, { "list-checks", "Select items", A_SELECT },
     { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
     { "list", "Add to the Media queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
@@ -684,6 +687,10 @@ static void run_action(int id)
         break;
     case A_MKDIR: ui_kbd_reset(&g_kbd, "", 0, "Create"); g_kmode = K_MKDIR; g_over = O_KBD; break;
     case A_DETAILS: details(); break;
+    case A_SELECT:   /* select mode: cross marks rather than opens, circle ends it (the marks gone) */
+        if (g_selecting) { int k; for (k = 0; k < p->list.n; k++) p->list.e[k].marked = 0; }
+        g_selecting = !g_selecting;
+        break;
     case A_MORE: g_over = O_OPTIONS; g_msel = 0; break;   /* the folder's and the view's: the second menu */
     case A_QUEUE: {   /* the marked (or highlighted) songs and folders, at the end of Music's queue */
         FEntry *e = (FEntry *)malloc(sizeof(FEntry) * (size_t)(p->list.n ? p->list.n : 1));
@@ -696,6 +703,7 @@ static void run_action(int id)
         snprintf(g_msg, sizeof(g_msg), "%s", n ? music_note() : "Highlight or mark songs, films or folders first.");
         g_over = O_MESSAGE;
         { int k; for (k = 0; k < p->list.n; k++) p->list.e[k].marked = 0; }
+        g_selecting = 0;
         break;
     }
     case A_ZIP: {   /* the name first: the highlighted one's, as a .zip */
@@ -865,7 +873,8 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     if (p->on_drives) {   /* the drive button: cross opens the list, down / circle back to the files */
         if (pressed & PSPEXP_BUTTON_CROSS) { drives_refresh(); g_msel = drive_cur(p); g_over = O_DRIVES; }
         else if (down || (pressed & PSPEXP_BUTTON_CIRCLE)) p->on_drives = 0;
-        if (pressed & PSPEXP_BUTTON_START) { g_over = O_OPTIONS; g_msel = 0; }   /* (no file here: the folder's and the view's) */
+        if (pressed & PSPEXP_BUTTON_TRIANGLE) { g_over = O_OPTIONS; g_msel = 0; }   /* (no file here: the folder's and the view's) */
+        if (pressed & PSPEXP_BUTTON_START) quick_open();
         g_dirty = 1;
         return;
     }
@@ -874,6 +883,14 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
     if (down) move_sel(p, 1);
     if (left) move_sel(p, -(ROWS - 1));
     if (right) move_sel(p, ROWS - 1);
+    if (g_selecting) {   /* Select items: cross marks (and moves on), circle ends it, the marks gone */
+        if ((pressed & PSPEXP_BUTTON_CROSS) && p->sel < p->list.n) {
+            if (!p->list.e[p->sel].is_up) p->list.e[p->sel].marked = !p->list.e[p->sel].marked;
+            move_sel(p, 1);
+        }
+        if (pressed & PSPEXP_BUTTON_CIRCLE) { int k, i; for (k = 0; k < 2; k++) for (i = 0; i < g_p[k].list.n; i++) g_p[k].list.e[i].marked = 0; g_selecting = 0; }
+        pressed &= ~(uint32_t)(PSPEXP_BUTTON_CROSS | PSPEXP_BUTTON_CIRCLE);
+    }
     if (pressed & PSPEXP_BUTTON_CROSS && p->sel < p->list.n) {
         FEntry *e = &p->list.e[p->sel];
         if (e->is_up) panel_up(p);
@@ -884,15 +901,14 @@ void files_input(uint32_t b, uint32_t pressed, int up, int down, int left, int r
         if (fops_is_root(p->path)) return;
         panel_up(p);
     }
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && p->sel < p->list.n) {
-        if (!p->list.e[p->sel].is_up) p->list.e[p->sel].marked = !p->list.e[p->sel].marked;
-        move_sel(p, 1);
-    }
-    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && p->sel < p->list.n && !p->list.e[p->sel].is_up) details();   /* more: Details */
-    if (pressed & PSPEXP_BUTTON_START) {   /* the menu: on ".." the folder's and the view's at once */
+    /* triangle: the menu, the file's (or the marked ones') actions, Details and Select items first; on
+     * ".." the folder's and the view's at once. START: Quick controls. (Square marked, triangle showed
+     * Details and START the menu until 2026-10-31) */
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) {
         g_over = p->sel < p->list.n && !p->list.e[p->sel].is_up ? O_ACTIONS : O_OPTIONS;
         g_msel = 0;
     }
+    if (pressed & PSPEXP_BUTTON_START) quick_open();
     g_dirty = 1;
 }
 
@@ -908,6 +924,7 @@ int files_needs_frame(uint64_t now)
         g_job_on = 0;
         reload_all();
         { int k, i; for (k = 0; k < 2; k++) for (i = 0; i < g_p[k].list.n; i++) g_p[k].list.e[i].marked = 0; }
+        g_selecting = 0;
         if (g_job.error[0]) {
             snprintf(g_msg_title, sizeof(g_msg_title), "%s", strcmp(g_job.error, "cancelled") ? "It did not finish" : "Cancelled");
             snprintf(g_msg, sizeof(g_msg), "%s", g_job.error);
@@ -1020,9 +1037,10 @@ static void draw_panel(int k)
     for (i = 0; i < p->list.n; i++) if (p->list.e[i].marked) { marked++; if (!p->list.e[i].is_dir) total += p->list.e[i].size; }
     if (marked && total) { char sz[32]; fops_human(total, sz, sizeof(sz)); snprintf(s, sizeof(s), "%d marked, files %s", marked, sz); }
     else if (marked) snprintf(s, sizeof(s), "%d marked", marked);
+    else if (g_selecting && active) snprintf(s, sizeof(s), "Selecting: cross marks");
     else { int n = p->list.n - (p->list.n && p->list.e[0].is_up); snprintf(s, sizeof(s), "%d %s%s%s", n, n == 1 ? "item" : "items", p->space[0] ? "   " : "", p->space); }
-    gfx_text(FONT_BADGE, x + 10, PANEL_Y + PANEL_H - 14, s, marked ? 0xffd479 : UI_MUTED, 255, 0);
-    if (active) {   /* the music going on, at the foot's right: cross on its song, or START > Music, shows it */
+    gfx_text(FONT_BADGE, x + 10, PANEL_Y + PANEL_H - 14, s, marked || (g_selecting && active) ? 0xffd479 : UI_MUTED, 255, 0);
+    if (active) {   /* the music going on, at the foot's right: cross on its song shows it */
         char t[160]; int paused, w = PANEL_W - 20 - gfx_text_width(FONT_BADGE, s) - 30;
         if (music_now(t, sizeof(t), &paused) && w > 40) {
             if (gfx_text_width(FONT_BADGE, t) < w) w = gfx_text_width(FONT_BADGE, t);
@@ -1035,21 +1053,19 @@ static void draw_panel(int k)
 
 static void draw_menu(const MItem *items, int n, const char *title)
 {
-    int w = 250, h = 30 + n * 20, x = (UI_SCREEN_W - w) / 2, y = (UI_SCREEN_H - h) / 2 - 8, i;
-    gfx_shadow(NINE_SHADOW14, x, y, w, h, 0x000000, 160);
-    gfx_nine(NINE_R14, x, y, w, h, 0x1b2a46, 250);
-    gfx_text(FONT_BODY, x + 14, y + 8, title, UI_TEXT, 255, w - 28);
+    UiMenu m;   /* (the shared panel: Files keeps its own rows and their highlight, g_msel) */
+    int i;
+    ui_menu_begin(&m, title);
     for (i = 0; i < n; i++) {
-        int ry = y + 28 + i * 20;
         char label[96];
         snprintf(label, sizeof(label), "%s", items[i].label);
         if (items[i].id == P_HIDDEN) snprintf(label, sizeof(label), "Hidden files: %s", g_hidden ? "shown" : "hidden");
         if (items[i].id == P_SORT) snprintf(label, sizeof(label), "Sort by %s", g_sort == FSORT_NAME ? "name" : g_sort == FSORT_SIZE ? "size" : "date");
-        if (items[i].id == A_MORE) { gfx_rect(x + 12, ry - 4, w - 24, 1, 0x34466b, 255); gfx_icon("chevron-right", 13, x + w - 27, ry + 1, i == g_msel ? 0xffffff : UI_SUB, 255); }
-        if (i == g_msel) gfx_nine(NINE_R6, x + 6, ry - 2, w - 12, 19, UI_ACCENT, 90);
-        gfx_icon(items[i].icon, 13, x + 14, ry + 1, i == g_msel ? 0xffffff : UI_ACCENT, 255);
-        gfx_text(FONT_SMALL, x + 36, ry, label, i == g_msel ? 0xffffff : UI_TEXT, 255, w - 48);
+        if (items[i].id == A_SELECT && g_selecting) snprintf(label, sizeof(label), "Stop selecting");
+        ui_menu_add(&m, items[i].id, items[i].icon, label, NULL, items[i].id == A_MORE || items[i].id == A_COPY, items[i].id == A_MORE);
     }
+    m.sel = g_msel;
+    ui_menu_draw(&m);
 }
 
 /* the drive list, dropped from the active panel's drive button */
@@ -1180,12 +1196,12 @@ void files_render(PspExpContext *ctx, uint64_t now)
             else if (is_image(e)) go = "View";
             else go = "Read";
         }
+        if (g_selecting) go = "Mark";
         if (!p->on_drives && g_over == O_NONE) x = ui_hint_btn(x, 'x', go);
     }
     /* the footer is the screen's under it: a menu its own two, a dialog none (its buttons are in it) */
     if (g_over == O_ACTIONS || g_over == O_OPTIONS || g_over == O_ARCHIVE) {
-        x = ui_hint_btn(x, 'x', "Choose");
-        x = ui_hint_btn(x, 'o', "Close");
+        /* (the menu's panel has them) */
     } else if (g_over != O_NONE && g_over != O_DRIVES) {
         /* (none) */
     } else if (g_over == O_DRIVES) {
@@ -1194,14 +1210,17 @@ void files_render(PspExpContext *ctx, uint64_t now)
     } else if (act()->on_drives) {
         x = ui_hint_btn(x, 'x', "Drives");
         x = ui_hint_cap(x, "DOWN", "The files", UI_SUB);
+        x = ui_hint_btn(x, 't', "Options");
+    } else if (g_selecting) {
+        x = ui_hint_btn(x, 'o', "Done");
+        x = ui_hint_btn(x, 't', "Options");
     } else {
         if (!fops_is_root(act()->path)) x = ui_hint_btn(x, 'o', "Up");
-        x = ui_hint_btn(x, 's', "Mark");
-        x = ui_hint_btn(x, 't', "Details");
+        x = ui_hint_btn(x, 't', "Options");
     }
     if (g_over == O_NONE) {
         x = ui_hint_cap(x, "L/R", "Panel", UI_SUB);
-        ui_hint_start("Menu");
+        ui_hint_start("Quick");
     }
     switch (g_over) {
     case O_DRIVES: draw_drives(); break;

@@ -14,6 +14,7 @@
 #include "files_psp.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
+#include "quick.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -87,7 +88,7 @@ static int mon_take_exit(void) { int e = g_exit; g_exit = 0; return e; }
  * on the overview its one row; triangle: the program's details */
 static UiMenu g_menu;
 static int g_more;
-enum { OM_END = 1, OM_SORT, OM_PROGRAMS };
+enum { OM_END = 1, OM_SORT, OM_PROGRAMS, OM_DETAILS };
 
 static void end_ask(uint64_t now)
 {
@@ -107,6 +108,7 @@ static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, 
         if (id == OM_END) end_ask(now);
         else if (id == OM_SORT) { g_sort_mem = !g_sort_mem; g_at = 0; }
         else if (id == OM_PROGRAMS) g_page = PAGE_PROGRAMS;
+        else if (id == OM_DETAILS && g_s.nproc && g_sel < g_s.nproc) g_more = 1;
         return;
     }
     if (g_confirm) {
@@ -122,22 +124,23 @@ static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, 
     }
     if (pressed & PSPEXP_BUTTON_LTRIGGER) g_page = PAGE_OVERVIEW;
     if (pressed & PSPEXP_BUTTON_RTRIGGER) g_page = PAGE_PROGRAMS;
-    /* (circle: nothing here, it never leaves an app: HOME does) */
-    if (pressed & PSPEXP_BUTTON_START) {
+    /* (circle: nothing here, it never leaves an app: HOME does). START: Quick controls; triangle: the
+     * program's actions (its details, End, the order: square's until 2026-10-31) */
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); return; }
+    if (pressed & PSPEXP_BUTTON_TRIANGLE) {
         if (g_page != PAGE_PROGRAMS) { ui_menu_begin(&g_menu, "System Monitor"); ui_menu_add(&g_menu, OM_PROGRAMS, "list", "Show the programs", NULL, 0, 0); }
         else {
             ui_menu_begin(&g_menu, g_s.nproc && g_sel < g_s.nproc ? g_s.proc[g_sel].name : "Programs");
+            if (g_s.nproc && g_sel < g_s.nproc) ui_menu_add(&g_menu, OM_DETAILS, "info", "Details", NULL, 0, 0);
             if (g_s.nproc && g_sel < g_s.nproc) ui_menu_add(&g_menu, OM_END, "circle-x", "End the program", NULL, 0, 0);
             ui_menu_add(&g_menu, OM_SORT, "arrow-up-down", "Sort by", g_sort_mem ? "memory" : "CPU", g_menu.n > 0, 0);
         }
         return;
     }
     if (g_page != PAGE_PROGRAMS) return;
-    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && g_s.nproc && g_sel < g_s.nproc) { g_more = 1; return; }
     if (up && g_sel > 0) g_sel--;
     if (down && g_sel < g_s.nproc - 1) g_sel++;
     if (g_s.nproc) g_sel_pid = g_s.proc[g_sel].pid;
-    if (pressed & PSPEXP_BUTTON_SQUARE) { g_sort_mem = !g_sort_mem; g_at = 0; }
     if (pressed & PSPEXP_BUTTON_CROSS) end_ask(now);
 }
 
@@ -358,10 +361,9 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_cap(x, "L/R", g_page == PAGE_OVERVIEW ? "Programs" : "Overview", UI_SUB);
         if (g_page == PAGE_PROGRAMS) {
             x = ui_hint_btn(x, 'x', "End");
-            x = ui_hint_btn(x, 's', g_sort_mem ? "By CPU" : "By memory");
-            x = ui_hint_btn(x, 't', "More");
         }
-        ui_hint_start("Menu");
+        x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     }
     if (g_more && g_s.nproc && g_sel < g_s.nproc) {   /* triangle: the program's details */
         const SysProc *pr = &g_s.proc[g_sel];

@@ -25,6 +25,15 @@
   options: Add to favourites, Game details, and Sort by (Favourites and
   recent, Recently played, Title A-Z); each platform keeps its view and its
   order. Square no longer adds a favourite.
+- **The same buttons in every app**: **triangle** opens the highlighted
+  thing's options in a panel at the right (Details first, then what you can
+  do: copy, delete, remove, add to the queue, stop...) in Files, the
+  Gallery, Media, Packages, the System Monitor and Notifications; **START**
+  opens **Quick controls** over any screen (Notifications, Terminal, Restart
+  PSPExp, Power off). Square no longer deletes, removes or marks straight
+  away: those are in triangle's options. Files marks several files with
+  triangle > **Select items** (cross marks, circle ends it). The terminal
+  keeps its keyboard (START is Enter).
 - **Every app has a title bar** with its name: an app no longer passes for
   the launcher. The hints at the bottom sit where the PSP's buttons are:
   "HOME Close" first at the left (the way out, the same as for games),

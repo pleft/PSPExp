@@ -18,9 +18,9 @@ times, it stops at the app's top, never throws you out).
 | HOME | leave what is on screen: in an app or a game, press it twice (the first shows "HOME again to quit" for 3 seconds), and the launcher comes back; in the launcher, the PSP's own "Quit?" (to the XMB); in your own PSP games, the PSP's HOME menu (Exit Game: back to PSPExp); held 2 s, PSPExp quits from anywhere |
 | cross | choose: open, play, confirm, type the highlighted key |
 | circle | back one step: cancel, the folder above; it never closes an app (HOME does; in the terminal: Esc) |
-| triangle | show more: in the launcher a game's or an app's options, elsewhere details, a hidden password (in the terminal: Space) |
-| square | in a platform's games, the other view (Focus or Grid); elsewhere mark or remove: mark a file, delete a letter, remove a package, forget a device, stop the music |
-| START | in the launcher, **Quick controls**; in an app, its menu (in a keyboard: done; in the terminal: Enter) |
+| triangle | **Options**: what you can do with the highlighted thing, in a panel at the right (a game's favourite, details and order; a file's details, copy, delete; a package's install or remove...), then the screen's own; in a keyboard, show a hidden password (in the terminal: Space) |
+| square | the other view where there is one (a platform's games: Focus or Grid); in a keyboard, delete a letter (in the terminal: Backspace) |
+| START | **Quick controls**, over any screen: Notifications, Terminal, Restart PSPExp, Power off (in a keyboard: done; in the terminal: Enter) |
 | SELECT | in the launcher's Games, **Search** |
 | L / R | the other category, tab, panel or page |
 | ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + L twice a screenshot, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
@@ -114,12 +114,12 @@ board's), the board losing its network, Bluetooth headphones gone,
 storage nearly full, an install or a Wi-Fi join that finished.
 
 Nothing is lost when you look away: the **bell** appears next to the clock
-in the top bar while there is something you have not seen, with how many. In the launcher press **START**
+in the top bar while there is something you have not seen, with how many. Press **START** anywhere
 and choose **Notifications** to open the list, the last 50, newest first:
 
 - **cross**: go where it is about (Packages for updates, Settings for the
   network or Bluetooth), when there is somewhere to go;
-- **square**: remove it; **START**: the menu (go there, remove, clear them all);
+- **triangle**: Options (go there, remove it, clear them all);
 - **HOME**: close (as in every app).
 
 While you play, nothing interrupts the game: what came meanwhile is
@@ -174,9 +174,8 @@ how many next to its name. It opens with
 |---|---|
 | up / down | a package |
 | cross | install it (or update it, when a newer version is there) |
-| square | remove it (asks first) |
-| triangle | its whole description, the versions |
-| START | the menu: install, update or remove it; look for new packages |
+| triangle | Options: Details (its whole description, the versions), install, update or remove it (removing asks first); look for new packages |
+| START | Quick controls |
 | HOME, twice | close Packages |
 
 Each game's entry says its **renderer**: **PSP** (SDL or OpenGL games, drawn
@@ -241,9 +240,8 @@ Only use ROMs of games you own.
 | cross | open: a folder, a picture, a text file, music or a film (in Media), a ROM (plays it), an archive (unpack it, or see what is in it), a package (installs it) |
 | circle | the folder above |
 | HOME, twice | close Files |
-| square | mark several files |
-| triangle | details: size, where it is, when it changed |
-| START | the menu: copy or move to the other panel, delete, rename, add to the Media queue, compress to a .zip; **Folder and view**: new folder, a terminal here, the same folder in both panels, swap the panels, hidden files, sorting, Media |
+| triangle | Options: **Details** (size, where it is, when it changed), **Select items** (then cross marks files, circle ends it), copy or move to the other panel, delete, rename, add to the Media queue, compress to a .zip; **Folder and view**: new folder, a terminal here, the same folder in both panels, swap the panels, hidden files, sorting, Media |
+| START | Quick controls |
 
 The drives include the board's storage, any USB stick plugged into it, and
 **the PSP's own memory stick** (drive **PSP**), while PSPExp runs. Copying
@@ -277,18 +275,18 @@ the **Library**:
   songs show their title and artist, and the one playing is marked. Cross
   opens a folder, or plays that song (or film) alone: **Play all** and
   **Shuffle** play the folder;
-  **square adds** the song, or a folder's songs (with its subfolders'), to
-  the end of the queue; circle goes up;
-- **Queue**: the songs to come. Cross plays one, square takes it out.
+  **triangle > Add to the queue** adds the song, or a folder's songs (with
+  its subfolders'), to the end of the queue; circle goes up;
+- **Queue**: the songs to come. Cross plays one, triangle > Remove from the
+  queue takes it out.
 
 | Button | |
 |---|---|
 | L / R | the other tab |
 | cross | pause / play (Library: open, play; Queue: play that one) |
 | left / right | Now playing: the previous / next song; held: back / on in it |
-| square | Now playing: stop; Library: add to the queue; Queue: take out |
-| triangle | what the song is: title, artist, where the file is, its size or format |
-| START | the menu: play, add to the queue, remove, stop; shuffle and repeat (off, all, one song); in the Queue also clear it |
+| triangle | Options: play, add to the queue, remove, stop, Info (title, artist, where the file is, its size or format); shuffle and repeat (off, all, one song); in the Queue also clear it |
+| START | Quick controls |
 | circle | Library: the folder above; Now playing and Queue: back to the Library (a film pauses) |
 | HOME, twice | close Media (back to Files, if you came from there); the music goes on, a film pauses |
 | ♪ (note) | pause / play, from anywhere |
@@ -296,8 +294,8 @@ the **Library**:
 The music goes on while you use the launcher, Files or the other apps;
 **Apps > Media** brings it back. In
 **Files** the song playing has a note beside it and its title shows at the
-foot of the panel; cross on it (or START > Folder and view > Media) brings Media back
-without starting the song over. Files' START menu has **Add to the
+foot of the panel; cross on it (or triangle > Folder and view > Media) brings Media back
+without starting the song over. Files' triangle menu has **Add to the
 Media queue**, for the highlighted or marked songs, films and folders.
 Starting a game stops it.
 
@@ -315,7 +313,7 @@ screen, up to 30 frames a second (a 60 a second film shows every other
 one); the PSP draws each picture and plays the sound. A key brings the
 title, the time and the buttons over the picture for a few seconds (the
 first press only shows them); cross pauses, left / right go to the
-previous or next film (held: back or on in it), square stops, circle goes
+previous or next film (held: back or on in it), triangle > Stop stops, circle goes
 back to the Library. Closing Media pauses a film. A Raspberry Pi 400 shows a
 720p or 1080p H.264 film at 29–30 frames a second; films need ffmpeg,
 which the card images have.
@@ -336,7 +334,7 @@ look as it arranges them.
 **Apps > Gallery** shows your screenshots, recordings and clips, a tile for
 each game, then a game's pictures newest first. Cross shows a screenshot
 full screen or plays a video; L / R show all, only the screenshots or only
-the videos; square deletes; START's menu copies them to the PSP's memory
+the videos; triangle's Options delete them or copy them to the PSP's memory
 stick, for the PSP's own Photo and Video menus. More in
 [Recording and screenshots](recording.md#the-gallery).
 
@@ -362,15 +360,17 @@ From then on:
   headphones go, so your phone or tablet can have them.
 - **Other headphones** chosen in Sound output take over: the ones before are
   let go first, as with The PSP. One device plays at a time.
-- Square on a device in the list forgets it; START's menu scans again.
+- Triangle on a device in the list: Forget, or Scan again.
 
 Bluetooth always adds a little delay. PSPExp keeps its own part small;
 what remains depends on the headphones.
 
 ## The terminal
 
-**Apps > Terminal**, or START > Terminal in the launcher (HOME goes back to
-the launcher): the board's Linux shell on the PSP, with an on-screen keyboard. Up to four shells,
+**Apps > Terminal**, or START > Terminal from anywhere (HOME goes back to
+the launcher): the board's Linux shell on the PSP, with an on-screen keyboard.
+Its buttons are a keyboard's, so here START is Enter and triangle Space,
+not Quick controls and Options. Up to four shells,
 colours, scrollback; `vi` and `top` work. On a Raspberry Pi 400 its own
 keyboard types into it too.
 
@@ -419,4 +419,5 @@ PSPExp** (after PSPExp was updated).
 
 **Apps > System Monitor** shows the board's processor, memory, temperature,
 storage and network, and its programs (one can be ended from there if it
-hangs: cross, or START's menu; triangle shows a program's details).
+hangs: cross, or triangle's Options, which also show a program's details
+and change the order).

@@ -8,6 +8,7 @@
  *   circle         close
  */
 #include "notify.h"
+#include "quick.h"
 #include "appview.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
@@ -306,7 +307,9 @@ static int marquee(int font, int x, int y, const char *s, uint32_t rgb, int a, i
 
 void notify_draw(uint64_t now)
 {
-    float dt = g_last_draw ? (float)(now - g_last_draw) / 1e6f : 0.016f;
+    float dt;
+    quick_draw();   /* (START's Quick controls: over every view, under the banners) */
+    dt = g_last_draw ? (float)(now - g_last_draw) / 1e6f : 0.016f;
     if (dt > 0.1f) dt = 0.1f;
     g_last_draw = now;
     g_moving = 0;
@@ -414,8 +417,8 @@ static void c_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
         c_exit = 1;
         return;
     }
-    if ((pressed & PSPEXP_BUTTON_SQUARE) && c_sel < g_nn) c_remove();
-    if ((pressed & PSPEXP_BUTTON_START) && g_nn) {
+    if (pressed & PSPEXP_BUTTON_START) { quick_open(); c_dirty = 1; return; }
+    if ((pressed & PSPEXP_BUTTON_TRIANGLE) && g_nn) {   /* the notification's actions, then the list's */
         ui_menu_begin(&c_menu, c_sel < g_nn ? g_n[c_sel].title : "Notifications");
         if (c_sel < g_nn && g_n[c_sel].action[0]) ui_menu_add(&c_menu, CM_GO, "chevron-right", "Go there", NULL, 0, 0);
         if (c_sel < g_nn) ui_menu_add(&c_menu, CM_REMOVE, "trash-2", "Remove", NULL, 0, 0);
@@ -487,7 +490,8 @@ static void c_render(PspExpContext *ctx, uint64_t now)
     else {
         x = ui_hint_home();
         if (c_sel < g_nn && g_n[c_sel].action[0]) x = ui_hint_btn(x, 'x', "Go there");
-        if (g_nn) { x = ui_hint_btn(x, 's', "Remove"); ui_hint_start("Menu"); }
+        if (g_nn) x = ui_hint_btn(x, 't', "Options");
+        ui_hint_start("Quick");
     }
     notify_draw(now);
     pspexp_present(ctx);

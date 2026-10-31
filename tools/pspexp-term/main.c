@@ -56,6 +56,7 @@
 #include "player.h"
 #include "music.h"
 #include "notify.h"
+#include "quick.h"
 #include "psp_native.h"
 #include "psp_plugin.h"
 #include "btaudio.h"
@@ -1662,6 +1663,20 @@ static void app_show(const AppView *a)
     a->open();
 }
 
+/* the terminal, from Quick controls over an app or Files: that one left as HOME leaves it */
+static void terminal_show(void)
+{
+    swallow();
+    if (g_app) {
+        if (g_app->leave) g_app->leave();
+        if (g_app == &MUSIC_APP) music_leave();
+        if (g_app_back) { g_app_back = NULL; music_set_back(0); }
+        g_app = NULL; g_app_from_files = 0;
+    }
+    g_view_files = 0; g_view_launcher = 0;
+    T.dirty = 1;
+}
+
 /* the app that opened this one, as it was left (its open not called again) */
 static void app_back(void)
 {
@@ -1848,6 +1863,12 @@ static void handle_input(void)
     if (g_app || g_view_files || g_view_launcher) pressed = (pressed & ~(uint32_t)PSPEXP_BUTTON_SELECT) | (g_select_tap ? PSPEXP_BUTTON_SELECT : 0);
     /* the PSP's note button: the music paused or resumed, from anywhere (runtimes that send it: 2026-10-06) */
     if ((pressed & PSPEXP_BUTTON_NOTE) && g_launch_pid <= 0) { music_toggle(); launcher_invalidate(); if (g_app) g_redraw_app = 1; }
+    if (quick_is_open()) {   /* START's Quick controls over whatever is shown: its input until it closes */
+        quick_input(pressed, up, down);
+        g_redraw_app = 1; T.dirty = 1;
+        if (g_launcher_on) { launcher_invalidate(); files_invalidate(); }
+        return;
+    }
     if (g_app) { g_app->input(b, pressed, up, down, left, right, now); return; }
     if (g_view_files) { files_input(b, pressed, up, down, left, right, now); return; }
     if (g_view_launcher) { launcher_input(b, pressed, up, down, left, right, now); return; }
@@ -3328,6 +3349,13 @@ int main(int argc, char **argv)
                 if (launcher_take_native(disc, sizeof(disc))) native_start(ctx, disc, now);
             }
             { char id[16]; if (launcher_take_app(id, sizeof(id))) app_show(app_find(id)); }
+            switch (quick_take()) {   /* chosen in Quick controls, over any view */
+            case QK_NOTIFY: app_show(app_find("notifications")); break;
+            case QK_TERMINAL: terminal_show(); break;
+            case QK_RESTART: fprintf(stderr, "[pspexp-term] restarting (Quick controls)\n"); g_quit = 1; break;
+            case QK_POWEROFF: launcher_power_off(now); break;
+            default: break;
+            }
         }
         if (g_app && g_app->take_app) {   /* another app for it (the Gallery a video: Media), then back */
             char id[16];

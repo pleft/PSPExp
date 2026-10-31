@@ -782,6 +782,31 @@ the PSP-1000 at 1:1: PSP in Focus and Grid, Super Nintendo in Focus and Grid
 A-Z, a favourite added and the Favourites list, Game details, App details,
 and a panel closed by a jump to another level.
 
+**Stage 3: the same roles in every app (2026-10-31).** The proposal's
+shared button roles, moved into every built-in app at once. Triangle opens
+the highlighted thing's options: the menu START opened until now, with
+Details first (triangle's own until now) and what square did straight away
+as its rows: the Gallery's Delete, Packages' Remove, the Monitor's order,
+Media's Stop, Add to the queue and Remove from the queue (with Info), the
+Notifications' Remove, the launcher's lists' Forget and New password.
+Square is left to changing a view (a platform's games). START is Quick
+controls everywhere: `quick.c` (Notifications, Terminal, the board's battery,
+Restart PSPExp, Power off, the last two asked again), opened by each view on
+START, its input taken in main.c's `handle_input` before the view's while
+open, drawn by `notify_draw` (every view's last call), its choice taken in
+the main loop (`quick_take`: Terminal leaves an app as HOME does,
+`terminal_show`). `ui_menu` became a panel along the right from x 256, the
+whole height, what it is over dimmed at the left, seven rows of 26 in view
+(more scroll), its own two hints at its foot; the launcher's triangle panel
+and Files' menus (`draw_menu`) are it too. Files' marks: triangle > **Select
+items** (`g_selecting`): cross marks and moves on, circle ends it with the
+marks cleared, the footer says "Selecting: cross marks", a finished job
+ends it. The terminal keeps a keyboard's buttons (START Enter, triangle
+Space). Checked on the PSP-1000 at 1:1: Quick controls over the launcher, Files and
+Notifications, its Terminal (and HOME back), Files' menu, Select items with
+two marked and their menu, and triangle in the Gallery, Media, Packages,
+the System Monitor and Notifications.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the
