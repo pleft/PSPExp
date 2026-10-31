@@ -712,7 +712,7 @@ from `g_link`'s first word and the board's name, "USB · Raspberry Pi 400";
 the music, Bluetooth, the bell, the clock and the PSP's battery, labelled
 PSP; the board's own battery moved to Quick controls), the ribbon (23..57:
 L, Games · Apps · Media · Settings, R; the one shown white and underlined),
-the location line (57..80: "Games / Super Nintendo", "2 / 6"), the browsing
+the location line (57..80: "Games › Super Nintendo", "2 / 6"; the path, the levels above in 13 px grey with a chevron after each, the level shown in 16 px white: "Games / Platforms" at the top, from the mockups, named a list where the rest named a place and read as one more line of small grey text, changed after the stage 3 review), the browsing
 area (80..246) and the hints (246..272). Four categories (`NSEC`), each a
 root level and its children: Games (`CK_PLATS`, its platforms `tab`),
 Apps (Files, Packages, Terminal, System Monitor, then installed apps A to

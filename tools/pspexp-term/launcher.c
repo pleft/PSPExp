@@ -2564,20 +2564,23 @@ static void detail_line(const LEntry *e, char *s, size_t n)
     }
 }
 
-/* where in the category, at the left ("Games / Super Nintendo"); the highlight's place in the list
- * at the right */
+/* where you are, at the left: the path, the levels above muted with a chevron after each, the level
+ * shown last, white and larger ("Games", "Games > Mega Drive", "Settings > Recording"); the
+ * highlight's place in the list at the right */
 static void draw_location(int alpha)
 {
     Cat *c = &g_cat[g_cur];
     char s[160];
-    int p = cat_parent(c), ty = LOC_Y + (BROWSE_Y - LOC_Y - gfx_line_height(FONT_BODY)) / 2;
-    if (p >= 0) snprintf(s, sizeof(s), "%s / %s", g_cat[p].name, c->name);
-    else if (c->kind == CK_PLATS) snprintf(s, sizeof(s), "Games / Platforms");
-    else snprintf(s, sizeof(s), "%s", c->name);
-    gfx_text(FONT_BODY, 16, ty, s, C_SUB, alpha, 330);
+    int p = cat_parent(c), x = 16, cy = LOC_Y + (BROWSE_Y - LOC_Y) / 2;
+    if (p >= 0) {
+        x += gfx_text(FONT_BODY, x, cy - gfx_line_height(FONT_BODY) / 2, g_cat[p].name, C_SUB, alpha, 0) + 4;
+        gfx_icon("chevron-right", 12, x, cy - 6, C_MUTED, alpha);
+        x += 16;
+    }
+    gfx_text(FONT_TITLE, x, cy - gfx_line_height(FONT_TITLE) / 2, c->name, C_TEXT, alpha, 330 - x);
     if (c->n) {
         snprintf(s, sizeof(s), "%d / %d", c->sel + 1, c->n);
-        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), ty + 1, s, C_MUTED, alpha, 0);
+        gfx_text(FONT_SMALL, SCREEN_W - 16 - gfx_text_width(FONT_SMALL, s), cy - gfx_line_height(FONT_SMALL) / 2, s, C_MUTED, alpha, 0);
     }
 }
 

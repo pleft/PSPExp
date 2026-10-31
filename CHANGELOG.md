@@ -7,7 +7,7 @@
   anywhere, each coming back where you left it. The d-pad moves along one
   list, the highlight staying on its second row while the list moves;
   **cross** goes in, **circle** back one level. A line under the categories
-  says where you are ("Games / Super Nintendo", "2 / 6"); the top line how
+  says where you are ("Games › Super Nintendo", "2 / 6"); the top line how
   the PSP is connected and to what ("USB · Raspberry Pi 400") and the PSP's
   battery. PSPExp opens on the game you played last, in its platform.
   Games lists your platforms (Favourites, PSP, your board's own games, one

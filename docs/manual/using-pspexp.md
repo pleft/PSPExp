@@ -34,7 +34,7 @@ it. The d-pad only moves along the list on screen: **cross** goes in,
 **circle** goes back one level (at a category's top there is nothing above,
 and no Back hint). The highlight stays on the second row and the list moves
 under it; the highlighted entry is larger, with a line about it. Under the
-categories a line says where you are ("Games / Super Nintendo") and where
+categories a line says where you are ("Games › Super Nintendo", the place you are in white) and where
 in the list ("2 / 6").
 
 **Games** lists your platforms, each with its console's picture and how
@@ -66,7 +66,7 @@ triangle has **App details**.
 ```
  PSPExp             USB · Raspberry Pi 400           16:40  PSP 67%
  (L)   Games      Apps      Media      Settings                 (R)
- Games / Super Nintendo                                      1 / 5
+ Games > Super Nintendo                                      1 / 5
 
  |[art] Chrono Trigger
  |      Super Nintendo · played lately
