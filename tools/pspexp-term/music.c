@@ -924,14 +924,14 @@ static void draw_now(uint64_t now)
 
 static void list_row(int i, int top, int sel, const char *icon, const char *text, uint32_t col)
 {
-    const int LX = 16, LW = UI_SCREEN_W - 32, ROWH = 24, Y0 = 40;
+    const int LX = 16, LW = UI_SCREEN_W - 32, ROWH = 24, Y0 = 48;   /* (under the title bar and the line saying where) */
     int y = Y0 + (i - top) * ROWH;
     if (sel) { gfx_nine(NINE_R10, LX, y, LW, ROWH - 2, 0xffffff, 26); gfx_rect(LX, y + 5, 3, ROWH - 12, UI_ACCENT, 255); }
     gfx_icon(icon, 16, LX + 10, y + 3, sel ? 0xffffff : UI_ACCENT, 255);
     gfx_text(FONT_BODY, LX + 34, y + 2, text, sel ? 0xffffff : col, 255, LW - 48);
 }
 
-#define ROWS 8
+#define ROWS 7
 
 static void draw_browse(void)
 {
@@ -950,7 +950,7 @@ static void draw_browse(void)
             n = g_nsrv;
         } else {
             for (k = 0; k <= g_upd; k++) { size_t l = strlen(where); snprintf(where + l, sizeof(where) - l, "%s%s", k ? " / " : "", g_ups[k].title); }
-            gfx_text(FONT_SMALL, 16, 26, where, UI_MUTED, 255, UI_SCREEN_W - 32);
+            gfx_text(FONT_SMALL, 16, 31, where, UI_MUTED, 255, UI_SCREEN_W - 32);
             if (!g_upn) { gfx_text(FONT_BODY, 32, 60, "No folders, songs or films here", UI_MUTED, 255, 0); return; }
             n = g_upn;
         }
@@ -976,7 +976,7 @@ static void draw_browse(void)
             snprintf(where, sizeof(where), "%s%s%s", g_root_name, *rest ? " / " : "", rest);
             { char *c; for (c = where + strlen(g_root_name); *c; c++) if (*c == '/' && c[-1] != ' ') { memmove(c + 3, c + 1, strlen(c + 1) + 1); c[0] = ' '; c[1] = '/'; c[2] = ' '; c += 2; } }
         }
-        gfx_text(FONT_SMALL, 16, 26, where, UI_MUTED, 255, UI_SCREEN_W - 32);
+        gfx_text(FONT_SMALL, 16, 31, where, UI_MUTED, 255, UI_SCREEN_W - 32);
     }
     if (!n) { gfx_text(FONT_BODY, 32, 60, g_dir[0] ? "No folders or songs here" : "No places", UI_MUTED, 255, 0); return; }
     for (i = g_btop; i < n && i < g_btop + ROWS; i++) {
@@ -1078,8 +1078,7 @@ static void mu_render(PspExpContext *ctx, uint64_t now)
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_backdrop();
-    gfx_icon("clapperboard", 16, 12, 8, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 34, 5, "Media", UI_TEXT, 255, 0);
+    ui_app_bar("clapperboard", "Media");
     gfx_nine(NINE_R6, tx - 20, 9, 16, 14, 0x1e2c4a, 255);   /* the views, as tabs: L and R on either side */
     gfx_text(FONT_BADGE, tx - 15, 10, "L", UI_SUB, 255, 0);
     for (i = 0; i < NVIEWS; i++) {

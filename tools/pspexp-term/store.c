@@ -510,8 +510,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_backdrop();
-    gfx_icon("package", 16, 12, 8, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 34, 5, "Packages", UI_TEXT, 255, 0);
+    int right = ui_app_bar("package", "Packages"), tabs_end = 0;
     {   /* the sections, as tabs (L / R) */
         static const char *tab[NTABS] = { "Games", "Emulators", "Apps" };
         int tx = 150, n_upd[NTABS] = { 0 };
@@ -528,6 +527,7 @@ static void st_render(PspExpContext *ctx, uint64_t now)
             if (cw) chip(tx + w - 7, 9, c, 0x7c5a12, 0xfff3c4);
             tx += w + 4;
         }
+        tabs_end = tx;
     }
     for (i = 0; i < g_n; i++) {
         int st = status_of(&g_pk[i]);
@@ -537,7 +537,8 @@ static void st_render(PspExpContext *ctx, uint64_t now)
     snprintf(s, sizeof(s), "%d installed", inst);
     if (upd) { snprintf(a, sizeof(a), ", %d update%s", upd, upd == 1 ? "" : "s"); strncat(s, a, sizeof(s) - strlen(s) - 1); }
     if (broken) { snprintf(a, sizeof(a), ", %d broken", broken); strncat(s, a, sizeof(s) - strlen(s) - 1); }
-    gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 9, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
+    if (right - gfx_text_width(FONT_SMALL, s) > tabs_end + 8)   /* (left of HOME Close, where there is room) */
+        gfx_text(FONT_SMALL, right - gfx_text_width(FONT_SMALL, s), 7, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
     if (g_load_pid > 0) {
         int bx = (UI_SCREEN_W - 320) / 2, by = (UI_SCREEN_H - 84) / 2 - 8;
         box("Reading the packages", "What this board can install, what is installed, and what is new.", 84);

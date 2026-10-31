@@ -408,7 +408,7 @@ static void c_input(uint32_t b, uint32_t pressed, int up, int down, int left, in
     if (down && c_sel < g_nn - 1) { c_sel++; c_dirty = 1; }
     if (c_sel < c_top) c_top = c_sel;
     if (c_sel >= c_top + ROWS) c_top = c_sel - ROWS + 1;
-    if (pressed & PSPEXP_BUTTON_CIRCLE) { c_exit = 1; return; }
+    /* (circle: nothing; HOME closes it, as every app: its title bar says so) */
     if ((pressed & PSPEXP_BUTTON_CROSS) && c_sel < g_nn && g_n[c_sel].action[0]) {
         snprintf(g_action, sizeof(g_action), "%s", g_n[c_sel].action);
         c_exit = 1;
@@ -450,9 +450,10 @@ static void c_render(PspExpContext *ctx, uint64_t now)
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_backdrop();
-    gfx_icon("bell", 16, 12, 8, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 34, 5, "Notifications", UI_TEXT, 255, 0);
-    if (g_nn) { snprintf(s, sizeof(s), "%d", g_nn); gfx_text(FONT_SMALL, UI_SCREEN_W - 12 - gfx_text_width(FONT_SMALL, s), 9, s, UI_MUTED, 255, 0); }
+    {
+        int right = ui_app_bar("bell", "Notifications");
+        if (g_nn) { snprintf(s, sizeof(s), "%d", g_nn); gfx_text(FONT_SMALL, right - gfx_text_width(FONT_SMALL, s), 7, s, UI_MUTED, 255, 0); }
+    }
     if (!g_nn) {
         gfx_icon("bell-off", 32, (UI_SCREEN_W - 32) / 2, 96, UI_MUTED, 255);
         snprintf(s, sizeof(s), "No notifications");
@@ -486,7 +487,6 @@ static void c_render(PspExpContext *ctx, uint64_t now)
     else {
         if (c_sel < g_nn && g_n[c_sel].action[0]) x = ui_hint_btn(x, 'x', "Go there");
         if (g_nn) { x = ui_hint_btn(x, 's', "Remove"); x = ui_hint_cap(x, "START", "Menu", UI_SUB); }
-        ui_hint_btn(x, 'o', "Close");
     }
     notify_draw(now);
     pspexp_present(ctx);

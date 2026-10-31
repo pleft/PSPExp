@@ -5,6 +5,13 @@ buttons; the board needs no screen, keyboard or mouse.
 
 ## The same buttons everywhere
 
+Every app (Files, Media, Gallery, Packages, System Monitor, Notifications)
+has a title bar across the top with its name, and at its right end **HOME
+Close**: the one way out of an app, as of a game. Circle only ever steps
+back inside it (pressed a few times, it stops at the app's top, never
+throws you out). The launcher has no such bar: Games, Apps and Settings
+along the top instead.
+
 | Button | What it does, on every screen |
 |---|---|
 | HOME | leave what is on screen: in an app or a game, press it twice (the first shows "HOME again to quit" for 3 seconds), and the launcher comes back; in the launcher, the PSP's own "Quit?" (to the XMB); in your own PSP games, the PSP's HOME menu (Exit Game: back to PSPExp); held 2 s, PSPExp quits from anywhere |
@@ -91,7 +98,7 @@ to open the list (or START > Notifications), the last 50, newest first:
 - **cross**: go where it is about (Packages for updates, Settings for the
   network or Bluetooth), when there is somewhere to go;
 - **square**: remove it; **START**: the menu (go there, remove, clear them all);
-- **circle**: close.
+- **HOME**: close (as in every app).
 
 While you play, nothing interrupts the game: what came meanwhile is
 summed up in one banner when you are back ("3 notifications while you

@@ -702,8 +702,7 @@ static void draw_header(void)
 {
     static const char *tab[NTABS] = { "All", "Screenshots", "Videos" };
     int i, tx = 132;
-    gfx_icon("images", 16, 12, 8, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 34, 5, "Gallery", UI_TEXT, 255, 0);
+    ui_app_bar("images", "Gallery");
     gfx_nine(NINE_R6, tx - 20, 9, 16, 14, 0x1e2c4a, 255);   /* the kinds, as tabs: L and R on either side */
     gfx_text(FONT_BADGE, tx - 15, 10, "L", UI_SUB, 255, 0);
     for (i = 0; i < NTABS; i++) {

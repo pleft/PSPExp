@@ -25,13 +25,13 @@
 
 /* ---- layout -------------------------------------------------------------------- */
 
-#define PANEL_Y   6
-#define PANEL_H   238
+#define PANEL_Y   (UI_BAR_H + 6)   /* under the title bar (2026-10-31) */
+#define PANEL_H   210
 #define PANEL_W   230
 #define PANEL_GAP 8
 #define LIST_Y    (PANEL_Y + 34)
 #define ROW_H     16
-#define ROWS      12
+#define ROWS      10
 
 typedef struct Panel {
     char path[FOPS_PATH];
@@ -1161,6 +1161,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         g_dirty = 0;
         return;
     }
+    ui_app_bar("folder-open", "Files");
     draw_panel(0);
     draw_panel(1);
     x = 12;

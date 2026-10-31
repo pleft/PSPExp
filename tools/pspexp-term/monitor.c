@@ -335,8 +335,7 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
     pspexp_begin_frame(ctx);
     pspexp_set_clip(ctx, 0, 0, UI_SCREEN_W, UI_SCREEN_H);
     gfx_backdrop();
-    gfx_icon("activity", 16, 12, 8, UI_ACCENT, 255);
-    gfx_text(FONT_TITLE, 34, 5, "System Monitor", UI_TEXT, 255, 0);
+    int right = ui_app_bar("activity", "System Monitor");
     {   /* the pages as tabs */
         const char *tab[2] = { "Overview", "Programs" };
         int i, tx = 190;
@@ -349,7 +348,7 @@ static void mon_render(PspExpContext *ctx, uint64_t now)
     }
     localtime_r(&t, &lt);
     strftime(s, sizeof(s), "%H:%M", &lt);
-    gfx_text(FONT_BODY, UI_SCREEN_W - 12 - gfx_text_width(FONT_BODY, s), 7, s, UI_SUB, 255, 0);
+    gfx_text(FONT_BODY, right - gfx_text_width(FONT_BODY, s), 5, s, UI_SUB, 255, 0);
     if (g_page == PAGE_OVERVIEW) draw_overview(ctx);
     else draw_programs();
     x = 12;

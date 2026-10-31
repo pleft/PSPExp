@@ -22,6 +22,19 @@ int ui_hint_btn(int x, char b, const char *label)
     return x + gfx_text(FONT_SMALL, x, UI_HINT_Y - 1, label, UI_SUB, 255, 0) + 14;
 }
 
+int ui_app_bar(const char *icon, const char *title)
+{
+    int bw = gfx_text_width(FONT_BADGE, "HOME") + 10, lw = gfx_text_width(FONT_SMALL, "Close"), x = UI_SCREEN_W - 12 - lw - 5 - bw;
+    gfx_rect(0, 0, UI_SCREEN_W, UI_BAR_H, 0x0a1120, 235);
+    gfx_rect(0, UI_BAR_H, UI_SCREEN_W, 1, 0x283a5c, 255);
+    gfx_icon(icon, 16, 12, 6, UI_ACCENT, 255);
+    gfx_text(FONT_TITLE, 34, 4, title, UI_TEXT, 255, 0);
+    gfx_nine(NINE_R6, x, 7, bw, 14, 0x1e2c4a, 255);
+    gfx_text(FONT_BADGE, x + 5, 7 + (14 - gfx_line_height(FONT_BADGE)) / 2, "HOME", UI_SUB, 255, 0);
+    gfx_text(FONT_SMALL, x + bw + 5, 7, "Close", UI_SUB, 255, 0);
+    return x - 10;
+}
+
 /* ---- the menu --------------------------------------------------------------------- */
 
 void ui_menu_begin(UiMenu *m, const char *title)
