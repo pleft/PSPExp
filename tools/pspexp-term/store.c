@@ -384,7 +384,7 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
     (void)b; (void)now;
     if (!pressed && !up && !down && !left && !right) return;
     g_dirty = 1;
-    if (g_load_pid > 0) return;   /* reading the list (HOME leaves meanwhile) */
+    if (g_load_pid > 0) { if (pressed & PSPEXP_BUTTON_START) quick_open(); return; }   /* reading the list (HOME leaves meanwhile; START is Quick controls) */
     if (g_more) { if (pressed) g_more = 0; return; }
     if (g_menu.open) {
         int id = ui_menu_input(&g_menu, pressed, up, down);

@@ -816,6 +816,20 @@ tick, each repeat of a held direction too); Settings > Sound > Button sounds
 also read "Wi-Fi," over TCP (the link's description is "Wi-Fi, PSP at ..."):
 it now stops at the comma too.
 
+**Quick controls says how things stand (2026-10-31).** What the status
+line gave up went into Quick controls, as info rows between Terminal and
+Restart (`launcher_status_info`): the PSP link (USB, Wi-Fi), the board's
+network (Ethernet, or Wi-Fi with its network's name, read when Quick
+controls opens, and its strength in words: off, weak, good, strong, the
+icon's bars too), the sound (the PSP, or Headphones and their volume) and
+the board's own battery when it has one (named after the board, a battery
+icon, no board icon: it told nothing). Cross on the network or the sound
+leaves the app and opens their Settings group (`QK_SETTINGS`,
+`launcher_show`); on the others it reads them anew. The panel shows eight
+rows of 25. Packages reading its list let START through too (it swallowed
+every button meanwhile). Checked on the PSP-1000 at 1:1: Quick controls over
+Apps and Packages, Network from Packages to Settings › Network.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

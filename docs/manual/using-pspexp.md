@@ -94,8 +94,12 @@ up / down, cross sets the one highlighted, circle leaves it as it was.
 The top line shows PSPExp, how the PSP is connected and to what ("USB ·
 Raspberry Pi 400"), and on the right a note while music is loaded,
 Bluetooth headphones, the **bell** while there is news (with how many),
-the clock and the PSP's battery. The board's own battery (the GameShell's)
-is in Quick controls.
+the clock and the PSP's battery. The rest is in **Quick controls**
+(START): how the PSP is connected, the board's network (Ethernet, or its
+Wi-Fi with the network's name and how strong it is), the sound (the PSP,
+or the headphones and their volume), and the board's own battery when it
+has one (the GameShell's). Cross on the network or the sound opens its
+Settings.
 
 | Button | In the launcher |
 |---|---|
@@ -106,7 +110,7 @@ is in Quick controls.
 | square | in a platform's games: Focus or Grid |
 | triangle | a game's options (favourite, Game details, Sort by), an app's App details |
 | SELECT | in Games, **Search** (games, apps and every ROM, by name) |
-| START | **Quick controls**: Notifications, Terminal, the board's battery when it has one, Restart PSPExp and Power off the board (each asked again) |
+| START | **Quick controls**: Notifications, Terminal; the PSP link, the board's network and Wi-Fi strength, the sound and the headphones' volume, the board's battery when it has one; Restart PSPExp and Power off the board (each asked again) |
 
 ## Notifications
 

@@ -1679,6 +1679,20 @@ static void terminal_show(void)
     T.dirty = 1;
 }
 
+/* the launcher, from Quick controls over an app or Files (Network, Sound: their Settings) */
+static void launcher_show(void)
+{
+    swallow();
+    if (g_app) {
+        if (g_app->leave) g_app->leave();
+        if (g_app == &MUSIC_APP) music_leave();
+        if (g_app_back) { g_app_back = NULL; music_set_back(0); }
+        g_app = NULL; g_app_from_files = 0;
+    }
+    g_view_files = 0; g_view_launcher = 1;
+    launcher_invalidate();
+}
+
 /* the app that opened this one, as it was left (its open not called again) */
 static void app_back(void)
 {
@@ -3365,6 +3379,7 @@ int main(int argc, char **argv)
             switch (quick_take()) {   /* chosen in Quick controls, over any view */
             case QK_NOTIFY: app_show(app_find("notifications")); break;
             case QK_TERMINAL: terminal_show(); break;
+            case QK_SETTINGS: launcher_show(); launcher_category(quick_settings_group()); break;
             case QK_RESTART: fprintf(stderr, "[pspexp-term] restarting (Quick controls)\n"); g_quit = 1; break;
             case QK_POWEROFF: launcher_power_off(now); break;
             default: break;

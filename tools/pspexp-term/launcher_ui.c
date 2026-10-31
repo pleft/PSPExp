@@ -71,7 +71,7 @@ int ui_menu_input(UiMenu *m, uint32_t pressed, int up, int down)
 
 void ui_menu_draw(const UiMenu *m)
 {
-    const int X = UI_PANEL_X, W = UI_SCREEN_W - UI_PANEL_X, Y0 = 42, RH = 26, ROWS = 7;
+    const int X = UI_PANEL_X, W = UI_SCREEN_W - UI_PANEL_X, Y0 = 40, RH = 25, ROWS = 8;
     int i, top, x;
     if (!m->open) return;
     top = m->sel - ROWS + 1 > 0 ? m->sel - ROWS + 1 : 0;   /* (the highlight in view, the rows below it next) */

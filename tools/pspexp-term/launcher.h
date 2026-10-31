@@ -96,12 +96,18 @@ int  launcher_take_clips_change(void);
 /* how the console reaches the PSP right now ("USB", "Wi-Fi 192.168.50.2"),
  * for the About page */
 void launcher_set_link(const char *desc);
-/* Quick controls (quick.c): the board's own battery ("GameShell battery"; 0 when it has none), and
- * its Power off, already asked again */
-int  launcher_board_battery(char *label, size_t n, int *pct, int *chg);
+/* what Quick controls (quick.c) shows: how the PSP is connected ("USB", "Wi-Fi"); the board's network
+ * (wired; Wi-Fi 0 off .. 3 strong, -1 none, its name; whether Settings has a Network group); the sound
+ * on Bluetooth and its volume (-1 not known); the board's own battery (-1 none) and the board's name */
+typedef struct LauncherStatus {
+    char link[24], ssid[64], board[48];
+    int wired, wifi, net_settings, bt, bt_vol, bat, chg;
+} LauncherStatus;
+void launcher_status_info(LauncherStatus *s);
+/* and its Power off, already asked again */
+void launcher_power_off(uint64_t now);
 /* Settings > Sound > Button sounds (sfx.h): on (1, the default) or off */
 int  launcher_button_sounds(void);
-void launcher_power_off(uint64_t now);
 /* the PSP's runtime, read from its stick on each connection (About): the slot
  * running ('a' / 'b'; '-' an install without slots; 0 not known), a finished
  * update waiting for a restart (its slot, 0 none), and the running slot's version */

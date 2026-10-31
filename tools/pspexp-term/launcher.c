@@ -2146,13 +2146,19 @@ void launcher_power_off(uint64_t now)
     }
 }
 int launcher_button_sounds(void) { return g_button_sounds; }
-int launcher_board_battery(char *label, size_t n, int *pct, int *chg)
+void launcher_status_info(LauncherStatus *s)
 {
-    if (g_bat < 0) return 0;
+    memset(s, 0, sizeof(*s));
     board_detect();
-    snprintf(label, n, "%s battery", g_board.name);
-    *pct = g_bat; *chg = g_chg;
-    return 1;
+    snprintf(s->board, sizeof(s->board), "%s", g_board.name);
+    snprintf(s->link, sizeof(s->link), "%s", g_link);
+    s->link[strcspn(s->link, " ,")] = 0;   /* "USB", "Wi-Fi, PSP at ...": the way */
+    if (!strcmp(s->link, "not")) snprintf(s->link, sizeof(s->link), "Not connected");
+    s->wired = g_wired; s->wifi = g_wifi < -1 ? -1 : g_wifi;
+    s->net_settings = board_wifi_kind() != BOARD_WIFI_NONE;
+    if (s->net_settings && !s->wired && s->wifi > 0) board_wifi_current(board_wifi_kind(), s->ssid, sizeof(s->ssid));   /* (now: popen, once a Quick controls) */
+    s->bt = g_snd_on; s->bt_vol = g_snd_vol;
+    s->bat = g_bat; s->chg = g_chg;
 }
 
 static void menu_choose(int id, uint64_t now)

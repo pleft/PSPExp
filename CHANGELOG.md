@@ -16,7 +16,9 @@
   which open the Media app in those folders. Settings lists its groups,
   each its settings: on / off flips in place, a choice (Clip length,
   Quality) opens its values with the current one ticked. **START** is
-  Quick controls (Notifications, Terminal, Restart PSPExp, Power off),
+  Quick controls (Notifications, Terminal; the PSP link, the board's
+  network and Wi-Fi strength, the sound and the headphones' volume, the
+  board's battery; Restart PSPExp, Power off),
   **SELECT** Search in Games; holding SELECT no longer opens the terminal
   (Apps or Quick controls do).
 - **Games with their art**: a platform's games show their box art at its
