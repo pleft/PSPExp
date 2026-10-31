@@ -20,7 +20,7 @@ watch on the PSP or copy anywhere.
 **In your own PSP games** (UMD, ISO, the PSP list), the same, with two
 things first:
 
-- Once: switch on the PSPExp plugin in **Settings > This PSP > PSPExp
+- Once: switch on the PSPExp plugin in **Settings > PSP > PSPExp
   plugin** (it needs PRO custom firmware; [the plugin](plugin.md)).
 - Keep the PSP plugged into the board, and wait until the game has started:
   ♪ + L does nothing in its first seconds (up to 20).
@@ -95,7 +95,7 @@ seconds long.
 **Quick controls** (START, anywhere in PSPExp) has the same: **Start
 recording** (or **Stop recording** while one runs) and, with Clips on,
 **Save the last 30 seconds**; the PSP's dot answers as for the buttons.
-(It needs the PSP updated with this version: Settings > Update the PSP.)
+(It needs the PSP updated with this version: Settings > Update PSP.)
 
 | Press | What happens | You see, bottom right |
 |---|---|---|
@@ -134,9 +134,9 @@ game's speed.
 ## If something does not work
 
 - **No dot:** check that the PSP is plugged into the board. In your own PSP
-  games, check that the PSPExp plugin is On (Settings > This PSP) and that the
+  games, check that the PSPExp plugin is On (Settings > PSP) and that the
   game has started. Keep PSPExp up to date on the board (Apps > Packages) and
-  on the PSP (Settings > Update the PSP).
+  on the PSP (Settings > Update PSP).
 - **The dot goes out by itself:** the board stopped hearing the PSP. What was
   recorded is saved; the plugin reconnects after a few seconds, and ♪ + L
   starts a new recording.

@@ -495,7 +495,7 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
         int idx = (g_log_n + i) % 4;
         printf("  %-64s\n", g_log[idx]);
     }
-    if (g_gone_view == 2) printf("\nTRIANGLE: back to the card                     \n");
+    if (g_gone_view == 2) printf("\nTRIANGLE: back to card                         \n");
 }
 
 /* Back to the status page: the debug screen takes the display over from the GE. */

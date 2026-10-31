@@ -562,12 +562,12 @@ static void menu_open(void)
         g_menu.title[0] = (char)(g_menu.title[0] - 32);   /* "Screenshot" */
         if (g_view == V_ITEMS) ui_menu_add(&g_menu, GM_PLAY, g_it[i].kind == K_SHOT ? "image" : "circle-play", g_it[i].kind == K_SHOT ? "Show" : "Play", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_DETAILS, "info", "Details", NULL, 0, 0);
-        ui_menu_add(&g_menu, GM_COPY, "memory-stick", "Copy to the PSP", NULL, 0, 0);
+        ui_menu_add(&g_menu, GM_COPY, "memory-stick", "Copy to PSP", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_DELETE, "trash-2", "Delete", NULL, 0, 0);
     } else {
         ui_menu_begin(&g_menu, g_al[a].name);
         ui_menu_add(&g_menu, GM_DETAILS, "info", "Details", NULL, 0, 0);
-        ui_menu_add(&g_menu, GM_COPY, "memory-stick", g_tab == T_ALL ? "Copy all to the PSP" : g_tab == T_SHOTS ? "Copy its screenshots to the PSP" : "Copy its videos to the PSP", NULL, 0, 0);
+        ui_menu_add(&g_menu, GM_COPY, "memory-stick", g_tab == T_ALL ? "Copy all to PSP" : g_tab == T_SHOTS ? "Copy its screenshots to PSP" : "Copy its videos to PSP", NULL, 0, 0);
         ui_menu_add(&g_menu, GM_DELETE, "trash-2", g_tab == T_ALL ? "Delete all" : g_tab == T_SHOTS ? "Delete its screenshots" : "Delete its videos", NULL, 0, 0);
     }
     if (g_view != V_PICTURE) ui_menu_add(&g_menu, GM_SORT, "arrow-up-down", "Order", g_oldest ? "oldest first" : "newest first", g_menu.n > 0, 0);
@@ -721,7 +721,7 @@ static void draw_empty(const char *what)
     gfx_icon("images", 32, (UI_SCREEN_W - 32) / 2, y, UI_MUTED, 220);
     gfx_text(FONT_BODY, (UI_SCREEN_W - gfx_text_width(FONT_BODY, what)) / 2, y + 42, what, UI_TEXT, 255, 0);
     {
-        const char *l1 = "On the PSP: ♪ + L twice takes a screenshot, ♪ + L records,", *l2 = "♪ + R keeps the last seconds (Settings / Recording / Clips)";
+        const char *l1 = "On PSP: ♪ + L twice takes a screenshot, ♪ + L records,", *l2 = "♪ + R keeps last seconds (Settings / Recording / Clips)";
         gfx_text(FONT_SMALL, (UI_SCREEN_W - gfx_text_width(FONT_SMALL, l1)) / 2, y + 66, l1, UI_SUB, 255, 0);
         gfx_text(FONT_SMALL, (UI_SCREEN_W - gfx_text_width(FONT_SMALL, l2)) / 2, y + 82, l2, UI_SUB, 255, 0);
     }
@@ -866,7 +866,7 @@ static void draw_confirm(void)
         int n = g_tab == T_SHOTS ? a->nshot : g_tab == T_VIDEOS ? a->nvid : a->nshot + a->nvid;
         snprintf(s, sizeof(s), "Delete %s %d %s of %s?", n == 1 ? "the" : "all", n,
                  g_tab == T_SHOTS ? kind_word(K_SHOT, n != 1) : g_tab == T_VIDEOS ? kind_word(K_VIDEO, n != 1) : n == 1 ? "capture" : "captures", a->name);
-    } else snprintf(s, sizeof(s), "Delete this %s?", kind_word(g_it[cur_item()].kind, 0));
+    } else snprintf(s, sizeof(s), "Delete %s?", kind_word(g_it[cur_item()].kind, 0));
     draw_box(h, s);
     gfx_text(FONT_SMALL, bx + 16, by + 34, "It is gone from this board for good.", UI_SUB, 255, w - 32);
     gfx_button('x', bx + 16, by + 60); gfx_text(FONT_SMALL, bx + 34, by + 59, "Delete", UI_TEXT, 255, 0);
@@ -883,8 +883,8 @@ static void draw_copy(void)
         int n = 0;
         while (d && (e = readdir(d))) if (e->d_name[0] != '.' && !strstr(e->d_name, ".part.")) n++;
         if (d) closedir(d);
-        draw_box(h, "Copying to the PSP");
-        gfx_text(FONT_SMALL, bx + 16, by + 32, "Making the videos ready for the PSP's player", UI_SUB, 255, w - 32);
+        draw_box(h, "Copying to PSP");
+        gfx_text(FONT_SMALL, bx + 16, by + 32, "Making videos ready for PSP's player", UI_SUB, 255, w - 32);
         gfx_nine(NINE_R6, bx + 16, by + 52, w - 32, 10, 0x151a26, 255);
         if (n > 0 && g_nprep) gfx_nine(NINE_R6, bx + 16, by + 52, (w - 32) * (n > g_nprep ? g_nprep : n) / g_nprep, 10, UI_ACCENT, 255);
         snprintf(line, sizeof(line), "%d / %d", n, g_nprep);
@@ -892,7 +892,7 @@ static void draw_copy(void)
         const FJob *j = &g_cjob[g_cphase == 0 ? 0 : 1];
         uint64_t done = j->bytes_done, tot = j->bytes_total;
         int pct = tot ? (int)(done * 100 / tot) : 0;
-        draw_box(h, "Copying to the PSP");
+        draw_box(h, "Copying to PSP");
         gfx_text(FONT_SMALL, bx + 16, by + 32, j->current, UI_SUB, 255, w - 32);
         gfx_nine(NINE_R6, bx + 16, by + 52, w - 32, 10, 0x151a26, 255);
         if (pct > 0) gfx_nine(NINE_R6, bx + 16, by + 52, (w - 32) * (pct > 100 ? 100 : pct) / 100, 10, UI_ACCENT, 255);

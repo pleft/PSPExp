@@ -1186,7 +1186,7 @@ static void menu_run(const TermMenuItem *it)
 static const char *const HELP[][2] = {
     { "#", "Typing" },
     { "D-pad", "move on the keyboard (hidden: arrow keys)" },
-    { "Cross", "type the highlighted key" },
+    { "Cross", "type highlighted key" },
     { "Square", "Backspace" },
     { "Circle", "Esc" },
     { "Triangle", "Space" },
@@ -1196,8 +1196,8 @@ static const char *const HELP[][2] = {
     { "R + Square", "Ctrl-C (stop)" },
     { "Nub", "arrow keys (keyboard shown)" },
     { "#", "Screen" },
-    { "Select", "keyboard on / off   held: the launcher" },
-    { "L + R + left/right", "the other shells (up to four)" },
+    { "Select", "keyboard on / off   held: launcher" },
+    { "L + R + left/right", "other shells (up to four)" },
     { "L + Square", "copy: move, cross start / end, triangle line" },
     { "L + Circle", "paste" },
     { "R + up/down", "scroll a line   left/right: a page" },
@@ -1205,7 +1205,7 @@ static const char *const HELP[][2] = {
     { "", "  the nub alone)" },
     { "L + Select", "scroll mode: nothing held; circle leaves" },
     { "#", "Menu" },
-    { "L tapped", "this menu: keys, commands, settings" },
+    { "L tapped", "menu: keys, commands, settings" },
     { "D-pad / Cross", "choose / run it     Circle: back" },
 };
 
@@ -1222,7 +1222,7 @@ static void draw_help(void)
         text(x0 + 20, y, HELP[i][0], rgb565(th->accent));
         text(x0 + 20 + 17 * UI_W, y, HELP[i][1], rgb565(th->key_text));
     }
-    text(x0 + w - 26 * UI_W, y0 + h - 12, "any button closes this", rgb565(th->heading));
+    text(x0 + w - 26 * UI_W, y0 + h - 12, "any button closes help", rgb565(th->heading));
 }
 
 #define MENU_W 34                      /* characters */
@@ -2417,7 +2417,7 @@ static void psp_slots_check(void)
         /* the plugin not on: said once on this board, for someone who never opens the manual (once
          * seen on, never: switching it off is a choice); its switch is a notification's cross away */
         if ((plug == PSP_PLUGIN_ON || plug == PSP_PLUGIN_OFF || plug == PSP_PLUGIN_MISSING) && launcher_first_time("plugin_hint") && plug != PSP_PLUGIN_ON)
-            notify(NOTE_ATTN, "puzzle", "Play and record your own PSP games", "Switch on the PSPExp plugin once: Settings > This PSP", "category:This PSP", "psp-plugin");
+            notify(NOTE_ATTN, "puzzle", "Play and record your own PSP games", "Switch on the PSPExp plugin once: Settings > PSP", "category:Settings/PSP", "psp-plugin");
     }
     if (s.fallback[0] && strcmp(s.fallback, reported)) {   /* the loader fell back: say so once */
         snprintf(reported, sizeof(reported), "%s", s.fallback);
@@ -2440,12 +2440,12 @@ static void psp_slots_check(void)
     plug_old = psp_plugin_outdated(ctx, runtime_dir(), s.dir) > 0;
     if (strcmp(have, s.version[s.current - 'a']) <= 0) {
         if (!plug_old) { if (g_launcher_on) launcher_set_psp_update(0); return; }
-        fprintf(stderr, "[pspexp-term] the PSP's PSPExp plugin is not this board's: Settings > Update the PSP\n");
-        if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSPExp plugin is here", "Settings > Update the PSP", "category:Settings", "psp-runtime"); }
+        fprintf(stderr, "[pspexp-term] the PSP's PSPExp plugin is not this board's: Settings > Update PSP\n");
+        if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSPExp plugin is here", "Settings > Update PSP", "category:Settings", "psp-runtime"); }
         return;
     }
-    fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: Settings > Update the PSP\n", s.version[s.current - 'a'], have);
-    if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSP runtime is here", "Settings > Update the PSP", "category:Settings", "psp-runtime"); }
+    fprintf(stderr, "[pspexp-term] PSP runtime %s, the board has %s: Settings > Update PSP\n", s.version[s.current - 'a'], have);
+    if (g_launcher_on) { launcher_set_psp_update(1); notify(NOTE_ATTN, "download", "A newer PSP runtime is here", "Settings > Update PSP", "category:Settings", "psp-runtime"); }
 }
 
 /* this board's clock comes from the network (NTP) and is believed */

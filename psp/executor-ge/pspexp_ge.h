@@ -68,7 +68,7 @@ void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32
 
 /* A frame the host began and never ended (the link went in the middle of it): dropped, never shown */
 void pspexp_ge_drop_frame(PspExpGeExecutor *ge);
-/* The card the PSP shows when the board went ("No connection to the board"; scripts/dev/make-lost-card.py)
+/* The card the PSP shows when the board went ("Connection lost"; scripts/dev/make-lost-card.py)
  * centred on the frame on screen, darkened under it: on `picture` (480x272 RGB 5650, 16-byte aligned,
  * pspexp_ge_read_display's) put back there first, or NULL on what is there. Not inside a frame. */
 void pspexp_ge_lost_card(PspExpGeExecutor *ge, const uint16_t *picture);

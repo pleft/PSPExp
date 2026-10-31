@@ -592,19 +592,19 @@ static void media_menu(int keep)
         int folder = g_upl[g_bsel].kind == UPNP_FOLDER;
         snprintf(g_menu.title, sizeof(g_menu.title), "%s", g_upl[g_bsel].title);
         ui_menu_add(&g_menu, MM_GO, folder ? "folder-open" : "play", folder ? "Open" : "Play", NULL, 0, 0);
-        if (!folder) ui_menu_add(&g_menu, MM_ADD, "list", "Add to the queue", NULL, 0, 0);
+        if (!folder) ui_menu_add(&g_menu, MM_ADD, "list", "Add to queue", NULL, 0, 0);
         item = 1;
     } else if (g_view == V_BROWSE && !g_up && g_dir[0] && g_bsel < lib_rows()) {
         const FEntry *e = lib_entry(g_bsel);
         if (!e) {   /* Play all, Shuffle */
             snprintf(g_menu.title, sizeof(g_menu.title), "%s", g_dir[0] ? strrchr(g_dir, '/') ? strrchr(g_dir, '/') + 1 : g_dir : "");
             ui_menu_add(&g_menu, MM_GO, g_bsel == 0 ? "play" : "shuffle", g_bsel == 0 ? "Play all" : "Shuffle", NULL, 0, 0);
-            ui_menu_add(&g_menu, MM_ADD, "list", "Add the folder to the queue", NULL, 0, 0);
+            ui_menu_add(&g_menu, MM_ADD, "list", "Add folder to queue", NULL, 0, 0);
         } else {
             const struct LTitle *t = &g_lt[g_bsel - g_nspec];
             snprintf(g_menu.title, sizeof(g_menu.title), "%s", e->is_dir ? e->name : t->title[0] ? t->title : e->name);
             ui_menu_add(&g_menu, MM_GO, e->is_dir ? "folder-open" : "play", e->is_dir ? "Open" : "Play", NULL, 0, 0);
-            ui_menu_add(&g_menu, MM_ADD, "list", "Add to the queue", NULL, 0, 0);
+            ui_menu_add(&g_menu, MM_ADD, "list", "Add to queue", NULL, 0, 0);
             ui_menu_add(&g_menu, MM_INFO, "info", "Info", NULL, 0, 0);
         }
         item = 1;
@@ -616,13 +616,13 @@ static void media_menu(int keep)
     } else if (g_view == V_QUEUE && g_qn && g_qsel < g_qn) {
         snprintf(g_menu.title, sizeof(g_menu.title), "%s", track_name(g_qsel));
         ui_menu_add(&g_menu, MM_GO, "play", "Play", NULL, 0, 0);
-        if (g_qsel != g_at) ui_menu_add(&g_menu, MM_REMOVE, "trash-2", "Remove from the queue", NULL, 0, 0);
+        if (g_qsel != g_at) ui_menu_add(&g_menu, MM_REMOVE, "trash-2", "Remove from queue", NULL, 0, 0);
         ui_menu_add(&g_menu, MM_INFO, "info", "Info", NULL, 0, 0);
         item = 1;
     }
     ui_menu_add(&g_menu, MM_SHUFFLE, "shuffle", "Shuffle", g_shuffle ? "On" : "Off", item, 0);
     ui_menu_add(&g_menu, MM_REPEAT, g_repeat == R_ONE ? "repeat-1" : "repeat", "Repeat", rep[g_repeat], 0, 0);
-    if (g_view == V_QUEUE && g_qn) ui_menu_add(&g_menu, MM_CLEAR, "trash-2", "Clear the queue", NULL, 0, 0);
+    if (g_view == V_QUEUE && g_qn) ui_menu_add(&g_menu, MM_CLEAR, "trash-2", "Clear queue", NULL, 0, 0);
     if (keep && sel < g_menu.n) g_menu.sel = sel;
     g_dirty = 1;
 }
@@ -893,7 +893,7 @@ static void draw_now(uint64_t now)
         gfx_nine(NINE_R10, 24, 44, 128, 128, UI_TILE, 255);
         gfx_icon("music", 64, 24 + 32, 44 + 32, UI_MUTED, 255);
         gfx_text(FONT_TITLE, x, 60, "Nothing playing", UI_TEXT, 255, 0);
-        gfx_text_wrapped(FONT_SMALL, x, 90, "Choose songs or films in the Library (R), or one in Files.", UI_SUB, 255, UI_SCREEN_W - x - 16, 14, 3);
+        gfx_text_wrapped(FONT_SMALL, x, 90, "Choose songs or films in Library (R), or one in Files.", UI_SUB, 255, UI_SCREEN_W - x - 16, 14, 3);
         return;
     }
     if (have && pi.cover[0] && strcmp(g_cover_key, pi.cover)) {
@@ -966,8 +966,8 @@ static void draw_browse(void)
             return;
         }
         if (g_up == UP_SERVERS) {
-            gfx_text(FONT_SMALL, 16, 26, "Media servers on the network", UI_MUTED, 255, UI_SCREEN_W - 32);
-            if (!g_nsrv) { gfx_text_wrapped(FONT_BODY, 32, 60, "No media server answered. Plex, Jellyfin, Kodi, MiniDLNA or a NAS with DLNA on, on this network, appear here.", UI_MUTED, 255, UI_SCREEN_W - 64, 18, 4); return; }
+            gfx_text(FONT_SMALL, 16, 26, "Media servers on your network", UI_MUTED, 255, UI_SCREEN_W - 32);
+            if (!g_nsrv) { gfx_text_wrapped(FONT_BODY, 32, 60, "No media server answered. Plex, Jellyfin, Kodi, MiniDLNA or a NAS with DLNA on, on your network, appear here.", UI_MUTED, 255, UI_SCREEN_W - 64, 18, 4); return; }
             n = g_nsrv;
         } else {
             for (k = 0; k <= g_upd; k++) { size_t l = strlen(where); snprintf(where + l, sizeof(where) - l, "%s%s", k ? " / " : "", g_ups[k].title); }
@@ -1021,7 +1021,7 @@ static void draw_browse(void)
 static void draw_queue(void)
 {
     int i;
-    if (!g_qn) { gfx_text(FONT_BODY, 32, 60, "The queue is empty: square adds songs in the Library.", UI_MUTED, 255, 0); return; }
+    if (!g_qn) { gfx_text(FONT_BODY, 32, 60, "Queue is empty: square adds songs in Library.", UI_MUTED, 255, 0); return; }
     if (g_qsel < g_qtop) g_qtop = g_qsel;
     if (g_qsel >= g_qtop + ROWS) g_qtop = g_qsel - ROWS + 1;
     for (i = g_qtop; i < g_qn && i < g_qtop + ROWS; i++)

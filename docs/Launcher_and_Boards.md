@@ -900,7 +900,7 @@ and built in 2.5 s; Sonic Adventure, a Dreamcast game, and a PSP game found)
 and on the PSP-1000 through the GameShell (76 s; Streets of Rage 2: About
 with its paragraphs, scrolled, and Info).
 
-**Themes (2026-10-31).** Settings > This PSP > Theme (`a:theme`, the library's
+**Themes (2026-10-31).** Settings > PSP > Theme (`a:theme`, the library's
 `theme`, 0 Midnight): Midnight, Crimson, Emerald, Violet, Amber, Graphite,
 first chosen from mockups (real PSP screenshots recoloured). PSPExp's
 colours are blues, so a theme is a transform in the drawing layer
@@ -927,6 +927,25 @@ executor, and the console sends the theme's hue and saturation (`THEME`,
 connection; the PSP turns its pictures once into copies in RAM and keeps
 them across connections (the card shows with no board). A console on
 Midnight turns them back. Architecture, "Themes on the PSP".
+
+**Labels without "the" and "this" (2026-11-01).** Labels, headers and the
+lines under them name things plainly: "the PSP" and "this PSP" are "PSP";
+"the board" and "this board" are the board's name (`launcher_board_name`:
+GameShell, Omega2+, the Raspberry Pi's model, Mac; another board its own
+model, else its host name). So the Settings groups This PSP and This board
+are **PSP** and the board's name (the group's `GROUPS` entry is NULL: the
+name filled in), **Update the PSP** is **Update PSP**, About's heading is
+the board's name in capitals, Quick controls says "Power off GameShell",
+and the apps' lines "Raspberry Pi 400's drives and PSP's memory stick".
+Other words lost their article where the sentence stays whole ("Copy to
+other panel", "Add to queue"); where it would not, the line was reworded
+("for its clock", "always records"). Messages and notifications kept theirs.
+Two names now appear in two sections (the PSP platform and the PSP group;
+the board's games and its group), so `launcher_category` takes
+`Settings/PSP`, notifications jump with it, and the levels kept across a
+rebuild match by section and name. Older passages here say This PSP, This
+board and Update the PSP. Checked in PPSSPP at 1:1 (18 screens, the Mac's
+name in them) and with the launcher and settings suites.
 
 ### 3.4 Status (2026-09-26)
 
@@ -1496,8 +1515,9 @@ right (architecture §12a).
 ## 7. The terminal and the file manager (2026-09-27)
 
 Both are built-in apps in the launcher's **Apps** (Terminal, Files; the
-category is in alphabetical order, built-in and installed apps together,
-since 2026-10-10: Files, Music, Packages, System Monitor, Terminal), with covers of their own (the icon large on a fixed
+category was in alphabetical order, built-in and installed apps together,
+from 2026-10-10; since the XMB launcher (2026-10-31) the built-in ones come
+first, Files, Packages, Terminal, System Monitor, then the installed A to Z), with covers of their own (the icon large on a fixed
 gradient, `CoverSpec.hero`), favourites and recents like any app; the
 System section keeps the board's settings only.
 
@@ -1696,6 +1716,7 @@ console). The commands:
 | `stats` | frames, latency, GE time, errors |
 | `shot NAME` | the PSP saves its screen next to its EBOOT; the console fetches it over the FILE channel into `/tmp/pspexp-shots/NAME.bmp` (or `$PSPEXP_TERM_SHOTS`) and deletes it from the stick |
 | `open launcher|terminal|files [PATH]` | switches the view |
+| `category NAME` | the launcher onto a category, a platform or a Settings group; `SECTION/NAME` (`Settings/PSP`) where a name is in two sections (Games' PSP platform and the PSP group; the board's games and its group) |
 | `select TITLE` | the launcher's highlight onto an entry of the section shown |
 | `stop` | ends the program the launcher started (its process group), and answers when the launcher has the PSP back |
 | `relink` | drops the link as a cable pull would, and answers when it is back |
@@ -1720,8 +1741,10 @@ the Mac.
 - **link:** connected, no errors, a screenshot round trip.
 - **stick:** free space; 4 MB up and back, identical, timed; listing,
   size and date; rename; errors; clean-up.
-- **launcher:** the sections; Apps starts with Terminal and Files; a
-  screenshot of every section.
+- **launcher:** the sections; Apps starts with its built-in apps (Files,
+  Packages, Terminal, System Monitor), the installed after them A to Z (the
+  check still wanted all A to Z until 2026-11-01, failing since the XMB
+  launcher); a screenshot of every section.
 - **settings:** every switch safe to flip (Button sounds, Clips, Box art,
   PSP clock; not the PSPExp plugin, SSH or Wi-Fi) gets cross twice: the value
   drawn (`launcher.shown`, not the setting held) must turn and turn back.

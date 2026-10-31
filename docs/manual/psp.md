@@ -39,7 +39,7 @@ first, see its guide) and the launcher appears within a few seconds.
 You can start PSPExp before or after plugging the cable in, and unplug and
 plug it again at any time: the launcher comes back by itself.
 Meanwhile the PSP keeps the last picture, darkened, under a card saying
-**No connection to the board**: **triangle** shows the status page (the
+**Connection lost**: **triangle** shows the status page (the
 link's details, for when something is wrong) and goes back to the card;
 **HOME** quits PSPExp.
 
@@ -51,7 +51,7 @@ PSPExp. Holding **HOME** for 2 seconds quits PSPExp from anywhere.
 
 To [play your PSP games from the board](psp-games.md) and to
 [record your own PSP games](recording.md), switch on the PSPExp plugin once:
-in PSPExp, **Settings > This PSP > PSPExp plugin**, then cross. It shows
+in PSPExp, **Settings > PSP > PSPExp plugin**, then cross. It shows
 **On**. The plugin came with the `PSPExp` folder (it is in its `plugin`
 folder), and PSPExp adds it to PRO's plugin list itself: there is nothing
 to edit by hand. It needs PRO custom firmware ([the plugin](plugin.md)).
@@ -61,7 +61,7 @@ whose cross takes you straight to the switch.
 ## Things the PSP does by itself
 
 - **Updates.** When the board has a newer PSPExp for the PSP, the launcher's
-  Settings page shows **Update the PSP**. It installs the new version beside
+  Settings page shows **Update PSP**. It installs the new version beside
   the old one and restarts into it; if the new one ever fails to start, the
   PSP goes back to the previous one by itself. It also puts the newest
   [PSPExp plugin](plugin.md) on the memory stick (for an update of the plugin
@@ -70,7 +70,7 @@ whose cross takes you straight to the switch.
   charges) next to the board's own indicators.
 - **Saving power.** While nothing happens on screen the PSP turns its
   backlight off; any button turns it back on.
-- **The clock.** Settings > This PSP > PSP clock lets the board set the PSP's clock,
+- **The clock.** Settings > PSP > PSP clock lets the board set the PSP's clock,
   handy when its clock battery has run flat.
 - **Volume.** The PSP's volume buttons work as always; with Bluetooth
   headphones on the board, they set the headphones' volume instead, and a

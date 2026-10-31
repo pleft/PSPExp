@@ -9,6 +9,7 @@
  */
 #include "appview.h"
 #include "notify.h"
+#include "launcher.h"
 #include "sysinfo.h"
 #include "files_ops.h"
 #include "files_psp.h"
@@ -128,11 +129,11 @@ static void mon_input(uint32_t b, uint32_t pressed, int up, int down, int left, 
      * program's actions (its details, End, the order: square's until 2026-10-31) */
     if (pressed & PSPEXP_BUTTON_START) { quick_open(); return; }
     if (pressed & PSPEXP_BUTTON_TRIANGLE) {
-        if (g_page != PAGE_PROGRAMS) { ui_menu_begin(&g_menu, "System Monitor"); ui_menu_add(&g_menu, OM_PROGRAMS, "list", "Show the programs", NULL, 0, 0); }
+        if (g_page != PAGE_PROGRAMS) { ui_menu_begin(&g_menu, "System Monitor"); ui_menu_add(&g_menu, OM_PROGRAMS, "list", "Show programs", NULL, 0, 0); }
         else {
             ui_menu_begin(&g_menu, g_s.nproc && g_sel < g_s.nproc ? g_s.proc[g_sel].name : "Programs");
             if (g_s.nproc && g_sel < g_s.nproc) ui_menu_add(&g_menu, OM_DETAILS, "info", "Details", NULL, 0, 0);
-            if (g_s.nproc && g_sel < g_s.nproc) ui_menu_add(&g_menu, OM_END, "circle-x", "End the program", NULL, 0, 0);
+            if (g_s.nproc && g_sel < g_s.nproc) ui_menu_add(&g_menu, OM_END, "circle-x", "End program", NULL, 0, 0);
             ui_menu_add(&g_menu, OM_SORT, "arrow-up-down", "Sort by", g_sort_mem ? "memory" : "CPU", g_menu.n > 0, 0);
         }
         return;
@@ -214,7 +215,7 @@ static void draw_overview(PspExpContext *ctx)
         gfx_text(FONT_BADGE, L + 10, 150, s, UI_MUTED, 255, W - 20);
     }
     /* the board */
-    card(L, 172, W, 72, "server", "This board");
+    card(L, 172, W, 72, "server", launcher_board_name());
     gfx_text(FONT_SMALL, L + 10, 190, g_s.model, UI_TEXT, 255, W - 20);
     {
         long up = (long)g_s.uptime;

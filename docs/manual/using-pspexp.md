@@ -63,7 +63,7 @@ triangle has **App details**.
 - **PSP** holds your own PSP games kept on the board (ISO, CSO, or a zip
   holding one, in `roms/psp`). The PSP runs them itself, not an emulator,
   and PSPExp comes back when you leave the game ([the PSPExp
-  plugin](plugin.md) must be on: Settings > This PSP).
+  plugin](plugin.md) must be on: Settings > PSP).
 - Under the highlighted game a line says what it is and whether you played
   it lately; its size, the file and who draws it are in **Details**.
 - **Game details** of a ROM also say who made it, when and what kind of game
@@ -94,7 +94,7 @@ installed (A to Z); cross opens one, HOME closes it and you are back on it.
 **Music** and **Videos**, which open the Media app in the board's Music or
 Videos folder (circle there goes up to its places: the PSP, other drives,
 media servers). **Settings**: its groups (Network, Sound, Recording, Clock,
-Library, This PSP, This board; Ready first when an update or a restart is
+Library, PSP, and one named after your board: Raspberry Pi 400, GameShell...; Ready first when an update or a restart is
 waiting), each a list of its settings with their values on the right.
 Cross turns an on / off setting on or off where it is; on a choice (Clip
 length, Quality) it opens the values beside it, the current one ticked:
@@ -173,7 +173,7 @@ d-pad in others). Triangle on a game in the launcher shows its details.
 character's name), the PSP's own keyboard opens over the game: type as
 you would in the PSP's menus and confirm, and the text goes into the game
 (followed by Enter); cancel it to type nothing. It needs the PSP's part
-from October 18, 2026 or later (Settings > Update the PSP).
+from October 18, 2026 or later (Settings > Update PSP).
 
 ## Packages: installing games
 
@@ -181,7 +181,7 @@ from October 18, 2026 or later (Settings > Update the PSP).
 Games, Emulators and Apps (L / R switch). **PSPExp** itself is the first
 entry under Apps: when it says **Update**, cross installs the new PSPExp
 (and the PSP's runtime with it); then **Settings > Restart PSPExp**, and
-**Settings > Update the PSP** when the launcher offers it. When a new
+**Settings > Update PSP** when the launcher offers it. When a new
 PSPExp is out, the launcher says so ("A new PSPExp is available"; choosing
 the notification opens Packages on it), and a section with updates shows
 how many next to its name. It opens with
@@ -214,7 +214,7 @@ put the game's file, as its makers released it, in `/opt/pspexp/downloads`
 on the board (with **Apps > Files** from a USB stick, for example) and
 install again; PSPExp checks it is the right file. PSPExp itself is updated the same way;
 after such an update, **Settings > Restart PSPExp** starts the new version,
-and **Settings > Update the PSP** puts the PSP's side up to date too.
+and **Settings > Update PSP** puts the PSP's side up to date too.
 
 ## Emulators and ROMs
 
@@ -321,7 +321,7 @@ The cover comes from the file, or a `cover.jpg` / `folder.jpg` beside it.
 Media Engine: the board barely works and the cable carries a few kilobytes
 a second. WAV plays as it is; Ogg, FLAC, Opus and M4A are decoded by the
 board when it has ffmpeg. The note button needs the PSP's PSPExp from
-5 October 2026 or later (Settings > Update the PSP).
+5 October 2026 or later (Settings > Update PSP).
 
 **Films** (MP4, MKV, WebM, AVI, MOV, MPEG and more: whatever ffmpeg
 reads, H.264, H.265, VP9, AV1, with any sound) play full screen in
@@ -427,11 +427,11 @@ PSPExp, it comes first, under **Ready**.
 | Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size ([Recording](recording.md); what they made is in Apps > Gallery) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
-| This PSP | PSPExp plugin: on to start the PSP list's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow); Theme: the colours of every screen, Midnight (the blue), Crimson, Emerald, Violet, Amber or Graphite, each shown as you move to it (cross keeps it, circle leaves the one you had) |
-| This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
+| PSP | PSPExp plugin: on to start the PSP list's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow); Theme: the colours of every screen, Midnight (the blue), Crimson, Emerald, Violet, Amber or Graphite, each shown as you move to it (cross keeps it, circle leaves the one you had) |
+| your board (Raspberry Pi 400, GameShell...) | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
 When there is something to do, it comes first, before the groups:
-**Update the PSP** (a newer PSPExp or PSPExp plugin for the PSP is ready) and **Restart
+**Update PSP** (a newer PSPExp or PSPExp plugin for the PSP is ready) and **Restart
 PSPExp** (after PSPExp was updated).
 
 **Apps > System Monitor** shows the board's processor, memory, temperature,

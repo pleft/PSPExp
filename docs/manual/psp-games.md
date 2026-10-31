@@ -13,8 +13,8 @@ back in PSPExp.
 - A PSP with **PRO custom firmware** (tested on a PSP-1000 with 6.60 PRO-C;
   ARK has not been tried yet).
 - PSPExp up to date on the board (Apps > Packages) and on the PSP
-  (Settings > Update the PSP, when the launcher offers it).
-- **The PSPExp plugin switched on**, once: **Settings > This PSP > PSPExp
+  (Settings > Update PSP, when the launcher offers it).
+- **The PSPExp plugin switched on**, once: **Settings > PSP > PSPExp
   plugin**, cross ([more about the plugin](plugin.md)).
 - Your own PSP games as **ISO** or **CSO** files, or a **zip** holding one.
 
@@ -50,8 +50,8 @@ games and removes the oldest when it needs the room.
 
 ## If something does not work
 
-- **"Switch on the PSPExp plugin first"**: Settings > This PSP > PSPExp
+- **"Switch on the PSPExp plugin first"**: Settings > PSP > PSPExp
   plugin is Off. Turn it on and choose the game again.
-- **"PSP games need PSPExp on the PSP updated"**: Settings > Update the PSP.
+- **"PSP games need PSPExp on the PSP updated"**: Settings > Update PSP.
 - **The game stays on a black screen:** check the cable and that the board is
   on; see [the plugin's page](plugin.md).

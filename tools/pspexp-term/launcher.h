@@ -103,6 +103,9 @@ typedef struct LauncherStatus {
     char link[24], ssid[64], board[48];
     int wired, wifi, net_settings, bt, bt_vol, bat, chg;
 } LauncherStatus;
+/* the board's name ("Raspberry Pi 400", "GameShell"; else its model or host name): labels say it
+ * where they would say "the board" */
+const char *launcher_board_name(void);
 void launcher_status_info(LauncherStatus *s);
 /* and its Power off, already asked again */
 void launcher_power_off(uint64_t now);

@@ -323,11 +323,14 @@ def suite_launcher(r):
     def apps():
         s = r.to_category("Apps")
         items = s["launcher.items"].split("|")
-        # Apps is in alphabetical order (2026-10-10, the user's ask), the built-in apps among the installed
-        r.expect("Terminal" in items and "Files" in items, "Apps lacks Terminal or Files: %s" % items)
-        r.expect(items == sorted(items, key=str.lower), "Apps is not in alphabetical order: %s" % items)
+        # the built-in apps first, in their order, then the installed ones A to Z (the XMB launcher,
+        # 2026-10-31; before it, all A to Z)
+        builtin = ["Files", "Packages", "Terminal", "System Monitor"]
+        r.expect(items[:4] == builtin, "Apps does not start with %s: %s" % (", ".join(builtin), items))
+        rest = items[4:]
+        r.expect(rest == sorted(rest, key=str.lower), "the installed apps are not A to Z: %s" % rest)
         r.shot("launcher-apps", "Apps: Terminal and Files, built in")
-    r.check("Apps holds Terminal and Files, A to Z", apps)
+    r.check("Apps: the built-in apps first, then the installed A to Z", apps)
 
     def walk():
         cats = r.state()["launcher.categories"].split("|")
@@ -350,7 +353,7 @@ def suite_settings(r):
     def to_groups():
         s = r.to_category("Settings")
         for _ in range(3):   # (circle: back up a level; it never closes anything in the launcher)
-            if "This PSP" in s["launcher.items"].split("|"):
+            if "PSP" in s["launcher.items"].split("|") and "Library" in s["launcher.items"].split("|"):
                 return s
             r.press("circle", idle=False)
             r.ctl("idle 800")

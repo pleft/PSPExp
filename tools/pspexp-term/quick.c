@@ -33,7 +33,7 @@ void quick_open(void)
     if (g_cap_mode) {   /* the recorder, as ♪ + L and ♪ + R do it (the PSP's own dot answers) */
         ui_menu_add(&g_q, Q_RECORD, g_cap_rec ? "circle-x" : "video", g_cap_rec ? "Stop recording" : "Start recording", "♪ + L", 0, 0);
         if (g_cap_mode == PSPEXP_CAPTURE_ALL) {
-            snprintf(label, sizeof(label), "Save the last %d seconds", launcher_clip_secs());
+            snprintf(label, sizeof(label), "Save last %d seconds", launcher_clip_secs());
             ui_menu_add(&g_q, Q_CLIP, "history", label, "♪ + R", 0, 0);
         }
     }
@@ -58,7 +58,8 @@ void quick_open(void)
         ui_menu_add(&g_q, Q_INFO, battery_icon(st.bat, st.chg), label, v, 0, 0);
     }
     ui_menu_add(&g_q, Q_RESTART, "refresh-cw", "Restart PSPExp", NULL, 1, 1);
-    ui_menu_add(&g_q, Q_POWER, "power", "Power off the board", NULL, 0, 1);
+    snprintf(label, sizeof(label), "Power off %s", launcher_board_name());
+    ui_menu_add(&g_q, Q_POWER, "power", label, NULL, 0, 1);
 }
 
 int quick_is_open(void) { return g_q.open; }
@@ -79,7 +80,11 @@ void quick_input(uint32_t pressed, int up, int down)
         ui_menu_add(&g_q, Q_CANCEL, "x", "Cancel", NULL, 0, 0);
         break;
     case Q_POWER:
-        ui_menu_begin(&g_q, "Power off the board?");
+        {
+            char t[96];
+            snprintf(t, sizeof(t), "Power off %s?", launcher_board_name());
+            ui_menu_begin(&g_q, t);
+        }
         ui_menu_add(&g_q, Q_POWER_YES, "power", "Power off", NULL, 0, 0);
         ui_menu_add(&g_q, Q_CANCEL, "x", "Cancel", NULL, 0, 0);
         break;

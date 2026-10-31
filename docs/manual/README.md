@@ -71,7 +71,7 @@ the setup and the list of packages differ.
 | A game froze or will not quit | Press **HOME** twice: the game is asked to quit, ended two seconds later if it is still there, and the launcher comes back. |
 | The PSP itself is stuck | Hold **HOME** for 2 seconds to leave PSPExp. |
 | No sound | Settings > Sound: is it on Bluetooth headphones that are not with you? Choose The PSP. |
-| The launcher offers "Update the PSP" or "Restart PSPExp" | A newer version was installed: choose it, it takes seconds. |
+| The launcher offers "Update PSP" or "Restart PSPExp" | A newer version was installed: choose it, it takes seconds. |
 
 More: the [cheatsheet](../cheatsheet.md) for command-line use, and the
 [other documents](../README.md) for how it all works and how to

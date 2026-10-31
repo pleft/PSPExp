@@ -259,7 +259,7 @@ to let them go, for your phone or tablet. Details:
 - Packages live in `/opt/pspexp`; your settings in `~/.config/pspexp*`.
 - **Getting into the Pi from a computer** (the card image; SSH is off at
   first because every card starts with the same password):
-  - on the PSP, **Settings > This board > SSH** turns it on (or off); the
+  - on the PSP, **Settings >** your Pi (**Raspberry Pi 400**, **Raspberry Pi 4**...) **> SSH** turns it on (or off); the
     launcher warns while the password is still `pspexp`, which **Apps >
     Terminal** changes: `passwd`;
   - or put the card in a computer and create an empty file named `ssh` on

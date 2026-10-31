@@ -25,7 +25,7 @@
 #include "launcher_mac.h"
 #endif
 #include "launcher_gfx.h"
-#include "psp_plugin.h"   /* PSP_PLUGIN_*: Settings > This PSP > PSPExp plugin */
+#include "psp_plugin.h"   /* PSP_PLUGIN_*: Settings > PSP > PSPExp plugin */
 #include "pspexp_version.h"   /* PSPEXP_VERSION: generated at build time (cmake/pspexp_version.cmake) */
 #include <stdio.h>
 #include <stdlib.h>
@@ -252,7 +252,8 @@ static void plat_sort(Cat *c)
 
 /* each level's place, kept over a rebuild (a game played moves up its list; a package installed):
  * its name, the entry highlighted (by id) and where that was */
-static struct { char name[64], id[160]; int sel; float scroll; } g_keep[40];
+static struct { char name[64], id[160]; int sel, sec; float scroll; } g_keep[40];   /* (by section and name: a Settings group may share a platform's name, "PSP") */
+static int section_of(const Cat *c);
 /* triangle's panel (the shared one, ui_menu): for which entry; at Sort by's values */
 enum { PN_FAV = 1, PN_DETAILS, PN_SORT, PN_SORT0 };
 static UiMenu g_tri;
@@ -269,13 +270,21 @@ static void cats_build(void)
     for (i = 0; i < g_ncat; i++) {
         snprintf(g_keep[i].name, sizeof(g_keep[i].name), "%s", g_cat[i].name);
         snprintf(g_keep[i].id, sizeof(g_keep[i].id), "%s", g_cat[i].n ? g_cat[i].it[g_cat[i].sel]->id : "");
-        g_keep[i].sel = g_cat[i].sel; g_keep[i].scroll = g_cat[i].scroll;
+        g_keep[i].sel = g_cat[i].sel; g_keep[i].scroll = g_cat[i].scroll; g_keep[i].sec = section_of(&g_cat[i]);
     }
     cats_free();
-    action(&g_builtin[0], "console", "Terminal", "square-terminal", "This board's shell on the PSP: up to four, themes, copy and paste");
-    action(&g_builtin[1], "files", "Files", "folder-open", "The board's drives and the PSP's memory stick: copy, move, view");
-    action(&g_builtin[2], "monitor", "System Monitor", "activity", "This board's CPU, memory, temperature, storage, network and programs");
-    action(&g_builtin[3], "store", "Packages", "package", "Games, emulators and apps for this board: install, update, remove");
+    board_detect();   /* (labels name the board: "Raspberry Pi 400's drives", not "the board's") */
+    {
+        char d[96];
+        snprintf(d, sizeof(d), "%s's shell on PSP: up to four, themes, copy and paste", g_board.name);
+        action(&g_builtin[0], "console", "Terminal", "square-terminal", d);
+        snprintf(d, sizeof(d), "%s's drives and PSP's memory stick: copy, move, view", g_board.name);
+        action(&g_builtin[1], "files", "Files", "folder-open", d);
+        snprintf(d, sizeof(d), "%s's CPU, memory, temperature, storage, network and programs", g_board.name);
+        action(&g_builtin[2], "monitor", "System Monitor", "activity", d);
+        snprintf(d, sizeof(d), "Games, emulators and apps for %s: install, update, remove", g_board.name);
+        action(&g_builtin[3], "store", "Packages", "package", d);
+    }
     action(&g_builtin[4], "music", "Media", "clapperboard", "Your music and films; music plays on behind everything");
     action(&g_builtin[5], "gallery", "Gallery", "images", "Your screenshots, recordings and clips, a page for each game");
     for (i = 0; i < NBUILTIN; i++) g_builtin[i].type = LT_APP;
@@ -338,8 +347,8 @@ static void cats_build(void)
         static const struct { const char *id, *title, *icon, *desc; } MEDIA[4] = {
             { "m:gallery", "Gallery", "images", "Your screenshots, recordings and clips" },
             { "m:now", "Now playing", "circle-play", "" },
-            { "m:music", "Music", "music", "The Music folder on the board" },
-            { "m:videos", "Videos", "clapperboard", "The Videos folder on the board" },
+            { "m:music", "Music", "music", "Music folder on %s" },
+            { "m:videos", "Videos", "clapperboard", "Videos folder on %s" },
         };
         c = cat_add("Media", "clapperboard", COL_MEDIA, CK_MEDIA, "item");
         for (i = 0; i < 4; i++) {
@@ -349,61 +358,63 @@ static void cats_build(void)
             snprintf(e->id, sizeof(e->id), "%s", MEDIA[i].id);
             snprintf(e->title, sizeof(e->title), "%s", MEDIA[i].title);
             snprintf(e->icon, sizeof(e->icon), "%s", MEDIA[i].icon);
-            snprintf(e->desc, sizeof(e->desc), "%s", i == 1 ? g_np_title : MEDIA[i].desc);
+            if (i == 1) snprintf(e->desc, sizeof(e->desc), "%s", g_np_title);
+            else snprintf(e->desc, sizeof(e->desc), MEDIA[i].desc, g_board.name);   /* ("%s": the board's name) */
             e->type = LT_TOOL; e->sys = -1;
             cat_push(c, e);
         }
     }
     g_nactions = 0;
     ACTION("rescan", "Refresh library", "refresh-cw", "Look for new packages, entries and ROMs");
-    if (g_wifi_cmd) ACTION("wifi", "Wi-Fi", "radio-tower", "PSP direct: the GameShell is the PSP's access point");
+    if (g_wifi_cmd) ACTION("wifi", "Wi-Fi", "radio-tower", "PSP direct: GameShell is PSP's access point");
     if (board_wifi_kind() != BOARD_WIFI_NONE)
         ACTION("wifinet", "Wi-Fi network", "wifi", "Join a Wi-Fi network from here");
-    if (bt_available()) ACTION("sound", "Sound output", "headphones", "The PSP, or Bluetooth headphones or a speaker paired with this board");
+    if (bt_available()) { char d[96]; snprintf(d, sizeof(d), "PSP, or Bluetooth headphones or a speaker paired with %s", g_board.name); ACTION("sound", "Sound output", "headphones", d); }
     ACTION("clicks", "Button sounds", "volume-2", "A soft click as you move and press buttons");
-    ACTION("tz", "Time zone", "globe", "The board's time zone, for the clock");
-    ACTION("pspclock", "PSP clock", "clock", "Set the PSP's clock from this board when they differ");
-    ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Covers for ROMs from libretro-thumbnails, their descriptions from the LaunchBox Games Database");
-    ACTION("clips", "Clips", "history", "♪ + R saves the last seconds as a video: the board records all the time");
+    { char d[96]; snprintf(d, sizeof(d), "%s's time zone, for its clock", g_board.name); ACTION("tz", "Time zone", "globe", d); }
+    { char d[96]; snprintf(d, sizeof(d), "Set PSP's clock from %s when they differ", g_board.name); ACTION("pspclock", "PSP clock", "clock", d); }
+    ACTION("boxart", "Box art", g_nofetch ? "image-off" : "image", "Covers for ROMs from libretro-thumbnails, their descriptions from LaunchBox Games Database");
+    { char d[96]; snprintf(d, sizeof(d), "♪ + R saves last seconds as a video: %s always records", g_board.name); ACTION("clips", "Clips", "history", d); }
     ACTION("cliplen", "Clip length", "clock", "How much ♪ + R saves");
-    ACTION("quality", "Quality", "gauge", "The videos' quality, and so their size");
-    ACTION("theme", "Theme", "paintbrush", "The colours of PSPExp's screens on the PSP");
-    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP list's, and recording them");
-    if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp for the PSP, or its plugin: put it on its memory stick");
-    if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
-    ACTION("reboot", "Restart", "rotate-ccw", "Restart this board");
-    ACTION("poweroff", "Power off", "power", "Shut this board down");
-    if (ssh_available()) ACTION("ssh", "SSH", "terminal", "Log in to this board from a computer");
-    ACTION("about", "About", "info", "This board, the PSP and the connection");
+    ACTION("quality", "Quality", "gauge", "Video quality, and so file size");
+    ACTION("theme", "Theme", "paintbrush", "Colours of PSPExp's screens on PSP");
+    if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For PSP's own games: PSP list's, and recording them");
+    if (g_psp_update) ACTION("psp-update", "Update PSP", "download", "A newer PSPExp for PSP, or its plugin: put it on its memory stick");
+    if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start new version");
+    { char d[96]; snprintf(d, sizeof(d), "Restart %s", g_board.name); ACTION("reboot", "Restart", "rotate-ccw", d); }
+    { char d[96]; snprintf(d, sizeof(d), "Shut %s down", g_board.name); ACTION("poweroff", "Power off", "power", d); }
+    if (ssh_available()) { char d[96]; snprintf(d, sizeof(d), "Log in to %s from a computer", g_board.name); ACTION("ssh", "SSH", "terminal", d); }
+    { char d[96]; snprintf(d, sizeof(d), "%s, PSP and connection", g_board.name); ACTION("about", "About", "info", d); }
     /* Settings: its groups, each a list of its settings (Ready first when something waits: an
      * update for the PSP, a restart) */
     {
         static const struct { const char *name, *icon, *desc, *ids[5]; } GROUPS[] = {
             { "Ready", "check-circle", "Waiting for you: an update, a restart", { "a:psp-update", "a:console-restart", NULL } },
-            { "Network", "wifi", "The board's Wi-Fi", { "a:wifinet", "a:wifi", NULL } },
-            { "Sound", "headphones", "Where the sound plays, button sounds", { "a:sound", "a:clicks", NULL } },
-            { "Recording", "film", "Clips, their length and the videos' quality", { "a:clips", "a:cliplen", "a:quality", NULL } },
-            { "Clock", "clock", "The board's time zone", { "a:tz", NULL } },
+            { "Network", "wifi", "%s's Wi-Fi", { "a:wifinet", "a:wifi", NULL } },
+            { "Sound", "headphones", "Where sound plays, button sounds", { "a:sound", "a:clicks", NULL } },
+            { "Recording", "film", "Clips, clip length, video quality", { "a:clips", "a:cliplen", "a:quality", NULL } },
+            { "Clock", "clock", "%s's time zone", { "a:tz", NULL } },
             { "Library", "refresh-cw", "Refreshing it, box art downloads", { "a:rescan", "a:boxart", NULL } },
-            { "This PSP", "gamepad-directional", "PSPExp plugin, PSP clock, Themes", { "a:plugin", "a:pspclock", "a:theme", NULL } },
-            { "This board", "circuit-board", "About, SSH, restart, power off", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
+            { "PSP", "gamepad-directional", "PSPExp plugin, PSP clock, Themes", { "a:plugin", "a:pspclock", "a:theme", NULL } },
+            { NULL, "circuit-board", "About, SSH, restart, power off", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },   /* (NULL: the board's name) */
         };
         int g, k, ng = 0;
         Cat *top = cat_add("Settings", "settings", COL_SETTINGS, CK_GROUPS, "group");
         for (g = 0; g < (int)(sizeof(GROUPS) / sizeof(GROUPS[0])) && ng < (int)(sizeof(g_groups) / sizeof(g_groups[0])); g++) {
             LEntry *h = &g_groups[ng];
             Cat *grp = NULL;
+            const char *gname = GROUPS[g].name ? GROUPS[g].name : g_board.name;
             for (k = 0; GROUPS[g].ids[k]; k++)   /* the group's settings in its own order (those this board has) */
                 for (i = 0; i < g_nactions; i++) if (!strcmp(g_actions[i].id, GROUPS[g].ids[k])) {
-                    if (!grp) grp = cat_add(GROUPS[g].name, GROUPS[g].icon, COL_SETTINGS, CK_SETTINGS, "setting");   /* (a group only with something in it) */
+                    if (!grp) grp = cat_add(gname, GROUPS[g].icon, COL_SETTINGS, CK_SETTINGS, "setting");   /* (a group only with something in it) */
                     cat_push(grp, &g_actions[i]);
                 }
             if (!grp) continue;
             memset(h, 0, sizeof(*h));
-            snprintf(h->id, sizeof(h->id), "g:%s", GROUPS[g].name);
-            snprintf(h->title, sizeof(h->title), "%s", GROUPS[g].name);
+            snprintf(h->id, sizeof(h->id), "g:%s", gname);
+            snprintf(h->title, sizeof(h->title), "%s", gname);
             snprintf(h->icon, sizeof(h->icon), "%s", GROUPS[g].icon);
-            snprintf(h->desc, sizeof(h->desc), "%s", GROUPS[g].desc);
+            snprintf(h->desc, sizeof(h->desc), GROUPS[g].desc, g_board.name);   /* ("%s": the board's name) */
             h->type = LT_TOOL; h->sys = -1;
             cat_push(top, h);
             ng++;
@@ -413,7 +424,7 @@ static void cats_build(void)
      * PSP, once done), the one above it, never whatever slid into its place (Restart) */
     for (s = 0; s < g_ncat; s++) {
         c = &g_cat[s];
-        for (i = 0; i < nkeep; i++) if (!strcmp(g_keep[i].name, c->name)) {
+        for (i = 0; i < nkeep; i++) if (g_keep[i].sec == section_of(c) && !strcmp(g_keep[i].name, c->name)) {
             int k, found = 0;
             for (k = 0; k < c->n && g_keep[i].id[0]; k++) if (!strcmp(c->it[k]->id, g_keep[i].id)) { c->sel = k; found = 1; }
             if (!found) c->sel = g_keep[i].sel - (g_keep[i].sel > 0);
@@ -895,9 +906,9 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "clips")) return g_clips_keep ? "On" : "Off";
     if (!strcmp(a, "cliplen")) { static char v[16]; snprintf(v, sizeof(v), "%d seconds", g_clip_secs); return v; }
     if (!strcmp(a, "quality")) return CLIP_QUALITY[g_clip_quality];
-    if (!strcmp(a, "plugin")) return g_psp_plugin == PSP_PLUGIN_ON ? "On" : g_psp_plugin == PSP_PLUGIN_OFF ? "Off" : "Not on the PSP";
+    if (!strcmp(a, "plugin")) return g_psp_plugin == PSP_PLUGIN_ON ? "On" : g_psp_plugin == PSP_PLUGIN_OFF ? "Off" : "Not on PSP";
     if (!strcmp(a, "sound")) { static char v[96]; bt_route_label(v, sizeof(v)); return v; }
-    if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
+    if (!strcmp(a, "pspclock")) { static char v[64]; snprintf(v, sizeof(v), "From %s", g_board.name); return g_psp_clock ? v : "Off"; }
     if (!strcmp(a, "ssh")) return g_ssh_on ? "On" : "Off";
     if (!strcmp(a, "clicks")) return g_button_sounds ? "On" : "Off";
     if (!strcmp(a, "theme")) return gfx_theme_name(gfx_theme());
@@ -1125,10 +1136,17 @@ int launcher_first_time(const char *key)
 
 int launcher_category(const char *name)
 {
-    int i;
+    static const char *const SEC[NSEC] = { "Games", "Apps", "Media", "Settings" };
+    const char *slash = strchr(name, '/');
+    int i, sec = -1;
     if (!strcmp(name, "All") || !strcmp(name, "Emulators")) name = "Games";   /* (sections before 2026-10-30: tests, notifications) */
+    if (slash) {   /* "Settings/PSP": in that section (Games has a "PSP" too, and the board's name) */
+        for (i = 0; i < NSEC; i++) if ((size_t)(slash - name) == strlen(SEC[i]) && !strncmp(name, SEC[i], (size_t)(slash - name))) sec = i;
+        if (sec < 0) return 0;
+        name = slash + 1;
+    }
     for (i = 0; i < g_ncat; i++)
-        if (!strcmp(g_cat[i].name, name)) {   /* a category, a platform, a Settings group */
+        if (!strcmp(g_cat[i].name, name) && (sec < 0 || section_of(&g_cat[i]) == sec)) {   /* a category, a platform, a Settings group */
             g_cur = i;
             g_tri.open = 0; g_vl.open = 0;   /* (a panel or a choice's values were over the level left) */
             snprintf(g_sec_at[section_of(&g_cat[i])], sizeof(g_sec_at[0]), "%s", name);
@@ -1296,7 +1314,7 @@ static const char *graphics_label(const char *g)
     if (!strcmp(g, "opengl")) return "OpenGL, PSP renderer";
     if (!strcmp(g, "opengl-shaders")) return "OpenGL with shaders, PSP renderer";
     if (!strcmp(g, "board-gpu")) return "OpenGL 3, Board GPU renderer";
-    if (!strcmp(g, "native")) return "the PSP's own game, run by the PSP";
+    if (!strcmp(g, "native")) return "PSP's own game, run by PSP";
     return "";
 }
 
@@ -1307,7 +1325,7 @@ static int psp_battery(char *out, size_t n, PspExpPowerStatus *p)
     char t[64];
     out[0] = 0;
     if (!g_ctx || pspexp_link_state(g_ctx) != PSPEXP_LINK_CONNECTED) return 0;
-    if (!pspexp_power_supported(g_ctx)) { snprintf(out, n, "needs a newer PSP runtime (Settings > Update the PSP)"); return 0; }
+    if (!pspexp_power_supported(g_ctx)) { snprintf(out, n, "needs a newer PSP runtime (Settings > Update PSP)"); return 0; }
     if (pspexp_power_status(g_ctx, p, NULL) < 0) { snprintf(out, n, "reading..."); return 0; }
     if (!(p->flags & PSPEXP_POWER_BATTERY)) { snprintf(out, n, "no battery: on the adapter"); return 0; }
     snprintf(out, n, p->percent >= 0 ? "%d%%" : "charge unknown", p->percent);
@@ -2076,7 +2094,7 @@ static int row_kind(const LEntry *e)
 static int switch_on(const LEntry *e)
 {
     const char *v = action_value(e);
-    return v && strcmp(v, "Off") && strcmp(v, "Not on the PSP");
+    return v && strcmp(v, "Off") && strcmp(v, "Not on PSP");
 }
 
 /* a choice's values in a small list beside it, the current one ticked: up / down move, cross sets
@@ -2193,6 +2211,7 @@ void launcher_power_off(uint64_t now)
     }
 }
 int launcher_button_sounds(void) { return g_button_sounds; }
+const char *launcher_board_name(void) { board_detect(); return g_board.name; }
 void launcher_status_info(LauncherStatus *s)
 {
     memset(s, 0, sizeof(*s));
@@ -2475,7 +2494,7 @@ static void board_detect(void)
     if (g_board.done) return;
     g_board.done = 1;
     g_board.icon = "computer"; g_board.colour = C_SUB;
-    snprintf(g_board.name, sizeof(g_board.name), "This board");
+    snprintf(g_board.name, sizeof(g_board.name), "Board");   /* (only until a name below: its model, else its host name) */
     if ((f = fopen("/proc/device-tree/model", "r"))) { if (!fgets(model, sizeof(model), f)) model[0] = 0; fclose(f); }
     if (!model[0] && (f = fopen("/proc/cpuinfo", "r"))) {   /* OpenWrt: "machine : Onion Omega2+" */
         char l[256];
@@ -2492,6 +2511,12 @@ static void board_detect(void)
         if ((r = strstr(g_board.name, " Rev"))) *r = 0;              /* "Raspberry Pi 400 Rev 1.0": "Raspberry Pi 400" */
         if ((r = strstr(g_board.name, " Model B"))) memmove(r, r + 8, strlen(r + 8) + 1);   /* "Raspberry Pi 4 Model B": "Raspberry Pi 4" */
     } else if (uname(&u) == 0 && !strcmp(u.sysname, "Darwin")) { g_board.icon = "laptop"; g_board.colour = 0xa5b4fc; snprintf(g_board.name, sizeof(g_board.name), "Mac"); }
+    else if (model[0]) {   /* another board: its own model's name ("Orange Pi Zero 2") */
+        char *r;
+        snprintf(g_board.name, sizeof(g_board.name), "%s", model + strspn(model, " \t"));
+        g_board.name[strcspn(g_board.name, "\n")] = 0;
+        if ((r = strstr(g_board.name, " Rev"))) *r = 0;
+    } else if (uname(&u) == 0 && u.nodename[0]) snprintf(g_board.name, sizeof(g_board.name), "%s", u.nodename);   /* else its host name */
 }
 
 /* a key's name in a small cap ("L", "R") */
@@ -2604,18 +2629,18 @@ static void detail_line(const LEntry *e, char *s, size_t n)
         snprintf(s, n, "Tool");
         break;
     case LT_ACTION:
-        if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "The GameShell is the PSP's access point" : "On the home network; X switches to PSP direct");
-        else if (!strcmp(e->id, "a:pspclock")) snprintf(s, n, "%s", g_psp_clock ? "When the PSP connects, a wrong clock is set from this board" : "The PSP keeps its own clock");
+        if (!strcmp(e->id, "a:wifi")) snprintf(s, n, "%s", wifi_mode_psp() ? "GameShell is PSP's access point" : "On home network; X switches to PSP direct");
+        else if (!strcmp(e->id, "a:pspclock")) { if (g_psp_clock) snprintf(s, n, "When PSP connects, a wrong clock is set from %s", g_board.name); else snprintf(s, n, "PSP keeps its own clock"); }
         else if (!strcmp(e->id, "a:boxart")) snprintf(s, n, "%s", g_nofetch ? "Generated covers only, no descriptions" : "Covers from libretro-thumbnails, descriptions from LaunchBox");
-        else if (!strcmp(e->id, "a:clips")) snprintf(s, n, g_clips_keep ? "♪ + R saves the last %d seconds: the board records all the time"
-                                                                     : "Turn on for ♪ + R: the last %d seconds as a video", g_clip_secs);
-        else if (!strcmp(e->id, "a:cliplen")) snprintf(s, n, "♪ + R saves the last %d seconds%s", g_clip_secs, g_clips_keep ? "" : " (with Clips on)");
-        else if (!strcmp(e->id, "a:quality")) snprintf(s, n, "%s", g_clip_quality == 0 ? "The sharpest: up to 17 MB a minute in a busy game"
+        else if (!strcmp(e->id, "a:clips")) { if (g_clips_keep) snprintf(s, n, "♪ + R saves last %d seconds: %s always records", g_clip_secs, g_board.name);
+                                              else snprintf(s, n, "Turn on for ♪ + R: last %d seconds as a video", g_clip_secs); }
+        else if (!strcmp(e->id, "a:cliplen")) snprintf(s, n, "♪ + R saves last %d seconds%s", g_clip_secs, g_clips_keep ? "" : " (with Clips on)");
+        else if (!strcmp(e->id, "a:quality")) snprintf(s, n, "%s", g_clip_quality == 0 ? "Sharpest: up to 17 MB a minute in a busy game"
                                                                    : g_clip_quality == 1 ? "Nearly as sharp: up to 10 MB a minute in a busy game"
                                                                    : "Softer: up to 5 MB a minute in a busy game");
-        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "The PSP list's games start, and PSP games record"
-                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to start the PSP list's games and record PSP games"
-                                                                  : "Not on the PSP's memory stick: cross puts it there and turns it on");
+        else if (!strcmp(e->id, "a:plugin")) snprintf(s, n, "%s", g_psp_plugin == PSP_PLUGIN_ON ? "PSP list's games start, and PSP games record"
+                                                                  : g_psp_plugin == PSP_PLUGIN_OFF ? "Turn on to start PSP list's games and record PSP games"
+                                                                  : "Not on PSP's memory stick: cross puts it there and turns it on");
         else snprintf(s, n, "%s", e->tags);
         break;
     default: snprintf(s, n, "%s", e->tags); break;
@@ -2712,8 +2737,8 @@ static void draw_focus(Cat *c, float dt, int alpha, int dx)
         int favs = c->kind == CK_FAVS, psp = c->kind == CK_SYSTEM && is_psp_sys(c->sys);
         gfx_text(FONT_TITLE, 24 + dx, FOCUS_AT + 6, favs ? "No favourites yet" : psp ? "No PSP games yet" : "Nothing here yet", C_SUB, alpha, 0);
         gfx_text_wrapped(FONT_SMALL, 24 + dx, FOCUS_AT + 30, favs ? "Triangle on a game, then Add to favourites, puts it here"
-                         : psp ? "Your ISO, CSO and ZIP games go in roms/psp on the board"
-                         : "Apps > Packages installs games and emulators; ROMs go in roms on the board",
+                         : psp ? "Your ISO, CSO and ZIP games go in roms/psp on board"
+                         : "Apps > Packages installs games and emulators; ROMs go in roms on board",
                          C_MUTED, alpha, SCREEN_W - 48, 14, 3);
         return;
     }
@@ -2807,7 +2832,7 @@ static void draw_settings(Cat *c, float dt, int alpha, int dx)
         else if (!strcmp(r->id, "a:psp-update") || !strcmp(r->id, "a:console-restart"))
             gfx_nine(NINE_R10, SET_X0 + dx, y + 1, SET_X1 - SET_X0, SET_ROW - 2, 0x1d3b2c, alpha * 220 / 255);   /* (Ready: something to do) */
         gfx_text(FONT_TITLE, SET_X0 + 14 + dx, cy - gfx_line_height(FONT_TITLE) / 2, r->title, sel ? 0xffffff : C_TEXT, alpha, 220);
-        if (kind == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strcmp(v, "From the board"))) {
+        if (kind == ROW_SWITCH && v && (!strcmp(v, "On") || !strcmp(v, "Off") || !strncmp(v, "From ", 5))) {
             int on = switch_on(r);
             gfx_nine(NINE_R6, vx - 26, cy - 7, 26, 14, on ? C_ACCENT : 0x3a4660, alpha);
             gfx_dot(10, on ? vx - 12 : vx - 24, cy - 5, 0xffffff, alpha);
@@ -2835,7 +2860,7 @@ static void draw_settings(Cat *c, float dt, int alpha, int dx)
         y += 18;
         x += gfx_text(FONT_SMALL, x, y, "♪ + L  Record", C_MUTED, alpha, 0) + 18;
         x += gfx_text(FONT_SMALL, x, y, "♪ + R  Save clip", C_MUTED, alpha, 0) + 18;
-        gfx_text(FONT_SMALL, x, y, "Saved on the board, in the Gallery", C_MUTED, alpha, 0);
+        { char t[96]; snprintf(t, sizeof(t), "Saved on %s, in Gallery", g_board.name); gfx_text(FONT_SMALL, x, y, t, C_MUTED, alpha, 0); }
     }
     if (g_vl.open) {   /* the choice's values, beside it */
         const int W = 170, RH = g_vl.n > 3 ? 22 : 26, X = SET_X1 - W, Y = g_vl.n > 3 ? BROWSE_Y - 6 : SET_Y0 + 2;   /* (more than three: closer, higher: above the hints) */
@@ -2901,7 +2926,7 @@ static void draw_hints(void)
     if (section_of(c) == SEC_GAMES) r = hint_right(r - 14, "SELECT", "Search");
     if (e && c->kind == CK_SETTINGS) {
         int k = row_kind(e);
-        go = k == ROW_SWITCH && action_value(e) && !strcmp(action_value(e), "Not on the PSP") ? "Install"
+        go = k == ROW_SWITCH && action_value(e) && !strcmp(action_value(e), "Not on PSP") ? "Install"
            : k == ROW_SWITCH ? (switch_on(e) ? "Turn off" : "Turn on") : k == ROW_CHOICE ? "Change" : k == ROW_PAGE ? "Open" : "Select";
     } else if (e) go = can_fav(e) ? "Play" : "Open";
     if (go) x = hint_btn(x, 'x', go);
@@ -3180,7 +3205,7 @@ static void draw_sheet(void)
     x = 16;
     gfx_button('x', x, HINT_Y); x += 18; x += gfx_text(FONT_SMALL, x, HINT_Y - 1, "Play", C_SUB, 255, 0) + 14;
     gfx_button('o', x, HINT_Y); x += 18; gfx_text(FONT_SMALL, x, HINT_Y - 1, "Back", C_SUB, 255, 0);
-    hint_right(SCREEN_W - 16, "HOME", "quits the game");
+    hint_right(SCREEN_W - 16, "HOME", "quits game");
 }
 
 /* the program being started: the last frame the PSP shows before it, which keeps it and turns a
@@ -3189,7 +3214,7 @@ static void draw_sheet(void)
 static void draw_running(void)
 {
     int w, cx = (SCREEN_W - COVER_SIZE) / 2, s = PSPEXP_SPINNER_SIZE;
-    const char *sub = "Starting", *h = "Press HOME in the game to quit it";
+    const char *sub = "Starting", *h = "Press HOME in game to quit it";
     gfx_shadow(NINE_SHADOW14, cx, 40 + 8, COVER_SIZE, COVER_SIZE, 0x000000, 180);
     draw_cover(&g_running_e, cx, 40, 255);
     w = gfx_text_width(FONT_H1, g_running_e.title);
@@ -3258,7 +3283,7 @@ static void draw_pick(float dt)
                 const BoardZone *z = board_zone(i);
                 label = z->label; value = z->offset; current = !strcmp(z->iana, g_cur_tz); icon = current ? "check" : "clock";
             } else if (g_pick_kind == PICK_BT) {
-                if (i == 0) { label = "The PSP"; current = !g_bt_chosen[0]; icon = current ? "check" : "volume-2"; value = "its speaker or headphone socket"; }
+                if (i == 0) { label = "PSP"; current = !g_bt_chosen[0]; icon = current ? "check" : "volume-2"; value = "its speaker or headphone socket"; }
                 else {
                     const BtDev *d = &g_bt[i - 1];
                     label = d->name; current = !strcmp(d->addr, g_bt_chosen);
@@ -3316,7 +3341,13 @@ static int about_rows(AboutRow *r, int max)
                                snprintf(r[n].value, sizeof(r[n].value), __VA_ARGS__); if (r[n].value[0]) n++; } } while (0)
 #define AB_HEAD(lb) do { if (n < max) { r[n].icon = ""; r[n].head = 1; snprintf(r[n].label, sizeof(r[n].label), "%s", (lb)); r[n].value[0] = 0; n++; } } while (0)
     board_detect();
-    AB_HEAD("THIS BOARD");
+    {   /* (the board's name, as the other heading: capitals) */
+        char hd[48];
+        int i;
+        for (i = 0; g_board.name[i] && i < (int)sizeof(hd) - 1; i++) hd[i] = (char)toupper((unsigned char)g_board.name[i]);
+        hd[i] = 0;
+        AB_HEAD(hd);
+    }
     AB_ITEM(g_board.icon, "Board", "%s", b->board);
     AB_ITEM("zap", "Chip", "%s%s%s", b->soc, b->soc[0] ? ", " : "", b->cpu);
     AB_ITEM("layers", "Memory", "%s", b->mem);
@@ -3337,9 +3368,9 @@ static int about_rows(AboutRow *r, int max)
         short_version(g_psp_ver, v, sizeof(v));
         /* the runtime: its slot and version (read from the stick on connecting), and an update waiting */
         if (g_psp_slot == 'a' || g_psp_slot == 'b')
-            AB_ITEM("gamepad-2", "On the PSP", "slot %c, %s%s", g_psp_slot, v[0] ? v : "version unknown", g_psp_pending ? "; an update waits: restart PSPExp on the PSP" : "");
-        else if (g_psp_slot == '-') AB_ITEM("gamepad-2", "On the PSP", "runtime %u, installed without slots", h->runtime_version);
-        else AB_ITEM("gamepad-2", "On the PSP", "runtime %u", h->runtime_version);
+            AB_ITEM("gamepad-2", "On PSP", "slot %c, %s%s", g_psp_slot, v[0] ? v : "version unknown", g_psp_pending ? "; an update waits: restart PSPExp on PSP" : "");
+        else if (g_psp_slot == '-') AB_ITEM("gamepad-2", "On PSP", "runtime %u, installed without slots", h->runtime_version);
+        else AB_ITEM("gamepad-2", "On PSP", "runtime %u", h->runtime_version);
         AB_ITEM("layers", "PSP memory", "%u KB VRAM, %u KB RAM", (unsigned)(h->vram_budget / 1024), (unsigned)(h->ram_budget / 1024));
     }
     {
@@ -3373,7 +3404,7 @@ static void draw_about(float dt)
     g_overlay_a = ease(g_overlay_a, 1.0f, 16.0f, dt, 0.01f);
     a = (int)(g_overlay_a * 255);
     if (g_about_sel >= n || r[g_about_sel].head) for (g_about_sel = 0; g_about_sel < n && r[g_about_sel].head; g_about_sel++) {}
-    location_line("This board", "About", NULL, a);
+    location_line(g_board.name, "About", NULL, a);
     target = g_about_scroll;
     if (g_about_sel - 1 < target) target = (float)(g_about_sel - 1);   /* (the heading over it in view) */
     if (g_about_sel > target + view - 1) target = (float)(g_about_sel - view + 1);
@@ -3450,7 +3481,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
     g_clips_keep = lib_setting_int(&L, "clips", 0);
     g_button_sounds = lib_setting_int(&L, "button_sounds", 1);
-    gfx_set_theme(lib_setting_int(&L, "theme", 0));   /* (Settings > This PSP > Theme) */
+    gfx_set_theme(lib_setting_int(&L, "theme", 0));   /* (Settings > PSP > Theme) */
     g_clip_secs = lib_setting_int(&L, "clip_secs", 30);
     if (g_clip_secs != 15 && g_clip_secs != 60) g_clip_secs = 30;
     g_clip_quality = lib_setting_int(&L, "clip_quality", 0);

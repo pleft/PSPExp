@@ -579,19 +579,19 @@ enum { A_COPY, A_MOVE, A_DELETE, A_RENAME, A_MKDIR, A_DETAILS, A_QUEUE, A_ZIP, A
 static int g_selecting;   /* Select items: cross marks rather than opens */
 static const MItem ACTIONS[] = {
     { "info", "Details", A_DETAILS }, { "list-checks", "Select items", A_SELECT },
-    { "copy", "Copy to the other panel", A_COPY }, { "folder-input", "Move to the other panel", A_MOVE },
+    { "copy", "Copy to other panel", A_COPY }, { "folder-input", "Move to other panel", A_MOVE },
     { "trash-2", "Delete", A_DELETE }, { "pencil", "Rename", A_RENAME },
-    { "list", "Add to the Media queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
+    { "list", "Add to Media queue", A_QUEUE }, { "file-archive", "Compress to a .zip", A_ZIP },
     { "sliders-horizontal", "Folder and view", A_MORE },
 };
 /* cross on an archive */
 static const MItem ARCHIVE[] = {
-    { "folder-output", "Unpack into the other panel", X_OTHER }, { "folder-down", "Unpack here", X_HERE },
+    { "folder-output", "Unpack into other panel", X_OTHER }, { "folder-down", "Unpack here", X_HERE },
     { "list", "Show what is in it", X_LIST }, { "package-open", "Install as a PSPExp package", X_INSTALL },
 };
 static const MItem OPTIONS[] = {
     { "folder-plus", "New folder", A_MKDIR }, { "square-terminal", "Terminal here", P_TERMINAL },
-    { "columns-2", "This folder in the other panel", P_SAME }, { "arrow-right-left", "Swap the panels", P_SWAP },
+    { "columns-2", "Same folder in other panel", P_SAME }, { "arrow-right-left", "Swap panels", P_SWAP },
     { "eye", "Hidden files", P_HIDDEN }, { "arrow-up-down", "Sort", P_SORT }, { "clapperboard", "Media", P_MUSIC },
 };
 #define NACT ((int)(sizeof(ACTIONS) / sizeof(ACTIONS[0])))
@@ -648,7 +648,7 @@ static void drive_go(Panel *p, int i)
     int cur = drive_cur(p), k, slot = -1;
     if (i < 0 || i >= g_ndrv || i == cur) return;
     if (drive_is_psp(i) && !files_psp_available()) {
-        snprintf(g_msg_title, sizeof(g_msg_title), "The PSP's memory stick");
+        snprintf(g_msg_title, sizeof(g_msg_title), "PSP's memory stick");
         snprintf(g_msg, sizeof(g_msg), "The PSP does not share its memory stick yet: its PSPExp runtime is older (or the PSP is not connected). Copy the new one (dist/PSPExp) to ms0:/PSP/GAME/PSPExp/ and start it again.");
         g_over = O_MESSAGE;
         return;
@@ -1084,7 +1084,7 @@ static void draw_drives(void)
         gfx_text(FONT_SMALL, x + 32, ry + 1, g_drv[i].name, tc, 255, w - 60);
         if (i == cur) gfx_icon("check", 12, x + w - 22, ry + 8, sel ? 0xffffff : UI_ACCENT, 255);
         /* where it is, and its free space (the board's drives: asked here, cheap) */
-        if (drive_is_psp(i)) snprintf(sub, sizeof(sub), "%s", avail ? "ms0:/  the PSP's memory stick" : "not shared by the PSP right now");
+        if (drive_is_psp(i)) snprintf(sub, sizeof(sub), "%s", avail ? "ms0:/  PSP's memory stick" : "not shared by PSP right now");
         else {
             struct statvfs sv;
             char fr[32] = "";
@@ -1130,7 +1130,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
     gfx_backdrop();
     if (g_over == O_KBD) {
         ui_kbd_draw(&g_kbd, g_kmode == K_MKDIR ? "folder-plus" : g_kmode == K_ZIP ? "file-archive" : "pencil",
-                    g_kmode == K_MKDIR ? "New folder" : g_kmode == K_ZIP ? "Compress" : "Rename", g_kmode == K_ZIP ? "The archive's name" : "Type a name", g_caret, 255);
+                    g_kmode == K_MKDIR ? "New folder" : g_kmode == K_ZIP ? "Compress" : "Rename", g_kmode == K_ZIP ? "Archive name" : "Type a name", g_caret, 255);
         notify_draw(now);
         pspexp_present(ctx);
         g_dirty = 0;
@@ -1209,7 +1209,7 @@ void files_render(PspExpContext *ctx, uint64_t now)
         x = ui_hint_btn(x, 'o', "Close");
     } else if (act()->on_drives) {
         x = ui_hint_btn(x, 'x', "Drives");
-        x = ui_hint_cap(x, "DOWN", "The files", UI_SUB);
+        x = ui_hint_cap(x, "DOWN", "Files", UI_SUB);
         x = ui_hint_btn(x, 't', "Options");
     } else if (g_selecting) {
         x = ui_hint_btn(x, 'o', "Done");

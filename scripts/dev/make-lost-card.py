@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # The card the PSP shows on its last picture when the board went (the link lost, or the board
-# said goodbye): "No connection to the board", waiting for it, HOME to quit and triangle for the
+# said goodbye): "Connection lost", waiting for it, HOME to quit and triangle for the
 # status page, in the launcher's look (Inter, its Lucide icons, its button badges), written as an
 # 8888 texture for the GE executor:
 #   python3 scripts/dev/make-lost-card.py   ->  psp/executor-ge/lost_card.h
@@ -25,7 +25,7 @@ def font(name, px):
 title_f, text_f = font("Inter-SemiBold.ttf", 15.0), font("Inter-Regular.ttf", 11.0)
 small_f, badge_f = font("Inter-Regular.ttf", 10.0), font("Inter-SemiBold.ttf", 7.5)
 icon_f = ImageFont.truetype(os.path.join(A, "lucide.ttf"), 26 * S)
-TITLE, TEXT = "No connection to the board", "Waiting for it to come back: check the cable."
+TITLE, TEXT = "Connection lost", "Waiting to reconnect: check USB cable."
 HOME, QUIT, DETAILS = "HOME", "Quit", "Status page"
 PANEL, LINE, BADGE_BG = (16, 26, 48, 242), (40, 58, 92, 255), (0x1E, 0x2C, 0x4A, 255)
 SUB, WHITE, AMBER, GREEN = (0xA9, 0xB9, 0xD3, 255), (0xF1, 0xF4, 0xF9, 255), (0xFF, 0xB5, 0x47, 255), (0x5E, 0xE3, 0xA1, 255)
@@ -63,7 +63,7 @@ for y in range(H):
         r, g, b, al = im.getpixel((x, y)) if x < W else (0, 0, 0, 0)
         px.append(al << 24 | b << 16 | g << 8 | r)   # GU_PSM_8888: ABGR (8 bits a colour: a theme turns them on the PSP, 4 lost its dark blues' hue)
 with open(OUT, "w") as f:
-    f.write("/* made by scripts/dev/make-lost-card.py: the PSP's \"No connection to the board\" card, GU_PSM_8888,\n"
+    f.write("/* made by scripts/dev/make-lost-card.py: the PSP's \"Connection lost\" card, GU_PSM_8888,\n"
             " * LOST_CARD_H rows of LOST_CARD_STRIDE pixels (a LOST_CARD_TW x LOST_CARD_TH texture, the rest never read) */\n")
     f.write("#define LOST_CARD_TW %d\n#define LOST_CARD_TH %d\n#define LOST_CARD_STRIDE %d\n#define LOST_CARD_W %d\n#define LOST_CARD_H %d\n"
             % (TW, TH, STRIDE, W, H))

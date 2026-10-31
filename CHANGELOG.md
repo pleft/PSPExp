@@ -33,17 +33,16 @@
   PSP. A screenshot's white dot (♪ + L twice) now shows just after the
   picture is taken, so it is no longer in it on a still screen.
 - **When the board goes**, the cable pulled or the board stopped, the PSP
-  keeps its last picture, darkened, under a card: "No connection to the
-  board", waiting for it to come back. **Triangle** shows the status page
+  keeps its last picture, darkened, under a card: "Connection lost",
+  waiting for it to come back. **Triangle** shows the status page
   (the link's details) and goes back to the card; **HOME** quits. The
   launcher comes back by itself with the board, as before. Needs Settings
-  > Update the PSP.
-- **Themes**: Settings > This PSP > Theme colours every screen, the
+  > Update PSP.
+- **Themes**: Settings > PSP > Theme colours every screen, the
   launcher and the apps: Midnight (the blue, as before), Crimson, Emerald,
   Violet, Amber or Graphite, each previewed as you move to it. What the
   PSP draws itself follows it too (the "HOME again to quit" bar, the
-  volume bar, the card when the board goes): needs Settings > Update the
-  PSP.
+  volume bar, the card when the board goes): needs Settings > Update PSP.
 - **Descriptions of your ROMs** in Game details, with who made them, the
   year and the genre: from the LaunchBox Games Database, which the board
   downloads once (110 MB, kept as 40 MB) and then reads offline, every
@@ -54,7 +53,8 @@
   keeps the categories over it, its results a list like a platform's with
   the covers; Game details is a screen of its own (the art, the whole title,
   the description, what is known), back where you were with circle; About
-  is a list under Settings > This board, one fact a row.
+  is a list under Settings > your board (Raspberry Pi 400, GameShell...),
+  one fact a row.
 - **Button sounds**: a soft click answers each press in the launcher and
   the apps (a tick as you move, rising for cross, falling for circle, a pop
   for a panel), played by the PSP over the music; **Settings > Sound >
@@ -73,13 +73,18 @@
   "HOME Close" first at the left (the way out, the same as for games),
   START at the right end. Circle only steps back inside an app; the
   Notifications list no longer closes on it either.
+- **Labels without "the" and "this"**: Settings' groups are **PSP** and
+  your board's own name (**Raspberry Pi 400**, **GameShell**...) where
+  they were This PSP and This board; **Update PSP**; lines say "Mac's
+  drives", "Restart Raspberry Pi 400", "Power off GameShell" rather than
+  "the board". On the PSP, its card says **Connection lost**.
 - **Plainer words**: the line under a game says what it is and whether you
   played it lately (sizes, files and how it draws are in Details).
 - **HOME leaves what is on screen**: in an app (Files, Media, Packages,
   the terminal...) or a game, press it twice ("HOME again to quit" shows
   for 3 seconds after the first) to go back to the launcher; in the
   launcher it is the PSP's own "Quit?" as before. **START + SELECT no longer
-  quits a game** (it still does until Settings > Update the PSP). Holding
+  quits a game** (it still does until Settings > Update PSP). Holding
   HOME 2 s still quits PSPExp from anywhere.
 - **Screenshots**: hold ♪ and tap **L twice**, quickly: a white dot flashes
   and the board saves the screen as a PNG. In PSPExp and in your own PSP

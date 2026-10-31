@@ -92,7 +92,7 @@ the PSP itself.
 - **Updates** come through **Apps > Packages**; after one, the launcher
   offers **Settings > Restart PSPExp**.
 - **Logging in** (for tinkerers): the user is `cpi`, password `cpi`. SSH is
-  off on a new card: **Settings > This board > SSH** turns it on (or off),
+  off on a new card: **Settings > GameShell > SSH** turns it on (or off),
   then `ssh cpi@gameshell.local` once on Wi-Fi. Change the password
   (`passwd` in **Apps > Terminal**): every card starts with the same one,
   and the launcher warns while it does.

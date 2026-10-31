@@ -18,6 +18,7 @@
  */
 #include "appview.h"
 #include "notify.h"
+#include "launcher.h"
 #include "launcher_gfx.h"
 #include "launcher_ui.h"
 #include "quick.h"
@@ -328,7 +329,7 @@ static void job_done(int status)
     {
         const char *last = strrchr(out, '\n'), *m = last ? last + 1 : out;
         if (!strncmp(m, "pspexp-pkg: ", 12)) m += 12;
-        if (ok && g_job_install && !strcmp(g_job_id, "pspexp")) snprintf(g_result, sizeof(g_result), "PSPExp updated. Settings > Restart PSPExp starts it; then Settings > Update the PSP, when offered.");
+        if (ok && g_job_install && !strcmp(g_job_id, "pspexp")) snprintf(g_result, sizeof(g_result), "PSPExp updated. Settings > Restart PSPExp starts it; then Settings > Update PSP, when offered.");
         else if (ok) snprintf(g_result, sizeof(g_result), "%s. The launcher shows the change in a moment.", g_job_install ? "Installed" : "Removed");
         else if (strstr(out, "busy")) snprintf(g_result, sizeof(g_result), "Another package operation is running; try again in a moment.");
         else snprintf(g_result, sizeof(g_result), "It did not work: %s", m[0] ? m : "pspexp-pkg failed");
@@ -425,7 +426,7 @@ static void st_input(uint32_t b, uint32_t pressed, int up, int down, int left, i
         if (p) ui_menu_add(&g_menu, PM_DETAILS, "info", "Details", NULL, 0, 0);
         if (can_install(p)) ui_menu_add(&g_menu, PM_INSTALL, "download", install_word(p), NULL, 0, 0);
         if (can_remove(p)) ui_menu_add(&g_menu, PM_REMOVE, "trash-2", "Remove", NULL, 0, 0);
-        ui_menu_add(&g_menu, PM_REFRESH, "refresh-cw", "Refresh the catalogue", NULL, g_menu.n > 0, 0);
+        ui_menu_add(&g_menu, PM_REFRESH, "refresh-cw", "Refresh catalogue", NULL, g_menu.n > 0, 0);
     }
     /* (circle at the top: nothing, it never leaves an app: HOME does) */
 }
@@ -544,14 +545,18 @@ static void st_render(PspExpContext *ctx, uint64_t now)
         gfx_text(FONT_SMALL, right - gfx_text_width(FONT_SMALL, s), 7, s, broken ? 0xff9a9a : upd ? 0xffc766 : UI_MUTED, 255, 0);
     if (g_load_pid > 0) {
         int bx = (UI_SCREEN_W - 320) / 2, by = (UI_SCREEN_H - 84) / 2 - 8;
-        box("Reading the packages", "What this board can install, what is installed, and what is new.", 84);
+        {
+            char t[128];
+            snprintf(t, sizeof(t), "What %s can install, what is installed, and what is new.", launcher_board_name());
+            box("Reading packages", t, 84);
+        }
         gfx_icon("loader", 14, bx + 320 - 30, by + 12, UI_ACCENT, 128 + (int)((now / 120000u) % 2) * 127);
     } else if (!g_n) {
         if (g_local || !g_catmode) snprintf(s, sizeof(s), g_local ? "The catalogue is empty." : "No catalogue yet. Join a network (Settings > Network) and press START to read it.");
         else snprintf(s, sizeof(s), "The catalogue is empty. Join a network (Settings > Network) and press START to read it.");
         box(g_catmode ? "No packages" : "No catalogue", s, 110);
     } else if (!p) {
-        gfx_text(FONT_BODY, LX + 12, 40, "Nothing in this section yet", UI_MUTED, 255, 0);
+        gfx_text(FONT_BODY, LX + 12, 40, "Nothing here yet", UI_MUTED, 255, 0);
     } else {
         CoverSpec cs;
         /* the highlighted one: cover and details */
