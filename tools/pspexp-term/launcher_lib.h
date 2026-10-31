@@ -55,6 +55,8 @@ typedef struct LSystem {
     char id[48], name[64], shortname[8];
     char roms[256], ext[96], exec[512], icon[32], thumbs[96];
     char graphics[16];                /* as an entry's: how its player draws */
+    char names[256];                  /* an arcade system's table, "set|Full title" lines: the titles of
+                                       * its zips ("mslug.zip": Metal Slug); an empty title, no game (a BIOS) */
     char pkg[64], dir[256];           /* pkg: its package; dir: where exec runs ("" = the ROM's folder) */
     char env[400];                    /* NAME=value pairs for exec */
     int pspexp;

@@ -28,8 +28,13 @@ static const struct { const char *ours, *lb; } SYS[] = {
     { "psp", "Sony PSP" }, { "pce", "NEC TurboGrafx-16" }, { "32x", "Sega 32X" }, { "segacd", "Sega CD" }, { "psx", "Sony Playstation" },
     { "ngp", "SNK Neo Geo Pocket" }, { "ngpc", "SNK Neo Geo Pocket Color" }, { "vb", "Nintendo Virtual Boy" }, { "atari2600", "Atari 2600" },
     { "atari7800", "Atari 7800" }, { "fds", "Nintendo Famicom Disk System" }, { "sg1000", "Sega SG-1000" }, { "msx", "Microsoft MSX" },
-    { "coleco", "ColecoVision" },
+    { "coleco", "ColecoVision" }, { "pcecd", "NEC TurboGrafx-CD" }, { "neogeo", "SNK Neo Geo AES" },
+    { "neogeomvs", "SNK Neo Geo MVS" }, { "neogeocd", "SNK Neo Geo CD" }, { "sgx", "NEC PC Engine SuperGrafx" },
 };
+/* the database's file: its name changes with the platforms kept (a copy made before lacks the new
+ * ones, made again once; the old one deleted): 2 the PC Engine CD and the Neo Geo (2026-11-01) */
+#define LB_DB "launchbox-2.sqlite"
+#define LB_DB_OLD "launchbox.sqlite"
 #define NSYS ((int)(sizeof(SYS) / sizeof(SYS[0])))
 
 static void cache_dir(char *out, size_t n)
@@ -305,7 +310,7 @@ static int lookup(const char *path, const char *sys, const char *title, int *wit
     int found = 0, k;
     for (k = 0; k < NSYS; k++) if (!strcmp(SYS[k].ours, sys)) lb_sys = SYS[k].lb;
     memset(out, 0, sizeof(*out));
-    db_path("launchbox.sqlite", lb_path, sizeof(lb_path));
+    db_path(LB_DB, lb_path, sizeof(lb_path));
     *with_lb = stat(lb_path, &st) == 0;
     if (lb_sys && *with_lb && sqlite3_open_v2(lb_path, &db, SQLITE_OPEN_READONLY, NULL) == SQLITE_OK) {
         found = lb_lookup(db, lb_sys, path, title, out);
@@ -387,8 +392,8 @@ static void lb_start(void)
         int ok;
         const char *url = getenv("PSPEXP_LAUNCHBOX_URL");   /* (tests: a copy, file:///...) */
         snprintf(cmd, sizeof(cmd), "curl -fsSL --retry 3 --retry-delay 5 --max-time 3600 '%s' | bsdtar -xOf - Metadata.xml Files.xml", url && *url ? url : LB_URL);
-        snprintf(part, sizeof(part), "%s/launchbox.sqlite.part", dir);
-        snprintf(db, sizeof(db), "%s/launchbox.sqlite", dir);
+        snprintf(part, sizeof(part), "%s/%s.part", dir, LB_DB);
+        snprintf(db, sizeof(db), "%s/%s", dir, LB_DB);
         snprintf(failed, sizeof(failed), "%s/launchbox.failed", dir);
         in = popen(cmd, "r");
         ok = in && lb_build(in, part) == 0;
@@ -397,7 +402,11 @@ static void lb_start(void)
             if (st != 0) ok = 0;
             fprintf(stderr, "[gamedb] LaunchBox Games Database: %s (download and unpacking %s)\n", ok ? "made" : "not made", st == 0 ? "fine" : "failed");
         }
-        if (ok && rename(part, db) == 0) unlink(failed);
+        if (ok && rename(part, db) == 0) {
+            unlink(failed);
+            snprintf(db, sizeof(db), "%s/%s", dir, LB_DB_OLD);   /* (the copy before it: 40 MB) */
+            unlink(db);
+        }
         else { FILE *f; unlink(part); if ((f = fopen(failed, "w"))) fclose(f); }
         _exit(ok ? 0 : 1);
     }
@@ -410,7 +419,7 @@ int gamedb_facts(const char *path, const char *sys, const char *title, int allow
     struct stat st, sn;
     int with_lb = 0, have_lb;
     pid_t pid;
-    db_path("launchbox.sqlite", lb, sizeof(lb)); db_path("launchbox.failed", lb_failed, sizeof(lb_failed));
+    db_path(LB_DB, lb, sizeof(lb)); db_path("launchbox.failed", lb_failed, sizeof(lb_failed));
     have_lb = stat(lb, &st) == 0;
     facts_paths(path, sys, txt, sizeof(txt), none, sizeof(none));
     if (facts_read(txt, out, &with_lb) && with_lb) return 1;

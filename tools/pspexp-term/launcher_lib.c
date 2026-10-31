@@ -125,6 +125,7 @@ static void system_kv(void *u, const char *k, const char *v)
     else if (!strcmp(k, "icon")) snprintf(s->icon, sizeof(s->icon), "%s", v);
     else if (!strcmp(k, "thumbs")) snprintf(s->thumbs, sizeof(s->thumbs), "%s", v);
     else if (!strcmp(k, "graphics")) snprintf(s->graphics, sizeof(s->graphics), "%s", v);
+    else if (!strcmp(k, "names")) snprintf(s->names, sizeof(s->names), "%s", v);
     else if (!strcmp(k, "pkg") && !strchr(v, '/')) snprintf(s->pkg, sizeof(s->pkg), "%s", v);
     else if (!strcmp(k, "env") && strchr(v, '=') && strlen(s->env) + strlen(v) + 2 < sizeof(s->env)) {
         if (s->env[0]) strcat(s->env, " ");
@@ -206,6 +207,7 @@ static void load_system_dir(Library *L, const char *dir)
         if (!s->name[0]) snprintf(s->name, sizeof(s->name), "%s", id);
         if (s->pkg[0]) snprintf(s->dir, sizeof(s->dir), "%s/apps/%s", L->root, s->pkg);
         expand_home(s->roms, sizeof(s->roms));
+        expand_home(s->names, sizeof(s->names));
         if (!is_dir(s->roms)) mkdir_p(s->roms);   /* shows the user where ROMs go */
         L->nsys++;
     }
@@ -237,6 +239,43 @@ static int has_ext(const char *file, const char *exts)
 
 static void rom_fill(LEntry *e, const LSystem *s, int sys, const char *dir, const char *file, long long size);
 
+/* an arcade set's title from its system's names table (read once a table, kept): NULL not in it, ""
+ * no game (a BIOS: left out) */
+static const char *arcade_title(const LSystem *s, const char *file)
+{
+    static struct { char path[256]; char **set, **title; int n; } T[4];
+    static int nt;
+    const char *dot = strrchr(file, '.');
+    size_t stem = dot ? (size_t)(dot - file) : strlen(file);
+    int t, i;
+    if (!s->names[0]) return NULL;
+    for (t = 0; t < nt && strcmp(T[t].path, s->names); t++) {}
+    if (t == nt) {   /* (first use: the table read) */
+        FILE *f;
+        char line[300];
+        if (nt == (int)(sizeof(T) / sizeof(T[0])) || !(f = fopen(s->names, "r"))) return NULL;
+        snprintf(T[t].path, sizeof(T[t].path), "%s", s->names);
+        T[t].set = T[t].title = NULL; T[t].n = 0;
+        while (fgets(line, sizeof(line), f)) {
+            char *bar = strchr(line, '|'), **ns, **nv;
+            if (line[0] == '#' || !bar) continue;
+            *bar = 0;
+            bar[1 + strcspn(bar + 1, "\r\n")] = 0;
+            if (!(ns = (char **)realloc(T[t].set, (size_t)(T[t].n + 1) * sizeof(char *)))) break;
+            T[t].set = ns;
+            if (!(nv = (char **)realloc(T[t].title, (size_t)(T[t].n + 1) * sizeof(char *)))) break;
+            T[t].title = nv;
+            T[t].set[T[t].n] = strdup(line); T[t].title[T[t].n] = strdup(bar + 1);
+            T[t].n++;
+        }
+        fclose(f);
+        nt++;
+    }
+    for (i = 0; i < T[t].n; i++)
+        if (strlen(T[t].set[i]) == stem && !strncasecmp(T[t].set[i], file, stem)) return T[t].title[i];
+    return NULL;
+}
+
 int lib_rom_entry(const Library *L, const char *path, LEntry *out)
 {
     const char *slash = strrchr(path, '/');
@@ -258,6 +297,8 @@ static void add_rom(LSystem *s, int sys, const char *dir, const char *file)
     char p[800];
     struct stat st;
     LEntry *e;
+    const char *at = arcade_title(s, file);
+    if (at && !at[0]) return;   /* (a BIOS beside the games: neogeo.zip) */
     snprintf(p, sizeof(p), "%s/%s", dir, file);
     if (stat(p, &st) != 0) return;
     s->roms_list = (LEntry *)realloc(s->roms_list, (size_t)(s->nroms + 1) * sizeof(LEntry));
@@ -280,6 +321,10 @@ static void rom_fill(LEntry *e, const LSystem *s, int sys, const char *dir, cons
     snprintf(e->env, sizeof(e->env), "%s", s->env);
     dot = strrchr(file, '.');
     snprintf(e->title, sizeof(e->title), "%.*s", dot ? (int)(dot - file) : (int)strlen(file), file);
+    {   /* an arcade set: its title ("mslug": "Metal Slug - Super Vehicle-001"), its codes as tags below */
+        const char *at = arcade_title(s, file);
+        if (at && at[0]) snprintf(e->title, sizeof(e->title), "%s", at);
+    }
     /* "Super Mario World (USA) (Rev 1)" -> title "Super Mario World", tags "USA, Rev 1" */
     if ((paren = strstr(e->title, " (")) && paren != e->title) {
         char *t = paren + 1, *o = e->tags;

@@ -105,6 +105,11 @@ PACKAGES = {
                                   ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
     "pspexp-libretro-picodrive": dict(what="the PicoDrive libretro core", comps=[("PicoDrive", GH + "libretro/picodrive", None, "../retro/libretro-picodrive")],
                                       ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
+    "pspexp-libretro-mednafen-pce-fast": dict(what="the Beetle PCE Fast libretro core (PC Engine)", comps=[("Beetle PCE Fast", GH + "libretro/beetle-pce-fast-libretro", None, "../retro/libretro-mednafen_pce_fast")],
+                                              ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
+    "pspexp-libretro-fbneo-neogeo": dict(what="FinalBurn Neo's libretro core, its Neo Geo driver alone (SUBSET=neogeo)", comps=[("FinalBurn Neo", GH + "libretro/FBNeo", None, "../retro/libretro-fbneo")],
+                                         licences={"FinalBurn Neo": ["src/license.txt"]},
+                                         ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh", P + "arcade-names.py"]),
     "pspexp-libretro-snes9x2005": dict(what="the Snes9x 2005 libretro core", comps=[("Snes9x 2005", GH + "libretro/snes9x2005", None, "../retro/libretro-snes9x2005")],
                                        ours=[P + "debs/pspexp-libretro/build", P + "build-retro-remote.sh", "scripts/gameshell/build.sh"]),
     # PSPExp's own: its code is MIT (its source: PSPExp's repository, at the commit the copyright

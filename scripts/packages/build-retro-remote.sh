@@ -16,8 +16,13 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 H="$1"; OUT="$2"; INC="$3"
 [ -n "$H" ] && [ -n "$OUT" ] || { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 CORE="${CORE:-fceumm}"
-SRC="$ROOT/../retro/libretro-$CORE"
-[ -f "$SRC/Makefile.libretro" ] || [ -f "$SRC/Makefile" ] || { echo "core source not found in $SRC" >&2; exit 1; }
+# a core whose makefile is not at its source's top: FinalBurn Neo's Neo Geo driver alone
+case "$CORE" in
+fbneo_neogeo) SRCDIR=libretro-fbneo; MKDIR=src/burner/libretro; MKARGS="SUBSET=neogeo" ;;
+*) SRCDIR=libretro-$CORE; MKDIR=.; MKARGS= ;;
+esac
+SRC="$ROOT/../retro/$SRCDIR"
+[ -f "$SRC/$MKDIR/Makefile.libretro" ] || [ -f "$SRC/$MKDIR/Makefile" ] || { echo "core source not found in $SRC/$MKDIR" >&2; exit 1; }
 
 ssh "$H" 'rm -rf ~/pspexp/retro-src && mkdir -p ~/pspexp/retro-src/core ~/pspexp/retro-src/player ~/pspexp/retro-src/sdl2'
 { COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git --exclude '*.o' --exclude '*.so' --exclude '*.dylib' -cf - . ; } 2>/dev/null |
@@ -27,11 +32,12 @@ ssh "$H" 'rm -rf ~/pspexp/retro-src && mkdir -p ~/pspexp/retro-src/core ~/pspexp
 [ -n "$INC" ] && { COPYFILE_DISABLE=1 tar --no-xattrs -C "$INC" -cf - . ; } 2>/dev/null |
 	ssh "$H" 'mkdir -p ~/pspexp/retro-src/sdl2/SDL2 && tar -C ~/pspexp/retro-src/sdl2/SDL2 -xf -'
 
-ssh "$H" "CORE=$CORE sh -s" <<'REMOTE'
+ssh "$H" "CORE=$CORE MKDIR=$MKDIR MKARGS='$MKARGS' sh -s" <<'REMOTE'
 set -e
 cd ~/pspexp/retro-src
-MK=Makefile.libretro; [ -f core/$MK ] || MK=Makefile
-make -C core -f $MK -j4 platform=unix > core.log 2>&1 || { tail -20 core.log; exit 1; }
+MK=Makefile.libretro; [ -f core/$MKDIR/$MK ] || MK=Makefile
+make -C core/$MKDIR -f $MK -j4 platform=unix $MKARGS > core.log 2>&1 || { tail -20 core.log; exit 1; }
+[ "$MKDIR" = . ] || cp core/$MKDIR/${CORE}_libretro.so core/
 if [ -f sdl2/SDL2/SDL.h ]; then
 	# headers sent along; link the system library by its runtime name
 	SDLLIB=$(ls /lib/*/libSDL2-2.0.so.0 /usr/lib/*/libSDL2-2.0.so.0 2>/dev/null | head -1)

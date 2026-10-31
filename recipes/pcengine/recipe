@@ -1,0 +1,51 @@
+# The PC Engine / TurboGrafx-16 and its CD-ROM² (Super CD-ROM², Arcade CD-ROM²): Beetle PCE Fast
+# (Mednafen's PC Engine), PSPExp's build on every board (pspexp-libretro-mednafen-pce-fast: no
+# Debian carries it), played by pspexp-retro. HuCards (.pce) in ~/roms/pce; CD games (.chd, or .cue
+# with their tracks) in ~/roms/pcecd, with the System Card from the player's own console in
+# ~/roms/pcecd/bios (syscard3.pce; Arcade CD-ROM² games need the Arcade Card's too). Both draw at
+# 256 wide, readable on the PSP's 480x272. The pad: I and II, Select and Run.
+
+[package]
+id=pcengine
+title=PC Engine
+description=PC Engine / TurboGrafx-16 and its CD-ROM²: PSPExp's Beetle PCE Fast core; HuCards in ~/roms/pce, CD games in ~/roms/pcecd (the System Card in ~/roms/pcecd/bios)
+category=system
+license=GPL-2.0 (Beetle PCE Fast); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro pspexp-libretro-mednafen-pce-fast
+core=mednafen_pce_fast_libretro.so
+
+[system]
+id=pce
+name=PC Engine
+short=PCE
+icon=gamepad-2
+ext=pce
+roms=~/roms/pce
+thumbs=NEC - PC Engine - TurboGrafx 16
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
+graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: II, I
+control=start: Run
+control=select: Select
+
+[system.pcecd]
+id=pcecd
+name=PC Engine CD
+short=PCECD
+icon=gamepad-2
+ext=chd,cue
+roms=~/roms/pcecd
+thumbs=NEC - PC Engine CD - TurboGrafx-CD
+env=PSPEXP_RETRO_SYSTEM=~/roms/pcecd/bios
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
+graphics=sdl
+control=dpad: D-pad (the nub too)
+control=cross circle: II, I
+control=start: Run
+control=select: Select

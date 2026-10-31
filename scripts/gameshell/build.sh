@@ -31,10 +31,13 @@ if [ "$WHAT" = retro ]; then
 	# libSDL2-2.0.so.0 that only names the functions it uses; on the board the
 	# image's own SDL2 answers them. CORE=<core> (../retro/libretro-<core>).
 	CORE="${CORE:-quicknes}"
-	SRC="$ROOT/../retro/libretro-$CORE"
+	case "$CORE" in   # (FinalBurn Neo: its makefile further in, the Neo Geo driver alone)
+	fbneo_neogeo) SRC="$ROOT/../retro/libretro-fbneo"; MKDIR=src/burner/libretro ;;
+	*) SRC="$ROOT/../retro/libretro-$CORE"; MKDIR=. ;;
+	esac
 	INC="$OUT/gnu/src/SDL2-${SDL_VER:-2.30.12}/include"
 	[ -f "$INC/SDL.h" ] || { echo "SDL2 headers missing: run scripts/gameshell/build.sh shim first" >&2; exit 1; }
-	[ -f "$SRC/Makefile.libretro" ] || [ -f "$SRC/Makefile" ] || { echo "core source not found in $SRC" >&2; exit 1; }
+	[ -f "$SRC/$MKDIR/Makefile.libretro" ] || [ -f "$SRC/$MKDIR/Makefile" ] || { echo "core source not found in $SRC/$MKDIR" >&2; exit 1; }
 	command -v zig >/dev/null || { echo "zig not found (brew install zig)" >&2; exit 1; }
 	R="$OUT/retro"; mkdir -p "$R" "$OUT/bin" "$ROOT/build/zig-cache"
 	T="arm-linux-gnueabihf.${GLIBC_VER:-2.35}"
@@ -54,15 +57,16 @@ if [ "$WHAT" = retro ]; then
 	W="$R/src-$CORE"; rm -rf "$W"; mkdir -p "$W"
 	{ COPYFILE_DISABLE=1 tar --no-xattrs -C "$SRC" --exclude .git -cf - . ; } 2>/dev/null | tar -C "$W" -xf -
 	find "$W" \( -name '*.o' -o -name '*.so' -o -name '*.dylib' \) -delete
-	MK=Makefile.libretro; [ -f "$W/$MK" ] || MK=Makefile
+	MK=Makefile.libretro; [ -f "$W/$MKDIR/$MK" ] || MK=Makefile
 	# per core: PicoDrive picks ARM assembly (Cyclone, DrZ80, renderers) from
 	# the compiler's target name, which Zig's triple with a glibc version
 	# breaks: its portable C cores instead
 	case "$CORE" in
 	picodrive) EXTRA="ARCH=generic" ;;   # its C 68000 (FAME) and Z80 (CZ80) cores, no assembly
+	fbneo_neogeo) EXTRA="SUBSET=neogeo" ;;
 	*) EXTRA= ;;
 	esac
-	make -C "$W" -f "$MK" -j8 platform=unix CC="$R/zcc" CXX="$R/zcxx" $EXTRA >"$R/core-$CORE.log" 2>&1 || true
+	make -C "$W/$MKDIR" -f "$MK" -j8 platform=unix CC="$R/zcc" CXX="$R/zcxx" $EXTRA >"$R/core-$CORE.log" 2>&1 || true
 	OBJS=$(find "$W" -name '*.o' | sort)
 	[ -n "$OBJS" ] || { tail -20 "$R/core-$CORE.log"; exit 1; }
 	"$R/zcxx" -shared -fPIC -o "$OUT/bin/${CORE}_libretro.so" $OBJS -lm

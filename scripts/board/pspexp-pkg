@@ -215,6 +215,7 @@ P
 			  [ -n "$nub" ] && echo "env=PSPEXP_NUB=$nub"
 			  rall "$R" "$sec" env | sed 's/^/env=/'
 			  th=$(rget "$R" "$sec" thumbs); [ -n "$th" ] && echo "thumbs=$th"
+			  nm=$(rget "$R" "$sec" names); [ -n "$nm" ] && echo "names=$nm"   # an arcade system's set titles (the core's package ships them)
 			  g=$(rget "$R" "$sec" graphics); [ -n "$g" ] && echo "graphics=$g"
 			  rall "$R" "$sec" control | sed 's/^/control=/'   # the launcher's controls sheet, for its ROMs
 			  echo "pspexp=1"; } > "$A/systems/$sid.system"

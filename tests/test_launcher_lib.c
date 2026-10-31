@@ -72,6 +72,13 @@ int main(void)
     put("home/roms/gba/Legend of Zelda, The - The Minish Cap (USA).gba", "x");
     put("home/roms/gba/Golden Sun (USA, Europe).gba", "xx");
     put("home/roms/gba/readme.txt", "not a rom");
+    /* an arcade system: its sets named by its table (names=), the BIOS left out (2026-11-01) */
+    put("root/systems/neogeo.system", "name=Neo Geo\nshort=NEO\nroms=~/roms/neogeo\next=zip\nnames=~/neogeo.names\nexec=pspexp-retro fbneo %ROM%\n");
+    put("home/neogeo.names", "# set|title\nmslug|Metal Slug - Super Vehicle-001\ngarou|Garou - Mark of the Wolves (NGM-2530)\nneogeo|\n");
+    put("home/roms/neogeo/mslug.zip", "x");
+    put("home/roms/neogeo/GAROU.zip", "x");
+    put("home/roms/neogeo/neogeo.zip", "bios");
+    put("home/roms/neogeo/homebrew.zip", "x");
 
     CHECK_EQ(lib_load(&L), 0);
 
@@ -103,7 +110,7 @@ int main(void)
     CHECK(!strcmp(L.e[0].title, "Freedoom: Phase 1") && !strcmp(L.e[3].title, "OpenTyrian"));
 
     /* systems: ~ expanded, ROM folders created, ROMs named and sorted */
-    CHECK_EQ(L.nsys, 2);
+    CHECK_EQ(L.nsys, 3);
     snprintf(p, sizeof(p), "%s/home/roms/snes", base);
     { struct stat st; CHECK(stat(p, &st) == 0 && S_ISDIR(st.st_mode)); }
     s = sys_index(&L, "gba");
@@ -140,6 +147,19 @@ int main(void)
         }
     }
 
+    s = sys_index(&L, "neogeo");
+    CHECK(s >= 0);
+    if (s >= 0) {
+        lib_scan_roms(&L, s);
+        CHECK_EQ(L.sys[s].nroms, 3);   /* (not neogeo.zip) */
+        if (L.sys[s].nroms == 3) {
+            CHECK(!strcmp(L.sys[s].roms_list[0].title, "Garou - Mark of the Wolves"));   /* (any case: GAROU.zip) */
+            CHECK(!strcmp(L.sys[s].roms_list[0].tags, "NGM-2530"));
+            CHECK(!strcmp(L.sys[s].roms_list[1].title, "homebrew"));   /* (not in the table: its file's name) */
+            CHECK(!strcmp(L.sys[s].roms_list[2].title, "Metal Slug - Super Vehicle-001"));
+        }
+    }
+
     /* favourites and recent persist as ids */
     CHECK_EQ(lib_fav_toggle(&L, "p:opentyrian/opentyrian"), 1);
     lib_recent_push(&L, "p:freedoom/phase1");
@@ -167,7 +187,7 @@ int main(void)
     CHECK_EQ(lib_changed(&L), 1);
     n = lib_reload(&L);
     CHECK_EQ(L.n, 5);
-    CHECK_EQ(n, 5 + 3);   /* games and apps, GBA and SNES ROMs */
+    CHECK_EQ(n, 5 + 3 + 3);   /* games and apps, GBA, SNES and Neo Geo ROMs (its BIOS not one) */
     CHECK_EQ(lib_changed(&L), 0);
     sleep(1);
     put("home/roms/gba/Metroid Fusion (USA).gba", "x");

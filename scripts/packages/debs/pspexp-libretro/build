@@ -8,7 +8,11 @@
 # Handy (the Atari Lynx) is in no Debian at all: both boards get ours; it runs
 # without Atari's boot ROM (a built-in replacement), using a real lynxboot.img only
 # when one is in the core's system folder.
-# Usage: build OUTDIR CORE ARCH   (CORE: picodrive | snes9x2005 | handy; ARCH: armhf | arm64)
+# Beetle PCE Fast (the PC Engine and its CD-ROM²) and FinalBurn Neo's Neo Geo driver alone
+# (SUBSET=neogeo) are in no Debian either (2026-11-01): both boards get ours. The Neo Geo's comes
+# with its names table (scripts/packages/arcade-names.py): the launcher's titles for its sets.
+# The package's name is the core's with "-" for "_" (Debian allows no "_").
+# Usage: build OUTDIR CORE ARCH   (CORE: picodrive | snes9x2005 | handy | mednafen_pce_fast | fbneo_neogeo; ARCH: armhf | arm64)
 # arm64: the Pi's build (CORE=... scripts/pi/install.sh retro -> build/pi/bin)
 set -e
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
@@ -22,18 +26,25 @@ case "$CORE" in
 picodrive)  DESC="Sega Mega Drive / Genesis, Master System, Game Gear, Sega CD and 32X (PicoDrive)"; LIC=COPYING ;;
 snes9x2005) DESC="Super Nintendo (Snes9x 2005: an older, lighter Snes9x)"; LIC=copyright ;;
 handy)      DESC="Atari Lynx (Handy)"; LIC=lynx/license.txt ;;
-*) echo "core: picodrive | snes9x2005 | handy" >&2; exit 2 ;;
+mednafen_pce_fast) DESC="PC Engine / TurboGrafx-16 and its CD-ROM² (Beetle PCE Fast)"; LIC=COPYING; TERMS="GPL-2.0" ;;
+fbneo_neogeo) DESC="Neo Geo (FinalBurn Neo, its Neo Geo driver)"; LIC=src/license.txt; SRCDIR=libretro-fbneo ;;
+*) echo "core: picodrive | snes9x2005 | handy | mednafen_pce_fast | fbneo_neogeo" >&2; exit 2 ;;
 esac
-SRC="$ROOT/../retro/libretro-$CORE"
+SRC="$ROOT/../retro/${SRCDIR:-libretro-$CORE}"
+PKG="pspexp-libretro-$(printf %s "$CORE" | tr _ -)"
 [ -f "$B/${CORE}_libretro.so" ] || { echo "no $B/${CORE}_libretro.so: CORE=$CORE scripts/gameshell/build.sh retro (armhf) or scripts/pi/install.sh retro (arm64)" >&2; exit 1; }
 [ -f "$SRC/$LIC" ] || { echo "no licence $SRC/$LIC" >&2; exit 1; }
 V="$(git -C "$SRC" log -1 --format=%cd --date=format:%Y.%m.%d)+$(git -C "$SRC" rev-parse --short HEAD)-pspexp2"   # (-pspexp2: the licences and source, 2026-10-11)
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 R="$W/root"
-mkdir -p "$R/usr/lib/$TRIPLET/libretro" "$R/usr/share/doc/pspexp-libretro-$CORE"
+mkdir -p "$R/usr/lib/$TRIPLET/libretro" "$R/usr/share/doc/$PKG"
 install -m 644 "$B/${CORE}_libretro.so" "$R/usr/lib/$TRIPLET/libretro/${CORE}_libretro.so"
+if [ "$CORE" = fbneo_neogeo ]; then   # its sets' titles, where the recipe's names= says
+	mkdir -p "$R/usr/share/pspexp/names"
+	python3 "$ROOT/scripts/packages/arcade-names.py" "$SRC" neogeo "$R/usr/share/pspexp/names/neogeo.names"
+fi
 cat > "$W/control" <<C
-Package: pspexp-libretro-$CORE
+Package: $PKG
 Version: $V
 Architecture: $ARCH
 Maintainer: PSPExp <info@pspexp.dev>
@@ -42,8 +53,8 @@ Priority: optional
 Depends: libc6
 Description: libretro core: $DESC
  Built by PSPExp for boards whose Debian doesn't carry it; installed in
- Debian's libretro folder and played by pspexp-retro. Free for
- non-commercial use: see /usr/share/doc/pspexp-libretro-$CORE/copyright.
+ Debian's libretro folder and played by pspexp-retro. ${TERMS:-Free for
+ non-commercial use}: see /usr/share/doc/$PKG/copyright.
 C
-python3 "$ROOT/scripts/packages/sources" copyright pspexp-libretro-$CORE "$V" "$R/usr/share/doc/pspexp-libretro-$CORE"   # licences, and where the complete source is (Package_Manager §6.2)
-python3 "$ROOT/scripts/packages/mkdeb.py" "$R" "$W/control" "$OUT/pspexp-libretro-${CORE}_${V}_$ARCH.deb"
+python3 "$ROOT/scripts/packages/sources" copyright $PKG "$V" "$R/usr/share/doc/$PKG"   # licences, and where the complete source is (Package_Manager §6.2)
+python3 "$ROOT/scripts/packages/mkdeb.py" "$R" "$W/control" "$OUT/${PKG}_${V}_$ARCH.deb"

@@ -53,6 +53,7 @@ packages/          what the launcher offers, for any board
   build-opensurge.sh, build-hurrican.sh, build-egoboo.sh, build-solarus.sh, build-easyrpg.sh, build-luanti.sh, build-vanillaconquer.sh, build-srb2kart.sh, build-srb2.sh, build-etlegacy.sh, build-openra.sh, build-stratagus.sh
                      engines Debian lacks, the same way
   push-roms.sh       copy the test ROMs (roms/, git-ignored) to a board
+  arcade-names.py    an arcade system's set titles (names=) from FinalBurn Neo's driver sources
   check-recipes      check the catalogue's recipes (docs/Package_Manager.md §4)
   debs/              our own .deb packages, each with a `build` script: pspexp-core,
                      pspexp-runtime, pspexp-retro, pspexp-cavestory, tyrian-data,

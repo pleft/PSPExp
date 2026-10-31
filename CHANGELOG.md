@@ -48,6 +48,13 @@
   in `roms/segacd/bios`; 32X games in `roms/32x`, played by PicoDrive
   (now on the Raspberry Pi too). Apps > Packages updates Mega Drive to
   bring them.
+- **PC Engine and Neo Geo**: Apps > Packages has **PC Engine** (HuCards
+  in `roms/pce`, CD games in `roms/pcecd` with your System Card in
+  `roms/pcecd/bios`) and **Neo Geo** (FinalBurn Neo's zips in
+  `roms/neogeo`, with the BIOS `neogeo.zip` beside them; each game shows by
+  its full name, "Metal Slug - Super Vehicle-001", and the BIOS not at all).
+  Game details finds their descriptions too (the board makes its database
+  again once, for the new systems).
 - **Descriptions of your ROMs** in Game details, with who made them, the
   year and the genre: from the LaunchBox Games Database, which the board
   downloads once (110 MB, kept as 40 MB) and then reads offline, every

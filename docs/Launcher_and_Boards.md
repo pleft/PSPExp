@@ -877,7 +877,9 @@ from 2021 and without Dreamcast). Matched by name, LaunchBox found all 35
 alone, through its other names ("Pokemon Red Version", "The GG Shinobi"), so
 it is the one source. Each board streams the zip once (`curl | bsdtar -xOf -
 Metadata.xml Files.xml`, never kept whole) through a line parser into
-launchbox.sqlite (SQLite 3.46.1 vendored, tools/pspexp-term/sqlite): the
+launchbox.sqlite, launchbox-2.sqlite since its platforms grew (2026-11-01: the
+PC Engine CD, the Neo Geo; a board makes it again once and deletes the old
+one) (SQLite 3.46.1 vendored, tools/pspexp-term/sqlite): the
 games of the systems PSPExp plays, their names and other names as `norm()`
 makes them (words, lower case, "the" and bracketed tags left out), and the
 No-Intro / Redump file names; 40 MB. 69 s on the GameShell, download

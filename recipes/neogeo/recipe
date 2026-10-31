@@ -1,0 +1,38 @@
+# The Neo Geo (MVS and AES): FinalBurn Neo, its Neo Geo driver alone (SUBSET=neogeo), PSPExp's
+# build on every board (pspexp-libretro-fbneo-neogeo: no Debian carries FinalBurn Neo), played by
+# pspexp-retro. The player's own sets as FinalBurn Neo's zips ("mslug.zip") in ~/roms/neogeo, with
+# the Neo Geo BIOS beside them (neogeo.zip, FinalBurn Neo's); the launcher names each set from the
+# table the core's package carries (names=, scripts/packages/arcade-names.py: "Metal Slug - Super
+# Vehicle-001") and leaves the BIOS out of the list. 304x224, readable on the PSP's 480x272.
+# The pad: A, B, C, D as on a PlayStation pad in RetroArch (cross, circle, square, triangle);
+# SELECT puts a coin in, START starts.
+
+[package]
+id=neogeo
+title=Neo Geo
+description=Neo Geo: PSPExp's FinalBurn Neo core (its Neo Geo driver); your sets (FinalBurn Neo zips) and the BIOS (neogeo.zip) in ~/roms/neogeo
+category=system
+license=FinalBurn Neo licence (non-commercial); pspexp-retro is part of PSPExp
+version=1
+
+[debian]
+apt=pspexp-retro pspexp-libretro-fbneo-neogeo
+core=fbneo_neogeo_libretro.so
+
+[system]
+id=neogeo
+name=Neo Geo
+short=NEO
+icon=gamepad-2
+ext=zip
+roms=~/roms/neogeo
+names=/usr/share/pspexp/names/neogeo.names
+thumbs=SNK - Neo Geo
+keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
+nub=keys
+graphics=sdl
+control=dpad: Joystick (the nub too)
+control=cross circle: A, B
+control=square triangle: C, D
+control=start: Start
+control=select: Coin

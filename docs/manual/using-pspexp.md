@@ -219,7 +219,7 @@ and **Settings > Update PSP** puts the PSP's side up to date too.
 ## Emulators and ROMs
 
 An emulator package adds a **system**: NES, SNES, Mega Drive (with Master
-System, Game Gear, Sega CD and 32X), Game Boy and Game Boy Color, Game Boy Advance,
+System, Game Gear, Sega CD and 32X), PC Engine (and its CD-ROM²), Neo Geo, Game Boy and Game Boy Color, Game Boy Advance,
 Atari Lynx, WonderSwan, and on a Raspberry Pi the Nintendo 64. It appears
 under **Emulators** once there are ROMs in
 its folder in the board's home folder:
@@ -231,6 +231,9 @@ its folder in the board's home folder:
 | Mega Drive / Master System / Game Gear | `roms/md`, `roms/sms`, `roms/gg` |
 | Sega CD | `roms/segacd` (.chd, or .cue with its tracks); your console's BIOS in `roms/segacd/bios` (`bios_CD_U.bin`, `bios_CD_E.bin` or `bios_CD_J.bin`, the disc's region) |
 | 32X | `roms/32x` (.32x) |
+| PC Engine / TurboGrafx-16 | `roms/pce` (.pce) |
+| PC Engine CD | `roms/pcecd` (.chd, or .cue with its tracks); your console's System Card in `roms/pcecd/bios` (`syscard3.pce`) |
+| Neo Geo | `roms/neogeo`: FinalBurn Neo's zips (`mslug.zip`) with the BIOS beside them (`neogeo.zip`); each shows by its full name, the BIOS not at all |
 | Game Boy / Color | `roms/gb`, `roms/gbc` |
 | Game Boy Advance | `roms/gba` |
 | Atari Lynx | `roms/lynx` |

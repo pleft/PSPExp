@@ -55,7 +55,10 @@ plays on it at 14-20 frames a second; its first start takes about 4 minutes.
 `roms/md` (and `roms/sms`, `roms/gg`, `roms/32x`), `roms/segacd` (Sega CD
 discs as `.chd`, or `.cue` with their tracks, and the BIOS from your own
 console in `roms/segacd/bios`: `bios_CD_U.bin`, `bios_CD_E.bin` or
-`bios_CD_J.bin`, the disc's region), `roms/gb`, `roms/gbc`, `roms/gba`,
+`bios_CD_J.bin`, the disc's region), `roms/pce` and `roms/pcecd` (PC Engine
+HuCards and CD games; for the CD the System Card `syscard3.pce` in
+`roms/pcecd/bios`), `roms/neogeo` (FinalBurn Neo's zips, the BIOS
+`neogeo.zip` beside them), `roms/gb`, `roms/gbc`, `roms/gba`,
 `roms/lynx`, `roms/ws`, `roms/wsc`. The easiest way: copy them to the PSP's
 memory stick, then in **Apps > Files** copy them from the **PSP** drive to
 the folder. Only use ROMs of games you own.

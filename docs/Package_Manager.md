@@ -244,6 +244,17 @@ package's: the Mega Drive recipe's 32X plays with PicoDrive
 its other systems with Genesis Plus GX. An `env=PSPEXP_RETRO_SYSTEM=~/roms/segacd/bios`
 points pspexp-retro at a system's BIOS folder (it expands the `~/`).
 
+An arcade system names its sets with `names=`, a table of `set|Full title`
+lines (an empty title: no game, left out of the list, as the Neo Geo's BIOS
+`neogeo.zip`): `recipes/neogeo/recipe` has
+`names=/usr/share/pspexp/names/neogeo.names`, which its core's package
+(`pspexp-libretro-fbneo-neogeo`) carries, made from FinalBurn Neo's driver
+sources by `scripts/packages/arcade-names.py`. Cores no Debian carries are
+PSPExp's own `pspexp-libretro-<core>` packages, the core's name with `-` for
+`_` (`debs/pspexp-libretro/build`: PicoDrive, Snes9x 2005, Handy, Beetle PCE
+Fast as `pspexp-libretro-mednafen-pce-fast`, FinalBurn Neo's Neo Geo driver
+alone as `pspexp-libretro-fbneo-neogeo`).
+
 A system may instead run a program of its own: `exec=` in `[system]`, with
 `%ROM%` where the ROM goes, and no `core=` (the Nintendo 64,
 `recipes/n64/recipe`: `exec=/usr/games/pspexp-n64 %ROM%`, Mupen64Plus drawn by
