@@ -385,7 +385,7 @@ static void cats_build(void)
             { "Recording", "film", "Clips, their length and the videos' quality", { "a:clips", "a:cliplen", "a:quality", NULL } },
             { "Clock", "clock", "The board's time zone", { "a:tz", NULL } },
             { "Library", "refresh-cw", "Refreshing it, box art downloads", { "a:rescan", "a:boxart", NULL } },
-            { "This PSP", "gamepad-directional", "The PSPExp plugin, the PSP's clock, the theme", { "a:plugin", "a:pspclock", "a:theme", NULL } },
+            { "This PSP", "gamepad-directional", "PSPExp plugin, PSP clock, Themes", { "a:plugin", "a:pspclock", "a:theme", NULL } },
             { "This board", "circuit-board", "About, SSH, restart, power off", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
         };
         int g, k, ng = 0;
