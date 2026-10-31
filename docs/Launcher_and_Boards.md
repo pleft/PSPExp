@@ -695,6 +695,63 @@ notification centre no longer closes on circle. Full-screen views (a film, a pic
 Checked on the PSP-1000 at 1:1: Media (Library, a folder, Now playing),
 Files, Gallery, Packages, System Monitor, Notifications (circle stayed).
 
+**The design proposal, stage 1: the shell (2026-10-31).** The grid
+launcher above was kept but not liked; a written design proposal (XMB-like
+navigation in the existing blue and waves, with mockups) replaced it, built
+in four stages, each checked on the PSP before the next: (1) the shell,
+focus, categories and depth; (2) the Games views (Focus and a 3x2 Grid on
+square, UMD discs for PSP games only, other platforms' art at its own
+proportions, triangle's panel: favourite, Game details, Sort by remembered
+per platform); (3) the same button roles in every app; (4) Quick controls
+(recording from it needs the recorder to take a start with Clips off),
+launch progress, connection recovery, empty states.
+
+Stage 1 is the shell. The screen is five bands (the proposal's table):
+the status strip (y 0..23: "PSPExp", how the PSP is connected and to what,
+from `g_link`'s first word and the board's name, "USB · Raspberry Pi 400";
+the music, Bluetooth, the bell, the clock and the PSP's battery, labelled
+PSP; the board's own battery moved to Quick controls), the ribbon (23..57:
+L, Games · Apps · Media · Settings, R; the one shown white and underlined),
+the location line (57..80: "Games / Super Nintendo", "2 / 6"), the browsing
+area (80..246) and the hints (246..272). Four categories (`NSEC`), each a
+root level and its children: Games (`CK_PLATS`, its platforms `tab`),
+Apps (Files, Packages, Terminal, System Monitor, then installed apps A to
+Z), Media (new, `CK_MEDIA`: Gallery, Now playing while music is loaded,
+Music, Videos; the last three open the Media app through
+`music_open_at`, at that place's folder, or on what plays) and Settings
+(new levels: `CK_GROUPS`, the seven groups and Ready, each a `CK_SETTINGS`
+list; the "h:" headings went). `cat_parent` gives a level's parent: circle
+goes back one level (`level_back`, on the entry it came from), nothing at a
+root, where no Back hint shows. L / R go round the categories from any
+depth, each coming back to the level it was left on (`g_sec_at`, by name).
+Every level keeps its highlight over a rebuild (`g_keep`: by the entry's id;
+a game played moves up its list and stays highlighted), so a game or app
+closed comes back where it was.
+
+A level is a focus list (`draw_focus`): the highlight fixed on the second
+row (`FOCUS_AT`, 56 px; the other rows 36), the list easing under it; the
+highlighted entry's picture at 32 px, its name in the 24 px font (16 px
+when it has a letter outside ASCII, which the 24 px atlas does not hold),
+a line about it under; the others' names at 16 px, platforms with how many
+games. A Settings group is a plain list (`draw_settings`, 30 px rows):
+on / off flips where it is; a choice (Clip length, Quality) opens its
+values beside the list, the current one ticked (`g_vl`): cross sets the
+one highlighted, circle leaves it. Under Recording's list: "♪ + L Record",
+"♪ + R Save clip", saved on the board, in the Gallery. The hints: cross's
+word, circle Back below a root, triangle Details at the left; SELECT
+Search (in Games) and START Quick at the right; when they would meet, the
+face hints go first, never the text size. START is Quick controls
+(Notifications, Terminal, the board's battery, Restart PSPExp, Power off;
+for now the centred menu); SELECT, a tap, is Search in Games: no longer
+the notifications, and held no longer the terminal (main.c). Games' rows
+show their system's console picture until stage 2 brings their art.
+Checked on the PSP-1000 at 1:1: the start (Mega Drive, on its last played),
+the platforms, Super Nintendo, the empty Favourites, PSP, Apps, Media,
+Settings and its groups, Recording with its value list (set and cancelled),
+This board, Quick controls; Media > Music opened Media in ~/Music, HOME back
+on Music; Gallery and Files back on their entries; Search opened and
+closed; L / R back to where each category was left.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the

@@ -1604,8 +1604,8 @@ static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
 static int g_launch_aware;                   /* it hands the PSP over itself (a PSPExp program) */
 
-/* hold select: the launcher <-> the terminal; an app or Files closed (HOME, their own exit): where
- * it was opened from. (The mirror view, the board's framebuffer on the PSP for the GameShell's
+/* the launcher <-> the terminal (HOME in the terminal); an app or Files closed (HOME, their own
+ * exit): where it was opened from. (The mirror view, the board's framebuffer on the PSP for the GameShell's
  * ClockworkOS, went with it on 2026-10-29.) */
 static void view_cycle(void)
 {
@@ -1836,23 +1836,12 @@ static void handle_input(void)
     int left = fire(V_LEFT, b & PSPEXP_BUTTON_LEFT, now, 1), right = fire(V_RIGHT, b & PSPEXP_BUTTON_RIGHT, now, 1);
     g_prev_buttons = b;
     if (b || ax * ax + ay * ay > 64 * 64) g_input_at = now;   /* (a worn nub rests up to ~55 off the middle) */
-    /* select: a long hold switches between the launcher and the terminal; a tap is resolved on
-     * release (the terminal's keyboard, the launcher's notifications) */
-    {
-        static uint64_t sel_down; static int sel_used;
-        int sel_tap = 0;
-        if (pressed & PSPEXP_BUTTON_SELECT) { sel_down = now; sel_used = 0; }
-        /* (not in an app or Files: HOME leaves them, and SELECT is theirs; held, it went to the
-         * launcher until 2026-10-29) */
-        if ((b & PSPEXP_BUTTON_SELECT) && !sel_used && now - sel_down >= 700000u && g_launcher_on && !g_app && !g_view_files) {
-            sel_used = 1;
-            view_cycle();
-        }
-        if ((g_prev_select_released = (!(b & PSPEXP_BUTTON_SELECT) && g_prev_select_held))) sel_tap = !sel_used;
-        g_prev_select_held = (b & PSPEXP_BUTTON_SELECT) != 0;
-        g_select_tap = sel_tap;
-        if (!g_launcher_on) g_select_tap = (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* no other view: taps act at once */
-    }
+    /* select: a tap, resolved on release (the terminal's keyboard, the launcher's Search). Held, it
+     * switched between the launcher and the terminal until 2026-10-31: the terminal is in Apps and
+     * Quick controls now, and HOME leaves it */
+    g_prev_select_released = !(b & PSPEXP_BUTTON_SELECT) && g_prev_select_held;
+    g_prev_select_held = (b & PSPEXP_BUTTON_SELECT) != 0;
+    g_select_tap = g_launcher_on ? g_prev_select_released : (pressed & PSPEXP_BUTTON_SELECT) != 0;   /* (no other view: taps act at once) */
     if (pressed & PSPEXP_BUTTON_HOME) { home_leave(); return; }   /* (only sent while HOME is the console's) */
     /* the views get SELECT as a tap, on its release (a press acted on also when the user was
      * holding it for the launcher); none closes on it now: circle steps back, HOME leaves */

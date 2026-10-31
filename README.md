@@ -32,7 +32,7 @@ What you get on the PSP:
 
 | | |
 |---|---|
-| <img src="docs/images/launcher-home.png" width="400" alt="The launcher: Games, a grid of your platforms"> | <img src="docs/images/packages.png" width="400" alt="The Packages app"> |
+| <img src="docs/images/launcher-home.png" width="400" alt="The launcher: Games, the list of your platforms"> | <img src="docs/images/packages.png" width="400" alt="The Packages app"> |
 | The launcher: Games | Packages: install games from the PSP |
 | <img src="docs/images/celeste64.png" width="400" alt="Celeste 64 on the PSP"> | <img src="docs/images/supertuxkart.png" width="400" alt="SuperTuxKart on the PSP"> |
 | Celeste 64, drawn by a Raspberry Pi's GPU | SuperTuxKart, the same way |

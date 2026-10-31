@@ -2,31 +2,30 @@
 
 ## Since 1.3.0
 
-- **A simpler launcher.** No home screen and no rail: three sections along
-  the top, Games, Apps and Settings, that **L / R** move between. PSPExp
-  opens inside the platform of the game you played last, on it. Games is a
-  grid of your platforms with their consoles' pictures: Favourites, PSP,
-  your board's own games (named after the board, "Raspberry Pi 400") and
-  one per system you have ROMs for; cross opens one, its games a shelf of
-  discs, favourites first (a yellow star before the name), then what you
-  played last; circle goes back. Apps is the same grid. It replaces the
-  Favourites, PSP, Games and Emulators sections. Restart PSPExp and Power
-  off are in START's menu everywhere.
-- **Settings is one list**: up / down along it, each option's value on the
-  right (a switch for on / off; a choice's values side by side, the current
-  one filled, left / right to change it); cross changes the highlighted one,
-  the hint saying how ("Next: 30 s", "Turn off"). What is waiting (an update
-  for the PSP) comes first.
+- **A new launcher**, XMB-like: four categories along the top, **Games**,
+  **Apps**, **Media** and **Settings**, that **L / R** move between from
+  anywhere, each coming back where you left it. The d-pad moves along one
+  list, the highlight staying on its second row while the list moves;
+  **cross** goes in, **circle** back one level. A line under the categories
+  says where you are ("Games / Super Nintendo", "2 / 6"); the top line how
+  the PSP is connected and to what ("USB · Raspberry Pi 400") and the PSP's
+  battery. PSPExp opens on the game you played last, in its platform.
+  Games lists your platforms (Favourites, PSP, your board's own games, one
+  per system with ROMs), each its games, favourites first, then what you
+  played last. Media holds the Gallery, Now playing, and Music and Videos,
+  which open the Media app in those folders. Settings lists its groups,
+  each its settings: on / off flips in place, a choice (Clip length,
+  Quality) opens its values with the current one ticked. **START** is
+  Quick controls (Notifications, Terminal, Restart PSPExp, Power off),
+  **SELECT** Search in Games; holding SELECT no longer opens the terminal
+  (Apps or Quick controls do).
 - **Every app has a title bar** with its name: an app no longer passes for
   the launcher. The hints at the bottom sit where the PSP's buttons are:
   "HOME Close" first at the left (the way out, the same as for games),
   START at the right end. Circle only steps back inside an app; the
   Notifications list no longer closes on it either.
-- **Calmer screens**: the bottom row shows at most three buttons (cross,
-  triangle Details, START Menu); the top bar the clock, the bell only when
-  there is news, and on the right the music, headphones, network and the
-  batteries; the line under a game says what it is and whether you played
-  it lately (sizes, files and how it draws are in Details).
+- **Plainer words**: the line under a game says what it is and whether you
+  played it lately (sizes, files and how it draws are in Details).
 - **HOME leaves what is on screen**: in an app (Files, Media, Packages,
   the terminal...) or a game, press it twice ("HOME again to quit" shows
   for 3 seconds after the first) to go back to the launcher; in the

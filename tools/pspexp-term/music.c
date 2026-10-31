@@ -505,6 +505,14 @@ static void browse_choose(void)
 
 /* ---- the app ------------------------------------------------------------------------------------ */
 
+static int g_open_req;            /* music_open_at: where the next opening goes */
+static char g_open_place[48];
+void music_open_at(const char *place)
+{
+    g_open_req = 1;
+    snprintf(g_open_place, sizeof(g_open_place), "%s", place ? place : "");
+}
+
 static void mu_open(void)
 {
     g_exit = 0; g_menu.open = 0; g_info = 0; g_dirty = 1; g_cover_key[0] = 0;   /* (Files' viewer may have used the picture since) */
@@ -513,6 +521,16 @@ static void mu_open(void)
         g_view = g_at >= 0 && player_info(&pi) && !pi.paused && !pi.ended ? V_NOW : V_BROWSE;
     }
     if (g_view == V_BROWSE && !g_dir[0]) places_load();
+    if (g_open_req) {   /* from the launcher's Media: on what plays, or in a place's folder */
+        g_open_req = 0;
+        if (!g_open_place[0]) { if (g_at >= 0) g_view = V_NOW; return; }
+        g_view = V_BROWSE;
+        g_dir[0] = 0; places_load(); g_bsel = g_btop = 0;
+        {
+            int i;
+            for (i = 0; i < g_npl; i++) if (!strcmp(g_pl[i].name, g_open_place)) { g_bsel = i; browse_choose(); break; }
+        }
+    }
 }
 
 /* the queue down to the track playing (none: empty) */

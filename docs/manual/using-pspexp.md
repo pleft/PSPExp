@@ -7,7 +7,7 @@ buttons; the board needs no screen, keyboard or mouse.
 
 Every app (Files, Media, Gallery, Packages, System Monitor, Notifications)
 has a title bar across the top with its name; the launcher has none (Games,
-Apps and Settings along the top instead). The hints at the bottom sit where
+Apps, Media and Settings along the top instead). The hints at the bottom sit where
 their buttons are on the PSP: **HOME Close** first at the left, under the
 HOME button, the one way out of an app as of a game; **START** at the right
 end, under START. Circle only ever steps back inside an app (pressed a few
@@ -20,68 +20,80 @@ times, it stops at the app's top, never throws you out).
 | circle | back one step: cancel, the folder above; it never closes an app (HOME does; in the terminal: Esc) |
 | triangle | show more: details, a hidden password (in the terminal: Space) |
 | square | mark or remove: favourite, mark a file, delete a letter, remove a package, forget a device, stop the music |
-| START | the menu: what you can do with the highlighted item, then the screen's own (in a keyboard: done; in the terminal: Enter) |
-| SELECT, held | in the launcher: the terminal (and back) |
-| L / R | the other section, tab, panel or page |
+| START | in the launcher, **Quick controls**; in an app, its menu (in a keyboard: done; in the terminal: Enter) |
+| SELECT | in the launcher's Games, **Search** |
+| L / R | the other category, tab, panel or page |
 | ♪ (note) | pause or resume the music, from anywhere (not during a game); ♪ + L records a video, ♪ + L twice a screenshot, ♪ + R saves the last 30 seconds (Settings > Recording) ([Recording](recording.md)) |
 
 ## The launcher
 
-Three sections run along the top: **Games**, **Apps** and **Settings**;
-**L and R** move between them (round from the last to the first). Each
-screen shows one thing to choose from.
+Four categories run along the top: **Games**, **Apps**, **Media** and
+**Settings**; **L and R** move between them (round from the last to the
+first), from wherever you are in one, and each comes back where you left
+it. The d-pad only moves along the list on screen: **cross** goes in,
+**circle** goes back one level (at a category's top there is nothing above,
+and no Back hint). The highlight stays on the second row and the list moves
+under it; the highlighted entry is larger, with a line about it. Under the
+categories a line says where you are ("Games / Super Nintendo") and where
+in the list ("2 / 6").
 
-**Games** is a grid of your platforms, each with its console's picture and
-how many games it holds: **Favourites** (the games you marked with
-**square**, a yellow star before their name wherever they are), **PSP**,
-your board's own games (named after it: Raspberry Pi 400, GameShell), then
-each system you have ROMs for. The d-pad moves around the grid; **cross**
-opens a platform: its games as a shelf of discs, each with its cover in the
-window (left / right), the favourites first, then what you played last,
-then the rest A to Z. **Cross** plays, **triangle** shows the details,
-**circle** goes back to the platforms. PSPExp opens inside the platform of
-the game you played last, on it: switch on, press cross, and you are playing
-again.
+**Games** lists your platforms, each with its console's picture and how
+many games it holds: **Favourites** (the games you marked with **square**,
+a yellow star before their name wherever they are), **PSP**, your board's
+own games (named after it: Raspberry Pi 400, GameShell), then each system
+you have ROMs for. Cross opens a platform: its games, the favourites first,
+then what you played last, then the rest A to Z. **Cross** plays,
+**triangle** shows the details, circle goes back to the platforms. PSPExp
+opens on the game you played last, in its platform: switch on, press cross,
+and you are playing again.
 
 - **PSP** holds your own PSP games kept on the board (ISO, CSO, or a zip
-  holding one, in `roms/psp`), each with its own icon from the disc. The PSP
-  runs them itself, not an emulator, and PSPExp comes back when you leave
-  the game ([the PSPExp plugin](plugin.md) must be on: Settings > This PSP).
-- Under a game a line says what it is and whether you played it lately; its
-  size, the file and who draws it are in **Details**.
+  holding one, in `roms/psp`). The PSP runs them itself, not an emulator,
+  and PSPExp comes back when you leave the game ([the PSPExp
+  plugin](plugin.md) must be on: Settings > This PSP).
+- Under the highlighted game a line says what it is and whether you played
+  it lately; its size, the file and who draws it are in **Details**.
 
 ```
- 12:04 (bell)2      L  [Games]  Apps  Settings  R        wifi  76%
-  [ * ]          [ PSP ]       [ Pi 400 ]     [ Lynx ]
-  Favourites     PSP           Raspberry Pi   Atari Lynx
-  2 favourites   10 games      3 games        3 games
-  [ DC ]         [ GB ]        [ GBA ]        [ MD ]
- (X) Open                                               START Menu
+ PSPExp             USB · Raspberry Pi 400           16:40  PSP 67%
+ (L)   Games      Apps      Media      Settings                 (R)
+ Games / Super Nintendo                                      1 / 5
+
+ |[pad] Chrono Trigger
+ |      Super Nintendo · played lately
+  [pad] Donkey Kong Country
+  [pad] Street Fighter II Turbo
+ (X) Play  (O) Back  (/\) Details            SELECT Search  START Quick
 ```
 
-**Apps** is the same grid of tiles; cross opens one.
- **Settings** is one list
-(below).
+**Apps**: Files, Packages, Terminal and System Monitor, then the apps you
+installed (A to Z); cross opens one, HOME closes it and you are back on it.
+**Media**: the **Gallery**, **Now playing** while music plays, and
+**Music** and **Videos**, which open the Media app in the board's Music or
+Videos folder (circle there goes up to its places: the PSP, other drives,
+media servers). **Settings**: its groups (Network, Sound, Recording, Clock,
+Library, This PSP, This board; Ready first when an update or a restart is
+waiting), each a list of its settings with their values on the right.
+Cross turns an on / off setting on or off where it is; on a choice (Clip
+length, Quality) it opens the values beside it, the current one ticked:
+up / down, cross sets the one highlighted, circle leaves it as it was.
 
-The top bar keeps to what tells you something: the clock; the **bell**, only
-while there is news (with how many); the sections; on the right a note while
-music is loaded, Bluetooth headphones and their volume, the board's network,
-the board's own battery when it has one (the GameShell's, its icon before
-it), and the PSP's battery. The bottom row shows at most three buttons;
-square (favourites) and SELECT (notifications) work everywhere, and START's
-menu has them too.
+The top line shows PSPExp, how the PSP is connected and to what ("USB ·
+Raspberry Pi 400"), and on the right a note while music is loaded,
+Bluetooth headphones, the **bell** while there is news (with how many),
+the clock and the PSP's battery. The board's own battery (the GameShell's)
+is in Quick controls.
 
 | Button | In the launcher |
 |---|---|
-| L / R | the previous / next section: Games, Apps, Settings |
-| d-pad | around the grid; along a platform's shelf; up / down Settings' options, left / right a choice's value |
+| L / R | the previous / next category: Games, Apps, Media, Settings |
+| d-pad | up / down the list |
 | cross | open, play, or change a setting |
-| circle | from a platform's games back to the platforms |
+| circle | back one level: from a platform's games to the platforms, from a group's settings to the groups |
 | square | a game or ROM: make it a favourite, or no longer one |
-| triangle | details: description, how it draws, size, when last played |
-| START | the menu: Play, Add to favourites, Details, **Search** (everything: games, apps and every ROM, by name), Notifications, Restart PSPExp and Power off the board (each asked again) |
-| SELECT | the notifications |
-| SELECT, held | the terminal (and back) |
+| triangle | a game's or an installed app's details: description, how it draws, size, when last played |
+| SELECT | in Games, **Search** (games, apps and every ROM, by name) |
+| START | **Quick controls**: Notifications, Terminal, the board's battery when it has one, Restart PSPExp and Power off the board (each asked again) |
 
 ## Notifications
 
@@ -93,8 +105,8 @@ board's), the board losing its network, Bluetooth headphones gone,
 storage nearly full, an install or a Wi-Fi join that finished.
 
 Nothing is lost when you look away: the **bell** appears next to the clock
-in the top bar while there is something you have not seen, with how many. In the launcher press **SELECT**
-to open the list (or START > Notifications), the last 50, newest first:
+in the top bar while there is something you have not seen, with how many. In the launcher press **START**
+and choose **Notifications** to open the list, the last 50, newest first:
 
 - **cross**: go where it is about (Packages for updates, Settings for the
   network or Bluetooth), when there is somewhere to go;
@@ -348,8 +360,8 @@ what remains depends on the headphones.
 
 ## The terminal
 
-Hold **SELECT** in the launcher (or **Apps > Terminal**): the board's
-Linux shell on the PSP, with an on-screen keyboard. Up to four shells,
+**Apps > Terminal**, or START > Terminal in the launcher (HOME goes back to
+the launcher): the board's Linux shell on the PSP, with an on-screen keyboard. Up to four shells,
 colours, scrollback; `vi` and `top` work. On a Raspberry Pi 400 its own
 keyboard types into it too.
 
@@ -359,7 +371,7 @@ keyboard types into it too.
 | START | Enter |
 | L + triangle / R + square | Tab (completes names) / Ctrl-C (stops a program) |
 | d-pad | move on the keyboard; arrow keys when it is hidden |
-| SELECT | show / hide the keyboard (held: the launcher) |
+| SELECT | show / hide the keyboard |
 | L held / R held | Shift / Ctrl |
 | L tapped | a menu: special keys, commands, themes, fonts, Files here |
 | R + d-pad | scroll back |
