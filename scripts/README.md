@@ -15,6 +15,7 @@ dev/               run and test from the build tree, a PSP on the Mac's USB or a
   run-ppsspp.sh      the PSP runtime in the PPSSPP emulator (installed fresh into slot a)
   bench-shim.sh      the SDL layer's upload benchmark (Doom timedemo), here or on a board
   make-home-hint.py  the PSP's "HOME again to quit" bar in the launcher's look (psp/executor-ge/home_hint.h)
+  make-lost-card.py  the PSP's "No connection to the board" card, the same way (psp/executor-ge/lost_card.h)
 
 board/             installed on every board (/usr/local/bin; the Omega's SD card)
   pspexp-exec        start a PSPExp program: the console hands the PSP over and back

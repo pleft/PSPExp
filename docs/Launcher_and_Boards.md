@@ -843,7 +843,9 @@ proposal's mockup. Never by switching Clips on. Checked on the PSP-1000
 through the GameShell after Update the PSP: Start recording turned into Stop
 recording while one ran. The same request makes the console's `shot` a
 capture: no memory stick (architecture §9). Left for stage 4: launch
-progress, connection recovery, empty states.
+progress and empty states. Connection recovery is the PSP's own: a card on
+the last picture when the board goes, triangle to the status page and back
+(architecture, "When the board goes", 2026-10-31).
 
 **The older screens in the shell (2026-10-31).** Search, Game details and
 About were full screens of their own; now the status line and the ribbon

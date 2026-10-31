@@ -32,6 +32,12 @@
   the PSP's dot answering as for the buttons. Needs Settings > Update the
   PSP. A screenshot's white dot (♪ + L twice) now shows just after the
   picture is taken, so it is no longer in it on a still screen.
+- **When the board goes**, the cable pulled or the board stopped, the PSP
+  keeps its last picture, darkened, under a card: "No connection to the
+  board", waiting for it to come back. **Triangle** shows the status page
+  (the link's details) and goes back to the card; **HOME** quits. The
+  launcher comes back by itself with the board, as before. Needs Settings
+  > Update the PSP.
 - **Themes**: Settings > This PSP > Theme colours every screen, the
   launcher and the apps: Midnight (the blue, as before), Crimson, Emerald,
   Violet, Amber or Graphite, each previewed as you move to it.

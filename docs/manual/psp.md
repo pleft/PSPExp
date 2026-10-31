@@ -38,6 +38,10 @@ first, see its guide) and the launcher appears within a few seconds.
 
 You can start PSPExp before or after plugging the cable in, and unplug and
 plug it again at any time: the launcher comes back by itself.
+Meanwhile the PSP keeps the last picture, darkened, under a card saying
+**No connection to the board**: **triangle** shows the status page (the
+link's details, for when something is wrong) and goes back to the card;
+**HOME** quits PSPExp.
 
 **HOME** leaves what is on screen: in an app or a game, press it twice
 ("HOME again to quit" shows after the first) to go back to the launcher; in the launcher it asks, as on any PSP, whether to quit

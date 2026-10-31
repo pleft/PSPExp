@@ -12,6 +12,7 @@
 #include <psploadexec.h>
 #include <stdio.h>
 #include <string.h>
+#include <malloc.h>
 #include "../../runtime/pspexp_runtime.h"
 #include "../executor-ge/pspexp_ge.h"
 #include "pspexp_audio_psp.h"
@@ -449,6 +450,7 @@ static void op_log(void *u, const char *msg)
 /* the GE's frame count when the status page last drew (it covers both frame buffers, 32-bit): no
  * recording dot drawn over it until the GE draws a frame again */
 static uint32_t g_status_at;
+static int g_gone_view;   /* the board gone: 0 the last picture alone, 1 the card on it, 2 the status page (below) */
 
 static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
 {
@@ -493,6 +495,7 @@ static void draw_status(PspExpRuntime *rt, unsigned gen, int connected)
         int idx = (g_log_n + i) % 4;
         printf("  %-64s\n", g_log[idx]);
     }
+    if (g_gone_view == 2) printf("\nTRIANGLE: back to the card                     \n");
 }
 
 /* Back to the status page: the debug screen takes the display over from the GE. */
@@ -571,6 +574,58 @@ static int handover_tick(PspExpRuntime *rt, uint32_t now)
         pspexp_ge_spinner(&g_ge, g_ho.x, g_ho.y, g_ho.bg, g_ho.fg, g_ho_phase++);
     }
     return 1;
+}
+
+/* The board gone (the link lost, or the board said goodbye: not handing over): the last picture
+ * stays and, after a second (a console restarting is back by then), a card on it says so
+ * (scripts/dev/make-lost-card.py): HOME quits, triangle shows the status page and goes back to
+ * the card, until a program draws again. The picture is kept in RAM for that: the status page
+ * draws over both frame buffers */
+static uint32_t g_gone_at, g_gone_frames, g_gone_pad;
+static uint16_t *g_gone_px;
+static int g_in_session;   /* (rt.connected as last seen: its end, a goodbye) */
+static void gone_end(void)
+{
+    free(g_gone_px);
+    g_gone_px = NULL;
+    g_gone_at = 0;
+    g_gone_view = 0;
+}
+static void session_gone(uint32_t now)
+{
+    g_in_session = 0;
+    if (g_ho_on || g_gone_at) return;   /* (handing over: the spinner; or gone already) */
+    if (g_home_host) home_set(0);       /* (HOME the system's again: the card's "Quit") */
+    if (g_ge.stats.frames == g_status_at) { show_status_page(); return; }   /* (nothing drawn since the status page) */
+    pspexp_ge_drop_frame(&g_ge);
+    g_gone_at = now | 1;
+    g_gone_frames = g_ge.stats.frames;
+}
+/* each turn while the board is gone: 1 the picture or the card on screen, 0 the status page (or none) */
+static int gone_tick(PspExpRuntime *rt, uint32_t now)
+{
+    SceCtrlData pad;
+    uint32_t pressed;
+    if (!g_gone_at) return 0;
+    if (g_ge.stats.frames != g_gone_frames) { gone_end(); return 0; }   /* a program drew again */
+    sceCtrlPeekBufferPositive(&pad, 1);
+    pressed = pad.Buttons & ~g_gone_pad;
+    g_gone_pad = pad.Buttons;
+    if (g_gone_view == 0) {
+        if (now - g_gone_at < 1000000u) return 1;
+        g_gone_px = (uint16_t *)memalign(64, PSPEXP_DISPLAY_WIDTH * PSPEXP_DISPLAY_HEIGHT * 2);
+        if (!g_gone_px) { trace("the board gone: no memory for the card, the status page"); gone_end(); show_status_page(); return 0; }
+        pspexp_ge_read_display(&g_ge, g_gone_px);
+        pspexp_ge_lost_card(&g_ge, NULL);
+        g_gone_view = 1;
+        trace("the board gone: the card on the last picture");
+        return 1;
+    }
+    if ((pressed & PSP_CTRL_TRIANGLE) && !rt->connected) {   /* (in a session the buttons are the board's) */
+        if (g_gone_view == 1) { show_status_page(); g_gone_view = 2; }
+        else { pspexp_ge_lost_card(&g_ge, g_gone_px); g_gone_view = 1; }
+    }
+    return g_gone_view == 1;
 }
 
 int main(int argc, char *argv[])
@@ -705,8 +760,8 @@ int main(int argc, char *argv[])
 
         if (!link_connected()) {
             handover_take(&rt, now);
-            if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); if (!g_ho_on) show_status_page(); }
-            if (!handover_tick(&rt, now) && now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
+            if (connected) { connected = 0; pspexp_runtime_disconnect(&rt); session_gone(now); }
+            if (!handover_tick(&rt, now) && !gone_tick(&rt, now) && now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
             link_wait();
             continue;
         }
@@ -718,7 +773,7 @@ int main(int argc, char *argv[])
              * old link left is read and dropped, so the sync has a buffer to land in. After 5 s with
              * no sync, greeted again on the same link (a board that never noticed) */
             while (link_read(rxbuf, sizeof(rxbuf), 1) > 0) ;   /* (1 us: 0 waits for ever) */
-            if (now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
+            if (!gone_tick(&rt, now) && now - last_status > 250000) { draw_status(&rt, gen, 0); last_status = now; }
             sceKernelDelayThread(10000);
             continue;
         }
@@ -754,7 +809,7 @@ int main(int argc, char *argv[])
             if (len == 0) break;
             int wr;
             link_lock(); wr = link_write(out, (int)len); link_unlock();
-            if (wr < 0) { link_lost(&rt, gen, "link write failed"); connected = 0; if (!g_ho_on) show_status_page(); break; }
+            if (wr < 0) { link_lost(&rt, gen, "link write failed"); connected = 0; session_gone(now); break; }
             pspexp_runtime_out_consume(&rt);
             rt.stats.messages_out++;
         }
@@ -766,7 +821,7 @@ int main(int argc, char *argv[])
                 trace("inbound stream corrupt");
                 /* Stream corrupt: drop state and wait for the host to resync. */
                 pspexp_runtime_disconnect(&rt);
-                show_status_page();
+                session_gone(now);
                 connected = 0;
                 continue;
             }
@@ -774,7 +829,7 @@ int main(int argc, char *argv[])
             link_lost(&rt, gen, "link read failed");
             connected = 0;
             handover_take(&rt, sceKernelGetSystemTimeLow());
-            if (!g_ho_on) show_status_page();
+            session_gone(now);
             continue;
         }
 
@@ -795,9 +850,14 @@ int main(int argc, char *argv[])
         }
         if (g_kb) { keyboard_tick(&rt); continue; }   /* (the keyboard owns the screen) */
         /* Keep the status page until the first frame; after that the GE owns the screen. While
-         * handing over, the spinner instead */
+         * handing over, the spinner instead; the board gone (it said goodbye, the link up), the card */
         handover_take(&rt, now);
-        if (!handover_tick(&rt, now) && rt.stats.frames == 0 && now - last_status > 250000) { draw_status(&rt, gen, 1); last_status = now; }
+        if (g_in_session && !rt.connected) session_gone(now);   /* (a hand-over taken above: g_ho_on) */
+        if (rt.connected) g_in_session = 1;
+        if (!handover_tick(&rt, now) && !gone_tick(&rt, now) && (rt.stats.frames == 0 || g_gone_view == 2) && now - last_status > 250000) {
+            draw_status(&rt, gen, 1);
+            last_status = now;
+        }
     }
 
     trace(g_boot_disc[0] ? "leaving: a PSP game starts (the board's BOOT_DISC)" : g_restart_asked ? "leaving: starting again (the board's RESTART)" : g_quit_asked ? "leaving: quit from the HOME menu" : "leaving");

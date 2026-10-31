@@ -62,6 +62,12 @@ typedef struct PspExpGeExecutor {
  * into the frame on screen. Not inside a frame. */
 void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32_t fg, unsigned phase);
 
+/* A frame the host began and never ended (the link went in the middle of it): dropped, never shown */
+void pspexp_ge_drop_frame(PspExpGeExecutor *ge);
+/* The card the PSP shows when the board went ("No connection to the board"; scripts/dev/make-lost-card.py)
+ * centred on the frame on screen, darkened under it: on `picture` (480x272 RGB 5650, 16-byte aligned,
+ * pspexp_ge_read_display's) put back there first, or NULL on what is there. Not inside a frame. */
+void pspexp_ge_lost_card(PspExpGeExecutor *ge, const uint16_t *picture);
 /* Copies the displayed framebuffer (480x272 RGB565) into `out` (row stride 480). */
 void pspexp_ge_read_display(PspExpGeExecutor *ge, uint16_t *out);
 /* One frame of the PSP's own keyboard (the system's on-screen keyboard, already

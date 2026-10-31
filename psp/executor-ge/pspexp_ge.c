@@ -7,6 +7,7 @@
 #include <malloc.h>
 #include <string.h>
 #include "home_hint.h"   /* (scripts/dev/make-home-hint.py) */
+#include "lost_card.h"   /* (scripts/dev/make-lost-card.py) */
 
 #define FB_BYTES        ((uint32_t)PSPEXP_DISPLAY_STRIDE * PSPEXP_DISPLAY_HEIGHT * 2u)
 #define VRAM_TEX_SIZE   (PSPEXP_VRAM_BYTES - ge->tex_base)
@@ -810,6 +811,57 @@ void pspexp_ge_spinner(PspExpGeExecutor *ge, int cx, int cy, uint32_t bg, uint32
     sceGuSync(0, 0);
     ge->mode3d = 1;   /* the next frame sets its state afresh */
     ge->cur_atlas = NULL;
+}
+
+void pspexp_ge_drop_frame(PspExpGeExecutor *ge)
+{
+    if (!ge->in_frame) return;
+    sceGuFinish();
+    sceGuSync(0, 0);
+    ge->in_frame = 0;
+}
+
+void pspexp_ge_lost_card(PspExpGeExecutor *ge, const uint16_t *picture)
+{
+    typedef struct { uint32_t c; int16_t x, y, z, pad; } V;   /* GU_COLOR_8888 | GU_VERTEX_16BIT */
+    unsigned char *fb = (unsigned char *)sceGeEdramGetAddr() + ge->displayed_offset;
+    int x = (PSPEXP_DISPLAY_WIDTH - LOST_CARD_W) / 2, y = (PSPEXP_DISPLAY_HEIGHT - LOST_CARD_H) / 2;
+    HintVertex *t;
+    V *v;
+    if (ge->in_frame) return;
+    sceGuStart(GU_DIRECT, ge->list);
+    ge->mode3d = 1; leave_3d(ge);   /* the 2D state, whatever the last program left */
+    sceGuDrawBufferList(GU_PSM_5650, (void *)ge->displayed_offset, PSPEXP_DISPLAY_STRIDE);   /* the frame on screen */
+    sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
+    if (picture) {   /* (by the GE, as pspexp_ge_read_display took it: PPSSPP's frames live in its GPU) */
+        sceGuCopyImage(GU_PSM_5650, 0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT, PSPEXP_DISPLAY_WIDTH, (void *)picture,
+                       0, 0, PSPEXP_DISPLAY_STRIDE, fb);
+        sceGuTexSync();
+    }
+    sceGuDisable(GU_TEXTURE_2D);   /* the picture darkened */
+    v = (V *)sceGuGetMemory(2 * sizeof(V));
+    memset(v, 0, 2 * sizeof(V));
+    v[0].c = v[1].c = 0x8C000000u;
+    v[1].x = PSPEXP_DISPLAY_WIDTH; v[1].y = PSPEXP_DISPLAY_HEIGHT;
+    sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+    sceGuEnable(GU_TEXTURE_2D);    /* the card on it */
+    sceGuTexMode(GU_PSM_4444, 0, 0, 0);
+    sceGuTexImage(0, LOST_CARD_TW, LOST_CARD_TH, LOST_CARD_STRIDE, g_lost_card);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFlush();
+    t = (HintVertex *)sceGuGetMemory(2 * sizeof(HintVertex));
+    t[0].u = 0; t[0].v = 0; t[0].x = (int16_t)x; t[0].y = (int16_t)y; t[0].z = 0;
+    t[1].u = LOST_CARD_W; t[1].v = LOST_CARD_H; t[1].x = (int16_t)(x + LOST_CARD_W); t[1].y = (int16_t)(y + LOST_CARD_H); t[1].z = 0;
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, t);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceKernelDcacheWritebackAll();
+    sceGuFinish();
+    sceGuSync(0, 0);
+    ge->tex_enabled = 1; ge->cur_atlas = NULL; ge->cur_palette = NULL;
+    ge->mode3d = 1; ge->state_dirty = 1;   /* the next frame sets its state afresh */
+    ge->dot_col[buf_index(ge->displayed_offset)] = 0;   /* (a dot there is under the card's shade now: the next frame draws over it) */
+    /* the display this buffer again, 16-bit: the status page had it, 32-bit */
+    sceDisplaySetFrameBuf(fb, PSPEXP_DISPLAY_STRIDE, PSP_DISPLAY_PIXEL_FORMAT_565, PSP_DISPLAY_SETBUF_NEXTFRAME);
 }
 
 void pspexp_ge_dot_tick(PspExpGeExecutor *ge)
