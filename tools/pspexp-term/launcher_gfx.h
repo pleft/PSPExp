@@ -113,4 +113,11 @@ int gfx_video_lost(void);
 
 uint32_t gfx_hash(const char *s);
 
+/* themes (Settings > This PSP > Theme): PSPExp's blues turned into another colour, or greys, in
+ * everything drawn (launcher_gfx.c: THEMES); 0 Midnight, the blue */
+int  gfx_theme_count(void);
+const char *gfx_theme_name(int k);
+int  gfx_theme(void);
+void gfx_set_theme(int k);
+
 #endif

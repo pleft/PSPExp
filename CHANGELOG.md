@@ -32,6 +32,9 @@
   the PSP's dot answering as for the buttons. Needs Settings > Update the
   PSP. A screenshot's white dot (♪ + L twice) now shows just after the
   picture is taken, so it is no longer in it on a still screen.
+- **Themes**: Settings > This PSP > Theme colours every screen, the
+  launcher and the apps: Midnight (the blue, as before), Crimson, Emerald,
+  Violet, Amber or Graphite, each previewed as you move to it.
 - **Descriptions of your ROMs** in Game details, with who made them, the
   year and the genre: from the LaunchBox Games Database, which the board
   downloads once (110 MB, kept as 40 MB) and then reads offline, every

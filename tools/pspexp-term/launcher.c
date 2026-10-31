@@ -117,7 +117,7 @@ static PspExpContext *g_ctx;
 static Library L;
 static Cat g_cat[40];
 static int g_ncat, g_cur;
-#define MAX_ACTIONS 20
+#define MAX_ACTIONS 24
 #define ACTION(...) do { if (g_nactions < MAX_ACTIONS) action(&g_actions[g_nactions++], __VA_ARGS__); } while (0)
 static LEntry g_actions[MAX_ACTIONS];   /* System's entries (up to 16 now: count them when adding one) */
 static int g_nactions;
@@ -258,7 +258,7 @@ enum { PN_FAV = 1, PN_DETAILS, PN_SORT, PN_SORT0 };
 static UiMenu g_tri;
 static LEntry *g_tri_e;
 /* a choice's values beside its setting (vlist_open): open, its highlight, the current one, how many */
-static struct { int open, sel, cur, n; const LEntry *e; char v[3][24]; } g_vl;
+static struct { int open, sel, cur, n; const LEntry *e; char v[8][24]; } g_vl;
 
 static void cats_build(void)
 {
@@ -367,6 +367,7 @@ static void cats_build(void)
     ACTION("clips", "Clips", "history", "♪ + R saves the last seconds as a video: the board records all the time");
     ACTION("cliplen", "Clip length", "clock", "How much ♪ + R saves");
     ACTION("quality", "Quality", "gauge", "The videos' quality, and so their size");
+    ACTION("theme", "Theme", "paintbrush", "The colours of PSPExp's screens on the PSP");
     if (g_psp_plugin != PSP_PLUGIN_UNKNOWN) ACTION("plugin", "PSPExp plugin", "puzzle", "For the PSP's own games: the PSP list's, and recording them");
     if (g_psp_update) ACTION("psp-update", "Update the PSP", "download", "A newer PSPExp for the PSP, or its plugin: put it on its memory stick");
     if (g_core_updated) ACTION("console-restart", "Restart PSPExp", "refresh-cw", "PSPExp was updated: start the new version");
@@ -384,7 +385,7 @@ static void cats_build(void)
             { "Recording", "film", "Clips, their length and the videos' quality", { "a:clips", "a:cliplen", "a:quality", NULL } },
             { "Clock", "clock", "The board's time zone", { "a:tz", NULL } },
             { "Library", "refresh-cw", "Refreshing it, box art downloads", { "a:rescan", "a:boxart", NULL } },
-            { "This PSP", "gamepad-directional", "The PSPExp plugin, the PSP's clock", { "a:plugin", "a:pspclock", NULL } },
+            { "This PSP", "gamepad-directional", "The PSPExp plugin, the PSP's clock, the theme", { "a:plugin", "a:pspclock", "a:theme", NULL } },
             { "This board", "circuit-board", "About, SSH, restart, power off", { "a:about", "a:ssh", "a:reboot", "a:poweroff", NULL } },
         };
         int g, k, ng = 0;
@@ -898,6 +899,7 @@ static const char *action_value(const LEntry *e)
     if (!strcmp(a, "pspclock")) return g_psp_clock ? "From the board" : "Off";
     if (!strcmp(a, "ssh")) return g_ssh_on ? "On" : "Off";
     if (!strcmp(a, "clicks")) return g_button_sounds ? "On" : "Off";
+    if (!strcmp(a, "theme")) return gfx_theme_name(gfx_theme());
     return NULL;
 }
 
@@ -2059,7 +2061,7 @@ enum { ROW_DO, ROW_SWITCH, ROW_CHOICE, ROW_PAGE };
 static int row_kind(const LEntry *e)
 {
     static const char *const SW[] = { "a:clips", "a:boxart", "a:pspclock", "a:plugin", "a:ssh", "a:clicks", NULL },
-                             *const CH[] = { "a:cliplen", "a:quality", NULL },
+                             *const CH[] = { "a:cliplen", "a:quality", "a:theme", NULL },
                              *const PG[] = { "a:wifinet", "a:sound", "a:tz", "a:about", NULL };
     int i;
     for (i = 0; SW[i]; i++) if (!strcmp(e->id, SW[i])) return ROW_SWITCH;
@@ -2081,20 +2083,30 @@ static void vlist_open(const LEntry *e)
     int k;
     memset(&g_vl, 0, sizeof(g_vl));
     g_vl.e = e; g_vl.n = 3;
-    for (k = 0; k < 3; k++) {
-        if (!strcmp(e->id, "a:cliplen")) snprintf(g_vl.v[k], sizeof(g_vl.v[k]), "%d seconds", CLIP_SECS[k]);
-        else snprintf(g_vl.v[k], sizeof(g_vl.v[k]), "%s", CLIP_QUALITY[k]);
+    if (!strcmp(e->id, "a:theme")) {   /* the themes (launcher_gfx.c), each shown as it is highlighted */
+        g_vl.n = gfx_theme_count() < 8 ? gfx_theme_count() : 8;
+        for (k = 0; k < g_vl.n; k++) snprintf(g_vl.v[k], sizeof(g_vl.v[k]), "%s", gfx_theme_name(k));
+        g_vl.cur = gfx_theme();
+    } else {
+        for (k = 0; k < 3; k++) {
+            if (!strcmp(e->id, "a:cliplen")) snprintf(g_vl.v[k], sizeof(g_vl.v[k]), "%d seconds", CLIP_SECS[k]);
+            else snprintf(g_vl.v[k], sizeof(g_vl.v[k]), "%s", CLIP_QUALITY[k]);
+        }
+        g_vl.cur = !strcmp(e->id, "a:cliplen") ? (g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1) : g_clip_quality;
     }
-    g_vl.cur = !strcmp(e->id, "a:cliplen") ? (g_clip_secs == 15 ? 0 : g_clip_secs == 60 ? 2 : 1) : g_clip_quality;
     g_vl.sel = g_vl.cur;
     g_vl.open = 1;
     g_dirty = 1;
 }
 static void vlist_input(uint32_t pressed, int up, int down)
 {
+    int theme = !strcmp(g_vl.e->id, "a:theme");
     if (up && g_vl.sel > 0) g_vl.sel--;
     if (down && g_vl.sel < g_vl.n - 1) g_vl.sel++;
-    if ((pressed & PSPEXP_BUTTON_CROSS) && g_vl.sel != g_vl.cur) {
+    if (theme && (up || down)) gfx_set_theme(g_vl.sel);   /* (seen as it is highlighted) */
+    if (theme && (pressed & PSPEXP_BUTTON_CIRCLE)) gfx_set_theme(g_vl.cur);   /* (left as it was) */
+    if (theme && (pressed & PSPEXP_BUTTON_CROSS)) { gfx_set_theme(g_vl.sel); lib_setting_set(&L, "theme", g_vl.sel); }
+    else if ((pressed & PSPEXP_BUTTON_CROSS) && g_vl.sel != g_vl.cur) {
         if (!strcmp(g_vl.e->id, "a:cliplen")) { g_clip_secs = CLIP_SECS[g_vl.sel]; lib_setting_set(&L, "clip_secs", g_clip_secs); }
         else { g_clip_quality = g_vl.sel; lib_setting_set(&L, "clip_quality", g_clip_quality); }
         g_clips_change = 1;   /* (the recorder starts again with it) */
@@ -2821,7 +2833,7 @@ static void draw_settings(Cat *c, float dt, int alpha, int dx)
         gfx_text(FONT_SMALL, x, y, "Saved on the board, in the Gallery", C_MUTED, alpha, 0);
     }
     if (g_vl.open) {   /* the choice's values, beside it */
-        const int W = 170, RH = 26, X = SET_X1 - W, Y = SET_Y0 + 2;
+        const int W = 170, RH = g_vl.n > 3 ? 22 : 26, X = SET_X1 - W, Y = g_vl.n > 3 ? BROWSE_Y - 6 : SET_Y0 + 2;   /* (more than three: closer, higher: above the hints) */
         int k, H = 30 + g_vl.n * RH + 6;
         gfx_shadow(NINE_SHADOW14, X, Y, W, H, 0x000000, 200);
         gfx_nine(NINE_R10, X, Y, W, H, 0x101a30, 250);
@@ -3433,6 +3445,7 @@ int launcher_init(PspExpContext *ctx, const char *assets)
     g_psp_clock = lib_setting_int(&L, "psp_clock", 1);
     g_clips_keep = lib_setting_int(&L, "clips", 0);
     g_button_sounds = lib_setting_int(&L, "button_sounds", 1);
+    gfx_set_theme(lib_setting_int(&L, "theme", 0));   /* (Settings > This PSP > Theme) */
     g_clip_secs = lib_setting_int(&L, "clip_secs", 30);
     if (g_clip_secs != 15 && g_clip_secs != 60) g_clip_secs = 30;
     g_clip_quality = lib_setting_int(&L, "clip_quality", 0);

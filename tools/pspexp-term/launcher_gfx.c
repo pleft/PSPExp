@@ -61,10 +61,72 @@
 
 static PspExpContext *G;
 
+/* ---- themes (2026-10-31) -----------------------------------------------------------------------
+ * PSPExp's colours are blues; a theme turns them, wherever they are drawn (every colour passes
+ * here, and the backdrop, the ribbons and a disc's glow as they are made), into another hue, or
+ * (Graphite) into greys: a blue, a blue-grey or an indigo (hue 0.48 to 0.78, saturation over 0.12)
+ * only, so white and grey text, the covers, the photos, the favourites' yellow, a warning's red,
+ * the Ready green and the PSP's button colours stay as they are */
+static const struct { const char *name; float hue, sat; } THEMES[] = {
+    { "Midnight", 0.0f, 1.0f }, { "Crimson", -0.62f, 1.0f }, { "Emerald", -0.27f, 1.0f },
+    { "Violet", 0.12f, 1.0f }, { "Amber", -0.52f, 1.0f }, { "Graphite", 0.0f, 0.12f },
+};
+#define NTHEMES ((int)(sizeof(THEMES) / sizeof(THEMES[0])))
+static int g_theme;
+
+static float hue2rgb(float p, float q, float t)
+{
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1.0f / 6) return p + (q - p) * 6 * t;
+    if (t < 0.5f) return q;
+    if (t < 2.0f / 3) return p + (q - p) * (2.0f / 3 - t) * 6;
+    return p;
+}
+
+/* r, g, b (0..1) through the theme, in place */
+static void theme_px(float *r, float *g, float *b)
+{
+    float mx, mn, h, s, l, d;
+    if (!g_theme) return;
+    mx = fmaxf(*r, fmaxf(*g, *b)); mn = fminf(*r, fminf(*g, *b)); l = (mx + mn) / 2; d = mx - mn;
+    if (d < 1e-6f) return;
+    s = l > 0.5f ? d / (2 - mx - mn) : d / (mx + mn);
+    if (mx == *r) h = (*g - *b) / d + (*g < *b ? 6 : 0);
+    else if (mx == *g) h = (*b - *r) / d + 2;
+    else h = (*r - *g) / d + 4;
+    h /= 6;
+    if (h <= 0.48f || h >= 0.78f || s <= 0.12f) return;   /* (not one of PSPExp's blues) */
+    h += THEMES[g_theme].hue; h -= floorf(h);
+    s *= THEMES[g_theme].sat;
+    {
+        float q = l < 0.5f ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+        *r = hue2rgb(p, q, h + 1.0f / 3); *g = hue2rgb(p, q, h); *b = hue2rgb(p, q, h - 1.0f / 3);
+    }
+}
+
+/* 0xRRGGBB through the theme; the last few remembered (the same colours come every frame) */
+static uint32_t theme_rgb(uint32_t rgb)
+{
+    static uint32_t key[64], val[64];
+    static int for_theme = -1;
+    unsigned k = (rgb ^ (rgb >> 9) ^ (rgb >> 17)) & 63;
+    float r, g, b;
+    if (!g_theme) return rgb;
+    if (for_theme != g_theme) { memset(key, 0xff, sizeof(key)); for_theme = g_theme; }
+    if (key[k] == rgb) return val[k];
+    r = (rgb >> 16 & 255) / 255.0f; g = (rgb >> 8 & 255) / 255.0f; b = (rgb & 255) / 255.0f;
+    theme_px(&r, &g, &b);
+    key[k] = rgb;
+    val[k] = (uint32_t)lroundf(r * 255) << 16 | (uint32_t)lroundf(g * 255) << 8 | (uint32_t)lroundf(b * 255);
+    return val[k];
+}
+
 static uint16_t c4444(uint32_t rgb, int a)
 {
     if (a < 0) a = 0;
     if (a > 255) a = 255;
+    rgb = theme_rgb(rgb);
     return pspexp_color_4444((uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8), (uint8_t)rgb, (uint8_t)a);
 }
 
@@ -386,6 +448,7 @@ int gfx_text_marquee(int font, int x, int y, const char *s, uint32_t rgb, int al
 void gfx_rect(int x, int y, int w, int h, uint32_t rgb, int alpha)
 {
     if (w <= 0 || h <= 0 || alpha <= 0) return;
+    rgb = theme_rgb(rgb);
     pspexp_fill_rect(G, (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h,
                      pspexp_color_5650((uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8), (uint8_t)rgb), (uint8_t)(alpha > 255 ? 255 : alpha));
 }
@@ -694,6 +757,7 @@ static void backdrop_make(void)
                         float dd = fabsf(Y - cy) / wid[k], lw = dd < 1 ? (1 - dd) * (1 - dd) * str[k] : 0;
                         r += 0.36f * lw; g += 0.60f * lw; b += 0.95f * lw;
                     }
+                    theme_px(&r, &g, &b);
                     dst[y * 256 + x] = dither5650(r, g, b, (int)X, (int)Y);
                 }
             pspexp_upload_texture_commit(G, 1);
@@ -710,6 +774,7 @@ static void waves_make(void)
 {
     int k, x, y;
     uint8_t *px = (uint8_t *)malloc((size_t)WAVE_W * WAVE_H * 4);
+    uint32_t col = theme_rgb(0xbedcff);   /* (190, 220, 255) */
     if (!px) return;
     for (k = 0; k < 2; k++) {
         for (y = 0; y < WAVE_H; y++)
@@ -720,7 +785,7 @@ static void waves_make(void)
                 a += clampf(1.2f - d, 0, 1) * 0.55f;                     /* the bright line */
                 a += expf(-d * d / (k ? 30.0f : 60.0f)) * 0.30f;          /* its glow */
                 uint8_t *p = px + (y * WAVE_W + x) * 4;
-                p[0] = 190; p[1] = 220; p[2] = 255; p[3] = (uint8_t)lroundf(clampf(a, 0, 1) * 255);
+                p[0] = (uint8_t)(col >> 16); p[1] = (uint8_t)(col >> 8); p[2] = (uint8_t)col; p[3] = (uint8_t)lroundf(clampf(a, 0, 1) * 255);
             }
         if (upload_rgba((uint16_t)(ID_WAVE + k), px, WAVE_W, WAVE_H) == 0) have_waves = 1;
     }
@@ -1271,7 +1336,7 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
             float in = cover_of(d), dl, a;
             /* shadow, and the glow of the selection */
             over_px(p, 0, 0, 0.03f, 0.55f * (1 - smooth(-2.0f, 6.0f, ds)));
-            if (big) over_px(p, 0.25f, 0.63f, 1.0f, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0));
+            if (big) { float gr = 0.25f, gg = 0.63f, gb = 1.0f; theme_px(&gr, &gg, &gb); over_px(p, gr, gg, gb, 0.85f * (1 - smooth(0.0f, 9.0f, d)) * (d > -1 ? 1 : 0)); }
             if (in <= 0) continue;
             /* the shell: silver, lit from above, a darker rim */
             {
@@ -1305,7 +1370,7 @@ static void disc_render(const uint8_t *cov, uint8_t *out, int T, int D, int big)
                     if (g > 0) over_px(p, 1, 1, 1, 0.16f * g * a);
                 }
             }
-            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) over_px(p, 150 / 255.0f, 205 / 255.0f, 1, a); }
+            if (big) { a = cover_of(fabsf(dl + 0.2f) - 0.6f); if (a > 0) { float rr = 150 / 255.0f, rg = 205 / 255.0f, rb = 1; theme_px(&rr, &rg, &rb); over_px(p, rr, rg, rb, a); } }
         }
     for (y = 0; y < T * T; y++) {
         out[y * 4 + 0] = (uint8_t)lroundf(clampf(f[y * 4 + 0], 0, 1) * 255);
@@ -1667,4 +1732,23 @@ int gfx_init(PspExpContext *ctx, const char *assets)
     backdrop_make();
     waves_make();
     return 0;
+}
+
+/* ---- themes: the setting ------------------------------------------------------------------------ */
+
+int gfx_theme_count(void) { return NTHEMES; }
+const char *gfx_theme_name(int k) { return k >= 0 && k < NTHEMES ? THEMES[k].name : ""; }
+int gfx_theme(void) { return g_theme; }
+
+void gfx_set_theme(int k)
+{
+    int i;
+    if (k < 0 || k >= NTHEMES || k == g_theme) return;
+    g_theme = k;
+    if (!G) return;   /* (before gfx_init: made in its colours there) */
+    for (i = 0; i < 6; i++) pspexp_release(G, (uint16_t)(ID_BACKDROP + i));   /* (the PSP keeps an id's first picture: let them go first) */
+    for (i = 0; i < 2; i++) pspexp_release(G, (uint16_t)(ID_WAVE + i));
+    backdrop_make();
+    waves_make();
+    for (i = 0; i < DISC_SLOTS; i++) if (dslot[i].key[0]) { pspexp_release(G, dslot[i].id); dslot[i].key[0] = 0; }   /* (their glow) */
 }

@@ -427,7 +427,7 @@ PSPExp, it comes first, under **Ready**.
 | Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size ([Recording](recording.md); what they made is in Apps > Gallery) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
-| This PSP | PSPExp plugin: on to start the PSP list's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow) |
+| This PSP | PSPExp plugin: on to start the PSP list's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow); Theme: the colours of every screen, Midnight (the blue), Crimson, Emerald, Violet, Amber or Graphite, each shown as you move to it (cross keeps it, circle leaves the one you had) |
 | This board | About (the board and the PSP: models, versions, battery, the connection), SSH (on or off: logging in from a computer; it warns while the password is still the card's own), Restart, Power off (they ask for a second press) |
 
 When there is something to do, it comes first, before the groups:

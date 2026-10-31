@@ -898,6 +898,24 @@ and built in 2.5 s; Sonic Adventure, a Dreamcast game, and a PSP game found)
 and on the PSP-1000 through the GameShell (76 s; Streets of Rage 2: About
 with its paragraphs, scrolled, and Info).
 
+**Themes (2026-10-31).** Settings > This PSP > Theme (`a:theme`, the library's
+`theme`, 0 Midnight): Midnight, Crimson, Emerald, Violet, Amber, Graphite,
+first chosen from mockups (real PSP screenshots recoloured). PSPExp's
+colours are blues, so a theme is a transform in the drawing layer
+(`theme_rgb`, launcher_gfx.c) rather than a palette passed around: every
+colour drawn (`c4444`, `gfx_rect`) and the pictures made on the board with
+colour in them (the backdrop, the two ribbons, a disc's glow and ring) go
+through it. Only a blue, a blue-grey or an indigo (hue 0.48 to 0.78,
+saturation over 0.12) is turned, by a hue (Crimson -0.62, Emerald -0.27,
+Violet +0.12, Amber -0.52) or to greys (Graphite: saturation x 0.12); white
+and grey text, covers, photos, the favourites' yellow, a warning's red, the
+Ready green and the PSP's button badges stay. The last 64 colours are
+remembered. Changing it remakes the backdrop and the ribbons (their ids
+released first: the PSP keeps an id's first picture) and lets the discs go
+(their glow). Its value list shows each theme as it is highlighted; cross
+keeps it, circle puts the old one back. The terminal keeps its own themes.
+Checked on the PSP-1000 through the Pi 400 at 1:1, all six.
+
 ### 3.4 Status (2026-09-26)
 
 Deployed and tested on the GameShell (the PSP over USB and over Wi-Fi), the
