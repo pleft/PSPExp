@@ -821,7 +821,7 @@ line gave up went into Quick controls, as info rows between Terminal and
 Restart (`launcher_status_info`): the PSP link (USB, Wi-Fi), the board's
 network (Ethernet, or Wi-Fi with its network's name, read when Quick
 controls opens, and its strength in words: off, weak, good, strong, the
-icon's bars too), the sound (the PSP, or Headphones and their volume) and
+icon's bars too), the sound ("PSP", or Headphones and their volume) and
 the board's own battery when it has one (named after the board, a battery
 icon, no board icon: it told nothing). Cross on the network or the sound
 leaves the app and opens their Settings group (`QK_SETTINGS`,

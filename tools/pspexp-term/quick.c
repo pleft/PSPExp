@@ -40,7 +40,7 @@ void quick_open(void)
     if (st.bt) {
         if (st.bt_vol >= 0) snprintf(v, sizeof(v), "%d%%", st.bt_vol); else v[0] = 0;
         ui_menu_add(&g_q, Q_SOUND, "headphones", "Headphones", v[0] ? v : NULL, 0, 1);
-    } else ui_menu_add(&g_q, Q_SOUND, "volume-2", "Sound", "the PSP", 0, 1);
+    } else ui_menu_add(&g_q, Q_SOUND, "volume-2", "Sound", "PSP", 0, 1);
     if (st.bat >= 0) {   /* the board's own (the GameShell's): the PSP's is in the status line */
         snprintf(label, sizeof(label), "%s battery", st.board);
         snprintf(v, sizeof(v), "%d%%%s", st.bat, st.chg ? ", charging" : "");
