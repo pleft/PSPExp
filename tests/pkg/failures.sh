@@ -4,7 +4,8 @@
 # sudo (setup and restore only), by tests/pkg/run.py, which puts the signed
 # test catalogues in /tmp/pkgtest-repo/{good,tampered,older}/.
 # Uses throwaway recipes: pkgtest-hello (Debian's tiny "hello"), pkgtest-sys
-# (a system on the NES core), pkgtest-clash (a system named like NES's).
+# (a system on the NES core), pkgtest-clash (a system named like NES's), pkgtest-missing (a
+# package no board's sources have).
 ROOT=${PSPEXP_ROOT:-/opt/pspexp}; APPS=$ROOT/apps; SYS=$ROOT/systems; ST=$ROOT/state
 CAT=/usr/share/pspexp/catalogue
 for HELPER in /usr/sbin/pspexp-pkg-apt /usr/local/sbin/pspexp-pkg-apt; do [ -x "$HELPER" ] && break; done   # pspexp-core's, or an installer's
@@ -144,6 +145,17 @@ echo "system files (§5.5)"
 out=$(pspexp-pkg install pkgtest-clash 2>&1); r=$?
 check '[ $r -ne 0 ] && echo "$out" | grep -q "belongs to nes" && grep -q "^pkg=nes" $SYS/nes.system && [ -z "$(meta pkgtest-clash)" ]' "a system named like another package's is refused, before apt"
 pspexp-pkg recover >/dev/null 2>&1
+
+echo "a package this board's sources do not have (2026-11-01: The Ur-Quan Masters on the GameShell)"
+out=$(pspexp-pkg install pkgtest-missing 2>&1); r=$?
+check '[ $r -ne 0 ] && echo "$out" | tail -1 | grep -q "cannot be installed on this board" && [ -z "$(meta pkgtest-missing)" ] && clean pkgtest-missing' "an install apt cannot resolve says so, and leaves no open operation"
+pspexp-pkg install pkgtest-hello >/dev/null 2>&1
+check "installed_ok pkgtest-hello" "the next install is not stopped by it"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
+crashrun apt-started install pkgtest-missing
+pspexp-pkg install pkgtest-hello >/dev/null 2>&1
+check "installed_ok pkgtest-hello && clean pkgtest-missing" "killed at apt-started: the next install closes it and carries on"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
 
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ]

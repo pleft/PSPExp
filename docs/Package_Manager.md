@@ -1315,8 +1315,11 @@ because boards differ.
 - **Failure paths, on a board with a scratch recipe:**
   - a catalogue with a wrong signature, or an older serial, is refused and
     the installed one stays;
-  - a recipe naming a missing package fails in the `apt` phase, shows as
-    broken, and Remove clears it;
+  - a recipe naming a package the board's sources do not have is refused
+    before apt changes anything: it says it cannot be installed on this
+    board, leaves no open operation, and the next install goes ahead, also
+    after one killed at `apt-started` (`pkgtest-missing`, 2026-11-01; until
+    then it stayed open and stopped the next installs);
   - an operation killed at each checkpoint of §5.3 (`staged`,
     `apt-started`, `apt-done`, `app-swap-started`, `app-swapped`,
     `systems-started`), and **between each action and the recording of its

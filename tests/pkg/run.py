@@ -69,6 +69,23 @@ short=CLASH
 ext=clash
 roms=~/roms/clash
 """,
+"pkgtest-missing": """[package]
+id=pkgtest-missing
+title=Package test: not in the sources
+description=A throwaway recipe needing a package no board's sources have
+category=app
+license=none
+version=1
+
+[debian]
+apt=pspexp-pkgtest-no-such-package
+
+[entry]
+title=missing
+type=app
+exec=/bin/true
+native=1
+""",
 }
 
 
