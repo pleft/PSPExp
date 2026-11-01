@@ -3822,7 +3822,7 @@ HOOK(int, SDL_PollEvent, (SDL_Event *ev))
         if (!told && SDL_GetTicks() - S.home_at > 1000) {
             told = 1;
             logf_("HOME + 1 s: %u polls, %d quit events still queued, %d events in all", polls,
-                  SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, SDL_QUIT, SDL_QUIT), SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT));
+                  REAL(SDL_PeepEvents)(NULL, 0, SDL_PEEKEVENT, SDL_QUIT, SDL_QUIT), REAL(SDL_PeepEvents)(NULL, 0, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT));   /* (REAL: check-sdl12-imports.sh) */
         }
     }
     return rc;

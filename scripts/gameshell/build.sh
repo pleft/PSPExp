@@ -191,6 +191,7 @@ sh "$ROOT/compatibility/sdl-pspexp/make-sdl12-rename.sh" "$ROOT/compatibility/sd
 "$GNU/zcc" -O2 -fPIC -shared -Wl,-soname,libsdl-pspexp-sdl12.so -Wl,-Bsymbolic "$GNU/sdl_pspexp_sdl12.o" "$GNU/gl_pspexp.o" "$GNU/glsl_pspexp.o" \
 	"$C/libpspexp_usb.a" "$C/libpspexp_tcp.a" "$C/libpspexp_null.a" "$C/libpspexp.a" "$C/libpspexp_runtime.a" "$C/libpspexp_protocol.a" \
 	"$GNU/prefix/lib/libusb-1.0.a" -ldl -lm -lpthread -o "$OUT/lib/libsdl-pspexp-sdl12.so"   # (not SDL2: it finds it itself, privately)
+sh "$ROOT/compatibility/sdl-pspexp/check-sdl12-imports.sh" "$OUT/lib/libsdl-pspexp-sdl12.so" || exit 1
 cp "$ROOT/scripts/board/pspexp-run" "$OUT/lib/"
 ls -la "$OUT/lib"
 echo "shim for $TARGET in build/gameshell/lib"

@@ -153,6 +153,9 @@ if(SDL2_FOUND)
       target_compile_definitions(sdl-pspexp-sdl12 PRIVATE PSPEXP_HAVE_USB=1)
     endif()
     set_target_properties(sdl-pspexp-sdl12 PROPERTIES OUTPUT_NAME "sdl-pspexp-sdl12" PREFIX "lib")
+    # no SDL function called directly: none is there to bind to in an SDL 1.2 program
+    add_custom_command(TARGET sdl-pspexp-sdl12 POST_BUILD
+      COMMAND sh ${CMAKE_SOURCE_DIR}/compatibility/sdl-pspexp/check-sdl12-imports.sh $<TARGET_FILE:sdl-pspexp-sdl12>)
   endif()
 
   add_executable(sdl-game examples/sdl-game/main.c)

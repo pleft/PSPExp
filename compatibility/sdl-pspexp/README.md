@@ -281,6 +281,16 @@ up in SDL2 itself, not as "the next after the layer" (that was SDL 1.2's
 `-Bsymbolic-functions` (`-Bsymbolic` on the GameShell), so its calls to its
 own functions stay its own.
 
+Every SDL2 call of this build goes through `REAL()` (its own lookup): a
+direct one has nothing to bind to in an SDL 1.2 program. A diagnostic line
+of 2026-10-29 called `SDL_PeepEvents` directly; the GameShell's build binds
+everything at load, so Frozen Bubble ended at its start ("undefined symbol:
+SDL_PeepEvents", status 127), and on the Pi it would have failed only when
+that line ran (an SDL 1.2 game a second after HOME). The builds now fail
+on any such call: `check-sdl12-imports.sh` lists the `SDL_` symbols the
+library needs from outside (CMake runs it after linking the target,
+`scripts/gameshell/build.sh` after its own link).
+
 An SDL 1.2 program is told the display's real size, not the PSP's: sdl12-compat
 lists the video modes up to the desktop's size, and at 480x272 Powermanga's
 640x400 was refused and it quit. Its window, whatever its size, is shrunk to
