@@ -147,16 +147,19 @@ class Run:
 
     # ---- helpers for the views ----------------------------------------------------------
     def to_category(self, name):
+        """a category, a platform or a Settings group; "Games/NAME" or "Settings/NAME" where both have
+        one (the board's name: its games, and its settings)"""
         s = self.state()
         cats = s["launcher.categories"].split("|")
+        sec, _, name = name.rpartition("/")
         self.expect(name in cats, "no %s section (sections: %s)" % (name, ", ".join(cats)))
-        ok, _ = self.t.ctl("category " + name)   # straight there (older consoles: by the buttons below)
+        ok, _ = self.t.ctl("category " + (sec + "/" if sec else "") + name)   # straight there (older consoles: by the buttons below)
         if ok:
             # (the Omega can take longer than an idle to show it: its covers loading)
             for _ in range(6):
                 self.ctl("idle 2500")
                 s = self.state()
-                if s["launcher.category"] == name:
+                if s["launcher.category"] == name and (not sec or s.get("launcher.section") == sec):
                     return s
             raise Fail("asked for %s, still in %s" % (name, s["launcher.category"]))
         for _ in range(len(cats) + 2):
@@ -171,8 +174,10 @@ class Run:
     def select(self, side, name, limit=80):
         """highlight name in a file-manager panel"""
         key = "files.%s.selected" % side
-        names = [n.rstrip("/") for n in self.state()["files.%s.names" % side].split("|") if n]
-        self.expect(name in names, "%s not in the %s panel (%s)" % (name, side, ", ".join(names)))
+        s = self.state()
+        names = [n.rstrip("/") for n in s["files.%s.names" % side].split("|") if n]
+        self.expect(name in names, "%s not in the %s panel (%s)%s" % (name, side, ", ".join(names),
+                    "; the panel's error: " + s["files.%s.error" % side] if s.get("files.%s.error" % side) else ""))
         for _ in range(limit):
             s = self.state()
             if s[key] == name:
@@ -203,6 +208,19 @@ class Run:
         self.expect(s["files.%s.drive" % side] == drive, "the %s panel is on %s, not %s" % (side, s["files.%s.drive" % side], drive))
         return s
 
+    def menu(self, row):
+        """triangle's menu on the highlighted file, then row (by its name) chosen with cross"""
+        self.press("triangle")
+        s = self.state()
+        self.expect(s["files.overlay"] == "actions", "the menu did not open (%s)" % s["files.overlay"])
+        want = FILE_ACTIONS.index(row)
+        for _ in range(len(FILE_ACTIONS) + 1):
+            if int(self.state()["files.menu_sel"]) == want:
+                break
+            self.press("down", idle=False)
+        self.expect(int(self.state()["files.menu_sel"]) == want, "could not reach %s in the menu" % row)
+        self.press("cross")
+
     def wait_job(self, limit=120):
         end = time.time() + limit
         while time.time() < end:
@@ -211,6 +229,11 @@ class Run:
                 return s
             time.sleep(0.5)
         raise Fail("the job did not finish in %d s" % limit)
+
+
+# triangle's menu in Files on a file or folder, in order (tools/pspexp-term/files.c ACTIONS; since 2026-10-31)
+FILE_ACTIONS = ["Details", "Select items", "Copy to other panel", "Move to other panel", "Delete", "Rename",
+                "Add to Media queue", "Compress to a .zip", "Folder and view"]
 
 
 # ---- suites -----------------------------------------------------------------------------
@@ -426,10 +449,7 @@ def suite_files(r):
         for name in ("pic.png", "note.txt"):
             r.press("l")
             r.select("left", name)
-            r.press("triangle")
-            s = r.state()
-            r.expect(s["files.overlay"] == "actions", "actions menu did not open (%s)" % s["files.overlay"])
-            r.press("cross")   # Copy to the other panel
+            r.menu("Copy to other panel")
             s = r.wait_job()
             r.expect(s["files.overlay"] == "none", "after the copy: %s %s" % (s.get("files.message.title", ""), s.get("files.message.text", "")))
         rows = r.ctl("fs ls " + STICK_DIR)[1:]
@@ -437,7 +457,7 @@ def suite_files(r):
         r.expect(any(x.split()[0] == "pic.png" and int(x.split()[1]) == size for x in rows), "pic.png on the stick: %s" % rows)
         r.ctl("fs get %s/pic.png %s/pic-back.png" % (STICK_DIR, BOARD_DIR))
         t.sh("cmp %s/board/pic.png %s/pic-back.png" % (BOARD_DIR, BOARD_DIR))
-    r.check("copy two files from the board to the PSP (triangle, Copy)", copy_to_psp)
+    r.check("copy two files from the board to the PSP (triangle, Copy to other panel)", copy_to_psp)
 
     def picture():
         r.press("r")
@@ -460,9 +480,7 @@ def suite_files(r):
 
     def delete():
         r.select("right", "pic.png")
-        r.press("triangle")
-        r.press("down"); r.press("down")   # Delete
-        r.press("cross")
+        r.menu("Delete")
         s = r.state()
         r.expect(s["files.overlay"] == "confirm", "no question before deleting (%s)" % s["files.overlay"])
         r.press("cross")
@@ -481,9 +499,7 @@ def suite_files(r):
         r.ctl("open files %s/board" % BOARD_DIR)   # (the left panel; the right one: the other folder, below)
         r.ctl("idle 2500")
         r.select("left", "pack")
-        r.press("triangle")
-        r.press("up")   # the menu wraps: up from the first row is the last, Compress to a .zip
-        r.press("cross")
+        r.menu("Compress to a .zip")
         s = r.state()
         r.expect(s["files.overlay"] == "kbd", "no name asked for the archive (%s)" % s["files.overlay"])
         r.press("start")   # the keyboard's done: the proposed name, pack.zip
@@ -637,12 +653,16 @@ def suite_games(r):
     # (not the PSP shelf: its games run on the PSP itself, PSPExp leaving for them; a run started
     # one, 2026-10-25, unpacking it while the next game ran)
     systems = [x for x in s.get("launcher.systems", "").split("|") if x and x != "PSP"]
-    games = [x for x in r.to_category("Games")["launcher.items"].split("|") if x] if "Games" in cats else []
+    # Games is a grid of platforms (2026-10-30): Favourites, PSP, the board's own games under its
+    # name, then each system; the board's tile is the one that is neither Favourites nor a system
+    tiles = [x for x in r.to_category("Games")["launcher.items"].split("|") if x] if "Games" in cats else []
+    board = [x for x in tiles if x != "Favourites" and x not in s.get("launcher.systems", "").split("|")]
+    games = [x for x in r.to_category("Games/" + board[0])["launcher.items"].split("|") if x] if board else []
     r.note("games installed: %s" % (", ".join(games) or "none"))
     r.note("systems with ROMs: %s" % (", ".join(systems) or "none"))
     for title in games:
         r.check("%s starts, draws, quits back to the launcher" % title,
-                lambda title=title: play(r, "Games", title, MIN_FPS, slug(title)))
+                lambda title=title: play(r, "Games/" + board[0], title, MIN_FPS, slug(title)))
     for cat in systems:
         roms = [x for x in r.to_category(cat)["launcher.items"].split("|") if x]
         if not roms:
@@ -661,10 +681,12 @@ def suite_apps(r):
         r.ctl("open launcher")
         s = r.to_category("Apps")
         items = s["launcher.items"].split("|")
-        missing = [a for a in ("Terminal", "Files", "Media", "System Monitor", "Packages") if a not in items]
-        r.expect(not missing, "Apps lacks %s: %s" % (missing, items))
-        r.expect(items == sorted(items, key=str.lower), "Apps is not in alphabetical order: %s" % items)
-    r.check("Apps lists Terminal, Files, Media, System Monitor and Packages, A to Z", listed)
+        builtin = ["Files", "Packages", "Terminal", "System Monitor"]   # (first, in this order: launcher.c, since 2026-10-31)
+        r.expect(items[:4] == builtin, "Apps does not start with %s: %s" % (builtin, items))
+        rest = items[4:]
+        r.expect(rest == sorted(rest, key=str.lower), "the installed apps are not A to Z: %s" % rest)
+        r.expect("Media" in s["launcher.categories"].split("|"), "no Media section")
+    r.check("Apps: Files, Packages, Terminal, System Monitor, then the installed ones A to Z; Media has its own section", listed)
 
     def monitor():
         r.ctl("open monitor")
@@ -680,8 +702,10 @@ def suite_apps(r):
         r.expect(r.state()["monitor.page"] == "programs", "the Programs page did not open")
         r.shot("monitor-programs", "System Monitor: the programs")
         r.press("circle", idle=False); r.ctl("wait 800")
-        r.expect(r.state()["view"] == "launcher", "circle did not close it")
-    r.check("System Monitor shows the board's figures, both pages, closes", monitor)
+        r.expect(r.state()["view"] == "monitor", "circle closed it (only HOME leaves an app)")
+        r.press("home", idle=False); r.ctl("wait 800")
+        r.expect(r.state()["view"] == "launcher", "HOME did not close it")
+    r.check("System Monitor shows the board's figures, both pages; circle keeps it, HOME closes it", monitor)
 
     def store():
         r.ctl("open store")

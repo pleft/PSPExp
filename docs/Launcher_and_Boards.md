@@ -1770,14 +1770,24 @@ the Mac.
   d-pad moved; the suite failed on that console and passed with the fix
   (an action now always draws again).
 - **files:** open at a board folder; the other panel onto the PSP through
-  the drive list; copy two files with triangle > Copy (checked byte for
-  byte); open a picture and a text file from the stick; delete with its
-  question; back to the board.
+  the drive list; copy two files with triangle > Copy to other panel
+  (checked byte for byte); open a picture and a text file from the stick;
+  delete with its question; a folder compressed to a .zip, listed and
+  unpacked; back to the board. Triangle's rows are chosen by name
+  (`FILE_ACTIONS`, files.c's order; until 2026-11-01 by position, from
+  before triangle's menu began with Details: Copy then opened Details).
+- **apps:** Apps begins Files, Packages, Terminal, System Monitor, then the
+  installed ones A to Z, and Media is a section of its own; System Monitor's
+  figures and both pages, circle keeping it and HOME closing it; Packages
+  agrees with `pspexp-pkg list`; a 720p film from Files plays at 20 pictures
+  a second or more.
 - **terminal:** a command and its output.
 - **relink:** the link dropped and back three times; then the clock is
   checked again, there are no errors, and the screen draws.
-- **games:** what the board has, never a fixed list. Every installed game,
-  and the first ROM of every emulated system that has ROMs (the launcher's
+- **games:** what the board has, never a fixed list. Every installed game
+  (Games' tile named after the board, `Games/<board>`: since the platform
+  grid of 2026-10-30 the suite had started the tiles themselves and tried
+  no game), and the first ROM of every emulated system that has ROMs (the launcher's
   `launcher.systems`), is started from the launcher. Each must draw frames
   with no link errors, quit (`stop`) and hand the PSP back to the launcher.
   Its frame rates come from the SDL layer's lines in
