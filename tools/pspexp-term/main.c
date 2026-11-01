@@ -1605,6 +1605,9 @@ static int g_app_from_files;                      /* it was opened by Files (a s
 static const AppView *g_app_back;                 /* it was opened by another app (the Gallery a video): closing it goes back there */
 static const char *g_launcher_assets;
 static pid_t g_launch_pid;                   /* a program started from the launcher */
+/* the program ended at the console's own asking (the control port's stop): its exit is no failure
+ * to tell (130, its signal's, put "Stopped with status 130" in the notifications after each test) */
+static int g_launch_stopped;
 static int g_launch_aware;                   /* it hands the PSP over itself (a PSPExp program) */
 
 /* the launcher <-> the terminal (HOME in the terminal); an app or Files closed (HOME, their own
@@ -2275,6 +2278,7 @@ static void launch_child(const char *cmd, const char *cwd, int aware)
         _exit(127);
     }
     g_launch_pid = pid;
+    g_launch_stopped = 0;
     g_launch_aware = aware;
     /* a PSPExp program needs the PSP to itself: let go of it now, not only
      * when a wrapper (pspexp-exec, pspexp-run) asks with SIGUSR1: a player or
@@ -2300,6 +2304,7 @@ static void launch_done(int status)
             fclose(f);
             unlink(p);
         }
+        if (g_launch_stopped) { code = 0; line[0] = 0; g_launch_stopped = 0; }
         launcher_child_exited(code, line);
     }
 }
@@ -2913,6 +2918,7 @@ static void ctl_step(uint64_t now, int connected)
     } else if (!strcmp(cmd, "stop")) {   /* end the program the launcher started, wait for the PSP to come back */
         if (g_launch_pid <= 0) { ctl_reply("error nothing is running"); return; }
         kill(-g_launch_pid, SIGTERM);
+        g_launch_stopped = 1;
         C.st = CS_STOP; C.t0 = now; C.until = now + 500000u; C.limit = now + 20000000u; C.shot = 0;
     } else if (!strcmp(cmd, "relink")) {   /* as a cable pull: drop the link, wait until it is back */
         if (!connected) { ctl_reply("error not connected"); return; }

@@ -1735,7 +1735,7 @@ console). The commands:
 | `open launcher|terminal|files [PATH]` | switches the view |
 | `category NAME` | the launcher onto a category, a platform or a Settings group; `SECTION/NAME` (`Settings/PSP`) where a name is in two sections (Games' PSP platform and the PSP group; the board's games and its group) |
 | `select TITLE` | the launcher's highlight onto an entry of the section shown |
-| `stop` | ends the program the launcher started (its process group), and answers when the launcher has the PSP back |
+| `stop` | ends the program the launcher started (its process group), and answers when the launcher has the PSP back; its exit is no failure to tell (before 2026-11-01 each test left "Stopped with status 130" in the notifications) |
 | `relink` | drops the link as a cable pull would, and answers when it is back |
 | `clock [force]` | the PSP's clock and time zone from the board (§9) |
 | `psp-restart` | PSPExp on the PSP starts itself again (runtimes with `PSPEXP_FEATURE_RESTART`); the link goes and comes back |
