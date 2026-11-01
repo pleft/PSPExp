@@ -1,13 +1,18 @@
 # Lure of the Temptress: Debian's freeware game data on Debian's ScummVM, a point-and-click
 # adventure played with the nub as the mouse.
 
+# ScummVM's SDL surface mode comes from a settings file of PSPExp's own (first-run), not from
+# --gfx-mode: that option opens a graphics change before there is any screen, and ScummVM 2.9's
+# dirty-rectangle count, never set at first, then made about one start in two end at once
+# ("SDL_BlitSurface failed", 2026-11-01)
+
 [package]
 id=lure-of-the-temptress
 title=Lure of the Temptress
 description=Revolution's 1992 fantasy adventure: Diermot escapes a dungeon and helps the town of Turnvale against the sorceress Selena; its people live lives of their own. Freeware since 2003.
 category=game
 license=Freeware (Revolution Software); ScummVM is GPL-3.0
-version=4
+version=5
 
 [debian]
 apt=scummvm lure-of-the-temptress
@@ -20,7 +25,8 @@ title=Lure of the Temptress
 type=game
 description=Revolution's 1992 fantasy adventure: Diermot escapes a dungeon and helps the town of Turnvale against the sorceress Selena; its people live lives of their own. Freeware since 2003.
 icon=puzzle
-exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/lure-of-the-temptress/en lure
+exec=/usr/games/scummvm --config=$HOME/.config/pspexp/scummvm.ini --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/lure-of-the-temptress/en lure
+first-run=.config/pspexp/scummvm.ini:[scummvm]\ngfx_mode=surfacesdl\n
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
 graphics=sdl

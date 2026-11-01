@@ -1,13 +1,18 @@
 # Drascula: The Vampire Strikes Back: Debian's freeware game data on Debian's ScummVM, a point-and-click
 # adventure played with the nub as the mouse.
 
+# ScummVM's SDL surface mode comes from a settings file of PSPExp's own (first-run), not from
+# --gfx-mode: that option opens a graphics change before there is any screen, and ScummVM 2.9's
+# dirty-rectangle count, never set at first, then made about one start in two end at once
+# ("SDL_BlitSurface failed", 2026-11-01)
+
 [package]
 id=drascula
 title=Drascula: The Vampire Strikes Back
 description=Alcachofa Soft's 1996 comedy vampire adventure: John Hacker sets out to rescue a kidnapped girl from Count Drascula. Point and click with the nub; freeware since 2006.
 category=game
 license=Freeware (Alcachofa Soft); ScummVM is GPL-3.0
-version=5
+version=6
 
 [debian]
 apt=scummvm drascula drascula-music
@@ -20,7 +25,8 @@ title=Drascula: The Vampire Strikes Back
 type=game
 description=Alcachofa Soft's 1996 comedy vampire adventure: John Hacker sets out to rescue a kidnapped girl from Count Drascula. Point and click with the nub; freeware since 2006.
 icon=puzzle
-exec=/usr/games/scummvm --gfx-mode=surfacesdl --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/drascula/en drascula
+exec=/usr/games/scummvm --config=$HOME/.config/pspexp/scummvm.ini --scaler=normal --scale-factor=1 --no-fullscreen -p /usr/share/scummvm/drascula/en drascula
+first-run=.config/pspexp/scummvm.ini:[scummvm]\ngfx_mode=surfacesdl\n
 keys=start=f5,select=escape,triangle=period,square=space,up=up,down=down,left=left,right=right
 nub=mouse
 graphics=sdl

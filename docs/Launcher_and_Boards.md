@@ -1017,6 +1017,27 @@ back to the launcher. Clearing the layer's OpenGL context on `SDL_GL_DeleteConte
 well made Beneath a Steel Sky stop at start (`SDL_BlitSurface failed`):
 left as it was. The Omega's ScummVM, built without OpenGL, never had it.
 
+**"SDL_BlitSurface failed" was ScummVM's own** (2026-11-01). On a fresh
+Pi 400 card about one start in two of Flight of the Amazon Queen and Lure of
+the Temptress ended at once, before ScummVM chose the game; started by hand
+they always played. A preload that printed a backtrace on a blit from a NULL
+surface (no debugger on a program holding the PSP), read with Debian's
+`scummvm-dbgsym`: `scummvm_main` (main.cpp:575) applies `--gfx-mode` from the
+command line in a graphics change of its own, before there is any screen;
+its end calls `internUpdateScreen`, which draws when the dirty-rectangle
+count says so, and `SurfaceSdlGraphicsManager` never sets that count at
+first (2.9.0, and upstream's master too): whatever the memory held decided,
+and a nonzero value blitted from no surface and `error()` quit. So the
+layer's context change above only moved what was in that memory. The four
+recipes now give ScummVM a settings file of PSPExp's own,
+`~/.config/pspexp/scummvm.ini` (`--config`, written by `first-run` with
+`gfx_mode=surfacesdl`), which it reads as it starts, choosing SDL surface
+mode with no change afterwards; the player's own ScummVM settings are left
+alone. Tried on the Pi 400 with the PSP-1000: 22 starts from the launcher,
+none failed (Amazon Queen 9 fps, Lure 45, Beneath a Steel Sky 7, Drascula 8).
+The Omega's entries (`scripts/packages/recipes/_lib.sh`) still pass
+`--gfx-mode` (the architecture's Next list).
+
 The static builds' rename header now lists only the hooks the static SDL
 layer defines (its OpenGL ones are left out): ScummVM asks
 `SDL_GL_GetDrawableSize` without using OpenGL and failed to link.

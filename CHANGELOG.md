@@ -8,6 +8,8 @@
 - **A game that hangs as it quits** no longer leaves the PSP frozen on its
   last picture: PSPExp ends what is left of it within a few seconds and
   takes the PSP back (seen with GLtron).
+- **The four ScummVM adventures** start every time: Flight of the Amazon
+  Queen and Lure of the Temptress ended at once about one start in two.
 - **Button sounds** are sent to the PSP once a connection, not twice: no
   more resource errors in the log after the PSP reconnects.
 
