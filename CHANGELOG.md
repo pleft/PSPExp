@@ -50,7 +50,7 @@
   bring them.
 - **PC Engine and Neo Geo**: Apps > Packages has **PC Engine** (HuCards
   in `roms/pce`, CD games in `roms/pcecd` with your System Card in
-  `roms/pcecd/bios`) and **Neo Geo** (FinalBurn Neo's zips in
+  `roms/pcecd/bios`; US HuCards dumped bit-reversed play too) and **Neo Geo** (FinalBurn Neo's zips in
   `roms/neogeo`, with the BIOS `neogeo.zip` beside them; each game shows by
   its full name, "Metal Slug - Super Vehicle-001", and the BIOS not at all).
   Game details finds their descriptions too (the board makes its database

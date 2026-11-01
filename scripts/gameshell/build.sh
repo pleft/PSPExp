@@ -63,7 +63,7 @@ if [ "$WHAT" = retro ]; then
 	# breaks: its portable C cores instead
 	case "$CORE" in
 	picodrive) EXTRA="ARCH=generic" ;;   # its C 68000 (FAME) and Z80 (CZ80) cores, no assembly
-	fbneo_neogeo) EXTRA="SUBSET=neogeo" ;;
+	fbneo_neogeo) EXTRA="SUBSET=neogeo REGEN_HEADERS=1" ;;   # (the subset's own driver list)
 	*) EXTRA= ;;
 	esac
 	make -C "$W/$MKDIR" -f "$MK" -j8 platform=unix CC="$R/zcc" CXX="$R/zcxx" $EXTRA >"$R/core-$CORE.log" 2>&1 || true

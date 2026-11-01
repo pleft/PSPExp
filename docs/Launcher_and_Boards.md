@@ -1326,6 +1326,14 @@ itself (on the Mac it plays in a window).
   `~/.config/pspexp-retro/system/`, or where `PSPEXP_RETRO_SYSTEM` says
   (`~/` is the home folder: a recipe's `env=`, which nothing else expands;
   the Sega CD's `~/roms/segacd/bios`, beside its discs, 2026-11-01).
+- **Content in memory** (2026-11-01). A core that wants paths may still take
+  some extensions from memory (`SET_CONTENT_INFO_OVERRIDE`) and then asks for
+  them through `GET_GAME_INFO_EXT`: Beetle PCE Fast its `.pce`. The player
+  had acknowledged the override and offered no data, so the core read the
+  file itself. Now it reads those into memory and answers. A `.pce` that is
+  a US HuCard's bit-reversed dump (GoodPCE's "(U)" sets; the reset vector's
+  high byte at 0x1FFF not E0..FF, its reverse so) is turned round first:
+  Blazing Lazers and Bonk's Adventure had shown a white screen.
 - **Core options.** The core's defaults, overridden by `KEY=value` lines in
   `~/.config/pspexp-retro/<core>.opt` or `PSPEXP_RETRO_OPT="k=v;k=v"`.
   `PSPEXP_RETRO_ASPECT=pixel` gives square pixels.

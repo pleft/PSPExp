@@ -18,7 +18,7 @@ H="$1"; OUT="$2"; INC="$3"
 CORE="${CORE:-fceumm}"
 # a core whose makefile is not at its source's top: FinalBurn Neo's Neo Geo driver alone
 case "$CORE" in
-fbneo_neogeo) SRCDIR=libretro-fbneo; MKDIR=src/burner/libretro; MKARGS="SUBSET=neogeo" ;;
+fbneo_neogeo) SRCDIR=libretro-fbneo; MKDIR=src/burner/libretro; MKARGS="SUBSET=neogeo REGEN_HEADERS=1" ;;   # (its driver list made again for the subset: else it names every driver)
 *) SRCDIR=libretro-$CORE; MKDIR=.; MKARGS= ;;
 esac
 SRC="$ROOT/../retro/$SRCDIR"

@@ -76,6 +76,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #ifndef PSPEXP_RETRO_STATIC
 #include <dlfcn.h>
@@ -211,6 +213,10 @@ static struct {
     int layout, layout_held;          /* which of the dual layouts (present) */
     /* paths */
     char system_dir[PATH_MAX], save_dir[PATH_MAX], srm_path[PATH_MAX], core_name[64];
+    /* the content as the core may ask for it (GET_GAME_INFO_EXT): in memory for the extensions it
+     * takes so (SET_CONTENT_INFO_OVERRIDE: Beetle PCE Fast's .pce, though it needs paths otherwise) */
+    char inmem_exts[128], rom_dir[PATH_MAX], rom_name[256], rom_ext[16];
+    struct retro_game_info_ext gix; int have_gix;
     /* options: key, default (first value), override */
     struct { char key[96], def[96], val[96]; } opt[256]; int nopt;
     int running;
@@ -344,6 +350,19 @@ static bool environment(unsigned cmd, void *data)
         return true;
     }
     case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: *(const char **)data = P.system_dir; return true;
+    case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE: {   /* extensions it takes from memory */
+        const struct retro_system_content_info_override *o = (const struct retro_system_content_info_override *)data;
+        for (; o && o->extensions; o++)
+            if (!o->need_fullpath && strlen(P.inmem_exts) + strlen(o->extensions) + 2 < sizeof(P.inmem_exts)) {
+                if (P.inmem_exts[0]) strcat(P.inmem_exts, "|");
+                strcat(P.inmem_exts, o->extensions);
+            }
+        return true;
+    }
+    case RETRO_ENVIRONMENT_GET_GAME_INFO_EXT:
+        if (!P.have_gix) return false;
+        *(const struct retro_game_info_ext **)data = &P.gix;
+        return true;
     case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: *(const char **)data = P.save_dir; return true;
     case RETRO_ENVIRONMENT_GET_LOG_INTERFACE: ((struct retro_log_callback *)data)->log = core_log; return true;
     case RETRO_ENVIRONMENT_SET_VARIABLES: opt_defaults((const struct retro_variable *)data); return true;
@@ -381,7 +400,6 @@ static bool environment(unsigned cmd, void *data)
     case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS:
     case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
     case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
-    case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE:
         return true;
     default:
         return false;   /* including SET_HW_RENDER: software cores only */
@@ -761,6 +779,27 @@ static void job_wait(void)
     SDL_UnlockMutex(P.mu);
 }
 
+/* A TurboGrafx-16 HuCard dumped as the US cartridge holds it, each byte's bits in reverse order
+ * (GoodPCE's "(U)" sets; No-Intro's are decoded): Beetle PCE Fast takes it as it is and draws a white
+ * screen (Blazing Lazers, Bonk's Adventure: 2026-11-01). At reset the first 8 KB bank sits at E000,
+ * so the reset vector's high byte is the ROM's 0x1FFF (after a 512-byte header): E0..FF in a decoded
+ * one; when only its reverse is, the whole ROM is turned round */
+static uint8_t bitrev(uint8_t b)
+{
+    b = (uint8_t)((b & 0xF0) >> 4 | (b & 0x0F) << 4);
+    b = (uint8_t)((b & 0xCC) >> 2 | (b & 0x33) << 2);
+    return (uint8_t)((b & 0xAA) >> 1 | (b & 0x55) << 1);
+}
+static void pce_us_decode(const char *rom, uint8_t *d, size_t n)
+{
+    const char *dot = strrchr(rom, '.');
+    size_t h = (n & 0x200) ? 512 : 0, i;
+    if (!dot || strcasecmp(dot, ".pce") || n < h + 0x2000) return;
+    if ((d[h + 0x1FFF] & 0xE0) == 0xE0 || (bitrev(d[h + 0x1FFF]) & 0xE0) != 0xE0) return;
+    for (i = h; i < n; i++) d[i] = bitrev(d[i]);
+    fprintf(stderr, "pspexp-retro: %s: a US HuCard's bit-reversed dump, decoded\n", rom);
+}
+
 static uint8_t *read_file(const char *path, size_t *n)
 {
     FILE *f = fopen(path, "rb");
@@ -841,10 +880,29 @@ int main(int argc, char **argv)
             core_path[0] ? core_path : "linked in");
     memset(&gi, 0, sizeof(gi));
     gi.path = rom;
-    if (!si.need_fullpath) {
-        size_t n = 0;
-        if (!(data = read_file(rom, &n))) die("%s: %s", rom, strerror(errno));
-        gi.data = data; gi.size = n;
+    {   /* its folder, name and extension (GET_GAME_INFO_EXT), and whether the core takes it from memory */
+        const char *rslash = strrchr(rom, '/'), *rbase = rslash ? rslash + 1 : rom, *rdot = strrchr(rbase, '.');
+        int inmem = !si.need_fullpath, j;
+        snprintf(P.rom_dir, sizeof(P.rom_dir), "%.*s", rslash ? (int)(rslash - rom) : 1, rslash ? rom : ".");
+        snprintf(P.rom_name, sizeof(P.rom_name), "%.*s", rdot ? (int)(rdot - rbase) : (int)strlen(rbase), rbase);
+        snprintf(P.rom_ext, sizeof(P.rom_ext), "%s", rdot ? rdot + 1 : "");
+        for (j = 0; P.rom_ext[j]; j++) P.rom_ext[j] = (char)tolower((unsigned char)P.rom_ext[j]);
+        if (!inmem && P.rom_ext[0]) {   /* ("pce|sgx": a whole word of the list) */
+            const char *l = P.inmem_exts, *hit;
+            size_t el = strlen(P.rom_ext);
+            for (hit = strstr(l, P.rom_ext); hit && !inmem; hit = strstr(hit + 1, P.rom_ext))
+                inmem = (hit == l || hit[-1] == '|') && (hit[el] == 0 || hit[el] == '|');
+        }
+        if (inmem) {
+            size_t n = 0;
+            if (!(data = read_file(rom, &n))) die("%s: %s", rom, strerror(errno));
+            pce_us_decode(rom, data, n);
+            gi.data = data; gi.size = n;
+        }
+        memset(&P.gix, 0, sizeof(P.gix));
+        P.gix.full_path = rom; P.gix.dir = P.rom_dir; P.gix.name = P.rom_name; P.gix.ext = P.rom_ext;
+        P.gix.data = gi.data; P.gix.size = gi.size;
+        P.have_gix = 1;
     }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) != 0) die("SDL: %s", SDL_GetError());
