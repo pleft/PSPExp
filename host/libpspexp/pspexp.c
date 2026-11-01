@@ -89,7 +89,7 @@ struct PspExpContext {
     int cap_fd, cap_mode, cap_got;
     int cap_recording;   /* CAPTURE_STATE: a recording under way (0 at each HELLO) */
     uint8_t cap_hello[32];
-    uint64_t cap_dropped, cap_tried;
+    uint64_t cap_dropped, cap_tried, cap_checked;
 };
 
 static void ctx_log(PspExpContext *ctx, const char *fmt, ...)
@@ -861,6 +861,20 @@ int pspexp_pump(PspExpContext *ctx, int timeout_ms)
         while ((r = pspexp_stream_next(&ctx->in, &m)) == 1) { handle(ctx, &m); count++; }
         if (r < 0) { ctx_log(ctx, "inbound stream corrupt"); link_lost(ctx); return -1; }
         wait = 0;  /* drain whatever else is already there */
+    }
+    /* a receiver gone (the console starts it again when Settings > Recording changes): noticed here
+     * once a second, not only when a write to it fails, as between recordings ("recordings only")
+     * nothing is written: the PSP kept the old mode, and Quick controls had no "Save last N
+     * seconds" after Clips was switched on (the GameShell, 2026-11-01). Then looked for again below */
+    if (ctx->cap_fd >= 0 && ctx->cap_mode && pspexp_time_us() - ctx->cap_checked >= 1000000) {
+        char b;
+        ssize_t r;
+        ctx->cap_checked = pspexp_time_us();
+        r = recv(ctx->cap_fd, &b, 1, MSG_PEEK | MSG_DONTWAIT);
+        if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
+            ctx_log(ctx, "Recording: the receiver went away");
+            capture_close(ctx);
+        }
     }
     /* a receiver that started after the PSP connected (the console starts it then): looked for
      * every 2 s */

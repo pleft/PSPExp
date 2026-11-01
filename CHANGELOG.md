@@ -148,6 +148,8 @@
   screen's hints under them; "Details" only where triangle opens them;
   Search's circle goes back to where you opened it; smaller fixes (Files'
   Compress keyboard's title, the Wi-Fi picker).
+- **Clips switched on take effect at once**: before, ♪ + R (and Quick
+  controls' Save the last seconds) waited until PSPExp next connected.
 - **Game Boy Advance**: no more dark one-pixel line near the right edge of
   every game (the picture's pieces now meet exactly).
 - **Saturn**: leaving a game no longer ends with a "Stopped with status 138"

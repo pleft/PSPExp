@@ -587,6 +587,19 @@ there, the receiver's hello saying which; the PSP then sends what it shows and p
 bytes being the receiver's own packets, cut anywhere. A new link (HELLO)
 turns it off.
 
+The receiver changing (2026-11-01): Settings > Recording's Clips starts the
+receiver again with its new clip length, and the host's library meets the new
+one only after dropping the old connection. A write that fails dropped it;
+but with Clips off ("recordings only") nothing is written between
+recordings, so the old connection stayed, the PSP kept "recordings only",
+and Quick controls offered no Save the last N seconds (found on the
+GameShell). libpspexp now peeks at the receiver's socket once a second
+(`MSG_PEEK | MSG_DONTWAIT`) and drops it at its end ("Recording: the
+receiver went away"), the 2 s search then finding the new one and its mode.
+On the Pi 400 with the PSP-1000: Clips off and on from Settings, the mode
+followed each time within 2 s, and Quick controls showed Save the last 15
+seconds.
+
 CAPTURE_REQUEST and CAPTURE_STATE (DEBUG 0x050A and 0x050B, 2026-10-31,
 runtimes with `PSPEXP_FEATURE_CAPTURE_REQ`): the host asks for what the note
 button would do (`PspExpCaptureRequest`: `what` 1 a clip, 2 a recording
