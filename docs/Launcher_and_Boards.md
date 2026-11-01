@@ -945,7 +945,12 @@ other panel", "Add to queue"); where it would not, the line was reworded
 Two names now appear in two sections (the PSP platform and the PSP group;
 the board's games and its group), so `launcher_category` takes
 `Settings/PSP`, notifications jump with it, and the levels kept across a
-rebuild match by section and name. Older passages here say This PSP, This
+rebuild match by section and name, as does the level kept as the current
+one, and cross on a group opens the group (`g:` ids), not the platform of
+its name (Settings › PSP had opened Games › PSP, the board's group its
+games: found on the PSP the same day; the control port's state now says
+`launcher.section`, and the settings suite checks each group opens in
+Settings). Older passages here say This PSP, This
 board and Update the PSP. Checked in PPSSPP at 1:1 (18 screens, the Mac's
 name in them) and with the launcher and settings suites.
 
@@ -1757,7 +1762,7 @@ the Mac.
   Packages, Terminal, System Monitor), the installed after them A to Z (the
   check still wanted all A to Z until 2026-11-01, failing since the XMB
   launcher); a screenshot of every section.
-- **settings:** every switch safe to flip (Button sounds, Clips, Box art,
+- **settings:** each group opens in Settings (`launcher.section`); every switch safe to flip (Button sounds, Clips, Box art,
   PSP clock; not the PSPExp plugin, SSH or Wi-Fi) gets cross twice: the value
   drawn (`launcher.shown`, not the setting held) must turn and turn back.
   It ends as it began. Added 2026-10-31 after Button sounds changed with no

@@ -264,9 +264,9 @@ static struct { int open, sel, cur, n; const LEntry *e; char v[8][24]; } g_vl;
 static void cats_build(void)
 {
     char keep[64] = "";
-    int i, s, nkeep = g_ncat;
+    int i, s, nkeep = g_ncat, keep_sec = -1;
     Cat *c;
-    if (g_ncat) snprintf(keep, sizeof(keep), "%s", g_cat[g_cur].name);
+    if (g_ncat) { snprintf(keep, sizeof(keep), "%s", g_cat[g_cur].name); keep_sec = section_of(&g_cat[g_cur]); }
     for (i = 0; i < g_ncat; i++) {
         snprintf(g_keep[i].name, sizeof(g_keep[i].name), "%s", g_cat[i].name);
         snprintf(g_keep[i].id, sizeof(g_keep[i].id), "%s", g_cat[i].n ? g_cat[i].it[g_cat[i].sel]->id : "");
@@ -434,7 +434,7 @@ static void cats_build(void)
         }
     }
     g_cur = -1;
-    for (i = 0; i < g_ncat; i++) if (keep[0] && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }
+    for (i = 0; i < g_ncat; i++) if (keep[0] && section_of(&g_cat[i]) == keep_sec && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }   /* (Settings' PSP is not Games' PSP) */
     if (g_cur < 0) { g_cur = start_cat(); g_cat[g_cur].scroll = (float)g_cat[g_cur].sel; g_tri.open = 0; }
 }
 
@@ -1253,7 +1253,11 @@ void launcher_state(char *out, size_t n)
     for (i = 0, e = NULL; i < g_ncat && l < n; i++) if (g_cat[i].kind == CK_SYSTEM) l += (size_t)snprintf(out + l, n - l, "%s%s", e ? "|" : "", g_cat[i].name), e = (LEntry *)1;
     if (l < n) l += (size_t)snprintf(out + l, n - l, "\nlauncher.toast=%s\n", notify_showing());   /* (the banner or the hint shown: tests read it) */
     /* what the screen shows, not what the setting holds: a change never drawn is a failure */
-    if (l < n) snprintf(out + l, n - l, "launcher.shown=%s\n", g_shown_value);
+    if (l < n) l += (size_t)snprintf(out + l, n - l, "launcher.shown=%s\n", g_shown_value);
+    {   /* the section the level shown is in: two can share a name (Games' PSP, Settings' PSP) */
+        static const char *const SEC[NSEC] = { "Games", "Apps", "Media", "Settings" };
+        if (l < n && g_ncat) snprintf(out + l, n - l, "launcher.section=%s\n", SEC[section_of(&g_cat[g_cur])]);
+    }
 }
 
 int launcher_system_for(const char *path, char *name, size_t n)
@@ -2028,7 +2032,9 @@ static void section_step(int d, uint64_t now)
 static void level_open(const LEntry *e, uint64_t now)
 {
     int i;
-    for (i = 0; i < g_ncat; i++) if ((g_cat[i].tab || g_cat[i].kind == CK_SETTINGS) && !strcmp(g_cat[i].name, e->title)) { show_cat(i, 1, now); return; }
+    int group = !strncmp(e->id, "g:", 2);   /* (a Settings group, else a platform: they may share a name, "PSP") */
+    for (i = 0; i < g_ncat; i++)
+        if ((group ? g_cat[i].kind == CK_SETTINGS : g_cat[i].tab) && !strcmp(g_cat[i].name, e->title)) { show_cat(i, 1, now); return; }
 }
 static void level_back(uint64_t now)
 {

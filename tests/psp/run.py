@@ -375,7 +375,11 @@ def suite_settings(r):
             r.expect(s["launcher.selected"] == g, "%s not highlighted (%s)" % (g, s["launcher.selected"]))
             r.press("cross", idle=False)   # (a group: its settings)
             r.ctl("idle 800")
-            items = r.state()["launcher.items"].split("|")
+            s = r.state()
+            # (in Settings: the PSP group once opened Games' PSP platform, the same name, 2026-11-01)
+            r.expect(s["launcher.category"] == g and s.get("launcher.section") == "Settings",
+                     "cross on the %s group opened %s in %s" % (g, s["launcher.category"], s.get("launcher.section")))
+            items = s["launcher.items"].split("|")
             for name in [x for x in SAFE_SWITCHES if x in items]:
                 r.ctl("select " + name)
                 s = r.state()
@@ -389,7 +393,7 @@ def suite_settings(r):
                 done.append("%s %s>%s>%s" % (name, was, now, back))
         r.expect(done, "no safe switch found in Settings")
         r.note("switches drawn: " + "; ".join(done))
-    r.check("Settings: cross on a switch redraws its value", switches)
+    r.check("Settings: each group opens in Settings, cross on a switch redraws its value", switches)
     to_groups()
 
 
