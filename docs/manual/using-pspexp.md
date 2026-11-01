@@ -240,6 +240,11 @@ its folder in the board's home folder:
 | WonderSwan / Color | `roms/ws`, `roms/wsc` |
 | Nintendo 64 (Raspberry Pi) | `roms/n64` (.z64, .n64, .v64) |
 
+ROMs go in unpacked: a `.zip` or `.7z` is not played (the Neo Geo's zips
+excepted, which are its games). In **Apps > Files**, cross on an archive
+unpacks it; pick the version you want from what comes out, as an archive
+often holds several (a game's regions, revisions or bad dumps).
+
 On the Nintendo 64 the nub is the stick, cross A, square B, L the Z
 trigger, R the R button, START Start, and the d-pad the four C buttons
 (triangle is the N64's L).
