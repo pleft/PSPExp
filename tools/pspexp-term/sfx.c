@@ -8,7 +8,7 @@
 #define SFX_MAX  (SFX_RATE / 10)  /* 100 ms at most */
 
 static int16_t g_pcm[SFX_COUNT][SFX_MAX];
-static int g_len[SFX_COUNT], g_made, g_sent;
+static int g_len[SFX_COUNT], g_made;
 
 /* a soft tone from f0 to f1 Hz, len ms, its start at `at` ms: a 1.5 ms rise, then an exponential
  * fall (tau ms), peak `amp` of full scale; added into s */
@@ -40,16 +40,16 @@ static void make(void)
     g_made = 1;
 }
 
-void sfx_connected(void) { g_sent = 0; }
-
 void sfx_play(PspExpContext *ctx, int which)
 {
     int i;
     if (which < 0 || which >= SFX_COUNT || pspexp_audio_local(ctx)) return;
     if (!g_made) make();
-    if (!g_sent) {
-        for (i = 0; i < SFX_COUNT; i++) pspexp_upload_sound(ctx, (uint16_t)(SFX_ID + i), g_pcm[i], (uint32_t)g_len[i], 1);
-        g_sent = 1;
-    }
+    /* uploaded when the PSP holds none: libpspexp sends its uploads again itself on a new link (the
+     * working set), so uploading them again at each connection gave the PSP each one twice, five
+     * DUPLICATE_ID errors a reconnect (the test suite's "no link errors", 2026-11-01) */
+    for (i = 0; i < SFX_COUNT; i++)
+        if (pspexp_resource_state(ctx, (uint16_t)(SFX_ID + i), NULL) == PSPEXP_RES_NONE)
+            pspexp_upload_sound(ctx, (uint16_t)(SFX_ID + i), g_pcm[i], (uint32_t)g_len[i], 1);
     pspexp_play_sound(ctx, (uint16_t)(SFX_ID + which), 255, 0, 0);
 }

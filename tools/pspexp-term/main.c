@@ -1543,7 +1543,6 @@ static int try_connect(void)
     pspexp_set_transport(ctx, t);
     if (pspexp_connect(ctx, 3000) < 0) { pspexp_set_transport(ctx, NULL); return 0; }
     fprintf(stderr, "[pspexp-term] PSP connected\n");
-    sfx_connected();   /* (the button sounds go to it again) */
     g_home_sent = -1;   /* (the PSP gives HOME back to its dialog at every disconnect) */
     T.dirty = 1;
     {
@@ -1609,6 +1608,15 @@ static pid_t g_launch_pid;                   /* a program started from the launc
  * to tell (130, its signal's, put "Stopped with status 130" in the notifications after each test) */
 static int g_launch_stopped;
 static int g_launch_aware;                   /* it hands the PSP over itself (a PSPExp program) */
+/* what a launched program left behind in its process group once it ended: a game started by a
+ * wrapper (pspexp-exec's shell) is its child, and the wrapper can end while the game does not.
+ * GLtron, stopped, took SDL's SIGTERM as a quit and hung in it (a FIFO opened for its sound, no
+ * reader), its USB link to the PSP still open: the PSP stayed in its session, frozen on its last
+ * picture, and the console could not take it back for 15 minutes (2026-11-01). So the rest of the
+ * group gets SIGTERM, then SIGKILL (as a stop that is not listened to) */
+static pid_t g_left_pgid;
+static uint64_t g_left_at;
+static int g_left_killed;
 
 /* the launcher <-> the terminal (HOME in the terminal); an app or Files closed (HOME, their own
  * exit): where it was opened from. (The mirror view, the board's framebuffer on the PSP for the GameShell's
@@ -2291,6 +2299,11 @@ static void launch_done(int status)
 {
     int code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
     fprintf(stderr, "[pspexp-term] launcher: pid %d ended (%d)\n", (int)g_launch_pid, code);
+    if (kill(-g_launch_pid, 0) == 0) {   /* (its group: the program was started in a session of its own) */
+        fprintf(stderr, "[pspexp-term] launcher: pid %d left programs running: SIGTERM, SIGKILL in 3 s\n", (int)g_launch_pid);
+        kill(-g_launch_pid, SIGTERM);
+        g_left_pgid = g_launch_pid; g_left_at = pspexp_time_us(); g_left_killed = 0;
+    }
     g_launch_pid = 0;
     if (g_launch_aware) g_acquire_req = 1;   /* ours again (pspexp-exec's SIGUSR2 may have said so already) */
     if (g_launch_from_files) { g_view_files = 1; g_view_launcher = 0; files_invalidate(); }   /* back where it was opened */
@@ -3332,6 +3345,16 @@ int main(int argc, char **argv)
         if (g_launch_pid > 0) {   /* a program started from the launcher */
             int st;
             if (waitpid(g_launch_pid, &st, WNOHANG) == g_launch_pid) launch_done(st);
+        }
+        if (g_left_pgid > 0) {   /* what an ended program left behind (g_left_pgid) */
+            if (kill(-g_left_pgid, 0) < 0 && errno == ESRCH) {
+                fprintf(stderr, "[pspexp-term] launcher: what pid %d left behind has ended\n", (int)g_left_pgid);
+                g_left_pgid = 0;
+            } else if (!g_left_killed && pspexp_time_us() - g_left_at > 3000000u) {
+                fprintf(stderr, "[pspexp-term] launcher: what pid %d left behind did not end: SIGKILL\n", (int)g_left_pgid);
+                kill(-g_left_pgid, SIGKILL);
+                g_left_killed = 1;
+            }
         }
         /* hand-over */
         if (g_release_req) { g_release_req = 0; release_psp(); }

@@ -5,6 +5,11 @@
 - **Celeste 64 and Theia** install every time: their download from itch.io
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
+- **A game that hangs as it quits** no longer leaves the PSP frozen on its
+  last picture: PSPExp ends what is left of it within a few seconds and
+  takes the PSP back (seen with GLtron).
+- **Button sounds** are sent to the PSP once a connection, not twice: no
+  more resource errors in the log after the PSP reconnects.
 
 ## 1.4.0 (2026-11-01)
 
