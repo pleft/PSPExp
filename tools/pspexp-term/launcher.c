@@ -261,17 +261,30 @@ static LEntry *g_tri_e;
 /* a choice's values beside its setting (vlist_open): open, its highlight, the current one, how many */
 static struct { int open, sel, cur, n; const LEntry *e; char v[8][24]; } g_vl;
 
-static void cats_build(void)
+/* the place cats_make goes back to: each level's (g_keep), and the level shown. Taken while the
+ * levels' entries are still the library's: a reload frees them, and reading the highlighted one's id
+ * after it read freed memory (the GameShell's console crashed in the games suite, 2026-11-01:
+ * cats_build after lib_reload, its snprintf of g_keep[].id) */
+static char g_keep_cur[64];
+static int g_keep_n, g_keep_cur_sec = -1;
+static void cats_keep(void)
 {
-    char keep[64] = "";
-    int i, s, nkeep = g_ncat, keep_sec = -1;
-    Cat *c;
-    if (g_ncat) { snprintf(keep, sizeof(keep), "%s", g_cat[g_cur].name); keep_sec = section_of(&g_cat[g_cur]); }
+    int i;
+    g_keep_cur[0] = 0; g_keep_cur_sec = -1; g_keep_n = g_ncat;
+    if (g_ncat) { snprintf(g_keep_cur, sizeof(g_keep_cur), "%s", g_cat[g_cur].name); g_keep_cur_sec = section_of(&g_cat[g_cur]); }
     for (i = 0; i < g_ncat; i++) {
         snprintf(g_keep[i].name, sizeof(g_keep[i].name), "%s", g_cat[i].name);
         snprintf(g_keep[i].id, sizeof(g_keep[i].id), "%s", g_cat[i].n ? g_cat[i].it[g_cat[i].sel]->id : "");
         g_keep[i].sel = g_cat[i].sel; g_keep[i].scroll = g_cat[i].scroll; g_keep[i].sec = section_of(&g_cat[i]);
     }
+}
+
+/* the levels made again from the library, each back at its place (cats_keep, taken before) */
+static void cats_make(void)
+{
+    const char *keep = g_keep_cur;
+    int i, s, nkeep = g_keep_n, keep_sec = g_keep_cur_sec;
+    Cat *c;
     cats_free();
     board_detect();   /* (labels name the board: "Raspberry Pi 400's drives", not "the board's") */
     {
@@ -436,6 +449,14 @@ static void cats_build(void)
     g_cur = -1;
     for (i = 0; i < g_ncat; i++) if (keep[0] && section_of(&g_cat[i]) == keep_sec && !strcmp(g_cat[i].name, keep)) { g_cur = i; break; }   /* (Settings' PSP is not Games' PSP) */
     if (g_cur < 0) { g_cur = start_cat(); g_cat[g_cur].scroll = (float)g_cat[g_cur].sel; g_tri.open = 0; }
+}
+
+/* the levels made again, each kept at its place: the library unchanged (a reload: cats_keep, the
+ * reload, then cats_make) */
+static void cats_build(void)
+{
+    cats_keep();
+    cats_make();
 }
 
 static LEntry *cur_entry(void)
@@ -933,8 +954,10 @@ static void run_action(LEntry *e, uint64_t now)
     }
     if (!strcmp(a, "rescan")) {
         char s[96];
-        int n = lib_reload(&L);
-        cats_build();
+        int n;
+        cats_keep();   /* (before the reload frees the entries the levels point to) */
+        n = lib_reload(&L);
+        cats_make();
         snprintf(s, sizeof(s), "%d game%s, app%s and ROMs", n, n == 1 ? "" : "s", n == 1 ? "" : "s");
         toast("refresh-cw", s, now);
     } else if (!strcmp(a, "console")) {
@@ -2446,10 +2469,11 @@ static float ease(float cur, float target, float rate, float dt, float snap)
 
 static void library_changed(uint64_t now)
 {
+    cats_keep();   /* (before the reload frees the entries the levels point to) */
     lib_reload(&L);
-    cats_build();
+    cats_make();
     g_det = NULL;
-    g_tri.open = 0;   /* (its entry may be gone) */
+    g_tri.open = 0; g_vl.open = 0;   /* (their entry may be gone) */
     if (g_mode == M_DETAILS) g_mode = M_BROWSE;
     if (g_mode == M_SEARCH) search_update();
     toast("package", "Library updated", now);

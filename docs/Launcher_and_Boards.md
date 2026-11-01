@@ -1236,7 +1236,15 @@ when it was removed: `--mirror` is accepted and ignored).
 
 The launcher checks every 3 s whether a package, entry, system or ROM
 folder changed and reloads ("Library updated"); System > Refresh library
-does it at once.
+does it at once. Each level stays on the entry it had (by its id), noted
+before the reload (`cats_keep`) and gone back to after (`cats_make`): noted
+after it, as until 2026-11-01, the highlighted entry was read from memory
+the reload had freed. The GameShell's console crashed on it in the games
+suite (a core dump: `cats_build`, its copy of the entry's id, from
+`library_changed`), rarely, as the memory happened to be reused;
+AddressSanitizer on the Mac, the console on PPSSPP and the library changed
+under a highlighted game, reported the use after free at once, and nothing
+with the fix.
 
 ### 4.2 Packages
 
