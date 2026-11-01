@@ -6,7 +6,7 @@ runs the games; the PSP does what it is good at, drawing them with its own
 graphics chip, playing their sound and taking your input. Together they play
 games the PSP never had, and even a tiny board keeps up.
 
-<p align="center"><img src="docs/images/launcher-games.png" width="640" alt="The PSPExp launcher on the PSP: the Games shelf, with Cave Story highlighted"></p>
+<p align="center"><img src="docs/images/launcher-games.png" width="640" alt="The PSPExp launcher on the PSP: Mega Drive's games with their box art, Streets of Rage 2 highlighted"></p>
 
 <p align="center"><a href="https://youtu.be/CQm_w-4Oqfw">▶ Watch the demo</a>: the PSP with a Raspberry Pi 400 and a ClockworkPi GameShell, in 80 seconds.<br><a href="https://youtu.be/_rBYBBLUeNc">▶ Part II: the games</a>: Super Mario 64, Unreal Tournament, Celeste 64 and more on the PSP-1000.<br><a href="https://youtu.be/ex6nnDBRzHU">▶ Dreamcast on the PSP</a>: Power Stone 2, Sega Rally 2 and Sonic Adventure 2.</p>
 
@@ -19,8 +19,9 @@ What you get on the PSP:
   Sonic Robo Blast 2, Cave Story, OpenTTD, Red Alert, Warcraft I
   and II and Morrowind (with your own copy's data), SuperTux, and
   [dozens more](docs/manual/raspberry-pi.md#what-it-plays-like).
-- **Emulators**: NES, SNES, Mega Drive, Game Boy (Color, Advance), Lynx,
-  WonderSwan and, on a Pi, the Nintendo 64, the Dreamcast, the Nintendo DS and the Sega Saturn. Bring your own ROMs.
+- **Emulators**: NES, SNES, Mega Drive (with Master System, Game Gear, Sega CD and 32X),
+  PC Engine, Neo Geo, Game Boy (Color, Advance), Lynx, WonderSwan and, on a Pi, the
+  Nintendo 64, the Dreamcast, the Nintendo DS and the Sega Saturn. Bring your own ROMs.
 - **A media player for music and films, a file manager and a Linux terminal**, plus Bluetooth
   headphones on boards that have Bluetooth.
 - **Your PSP games, kept on the board**: ISO, CSO or zipped games in the

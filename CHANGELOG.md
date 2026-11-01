@@ -1,6 +1,13 @@
 # Release notes
 
-## Since 1.3.0
+## 1.4.0 (2026-11-01)
+
+A new launcher, four more systems and Quick controls: Games, Apps, Media and
+Settings on L and R, every platform with its box art and each game's story;
+Sega CD, 32X, PC Engine and Neo Geo; START for recording, clips and the
+board's state from anywhere; and themes. New card images for the Raspberry Pi
+and the GameShell have all of it in; a board already set up gets the same
+through Apps > Packages, then Settings > Update PSP for the PSP's part.
 
 - **A new launcher**, XMB-like: four categories along the top, **Games**,
   **Apps**, **Media** and **Settings**, that **L / R** move between from
@@ -108,7 +115,7 @@
   go to `Gallery` in the board's home folder, in a folder named after the
   game (a PSP game's own title, the launcher's name for PSPExp's games).
   Videos from before, in `Videos/PSPExp`, move once into `Gallery/Earlier`.
-  **Apps > Gallery** shows them: the
+  **Media > Gallery** shows them: the
   games, each with its latest picture, then a game's pictures newest first,
   a video's length on it; L / R show all, the screenshots or the videos.
   Cross shows a screenshot full screen (left / right the next) or plays a

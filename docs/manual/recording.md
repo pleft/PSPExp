@@ -52,11 +52,11 @@ Videos made before this version, in **Videos/PSPExp**, are moved once into
 **Gallery/Earlier** (and a **Captures** folder of the first test versions
 into **Gallery**).
 
-![The new recording in Files, on the board](../images/record-saved.png)
-
 ## The Gallery
 
-**Apps > Gallery** shows what you
+![The Gallery: a tile for each game, with its latest picture and what it holds](../images/record-saved.png)
+
+**Media > Gallery** shows what you
 captured. Its first page has a tile for each game, with its latest picture
 and how many screenshots and videos it holds; cross opens a game, with its
 pictures newest first, four to a row. A video shows its length in the

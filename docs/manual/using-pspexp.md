@@ -286,7 +286,7 @@ first. A zipped ROM still goes straight to its emulator.
 
 ## Media
 
-**Apps > Media** plays the music and the films on your board, your USB
+**Media** (the category, on L / R) plays the music and the films on your board, your USB
 sticks and the PSP's memory stick, and your captures. Cross on a song or a
 film in **Files** opens it here too. It has three tabs; **L / R** go from
 one to the next. It opens on **Now playing** while something plays, else on
@@ -319,7 +319,7 @@ the **Library**:
 | ♪ (note) | pause / play, from anywhere |
 
 The music goes on while you use the launcher, Files or the other apps;
-**Apps > Media** brings it back. In
+**Media > Now playing** brings it back. In
 **Files** the song playing has a note beside it and its title shows at the
 foot of the panel; cross on it (or triangle > Folder and view > Media) brings Media back
 without starting the song over. Files' triangle menu has **Add to the
@@ -358,7 +358,7 @@ look as it arranges them.
 
 ## Gallery
 
-**Apps > Gallery** shows your screenshots, recordings and clips, a tile for
+**Media > Gallery** shows your screenshots, recordings and clips, a tile for
 each game, then a game's pictures newest first. Cross shows a screenshot
 full screen or plays a video; L / R show all, only the screenshots or only
 the videos; triangle's Options delete them or copy them to the PSP's memory
@@ -434,7 +434,7 @@ PSPExp, it comes first, under **Ready**.
 |---|---|
 | Network | Wi-Fi network: join a network (an on-screen keyboard for the password); on the GameShell also PSP direct |
 | Sound | the PSP or Bluetooth headphones (boards with Bluetooth) |
-| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size ([Recording](recording.md); what they made is in Apps > Gallery) |
+| Recording | Clips: ♪ + R saves the last 30 seconds, the board then recording all the time (off at first; ♪ + L recordings work either way); Clip length: 15, 30 or 60 seconds; Quality: High, Standard or Small, for the videos' size ([Recording](recording.md); what they made is in Media > Gallery) |
 | Clock | Time zone, for the clock |
 | Library | Refresh library: look for new games and ROMs now; Box art: download covers for ROMs, on or off |
 | PSP | PSPExp plugin: on to start the PSP list's games and record your own PSP games ([the plugin](plugin.md)); PSP clock: let the board set the PSP's clock (after its time zone changes, restart the PSP for the dates of files it writes to follow); Theme: the colours of every screen, Midnight (the blue), Crimson, Emerald, Violet, Amber or Graphite, each shown as you move to it (cross keeps it, circle leaves the one you had) |
