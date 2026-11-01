@@ -491,7 +491,7 @@ complete list:
 |---|---|---|
 | `update` | fetch and check the catalogue (§5.1), then `apt-get update` | none |
 | `prepare <id> <version>` | build the recipe's meta-package `pspexp-recipe-<id>` (§5.4) into the helper's own root-owned folder, written whole: the operation's record of what it installs. Run before the journal says `staged` | a recipe id present in the trusted catalogue, at that version |
-| `resume <id> <version>` | install what that meta-package names with `apt-get install`, then the meta-package; never reads the catalogue, so `recover` (§5.3) finishes an operation from it even when the catalogue changed. Exit 3 when there is none (apt had not begun) | a recipe id and the version its operation prepared |
+| `resume <id> <version>` | install what that meta-package names with `apt-get install`, then the meta-package; never reads the catalogue, so `recover` (§5.3) finishes an operation from it even when the catalogue changed. Exit 3 when there is none (apt had not begun); exit 4 when apt, asked first with `-s` (nothing changed), cannot resolve its packages from this board's sources (`not installable`, `no installation candidate`, `Unable to locate package`, `Unable to satisfy dependencies`; any other failure of the dry run goes on to the install) | a recipe id and the version its operation prepared |
 | `install <id>` | `prepare` then `resume`, at the catalogue's version (by hand) | a recipe id present in the trusted catalogue |
 | `remove <id>` | `apt-get remove pspexp-recipe-<id>`, then remove only the packages §5.4 allows | an installed recipe id |
 | `upgrade` | for each installed recipe: its meta-package rebuilt when the recipe changed and installed with `apt-get install` (new dependencies come in); then `apt-get install --only-upgrade` of the packages the installed meta-packages depend on, and `pspexp-*` (§5.6) | none (the list comes from the catalogue and apt's state) |
@@ -526,6 +526,18 @@ finishes or cleans up, and the user sees which.
   what to do in the Packages app ("install it again, and it carries on").
   Tried on the GameShell: Mr. Boom's install cut off by a dead route, then
   Rocks'n'Diamonds' install finished it first and both were installed.
+- **An install that can never succeed is closed, not left open
+  (2026-11-01):** on the GameShell's fresh 1.4.0 card The Ur-Quan Masters'
+  content, music and voices are in Debian's non-free, which its sources do
+  not list; apt refused before changing anything, but the operation stayed
+  open as a download cut short, and the next install (Zelda: Mystery of
+  Solarus DX) tried to finish it first, could not, and failed too ("is the
+  board online?"). `resume` now asks apt first and exits 4 when it cannot
+  resolve the packages; the install closes its operation and says "X cannot
+  be installed on this board: some of the packages it needs are not in its
+  package sources", and `recover` closes one found at `apt-started` the same
+  way. Tried on the GameShell: the open uqm operation closed by the next
+  install, uqm's own install answered so, Zelda installed after it.
 - **A route that leads nowhere (the cause, 2026-10-11):** the GameShell's
   USB network takes a lease from a computer's Internet Sharing; after the
   cable came out its default route stayed (`linkdown`) and, without a

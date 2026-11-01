@@ -5,6 +5,8 @@
 - **Celeste 64 and Theia** install every time: their download from itch.io
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
+- **A game that cannot be installed on a board** (The Ur-Quan Masters on the
+  GameShell) says so in Packages and no longer stops the next installs.
 - **PSPExp no longer crashes** now and then when a package is installed or
   removed while the launcher is open (seen on the GameShell).
 - **A game that hangs as it quits** no longer leaves the PSP frozen on its

@@ -5,7 +5,8 @@
 #
 #   pspexp-pkg-apt update        the catalogue (signature and serial checked, §5.1), then apt's lists
 #   pspexp-pkg-apt prepare ID V  the recipe's meta-package at version V, written before apt begins
-#   pspexp-pkg-apt resume ID V   install from it (exit 3 when there is none: apt had not begun)
+#   pspexp-pkg-apt resume ID V   install from it (exit 3 when there is none: apt had not begun;
+#                                exit 4 when apt cannot resolve its packages here: nothing changed)
 #   pspexp-pkg-apt install ID    both; the recipe's meta-package pspexp-recipe-ID, built here from the
 #                                trusted recipe, installed (or upgraded) with apt; dependencies an
 #                                older version had and nothing needs any more are removed (§5.4, §5.6)
@@ -124,6 +125,17 @@ resume_meta() {
 	olddeps=""
 	[ "$(dpkg-query -W -f='${Version}' "pspexp-recipe-$id" 2>/dev/null)" != "$v" ] && installed "pspexp-recipe-$id" && olddeps=$(deps_of "pspexp-recipe-$id" | tr '\n' ' ')
 	lists
+	# apt asked first, changing nothing (-s): packages this board's sources do not have (the
+	# GameShell's lack non-free, where The Ur-Quan Masters' content is) are no download cut short,
+	# to try again before every later operation, as such a failure was; exit 4, and pspexp-pkg
+	# closes the operation. Only apt's own "cannot resolve" answers count: any other failure of
+	# the dry run (dpkg interrupted) goes on to the install, which fails or recovers as before
+	if ! dry=$(apt-get -s -q --no-install-recommends install $pk 2>&1) &&
+	   printf '%s\n' "$dry" | grep -q -e 'not installable' -e 'no installation candidate' -e 'Unable to locate package' -e 'Unable to satisfy dependencies'; then
+		need=$(printf '%s\n' "$dry" | sed -n -e "s/.*Depends:* \([^ ]*\).*/\1/p" -e "s/.*Package '\([^']*\)' has no installation candidate.*/\1/p" -e 's/.*Unable to locate package \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ')
+		echo "pspexp-pkg-apt: $id cannot be installed here: apt cannot find ${need:-its packages }in this board's package sources" >&2
+		exit 4
+	fi
 	install_meta "$id" "$pk" "$deb"
 	[ -n "$olddeps" ] && prune "$olddeps"
 	echo "installed pspexp-recipe-$id $v"

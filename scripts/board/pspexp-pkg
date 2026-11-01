@@ -359,7 +359,13 @@ install_recipe() {
 	$APT_HELPER prepare "$ID" "$RV" >/dev/null || die "$ID: could not prepare its meta-package"
 	jset staged; crash staged
 	jset apt-started; crash apt-started
-	$APT_HELPER resume "$ID" "$RV" || { echo "pspexp-pkg: the download or install did not finish (is the board online?): install it again, and it carries on" >&2; exit 1; }
+	rc=0; $APT_HELPER resume "$ID" "$RV" || rc=$?
+	if [ $rc = 4 ]; then   # apt cannot resolve its packages here: nothing changed, nothing to carry on
+		rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"
+		echo "pspexp-pkg: $(rget "$R" package title) cannot be installed on this board: some of the packages it needs are not in its package sources" >&2
+		exit 1
+	fi
+	[ $rc = 0 ] || { echo "pspexp-pkg: the download or install did not finish (is the board online?): install it again, and it carries on" >&2; exit 1; }
 	crash apt-unrecorded
 	jset apt-done; crash apt-done
 	# a system's core must now exist where the system file says
@@ -430,6 +436,11 @@ recover() {
 			# once more (Retry), from the meta-package the helper prepared for
 			# this operation, not the catalogue, which may have changed since
 			rc=0; $APT_HELPER resume "$ID" "$RV" >/dev/null 2>&1 || rc=$?
+			if [ $rc = 4 ]; then   # (apt cannot resolve its packages here: nothing to finish, closed)
+				rm -rf "$STAGE"; rm -f "$J" "$STATE/publishing"
+				echo "$ID cannot be installed on this board (some of its packages are not in its package sources): the operation is closed" >&2
+				return 0
+			fi
 			if [ $rc = 3 ]; then
 				# the helper's record is gone (prepare wrote it before the journal said staged):
 				# apt may have installed part of it, so the operation stays open, broken
