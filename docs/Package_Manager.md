@@ -239,9 +239,9 @@ graphics=sdl
 ```
 
 A system may name its own core, `core=` in its `[system]`, over the
-package's: the Mega Drive recipe's 32X plays with PicoDrive
+package's: the Mega Drive recipe's Sega CD and 32X play with PicoDrive
 (`core=picodrive_libretro.so`, `pspexp-libretro-picodrive` on every board),
-its other systems with Genesis Plus GX. An `env=PSPEXP_RETRO_SYSTEM=~/roms/segacd/bios`
+its other systems with Genesis Plus GX (Debian's has no 32X, and reads no CHD). An `env=PSPEXP_RETRO_SYSTEM=~/roms/segacd/bios`
 points pspexp-retro at a system's BIOS folder (it expands the `~/`).
 
 An arcade system names its sets with `names=`, a table of `set|Full title`

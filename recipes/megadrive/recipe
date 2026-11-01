@@ -1,6 +1,8 @@
-# The Mega Drive / Genesis, and the Master System, Game Gear and Sega CD, which the same
-# cores play: Debian's Genesis Plus GX, played by pspexp-retro; the 32X by PicoDrive (Genesis
-# Plus GX has no 32X), PSPExp's build (pspexp-libretro-picodrive), on every board.
+# The Mega Drive / Genesis, and the Master System and Game Gear, which the same cores play:
+# Debian's Genesis Plus GX, played by pspexp-retro; the Sega CD and the 32X by PicoDrive,
+# PSPExp's build (pspexp-libretro-picodrive), on every board: Genesis Plus GX has no 32X, and
+# Debian's builds it without CHD (a .chd refused as "File is too large", 2026-11-01). On the
+# Pi 400 both at 59.9 frames a second (Sonic CD to its title, Knuckles' Chaotix's intro).
 # The Sega CD needs the player's own BIOS in ~/roms/segacd/bios (bios_CD_U.bin, bios_CD_E.bin,
 # bios_CD_J.bin: the region of the disc's); its discs as .chd, or .cue with their tracks. The 32X
 # needs no BIOS (PicoDrive's own).
@@ -8,7 +10,7 @@
 [package]
 id=megadrive
 title=Mega Drive
-description=Sega Mega Drive / Genesis, Sega CD and 32X: Debian's Genesis Plus GX core, PicoDrive for the 32X; ROMs in ~/roms/md, ~/roms/segacd (its BIOS in ~/roms/segacd/bios), ~/roms/32x
+description=Sega Mega Drive / Genesis, Sega CD and 32X: Debian's Genesis Plus GX core, PicoDrive for the Sega CD and 32X; ROMs in ~/roms/md, ~/roms/segacd (its BIOS in ~/roms/segacd/bios), ~/roms/32x
 category=system
 license=Genesis Plus GX and PicoDrive licences (non-commercial); pspexp-retro is part of PSPExp
 version=5
@@ -90,6 +92,7 @@ icon=gamepad-2
 ext=chd,cue
 roms=~/roms/segacd
 thumbs=Sega - Mega-CD - Sega CD
+core=picodrive_libretro.so
 env=PSPEXP_RETRO_SYSTEM=~/roms/segacd/bios
 keys=cross=z,circle=x,square=a,triangle=s,l=q,r=w,start=return,select=rshift,up=up,down=down,left=left,right=right
 nub=keys
