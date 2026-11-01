@@ -20,7 +20,7 @@
 #   DIR, CMD               the folder under /usr/share/games and the command in /usr/games
 #                          (default: ID), where a recipe or a Debian program expects them
 #   ITCH=user/game/upload  an itch.io upload (a free game's link is asked for at
-#                          each install: itch.io's links last a minute)
+#                          each install: itch.io's links last a minute; python3 reads it)
 #   SIZE                   the download's size, for the message ("575 MB")
 #   TOP                    the folder inside the archive that holds the game ("" when at the top)
 #   KEEP                   instead of TOP: the download is kept whole under this name (a
@@ -55,10 +55,14 @@ S
 	if [ -n "$ITCH" ]; then
 		_u=${ITCH%%/*}; _r=${ITCH#*/}; _g=${_r%%/*}; _id=${_r#*/}
 		_src="https://$_u.itch.io/$_g (upload $_id)"
-		# a fresh link at each try: itch.io's last a minute, and now and then the link gave a small
-		# web page instead of the game (twice in the 2026-10-21 audit, Theia and Celeste 64)
-		_fetch="itchlink() { curl -fsSL -X POST 'https://$_u.itch.io/$_g/file/$_id?source=view_game&as_props=1&after_download_lightbox=true' | grep -o '\"url\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4 | sed 's#\\\\/#/#g'; }
+		# a fresh link at each try: itch.io's last a minute. The answer is JSON whose top-level "url"
+		# is the download, but its fields come in any order, and its "lightbox" (recommended games)
+		# holds other "url"s: taking the first one found fetched another game's web page whenever
+		# the lightbox came first (twice in the 2026-10-21 audit; three tries in a row on 2026-11-01,
+		# Celeste 64 on a fresh Pi card), so the JSON is read as JSON
+		_fetch="itchlink() { curl -fsSL -X POST 'https://$_u.itch.io/$_g/file/$_id?source=view_game&as_props=1&after_download_lightbox=true' | python3 -c 'import json, sys; print(json.load(sys.stdin).get(\"url\") or \"\")' 2>/dev/null; }
 u=itch"
+		DEPENDS="python3${DEPENDS:+, $DEPENDS}"
 	else
 		_src="$URL"
 		_fetch="u='$URL'"

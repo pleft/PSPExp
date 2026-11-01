@@ -1,5 +1,11 @@
 # Release notes
 
+## Since 1.4.0
+
+- **Celeste 64 and Theia** install every time: their download from itch.io
+  sometimes fetched a web page instead of the game, and after three tries the
+  install gave up ("no source gave the expected file").
+
 ## 1.4.0 (2026-11-01)
 
 A new launcher, four more systems and Quick controls: Games, Apps, Media and

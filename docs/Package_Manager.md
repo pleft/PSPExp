@@ -312,7 +312,10 @@ the developer publishes it, checks a pinned SHA-256 and unpacks it, its
 `mkdeb.py` takes `preinst` / `postinst` / `prerm` / `postrm` from beside the
 control file. One builder makes them all, `scripts/packages/debs/_installer.sh`:
 a direct download (`URL=`) or an itch.io upload (`ITCH=user/game/upload`,
-whose short-lived link is asked for at each install); unpacked with unar
+whose short-lived link is asked for at each install, and read from itch.io's JSON answer by python3:
+its top-level `url`; the fields come in any order and its recommended games carry `url`s of
+their own, so the first `"url"` found was at times another game's web page, which failed
+Celeste 64 on a fresh Pi card three times in a row on 2026-11-01); unpacked with unar
 (RAR, ZIP; tar for a .tar.gz, .tar.bz2 or .tar.xz, which unar would only decompress under the name game.part; unar with `-D`, so an archive of several
 top-level items is not wrapped in a folder named after the download), or
 kept whole (`KEEP=`: a Solarus quest's `.solarus` file). **Sources
