@@ -46,7 +46,8 @@
 - **Sega CD and 32X**, with the Mega Drive package: Sega CD discs in
   `roms/segacd` (.chd, or .cue with its tracks), with your console's BIOS
   in `roms/segacd/bios`; 32X games in `roms/32x` (unzipped), both played
-  by PicoDrive (now on the Raspberry Pi too), at full speed on a Pi 400. Apps > Packages updates Mega Drive to
+  by PicoDrive (now on the Raspberry Pi too), at full speed on a Pi 400
+  and on a GameShell (whose PicoDrive now has its recompiler). Apps > Packages updates Mega Drive to
   bring them.
 - **PC Engine and Neo Geo**: Apps > Packages has **PC Engine** (HuCards
   in `roms/pce`, CD games in `roms/pcecd` with your System Card in

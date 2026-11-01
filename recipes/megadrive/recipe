@@ -2,7 +2,9 @@
 # Debian's Genesis Plus GX, played by pspexp-retro; the Sega CD and the 32X by PicoDrive,
 # PSPExp's build (pspexp-libretro-picodrive), on every board: Genesis Plus GX has no 32X, and
 # Debian's builds it without CHD (a .chd refused as "File is too large", 2026-11-01). On the
-# Pi 400 both at 59.9 frames a second (Sonic CD to its title, Knuckles' Chaotix's intro).
+# Pi 400 both at 59.9 frames a second (Sonic CD to its title, Knuckles' Chaotix's intro); on the
+# GameShell 59-60 once its PicoDrive had its SH2 recompiler (12 without it), the Mega Drive and
+# Game Gear unchanged at 59-60.
 # The Sega CD needs the player's own BIOS in ~/roms/segacd/bios (bios_CD_U.bin, bios_CD_E.bin,
 # bios_CD_J.bin: the region of the disc's); its discs as .chd, or .cue with their tracks. The 32X
 # needs no BIOS (PicoDrive's own).

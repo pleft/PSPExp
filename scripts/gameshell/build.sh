@@ -62,7 +62,9 @@ if [ "$WHAT" = retro ]; then
 	# the compiler's target name, which Zig's triple with a glibc version
 	# breaks: its portable C cores instead
 	case "$CORE" in
-	picodrive) EXTRA="ARCH=generic" ;;   # its C 68000 (FAME) and Z80 (CZ80) cores, no assembly
+	# its C 68000 (FAME) and Z80 (CZ80) cores, no assembly; but the SH2 recompiler on (ARCH=arm named,
+	# not guessed): without it the 32X ran at 12 frames a second (2026-11-01)
+	picodrive) EXTRA="ARCH=arm use_cyclone=0 use_drz80=0 use_fame=1 use_cz80=1 use_sh2drc=1 use_svpdrc=0 asm_memory=0 asm_render=0 asm_ym2612=0 asm_misc=0 asm_cdmemory=0 asm_mix=0 asm_32xdraw=0 asm_32xmemory=0" ;;
 	fbneo_neogeo) EXTRA="SUBSET=neogeo REGEN_HEADERS=1" ;;   # (the subset's own driver list)
 	*) EXTRA= ;;
 	esac

@@ -3,7 +3,8 @@
 # pspexp-retro. The player's own sets as FinalBurn Neo's zips ("mslug.zip") in ~/roms/neogeo, with
 # the Neo Geo BIOS beside them (neogeo.zip, FinalBurn Neo's); the launcher names each set from the
 # table the core's package carries (names=, scripts/packages/arcade-names.py: "Metal Slug - Super
-# Vehicle-001") and leaves the BIOS out of the list. 304x224, readable on the PSP's 480x272.
+# Vehicle-001") and leaves the BIOS out of the list. 304x224, readable on the PSP's 480x272. Metal
+# Slug 59.5 frames a second on the Pi 400, 58-59 on the GameShell.
 # The pad: A, B, C, D as on a PlayStation pad in RetroArch (cross, circle, square, triangle);
 # SELECT puts a coin in, START starts.
 

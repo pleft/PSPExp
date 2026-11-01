@@ -34,7 +34,10 @@ SRC="$ROOT/../retro/${SRCDIR:-libretro-$CORE}"
 PKG="pspexp-libretro-$(printf %s "$CORE" | tr _ -)"
 [ -f "$B/${CORE}_libretro.so" ] || { echo "no $B/${CORE}_libretro.so: CORE=$CORE scripts/gameshell/build.sh retro (armhf) or scripts/pi/install.sh retro (arm64)" >&2; exit 1; }
 [ -f "$SRC/$LIC" ] || { echo "no licence $SRC/$LIC" >&2; exit 1; }
-V="$(git -C "$SRC" log -1 --format=%cd --date=format:%Y.%m.%d)+$(git -C "$SRC" rev-parse --short HEAD)-pspexp2"   # (-pspexp2: the licences and source, 2026-10-11)
+# (-pspexp2: the licences and source, 2026-10-11; PicoDrive -pspexp3: the GameShell's with its SH2
+# recompiler, 2026-11-01, so boards take it though its source is the same)
+REV=pspexp2; [ "$CORE" = picodrive ] && REV=pspexp3
+V="$(git -C "$SRC" log -1 --format=%cd --date=format:%Y.%m.%d)+$(git -C "$SRC" rev-parse --short HEAD)-$REV"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 R="$W/root"
 mkdir -p "$R/usr/lib/$TRIPLET/libretro" "$R/usr/share/doc/$PKG"

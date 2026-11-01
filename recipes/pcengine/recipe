@@ -5,7 +5,8 @@
 # ~/roms/pcecd/bios (syscard3.pce; Arcade CD-ROM² games need the Arcade Card's too). Both draw at
 # 256 wide, readable on the PSP's 480x272. The pad: I and II, Select and Run. A US HuCard dumped
 # bit-reversed (GoodPCE's "(U)") is decoded by pspexp-retro as it loads (white screen otherwise).
-# On the Pi 400: Gunhed, Blazing Lazers and Bonk's Adventure at 59.9 frames a second.
+# On the Pi 400: Gunhed, Blazing Lazers and Bonk's Adventure at 59.9 frames a second; on the
+# GameShell Bonk's Adventure 58.5-59.7.
 
 [package]
 id=pcengine
