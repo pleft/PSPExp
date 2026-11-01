@@ -604,6 +604,9 @@ def play_one(r, category, title, min_fps, name):
     fps, errors, underruns, end = [], [], [], time.time() + 75
     while time.time() < end:   # the SDL layer's line every few seconds: a starting phase, then three to judge by
         time.sleep(2)
+        # (the launcher starts its log again past 256 KB as it starts a game: from the top then)
+        if int(t.sh("wc -c < %s 2>/dev/null || echo 0" % LOG).strip() or 0) < off:
+            off = 0
         lines = t.sh("tail -c +%d %s 2>/dev/null | grep -a 'fps  ' || true; %s" % (off + 1, LOG, OWN_LOGS)).splitlines()
         if len(lines) >= 4:
             break
