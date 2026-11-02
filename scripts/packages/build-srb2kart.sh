@@ -21,11 +21,12 @@ apt-get install -y -qq --no-install-recommends build-essential cmake git ca-cert
 	libsdl2-dev libsdl2-mixer-dev libpng-dev zlib1g-dev libcurl4-gnutls-dev libgme-dev libgl-dev curl unzip >/dev/null
 cd /tmp
 git -c advice.detachedHead=false clone -q --depth 1 -b $VER https://github.com/STJr/Kart-Public.git src
-# alignments given in bytes where SRB2Kart's Z_MallocAlign takes bits: 32-bit ARM crashed at every
-# start and in the attract demo (srb2kart-align.pl says why); its five calls of 32 or 64 changed,
-# and the build fails when any other is left. The draw list's 8 (bytes, so 256 as bits) is 3
+# alignments given in bytes, or as a type's bits, where SRB2Kart's Z_MallocAlign takes bits: 32-bit
+# ARM crashed at every start and in the attract demo (srb2kart-align.pl says why); its eight calls
+# changed (five of 32 or 64, three of sizeof(T) * 8), and the build fails when another is left to
+# look at. The draw list's 8 (bytes, so 256 as bits) is 3
 n=\$(perl /out/srb2kart-align.pl src/src/*.c)   # (fails the build when one is left)
-[ \"\$n\" = 5 ]
+[ \"\$n\" = 8 ]
 sed -i 's/PU_STATIC, NULL, 8);/PU_STATIC, NULL, 3);/' src/src/lua_hudlib_drawlist.c
 grep -q 'PU_STATIC, NULL, 3);' src/src/lua_hudlib_drawlist.c
 rm -f /out/srb2kart-align.pl
