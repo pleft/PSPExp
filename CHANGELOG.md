@@ -6,6 +6,9 @@
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
 - **Frozen Bubble** starts again on the GameShell (it ended at once).
+- **Commander Keen 1** no longer ends at its start now and then on the
+  GameShell: Commander Genius is built without its own downloader, which
+  the episodes as packages never needed.
 - **A game that cannot be installed on a board** says so in Packages and no
   longer stops the next installs. The Ur-Quan Masters is no longer offered on
   the GameShell (its data is in Debian's non-free, which the GameShell's card

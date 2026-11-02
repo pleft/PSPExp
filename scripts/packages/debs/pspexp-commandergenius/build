@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/commandergenius"
 [ -x "$B/root/usr/games/CGeniusExe" ] && [ -s "$B/depends.txt" ] || { echo "no $B: scripts/packages/build-commandergenius.sh $ARCH first" >&2; exit 1; }
-V=3.6.4+git20260930-pspexp1
+V=3.6.4+git20260930-pspexp2
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 cp -a "$B/root" "$W/root"
 rm -rf "$W/root/usr/share/applications" "$W/root/usr/share/metainfo"   # (no desktop: the launcher's entries start it)

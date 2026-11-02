@@ -1,9 +1,11 @@
 #!/bin/sh
 # Commander Genius 3.6.4 (GPL-2.0+), the open-source engine for Commander Keen
 # 1-6, for a Debian 13 board: Debian does not package it. Built in a Debian 13
-# container of the board's architecture (as build-srb2.sh), on Debian's SDL2;
-# its own downloader (DOWNLOADER) fetches the freely distributed episodes (Keen 1,
-# Keen 4) from inside the game. Installed as its build installs it (the program
+# container of the board's architecture (as build-srb2.sh), on Debian's SDL2,
+# without its own downloader (DOWNLOADER=OFF, 2026-11-02): the episodes come as
+# packages (commander-keen1, commander-keen4), and a curl callback of the
+# downloader read memory the game had freed (valgrind on the GameShell: Keen 1
+# ended at its start, "corrupted size vs. prev_size", about one start in two). Installed as its build installs it (the program
 # and its data, /usr/share/games/commandergenius) into build/<arch>/commandergenius/root,
 # with depends.txt and LICENSE, for scripts/packages/debs/pspexp-commandergenius/build.
 #   scripts/packages/build-commandergenius.sh arm64|armhf
@@ -21,7 +23,7 @@ apt-get install -y -qq --no-install-recommends build-essential cmake git ca-cert
 	libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libcurl4-openssl-dev zlib1g-dev libboost-dev >/dev/null
 cd /tmp
 git clone -q https://github.com/gerstrong/Commander-Genius.git src && git -C src checkout -q $CG_VER
-cmake -S src -B b -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DUSE_VIRTUALPAD=OFF >/dev/null
+cmake -S src -B b -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DUSE_VIRTUALPAD=OFF -DDOWNLOADER=OFF >/dev/null
 cmake --build b -j\$(nproc) 2>&1 | grep -m5 -B2 'error:' || true
 DESTDIR=/out/root cmake --install b >/dev/null
 B=\$(find /out/root -type f -perm -u+x -name 'CGenius*' | head -1); [ -n \"\$B\" ]; strip \"\$B\"
