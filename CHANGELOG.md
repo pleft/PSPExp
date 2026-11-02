@@ -5,6 +5,8 @@
 - **Celeste 64 and Theia** install every time: their download from itch.io
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
+- **SRB2Kart runs on the GameShell:** it crashed at its start there, and in
+  its title's demo, from a 32-bit fault in the game, now fixed in its build.
 - **The magnifier (R) in Freeciv** switches and follows the pointer at once:
   in a game that draws only when something changes it seemed to magnify only
   the pointer, and a magnified picture could stay on the screen.
@@ -15,7 +17,7 @@
 - **A game that cannot be installed on a board** says so in Packages and no
   longer stops the next installs. The Ur-Quan Masters is no longer offered on
   the GameShell (its data is in Debian's non-free, which the GameShell's card
-  does not use), nor, for now, SRB2Kart (it crashes there): 64 packages there.
+  does not use): 65 packages there.
   Where one was installed, it stays in Packages, to be removed there, and no
   longer turns up as an update that fails.
 - **PSPExp no longer crashes** now and then when a package is installed or

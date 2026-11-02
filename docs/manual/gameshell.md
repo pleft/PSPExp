@@ -40,15 +40,14 @@ Everything else happens on the PSP: **Apps > Packages** to install games.
 **Apps > Packages**: Freedoom, OpenTyrian, Cave Story, SuperTux, the
 Revolution adventures, the emulators and more. Each appears under
 **Games** (or as its system's tile) once installed. The card image comes
-with none, so you choose what takes space. Packages offers the GameShell 64
+with none, so you choose what takes space. Packages offers the GameShell 65
 of PSPExp's 84 packages: not the twelve drawn by a Raspberry Pi's graphics
 chip (SuperTuxKart, Celeste 64, Nintendo 64, Dreamcast, Sega Saturn, Morrowind, Unreal Tournament,
 Luanti, Trackballs, Open Surge, OpenRA's Red Alert,
 Taisei: its own chip is too small for them),
 nor Diablo and Wolfenstein: Enemy Territory, nor Heroes II, LinCity-NG,
 C-Dogs and the Nintendo DS: too slow on it; nor The Ur-Quan Masters, whose
-data is in Debian's non-free, which the GameShell's card does not use; nor
-SRB2Kart for now (it crashes there).
+data is in Debian's non-free, which the GameShell's card does not use.
 Kenta Cho's shooters run slower than on a Pi but fluidly (rRootage the
 slowest). Heroes III
 plays on it at 14-20 frames a second; its first start takes about 4 minutes.
