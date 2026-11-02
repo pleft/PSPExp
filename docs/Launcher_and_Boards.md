@@ -1375,7 +1375,7 @@ itself (on the Mac it plays in a window).
   RUN BUTTON!", as the console does; START (Run) boots it. On the GameShell
   with the PSP-1000 from the launcher: all three at 55-60 fps, each booted
   past the System Card (the PSP's screenshots: Konami's logo, Ys's title,
-  Might and Magic III's intro).
+  Might and Magic III's intro); on the Pi 400 the same, at 60.
 - **Core options.** The core's defaults, overridden by `KEY=value` lines in
   `~/.config/pspexp-retro/<core>.opt` or `PSPEXP_RETRO_OPT="k=v;k=v"`.
   `PSPEXP_RETRO_ASPECT=pixel` gives square pixels.
