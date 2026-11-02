@@ -573,6 +573,15 @@ LOG = "/tmp/pspexp-launcher.log"   # where the console writes the programs it st
 OWN_LOGS = "find ~/.cache -maxdepth 1 -name 'pspexp-*.log' -newer /tmp/pspexp-it-start -exec grep -ah 'fps  ' {} + 2>/dev/null || true"
 
 
+def line_fps(l):
+    """the frame rate of one of the SDL layer's lines ("59.9 fps  ..."), 0 if none"""
+    w = l.split()
+    try:
+        return float(w[w.index("fps") - 1])
+    except (ValueError, IndexError):
+        return 0.0
+
+
 def play(r, category, title, min_fps, name):
     """start title from the launcher, read its frame rates for a while, stop it, check the launcher is back"""
     try:
@@ -608,7 +617,9 @@ def play_one(r, category, title, min_fps, name):
         if int(t.sh("wc -c < %s 2>/dev/null || echo 0" % LOG).strip() or 0) < off:
             off = 0
         lines = t.sh("tail -c +%d %s 2>/dev/null | grep -a 'fps  ' || true; %s" % (off + 1, LOG, OWN_LOGS)).splitlines()
-        if len(lines) >= 4:
+        # (enough lines, and one of them drawing: a game's loading screen first draws less than a frame
+        # a second, Frozen Bubble's 15 s on the GameShell, judged "draws no frames" from it, 2026-11-02)
+        if len(lines) >= 4 and any(line_fps(l) >= DRAWS_FPS for l in lines):
             break
     r.expect(lines, "%s wrote no frame rates in 75 s (log: %s)" % (title, t.sh("tail -c +%d %s | tail -3" % (off + 1, LOG)).strip()))
     for l in lines[1:] or lines:

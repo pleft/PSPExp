@@ -1821,7 +1821,9 @@ the Mac.
   with no link errors, quit (`stop`) and hand the PSP back to the launcher.
   Its frame rates come from the SDL layer's lines in
   `/tmp/pspexp-launcher.log` (read from the top when the launcher has
-  started it again, past 256 KB, as the game started), or in a system's own log written since it
+  started it again, past 256 KB, as the game started; waited for, up to 75 s,
+  until one shows the game drawing: a loading screen draws less than a frame a
+  second, Frozen Bubble's for 15 s on the GameShell), or in a system's own log written since it
   started (`~/.cache/pspexp-*.log`: the Dreamcast's); a game left running
   by a failed check is stopped, so the next one finds the PSP; they differ widely between boards, so they
   are recorded, not judged. `--min-fps N` adds a floor for one board. The
