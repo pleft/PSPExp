@@ -11,10 +11,15 @@ title=The Ur-Quan Masters
 description=Star Control II: explore a galaxy of hundreds of stars, meet strange alien races, build a fleet and free Earth from the Ur-Quan. With its music and voices.
 category=game
 license=GPL-2.0 (UQM); CC BY-NC-SA 2.5 (its content)
-version=2
+version=3
 
 [debian]
 apt=uqm uqm-music uqm-voice
+
+# not on the GameShell: the content, music and voices are in Debian's non-free, which its card's
+# sources do not list (2026-11-01: Packages offered it, apt could not install it)
+[debian:gameshell]
+apt=
 
 [entry]
 title=The Ur-Quan Masters
