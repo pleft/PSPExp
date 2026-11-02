@@ -232,7 +232,7 @@ its folder in the board's home folder:
 | Sega CD | `roms/segacd` (.chd, or .cue with its tracks); your console's BIOS in `roms/segacd/bios` (`bios_CD_U.bin`, `bios_CD_E.bin` or `bios_CD_J.bin`, the disc's region) |
 | 32X | `roms/32x` (.32x) |
 | PC Engine / TurboGrafx-16 | `roms/pce` (.pce) |
-| PC Engine CD | `roms/pcecd` (.chd, or .cue with its tracks); your console's System Card in `roms/pcecd/bios` (`syscard3.pce`) |
+| PC Engine CD | `roms/pcecd` (.chd, or .cue with its tracks); your console's System Card in `roms/pcecd/bios` (`syscard3.pce`). A game starts on the System Card's screen, "PUSH RUN BUTTON!", as on the console: press START |
 | Neo Geo | `roms/neogeo`: FinalBurn Neo's zips (`mslug.zip`) with the BIOS beside them (`neogeo.zip`); each shows by its full name, the BIOS not at all |
 | Game Boy / Color | `roms/gb`, `roms/gbc` |
 | Game Boy Advance | `roms/gba` |

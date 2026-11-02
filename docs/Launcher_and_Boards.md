@@ -1368,6 +1368,14 @@ itself (on the Mac it plays in a window).
   a US HuCard's bit-reversed dump (GoodPCE's "(U)" sets; the reset vector's
   high byte at 0x1FFF not E0..FF, its reverse so) is turned round first:
   Blazing Lazers and Bonk's Adventure had shown a white screen.
+- **PC Engine CD** (2026-11-02, the first discs: Akumajou Dracula X, Might
+  and Magic III, Ys Book I & II, as .chd). Beetle PCE Fast reads the CHD
+  itself and the System Card (`syscard3.pce`) from `PSPEXP_RETRO_SYSTEM`
+  (`~/roms/pcecd/bios`). Each disc starts on the System Card's screen, "PUSH
+  RUN BUTTON!", as the console does; START (Run) boots it. On the GameShell
+  with the PSP-1000 from the launcher: all three at 55-60 fps, each booted
+  past the System Card (the PSP's screenshots: Konami's logo, Ys's title,
+  Might and Magic III's intro).
 - **Core options.** The core's defaults, overridden by `KEY=value` lines in
   `~/.config/pspexp-retro/<core>.opt` or `PSPEXP_RETRO_OPT="k=v;k=v"`.
   `PSPEXP_RETRO_ASPECT=pixel` gives square pixels.

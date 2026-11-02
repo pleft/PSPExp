@@ -5,6 +5,9 @@
 - **Celeste 64 and Theia** install every time: their download from itch.io
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
+- **PC Engine CD games** tried: Dracula X, Might and Magic III and Ys play
+  on the GameShell at full speed. Each starts on the System Card's "PUSH RUN
+  BUTTON!" screen, as on the console: press START.
 - **SRB2Kart runs on the GameShell:** it crashed at its start there, and in
   its title's demo, from a 32-bit fault in the game, now fixed in its build.
 - **The magnifier (R) in Freeciv** switches and follows the pointer at once:
