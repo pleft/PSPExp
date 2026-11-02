@@ -19,7 +19,6 @@ version=5
 [debian]
 apt=srb2kart
 
-
 [entry]
 title=SRB2Kart
 type=game
