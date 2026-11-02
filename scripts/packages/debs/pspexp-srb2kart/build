@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 OUT="$1"; ARCH="$2"
 B="$ROOT/build/$ARCH/srb2kart"
 [ -x "$B/srb2kart" ] && [ -s "$B/depends.txt" ] || { echo "no $B/srb2kart: scripts/packages/build-srb2kart.sh $ARCH first" >&2; exit 1; }
-V=1.6-pspexp2
+V=1.6-pspexp3
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/root/usr/lib/pspexp/srb2kart" "$W/root/usr/share/doc/pspexp-srb2kart"
 install -m 755 "$B/srb2kart" "$W/root/usr/lib/pspexp/srb2kart/srb2kart"

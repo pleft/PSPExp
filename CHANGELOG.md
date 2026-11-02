@@ -12,7 +12,7 @@
 - **A game that cannot be installed on a board** says so in Packages and no
   longer stops the next installs. The Ur-Quan Masters is no longer offered on
   the GameShell (its data is in Debian's non-free, which the GameShell's card
-  does not use): 65 packages there.
+  does not use), nor, for now, SRB2Kart (it crashes there): 64 packages there.
 - **PSPExp no longer crashes** now and then when a package is installed or
   removed while the launcher is open (seen on the GameShell).
 - **A game that hangs as it quits** no longer leaves the PSP frozen on its
