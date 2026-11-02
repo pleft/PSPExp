@@ -672,6 +672,48 @@ static void flush_quads(void)
 static int pointer_shown(void) { return S.nub_mouse && !S.cursor_hidden && !S.cursor_blank && !S.relative && !S.own_pointer; }
 static void draw_pointer(void);
 
+/* The last frame's draws, to draw it again at another scale or place: the magnifier switched, or the
+ * pointer moved while magnified, and the game drew nothing. Freeciv draws only on a change: R seemed
+ * to magnify only the pointer, the view did not follow the pointer, and a frame drawn magnified stayed
+ * on the screen after it was switched off (2026-11-02). Kept only for a frame of a clear or a copy over
+ * the whole window and then texture copies to the screen; a frame with anything else (fills, lines,
+ * points), drawn in pieces, of OpenGL or composed, is left as it was (the last frame shown again) */
+typedef struct { SDL_Texture *t; SDL_Rect src; int has_src; float dx, dy, dw, dh; int flip; } Redraw;
+#define REDRAW_MAX 256
+static struct {
+    Redraw cur[REDRAW_MAX], last[REDRAW_MAX];
+    int ncur, nlast, cur_bad, cur_clear, cur_full, last_ok, last_clear, pending, replaying;
+    Uint8 cr, cg, cb, lr, lg, lb;
+} RD;
+static void redraw_note_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy, float dw, float dh, int flip)
+{
+    Redraw *d;
+    float fw = (float)(S.log_w > 0 ? S.log_w : S.win_w), fh = (float)(S.log_h > 0 ? S.log_h : S.win_h);
+    if (S.target || RD.replaying) return;
+    if (RD.ncur >= REDRAW_MAX) { RD.cur_bad = 1; return; }
+    d = &RD.cur[RD.ncur++];
+    d->t = t; d->has_src = src != NULL; if (src) d->src = *src;
+    d->dx = dx; d->dy = dy; d->dw = dw; d->dh = dh; d->flip = flip;
+    if (dx <= 0 && dy <= 0 && dx + dw >= fw && dy + dh >= fh) RD.cur_full = 1;   /* (the whole window covered) */
+}
+static void redraw_note_clear(void)
+{
+    if (S.target || RD.replaying) return;
+    RD.ncur = 0; RD.cur_bad = 0; RD.cur_full = 0; RD.cur_clear = 1;   /* (what came before is cleared away) */
+    RD.cr = S.dr; RD.cg = S.dg; RD.cb = S.db;
+}
+static void redraw_frame_done(void)   /* a frame presented: its draws the last frame's */
+{
+    if (!RD.replaying) {
+        RD.last_ok = !RD.cur_bad && RD.ncur > 0 && (RD.cur_clear || RD.cur_full) && !S.gl_window && !S.compose;
+        if (RD.last_ok) {
+            memcpy(RD.last, RD.cur, (size_t)RD.ncur * sizeof(Redraw)); RD.nlast = RD.ncur;
+            RD.last_clear = RD.cur_clear; RD.lr = RD.cr; RD.lg = RD.cg; RD.lb = RD.cb;
+        }
+    }
+    RD.ncur = 0; RD.cur_bad = 0; RD.cur_clear = 0; RD.cur_full = 0; RD.pending = 0;
+}
+
 static void begin_frame(void)
 {
     if (!S.frame_open) {
@@ -1654,6 +1696,7 @@ static void mirror_copy(SDL_Texture *t, const SDL_Rect *src, float dx, float dy,
 static void mirror_fill(float x, float y, float w, float h)
 {
     if (S.skip_rects) return;
+    if (!S.target) RD.cur_bad = 1;   /* (not one the layer draws again: redraw_last) */
     x *= S.rsx; y *= S.rsy; w *= S.rsx; h *= S.rsy;
     if (S.target) { SDL_Rect d = { (int)x, (int)y, (int)w, (int)h }; record_op(NULL, NULL, &d, 0, S.dr, S.dg, S.db, draw_alpha()); return; }
     if (!drawing()) return;
@@ -1663,6 +1706,7 @@ static void mirror_fill(float x, float y, float w, float h)
 
 static void mirror_line(float x0, float y0, float x1, float y1)
 {
+    if (!S.target) RD.cur_bad = 1;   /* (not one the layer draws again: redraw_last) */
     if (S.skip_lines || !drawing()) return;
     x0 *= S.rsx; y0 *= S.rsy; x1 *= S.rsx; y1 *= S.rsy;
     flush_quads();
@@ -2125,6 +2169,7 @@ static void feed_input(void)
             Tex *tx;
             S.magnify = !S.magnify;
             update_scale();
+            RD.pending = 1;   /* (drawn again now, if the game does not draw: redraw_last) */
             for (tx = S.textures; tx; tx = tx->next) tx->dirty = 1;   /* sent again at the new size */
             if (S.surface_tex) S.surface_tex->dirty = 1;
         }
@@ -2789,6 +2834,7 @@ HOOK(int, SDL_RenderClear, (SDL_Renderer *r))
     } else if (r == S.ren && link_up() && !S.target && !S.skip_clear) {
         begin_frame();
         flush_quads();
+        redraw_note_clear();
         /* clear covers the whole PSP screen including the letterbox bars */
         S.clip_sent = 0;
         pspexp_set_clip(S.ctx, 0, 0, 480, 272);
@@ -2810,7 +2856,7 @@ HOOK(int, SDL_RenderCopy, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src,
     if (r == S.ren) {
         Tex *x = find_tex(t);
         SDL_Rect d = dst ? *dst : full_dst();
-        if (x) mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0);
+        if (x) { redraw_note_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); }
     }
     if (!host_render()) return 0;
     return REAL(SDL_RenderCopy)(r, t, src, dst);
@@ -2821,7 +2867,7 @@ HOOK(int, SDL_RenderCopyEx, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *sr
     if (r == S.ren) {
         Tex *x = find_tex(t);
         SDL_Rect d = dst ? *dst : full_dst();
-        if (x) mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, (int)flip);
+        if (x) { redraw_note_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, (int)flip); mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, (int)flip); }
     }
     if (!host_render()) return 0;
     return REAL(SDL_RenderCopyEx)(r, t, src, dst, angle, center, flip);
@@ -2829,15 +2875,15 @@ HOOK(int, SDL_RenderCopyEx, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *sr
 
 HOOK(int, SDL_RenderCopyF, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src, const SDL_FRect *dst))
 {
-    if (r == S.ren && dst) mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, 0);
-    else if (r == S.ren) { SDL_Rect d = full_dst(); mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); }
+    if (r == S.ren && dst) { redraw_note_copy(t, src, dst->x, dst->y, dst->w, dst->h, 0); mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, 0); }
+    else if (r == S.ren) { SDL_Rect d = full_dst(); redraw_note_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); mirror_copy(t, src, (float)d.x, (float)d.y, (float)d.w, (float)d.h, 0); }
     if (!host_render()) return 0;
     return REAL(SDL_RenderCopyF)(r, t, src, dst);
 }
 
 HOOK(int, SDL_RenderCopyExF, (SDL_Renderer *r, SDL_Texture *t, const SDL_Rect *src, const SDL_FRect *dst, double angle, const SDL_FPoint *center, SDL_RendererFlip flip))
 {
-    if (r == S.ren && dst) mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, (int)flip);
+    if (r == S.ren && dst) { redraw_note_copy(t, src, dst->x, dst->y, dst->w, dst->h, (int)flip); mirror_copy(t, src, dst->x, dst->y, dst->w, dst->h, (int)flip); }
     if (!host_render()) return 0;
     return REAL(SDL_RenderCopyExF)(r, t, src, dst, angle, center, flip);
 }
@@ -2929,6 +2975,32 @@ static void link_mutex_init(void)
 static void link_lock(void) { pthread_once(&link_once, link_mutex_init); pthread_mutex_lock(&link_mutex); }
 static void link_unlock(void) { pthread_mutex_unlock(&link_mutex); }
 
+/* the last frame drawn again by the layer, at the current scale and place (RD, above): its copies
+ * through the same path as the game's, its textures sent again at the new size where they changed */
+static void end_frame(void);
+static int redraw_last(void)
+{
+    int i;
+    if (!RD.last_ok || S.frame_open || S.gl_window || S.compose || !S.ren) return 0;
+    for (i = 0; i < RD.nlast; i++) if (!find_tex(RD.last[i].t)) { RD.last_ok = 0; return 0; }   /* (a texture gone since) */
+    RD.replaying = 1;
+    begin_frame();
+    if (RD.last_clear) {
+        flush_quads();
+        S.clip_sent = 0;
+        pspexp_set_clip(S.ctx, 0, 0, 480, 272);
+        pspexp_fill_rect(S.ctx, 0, 0, 480, 272, pspexp_color_5650(RD.lr, RD.lg, RD.lb), 255);
+    }
+    for (i = 0; i < RD.nlast; i++) {
+        const Redraw *d = &RD.last[i];
+        mirror_copy(d->t, d->has_src ? &d->src : NULL, d->dx, d->dy, d->dw, d->dh, d->flip);
+    }
+    end_frame();
+    RD.replaying = 0;
+    S.replays++;
+    return 1;
+}
+
 /* The pointer moved while the game drew nothing (fheroes2 draws 4-8 frames a second, its pointer the
  * system's): its last frame again, the pointer where it is now, at most every 16 ms and only when
  * no frame is on its way, so the game's own frames never wait. The frame's draws only: its textures
@@ -2939,7 +3011,14 @@ static void replay_pointer(void)
     static Uint32 gap;   /* PSPEXP_POINTER_FPS: at most that many such frames a second (60; the PSP's LCD smears a small
                           * bright cursor moved often, so fewer and larger steps can look cleaner) */
     if (!gap) { int f = getenv("PSPEXP_POINTER_FPS") ? atoi(getenv("PSPEXP_POINTER_FPS")) : 60; gap = f > 0 && f <= 60 ? 1000u / (Uint32)f : 16u; }
-    if (S.frame_open || !pointer_shown() || (S.px == S.drawn_px && S.py == S.drawn_py) || now - S.last_present < gap) return;
+    if (S.frame_open || now - S.last_present < gap) return;
+    /* the view changed (the magnifier switched, or it follows the pointer): the frame drawn again
+     * there, not shown again as it was */
+    if (RD.pending || (S.magnify && RD.last_ok && pointer_shown() && (S.px != S.drawn_px || S.py != S.drawn_py))) {
+        if (pspexp_should_render(S.ctx) && redraw_last()) return;
+        RD.pending = 0;
+    }
+    if (!pointer_shown() || (S.px == S.drawn_px && S.py == S.drawn_py)) return;
     if (!pspexp_should_render(S.ctx) || pspexp_replay_frame(S.ctx) < 0) return;
     S.clip_sent = 0;
     draw_pointer();
@@ -3352,6 +3431,7 @@ static void end_frame_locked(void)
     pspexp_frame_mark(S.ctx);   /* (the frame kept without the pointer: replay_pointer) */
     if (pointer_shown()) { draw_pointer(); S.drawn_px = S.px; S.drawn_py = S.py; }
     S.last_present = SDL_GetTicks();
+    redraw_frame_done();
     audio_drain();
     {
         uint64_t w0, w1, f0 = wall_ns(), c0 = cpu_ns();

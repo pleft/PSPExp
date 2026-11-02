@@ -5,6 +5,9 @@
 - **Celeste 64 and Theia** install every time: their download from itch.io
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
+- **The magnifier (R) in Freeciv** switches and follows the pointer at once:
+  in a game that draws only when something changes it seemed to magnify only
+  the pointer, and a magnified picture could stay on the screen.
 - **Frozen Bubble** starts again on the GameShell (it ended at once).
 - **Commander Keen 1** no longer ends at its start now and then on the
   GameShell: Commander Genius is built without its own downloader, which
