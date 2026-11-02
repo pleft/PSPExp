@@ -2,7 +2,7 @@
 # The package manager's failure paths (docs/Package_Manager.md §10.3), on a
 # Debian board set up by pspexp-apt-setup. Run as the console's user, with
 # sudo (setup and restore only), by tests/pkg/run.py, which puts the signed
-# test catalogues in /tmp/pkgtest-repo/{good,tampered,older}/.
+# test catalogues in /tmp/pkgtest-repo/{good,tampered,older,good2,good3}/.
 # Uses throwaway recipes: pkgtest-hello (Debian's tiny "hello"), pkgtest-sys
 # (a system on the NES core), pkgtest-clash (a system named like NES's), pkgtest-missing (a
 # package no board's sources have).
@@ -145,6 +145,17 @@ echo "system files (§5.5)"
 out=$(pspexp-pkg install pkgtest-clash 2>&1); r=$?
 check '[ $r -ne 0 ] && echo "$out" | grep -q "belongs to nes" && grep -q "^pkg=nes" $SYS/nes.system && [ -z "$(meta pkgtest-clash)" ]' "a system named like another package's is refused, before apt"
 pspexp-pkg recover >/dev/null 2>&1
+
+echo "a recipe no longer offered on this board (2026-11-02: SRB2Kart off the GameShell)"
+setrepo file:///tmp/pkgtest-repo/good; sudo rm -f $CAT/serial; sudo $HELPER update >/dev/null 2>&1
+pspexp-pkg install pkgtest-hello >/dev/null 2>&1
+setrepo file:///tmp/pkgtest-repo/good3; pspexp-pkg update >/dev/null 2>&1; setrepo "$REPO_SAVE"
+pspexp-pkg upgrade >/dev/null 2>&1; r=$?
+check '[ $r -eq 0 ] && [ "$(meta pkgtest-hello)" = 1 ] && clean pkgtest-hello' "upgrade leaves it as it is, and does not fail"
+check '[ "$(pspexp-pkg available | grep "^pkgtest-hello|" | cut -d"|" -f3)" = installed ]' "it is still listed, as installed, so it can be removed"
+pspexp-pkg remove pkgtest-hello >/dev/null 2>&1
+check "gone_ok pkgtest-hello" "and it is removed"
+setrepo file:///tmp/pkgtest-repo/good; sudo rm -f $CAT/serial; sudo $HELPER update >/dev/null 2>&1   # (back to version 1: the cases below install it)
 
 echo "a package this board's sources do not have (2026-11-01: The Ur-Quan Masters on the GameShell)"
 out=$(pspexp-pkg install pkgtest-missing 2>&1); r=$?

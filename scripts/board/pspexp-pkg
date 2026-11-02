@@ -539,6 +539,10 @@ available_debian() {
 			else st = (meta[id] == v) ? "installed" : "update"
 			terms = get("package", "terms"); gsub(/\|/, " ", terms)
 			printf "%s|%s|%s|%s|%s|%s%s|%s|%s\n", id, v, st, get("package", "category"), get("package", "title"), (w != "" ? w ". " : ""), get("package", "description"), g, terms
+		} else if (id in app) {   # installed, but no longer offered on this board (SRB2Kart on the GameShell,
+			# 2026-11-02): still listed, so it can be removed; never an update (nothing to install)
+			g = get("entry", "graphics"); if (g == "") g = get("system", "graphics")
+			printf "%s|%s|installed|%s|%s|No longer offered on this board. %s|%s|\n", id, ((id in meta) ? meta[id] : get("package", "version")), get("package", "category"), get("package", "title"), get("package", "description"), g
 		}
 		split("", base); split("", ov)
 	}
@@ -592,7 +596,10 @@ upgrade)
 		[ -f "$r" ] || continue
 		i=$(basename "$(dirname "$r")")
 		if [ "$FAMILY" = omega ]; then [ -f "$APPS/$i/package" ] && [ "$(state_of "$i")" = update ] && install_build "$i"
-		else [ "$(state_of "$i")" = update ] && [ -n "$(meta_version "$i")" ] && install_recipe "$i"; fi
+		elif [ "$(state_of "$i")" = update ] && [ -n "$(meta_version "$i")" ]; then
+			# (a recipe no longer offered on this board: left as it is, not an update that fails each time)
+			if [ -n "$(rget "$r" debian apt)" ]; then install_recipe "$i"; else echo "$i: no longer offered on this board: left as it is"; fi
+		fi
 	done
 	if [ "$FAMILY" = debian ]; then $APT_HELPER upgrade; fi ;;
 recover) lock; if [ "$FAMILY" = debian ]; then recover; fi ;;

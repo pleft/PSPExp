@@ -407,7 +407,13 @@ it without the checksum; §4.3).
 
 - **Not on a board:** an empty value there, `[debian:gameshell]` with
   `apt=`, leaves the recipe out of that board's catalogue (SuperTuxKart:
-  OpenGL 3 on the Pi's GPU, which the GameShell's has not).
+  OpenGL 3 on the Pi's GPU, which the GameShell's has not). A recipe taken
+  off a board where it is installed (SRB2Kart off the GameShell,
+  2026-11-02) stays listed there, as installed, "No longer offered on this
+  board" before its description, so Packages can remove it, and `upgrade`
+  leaves it as it is ("no longer offered on this board: left as it is");
+  until then `upgrade` tried it as an update and failed each time ("nothing
+  for this board"), and Packages listed it no more.
 - **Terms to accept:** `terms=NAME|URL` in `[package]` (Unreal
   Tournament: the Epic Games Terms of Service; ET: Legacy: id's licence
   agreement, the URL id's download that carries it). `pspexp-pkg available`
@@ -1320,6 +1326,9 @@ because boards differ.
     board, leaves no open operation, and the next install goes ahead, also
     after one killed at `apt-started` (`pkgtest-missing`, 2026-11-01; until
     then it stayed open and stopped the next installs);
+  - a recipe installed and then no longer offered on the board: `upgrade`
+    leaves it and succeeds, it is listed as installed, and it is removed
+    (catalogue `good3`, 2026-11-02);
   - an operation killed at each checkpoint of §5.3 (`staged`,
     `apt-started`, `apt-done`, `app-swap-started`, `app-swapped`,
     `systems-started`), and **between each action and the recording of its

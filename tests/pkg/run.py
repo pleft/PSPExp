@@ -89,7 +89,7 @@ native=1
 }
 
 
-def catalogue(out_dir, serial, tamper=False, v2=False):
+def catalogue(out_dir, serial, tamper=False, v2=False, gone=False):
     os.makedirs(out_dir)
     cat = os.path.join(out_dir, "catalogue.tar.gz")
     with tempfile.TemporaryDirectory() as w:
@@ -97,6 +97,8 @@ def catalogue(out_dir, serial, tamper=False, v2=False):
         for rid, text in TEST_RECIPES.items():
             if v2 and rid == "pkgtest-hello":   # the recipe changes: version 2, figlet instead of hello (§5.6)
                 text = text.replace("version=1", "version=2").replace("apt=hello", "apt=figlet").replace("exec=/usr/bin/hello", "exec=/usr/bin/figlet")
+            if gone and rid == "pkgtest-hello":   # no longer offered on any board: version 3, nothing to install
+                text = text.replace("version=1", "version=3").replace("apt=hello", "apt=")
             os.makedirs(os.path.join(w, "recipes", rid))
             open(os.path.join(w, "recipes", rid, "recipe"), "w").write(text)
         open(os.path.join(w, "serial"), "w").write(serial + "\n")
@@ -117,6 +119,7 @@ def main():
         catalogue(os.path.join(repo, "tampered"), serial, tamper=True)
         catalogue(os.path.join(repo, "older"), "20000101000000")
         catalogue(os.path.join(repo, "good2"), str(int(serial) + 1), v2=True)
+        catalogue(os.path.join(repo, "good3"), str(int(serial) + 2), gone=True)
         subprocess.run(["ssh", host, "rm -rf /tmp/pkgtest-repo"], check=True)
         subprocess.run(["scp", "-rq", repo, os.path.join(ROOT, "tests/pkg/failures.sh"), "%s:/tmp/" % host], check=True)
     r = subprocess.run(["ssh", host, "sh /tmp/failures.sh; r=$?; rm -rf /tmp/pkgtest-repo /tmp/failures.sh; exit $r"])
