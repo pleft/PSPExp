@@ -204,6 +204,20 @@ static void folder_name(const char *in, size_t len, char *out, size_t n)
     if (!o) snprintf(out, n, "PSP game");
 }
 
+/* a path for sh, quoted whole: a game's name can have a quote in it ("Knuckles' Chaotix": its
+ * recording was not made, 2026-11-06) */
+static const char *shq(const char *in, char *out, size_t n)
+{
+    size_t o = 0;
+    out[o++] = '\'';
+    for (; *in && o + 6 < n; in++) {
+        if (*in == '\'') { memcpy(out + o, "'\\''", 4); o += 4; }
+        else out[o++] = *in;
+    }
+    out[o++] = '\''; out[o] = 0;
+    return out;
+}
+
 /* the game's folder in the captures' folder, made if not there: into out */
 static void game_dir(const char *title, char *out, size_t n)
 {
@@ -217,7 +231,7 @@ static void game_dir(const char *title, char *out, size_t n)
  * /tmp/pspexp-shots/request-<number>.png instead, never in the Gallery */
 static void shot_save(const uint8_t *rgb, uint32_t tag)
 {
-    char dir[1100], name[1300], cmd[1500], when[64];
+    char dir[1100], name[1300], q[2700], cmd[2900], when[64];
     time_t tt = time(NULL);
     FILE *f;
     if (tag) {
@@ -229,7 +243,7 @@ static void shot_save(const uint8_t *rgb, uint32_t tag)
         game_dir(g_title, dir, sizeof(dir));
         snprintf(name, sizeof(name), "%s/screenshot-%s.png", dir, when);
     }
-    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -i - -frames:v 1 '%s'", W, H, name);
+    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -i - -frames:v 1 %s", W, H, shq(name, q, sizeof(q)));
     if (!(f = popen(cmd, "w"))) { fprintf(stderr, "pspexp-plugin-host: no ffmpeg for the screenshot\n"); return; }
     fwrite(rgb, 1, (size_t)W * H * 3, f);
     if (pclose(f) == 0) {
@@ -262,12 +276,13 @@ static int seg_complete(int k)
 static void *job_run(void *arg)
 {
     Job *j = arg;
-    char cmd[4000], dir[sizeof(j->name)], *slash;
+    char cmd[8000], q1[2400], q2[2400], q3[2400], dir[sizeof(j->name)], *slash;
     /* the game's folder again, in case it went since the clip was named (the Gallery emptied in Files) */
     snprintf(dir, sizeof(dir), "%s", j->name);
     if ((slash = strrchr(dir, '/'))) { *slash = 0; mkdir(g_clips, 0755); mkdir(dir, 0755); }
-    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f concat -safe 0 -i '%s.txt' -f s16le -ar %d -ac 2 -i '%s.raw' "
-             "-c:v copy -c:a aac -b:a 160k -shortest -movflags +faststart '%s'", j->seg, RATE, j->seg, j->name);
+    snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f concat -safe 0 -i %s.txt -f s16le -ar %d -ac 2 -i %s.raw "
+             "-c:v copy -c:a aac -b:a 160k -shortest -movflags +faststart %s", shq(j->seg, q1, sizeof(q1)), RATE,
+             shq(j->seg, q2, sizeof(q2)), shq(j->name, q3, sizeof(q3)));
     int r = system(cmd);
     char p[1200];
     snprintf(p, sizeof(p), "%s.txt", j->seg); unlink(p);
@@ -587,7 +602,7 @@ static void mix_reset(void)
 /* the note button's clips: the picture in 1 s pieces (see jobs_step), from piece 0 */
 static FILE *seg_open(void)
 {
-    char cmd[1600];
+    char cmd[4000], q[2400];
     FILE *ff;
     snprintf(g_segdir, sizeof(g_segdir), "%s/pspexp-plugin-host-%d", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
     mkdir(g_segdir, 0700);
@@ -595,7 +610,7 @@ static FILE *seg_open(void)
     /* (Main profile, level 3.0: what the PSP's own Video menu plays, the Gallery's copies there; High it does not) */
     snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
              "-c:v libx264 -preset " X264_PRESET " -profile:v main -level 3.0 -crf %d -pix_fmt yuv420p -g 30 -force_key_frames 'expr:gte(t,n_forced)' "
-             "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 '%s/seg-%%06d.ts'", W, H, g_crf, g_segdir);   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
+             "-f segment -segment_time 1 -segment_time_delta 0.0167 -reset_timestamps 1 %s/seg-%%06d.ts", W, H, g_crf, shq(g_segdir, q, sizeof(q)));   /* (the delta, half a frame: without it the first piece took 2 s, every clip a second off) */
     ff = popen(cmd, "w");
     if (!ff) perror("ffmpeg");
     return ff;
@@ -637,13 +652,13 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
     if (g_clips && !rec_only) {   /* (recordings only: the pieces start with each recording) */
         if (!(ff = seg_open())) return -1;
     } else if (out) {
-        char cmd[1400];
+        char cmd[4000], q[2400];
         /* the picture first on its own (the sound is mixed while it comes, added at the end); a
          * steady 30 a second, each frame placed at the time the PSP showed it: one that came late
          * is held, so a clip plays at the game's own speed */
         snprintf(video, sizeof(video), "%s.picture.mp4", out);
         snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r 30 -i - "
-                 "-c:v libx264 -preset " X264_PRESET " -profile:v main -level 3.0 -crf %d -pix_fmt yuv420p '%s'", W, H, g_crf, video);
+                 "-c:v libx264 -preset " X264_PRESET " -profile:v main -level 3.0 -crf %d -pix_fmt yuv420p %s", W, H, g_crf, shq(video, q, sizeof(q)));
         ff = popen(cmd, "w");
         if (!ff) { perror("ffmpeg"); return -1; }
     }
@@ -817,11 +832,11 @@ static int session(PspExpTransport *t, const char *out, const char *dir, double 
         if (!frames) { unlink(video); return 0; }
         if (!g_audio_blocks) { rename(video, out); return 0; }
         /* the sound as long as the picture, then both into the clip */
-        char raw[1100], cmd[3600];
+        char raw[1100], cmd[8000], q1[2400], q2[2400], q3[2400];
         snprintf(raw, sizeof(raw), "%s.sound.raw", out);
         if (write_sound(raw, (int64_t)(written * RATE / 30)) < 0) { perror(raw); return -1; }
-        snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -i '%s' -f s16le -ar %d -ac 2 -i '%s' "
-                 "-c:v copy -c:a aac -b:a 160k -shortest '%s'", video, RATE, raw, out);
+        snprintf(cmd, sizeof(cmd), "ffmpeg -loglevel error -y -i %s -f s16le -ar %d -ac 2 -i %s "
+                 "-c:v copy -c:a aac -b:a 160k -shortest %s", shq(video, q1, sizeof(q1)), RATE, shq(raw, q2, sizeof(q2)), shq(out, q3, sizeof(q3)));
         if (system(cmd) != 0) { fprintf(stderr, "pspexp-plugin-host: ffmpeg could not join the sound (kept: %s, %s)\n", video, raw); return -1; }
         unlink(video); unlink(raw);
         fprintf(stderr, "pspexp-plugin-host: %s\n", out);

@@ -2,6 +2,9 @@
 
 ## Since 1.4.0
 
+- **Recordings and screenshots of a game with a quote in its name** are
+  saved: Knuckles' Chaotix's recording was lost ("ffmpeg could not make"),
+  and the same went for Bonk's Adventure or Bomberman '93.
 - **Celeste 64 and Theia** install every time: their download from itch.io
   sometimes fetched a web page instead of the game, and after three tries the
   install gave up ("no source gave the expected file").
