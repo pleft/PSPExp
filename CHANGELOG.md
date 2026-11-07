@@ -9,7 +9,8 @@
   HOME in PSPExp is PSPExp's. Needs Settings > Update PSP.
 - **Media > Music and Media > Videos** open the board's Music and Videos
   folders again after a media server: once you had browsed one, both opened
-  in the server, with no way back to the board's folders.
+  in the server, and going back with circle did not reach the board's
+  folders either.
 - **Recordings and screenshots of a game with a quote in its name** are
   saved: Knuckles' Chaotix's recording was lost ("ffmpeg could not make"),
   and the same went for Bonk's Adventure or Bomberman '93.
