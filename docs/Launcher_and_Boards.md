@@ -1692,7 +1692,10 @@ as FLAC (ffmpeg on the Pi), played by hand.
 The launcher's text became UTF-8 the same day: the title, body and small
 fonts carry Latin-1, Latin Extended-A, Greek and Cyrillic (the glyph atlas
 grew to 512x512), so accented, Greek and Cyrillic file names and tags
-show; before, every byte past ASCII was a '?'.
+show; before, every byte past ASCII was a '?'. General Punctuation
+(U+2010..203F: dashes, curly quotes, the ellipsis, ′ ″) joined them on
+2026-11-07, after a song's tag "7″ Mix" showed as "7? mix"; the atlas then
+holds 409 of its 512 rows.
 
 ### 7.3 The PSP's memory stick as a drive (2026-09-28)
 
