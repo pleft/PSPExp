@@ -2,6 +2,9 @@
 
 ## Since 1.4.0
 
+- **Media > Music and Media > Videos** open the board's Music and Videos
+  folders again after a media server: once you had browsed one, both opened
+  in the server, with no way back to the board's folders.
 - **Recordings and screenshots of a game with a quote in its name** are
   saved: Knuckles' Chaotix's recording was lost ("ffmpeg could not make"),
   and the same went for Bonk's Adventure or Bomberman '93.

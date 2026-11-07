@@ -278,6 +278,7 @@ static UpnpEntry *g_upl;               /* the folder's folders and what plays in
 static int g_upn;
 static pthread_t g_up_thr;
 static volatile int g_up_busy, g_up_done;   /* a search or a listing running; finished, to be taken */
+static int g_up_drop;                  /* the one running no longer wanted (Media's Music or Videos opened meanwhile) */
 static int g_up_job;                   /* UP_SERVERS (a search) or UP_FOLDER (a listing) */
 static UpnpServer g_job_srv[16]; static int g_job_nsrv;
 static UpnpEntry *g_job_list; static int g_job_n; static char g_job_err[200], g_job_id[256];
@@ -307,6 +308,7 @@ static void up_take(void)
     if (!g_up_busy || !g_up_done) return;
     pthread_join(g_up_thr, NULL);
     g_up_busy = 0; g_dirty = 1;
+    if (g_up_drop) { g_up_drop = 0; free(g_job_list); g_job_list = NULL; return; }
     if (g_up_job == UP_SERVERS) {
         memcpy(g_srv, g_job_srv, sizeof(g_srv)); g_nsrv = g_job_nsrv;
         g_up = UP_SERVERS; g_bsel = g_btop = 0;
@@ -526,6 +528,8 @@ static void mu_open(void)
         g_open_req = 0;
         if (!g_open_place[0]) { if (g_at >= 0) g_view = V_NOW; return; }
         g_view = V_BROWSE;
+        /* (out of a media server too: Browse showed it, the place asked for not, 2026-11-07) */
+        g_up = UP_OFF; g_upd = 0; if (g_up_busy) g_up_drop = 1;
         g_dir[0] = 0; places_load(); g_bsel = g_btop = 0;
         {
             int i;
