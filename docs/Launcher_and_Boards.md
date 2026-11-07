@@ -2059,7 +2059,9 @@ the fifth tile in Apps) with three views, START going round them:
 
 - **Now playing**: title, artist, album, cover, format and where it is
   decoded, the time, and the next track;
-- **Browse**: places first (~/Music, home, the board's drives, the PSP's
+- **Browse**: places first (~/Music and ~/Videos, made when missing since
+  2026-11-07, as the launcher's Media offers them and a Pi's card has
+  neither; the Gallery, the board's drives, the PSP's
   `ms0:/MUSIC` and the whole stick while PSPExp runs), then folders and
   playable files only; cross on a song plays the folder from it, circle
   goes up (from a place's top: back to the places);

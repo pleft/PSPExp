@@ -2,6 +2,9 @@
 
 ## Since 1.4.0
 
+- **Media > Music and Media > Videos on a Raspberry Pi** open its Music and
+  Videos folders: the Pi's card had neither, so both opened on the other
+  places. The folders are made when missing.
 - **Song and file names with dashes, curly quotes, ″ or …** show them,
   where a "?" stood ("I Totally Miss You (7″ Mix)" showed "7?").
 - **The PSP's volume buttons show the volume** on screen, with the same bar

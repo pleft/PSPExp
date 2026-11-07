@@ -409,10 +409,13 @@ static void places_load(void)
     g_npl = 0;
 #define PLACE(P, N, I) do { snprintf(g_pl[g_npl].path, FOPS_PATH, "%s", (P)); snprintf(g_pl[g_npl].name, 48, "%s", (N)); g_pl[g_npl].icon = (I); g_npl++; } while (0)
     /* (Home went, 2026-10-29: Files is for the whole board; the PSP's MUSIC and VIDEO are in PSP) */
-    if (home) {
+    if (home) {   /* made when missing: the launcher's Media offers them (a Pi's card has neither: Media > Music
+                   * opened on the other places, 2026-11-07), and Files shows where songs and films go */
         snprintf(p, sizeof(p), "%s/Music", home);
+        if (!is_dir(p)) mkdir(p, 0755);
         if (is_dir(p)) PLACE(p, "Music", "music");
         snprintf(p, sizeof(p), "%s/Videos", home);
+        if (!is_dir(p)) mkdir(p, 0755);
         if (is_dir(p)) PLACE(p, "Videos", "clapperboard");
     }
     launcher_gallery_dir(p, sizeof(p));   /* the recordings, clips and screenshots, a folder a game (the Gallery's) */

@@ -92,8 +92,9 @@ triangle has **App details**.
 installed (A to Z); cross opens one, HOME closes it and you are back on it.
 **Media**: the **Gallery**, **Now playing** while music plays, and
 **Music** and **Videos**, which open the Media app in the board's Music or
-Videos folder (circle there goes up to its places: the PSP, other drives,
-media servers). **Settings**: its groups (Network, Sound, Recording, Clock,
+Videos folder, made the first time if it is not there: put your songs and
+films in it with Files (circle there goes up to its places: the PSP, other
+drives, media servers). **Settings**: its groups (Network, Sound, Recording, Clock,
 Library, PSP, and one named after your board: Raspberry Pi 400, GameShell...; Ready first when an update or a restart is
 waiting), each a list of its settings with their values on the right.
 Cross turns an on / off setting on or off where it is; on a choice (Clip
