@@ -550,20 +550,35 @@ unsigned int pspexpUsbButtons(void)
  * the PSPExp plugin does. The finder is imported weakly (systemctrl.S): called only once the
  * loader has linked it, its stub then a jump (PPSSPP leaves "jr ra" there, an unlinked stub data). */
 u32 sctrlHENFindFunction(char *modname, char *libname, u32 nid);
+#define IMPOSE_MAIN_VOLUME 0x1
 #define IMPOSE_MUTE 0x8
+static int (*impose_get)(int), (*impose_put)(int, int);
+static void impose_find(void)
+{
+    static int looked;
+    if (looked) return;
+    looked = 1;
+    if ((*(volatile u32 *)(void *)sctrlHENFindFunction >> 26) == 2) {   /* (j) */
+        impose_get = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x531C9778);   /* sceImposeGetParam */
+        impose_put = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x810FB7FB);   /* sceImposeSetParam */
+    }
+}
 int pspexpUsbMute(int set)
 {
-    static int (*get)(int), (*put)(int, int);
-    static int looked;
     int k1 = pspSdkSetK1(0), r = -1;
-    if (!looked) {
-        looked = 1;
-        if ((*(volatile u32 *)(void *)sctrlHENFindFunction >> 26) == 2) {   /* (j) */
-            get = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x531C9778);   /* sceImposeGetParam */
-            put = (void *)sctrlHENFindFunction("sceImpose_Driver", "sceImpose_driver", 0x810FB7FB);   /* sceImposeSetParam */
-        }
-    }
-    if (get && put) r = set < 0 ? get(IMPOSE_MUTE) : put(IMPOSE_MUTE, set);
+    impose_find();
+    if (impose_get && impose_put) r = set < 0 ? impose_get(IMPOSE_MUTE) : impose_put(IMPOSE_MUTE, set);
+    pspSdkSetK1(k1);
+    return r;
+}
+
+/* The system's volume, 0..30, as the volume buttons set it (the HOME menu shows it, and HOME is
+ * the board's in PSPExp: PSPExp's own bar shows it instead); -1 where it cannot be read */
+int pspexpUsbVolume(void)
+{
+    int k1 = pspSdkSetK1(0), r = -1;
+    impose_find();
+    if (impose_get) r = impose_get(IMPOSE_MAIN_VOLUME);
     pspSdkSetK1(k1);
     return r;
 }

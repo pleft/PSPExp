@@ -578,6 +578,7 @@ static void op_draw_line(void *u, int16_t x0, int16_t y0, int16_t x1, int16_t y1
 static void op_osd_volume(void *u, int percent)
 {
     PspExpGeExecutor *ge = (PspExpGeExecutor *)u;
+    ge->osd_psp = percent == PSPEXP_OSD_PSP_VOLUME;
     ge->osd_percent = percent > 100 ? 100 : percent;
     ge->osd_until = percent < 0 ? 0 : sceKernelGetSystemTimeLow() + OSD_US;
 }
@@ -593,8 +594,11 @@ static void osd_digit(PspExpGeExecutor *ge, int d, int x, int y)
 static void draw_osd(PspExpGeExecutor *ge)
 {
     const int w = 200, h = 26, x = (PSPEXP_DISPLAY_WIDTH - w) / 2, y = 10, bx = x + 34, bw = 120;
-    int p = ge->osd_percent, fill = bw * p / 100, k;
+    int p = ge->osd_percent, fill, k;
     char num[4];
+    if (ge->osd_psp) p = ge->psp_volume ? ge->psp_volume() : -1;   /* (as the volume buttons change it) */
+    if (p < 0) p = 0;
+    fill = bw * p / 100;
     leave_3d(ge);
     sceGuScissor(0, 0, PSPEXP_DISPLAY_WIDTH, PSPEXP_DISPLAY_HEIGHT);
     op_draw_rect(ge, (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, 0x0000, 190);

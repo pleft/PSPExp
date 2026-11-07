@@ -189,9 +189,14 @@ void pspexp_la_buttons(PspExpLocalAudio *la, uint32_t buttons, uint64_t now_us)
         la->vol_pid = -1;
     }
     if (pressed) la_route(la);   /* (a program that plays nothing has not looked at the route) */
-    if (!la->want) { la->vol_pending = 0; return; }   /* the PSP's own sound: its own volume */
     if (pressed) la->vol_next_us = now_us + 400000u;   /* held: again after 0.4 s, then every 0.15 s */
     else if (vol && now_us >= la->vol_next_us) { la->vol_next_us = now_us + 150000u; pressed = vol; }
+    if (!la->want) {   /* the PSP's own sound: its own volume, the PSP's bar showing it (HOME, where the
+                        * system shows it, is the board's) */
+        la->vol_pending = 0;
+        if (pressed) la->own_report = 1;
+        return;
+    }
     if (pressed & VOL_UP) la->vol_pending += VOL_STEP;
     if (pressed & VOL_DOWN) la->vol_pending -= VOL_STEP;
     if (la->vol_pending && la->vol_pid <= 0) vol_spawn(la);   /* one at a time: the presses meanwhile add up */

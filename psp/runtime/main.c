@@ -628,6 +628,13 @@ static int gone_tick(PspExpRuntime *rt, uint32_t now)
     return g_gone_view == 1;
 }
 
+/* the system's volume for the volume bar, as percent (its 0..30) */
+static int psp_volume(void)
+{
+    int v = pspexpUsbVolume();
+    return v < 0 ? -1 : (v * 100 + 15) / 30;
+}
+
 int main(int argc, char *argv[])
 {
     PspExpRuntime rt;
@@ -664,6 +671,7 @@ int main(int argc, char *argv[])
 
     memset(&ops, 0, sizeof(ops));
     pspexp_ge_init(&g_ge);
+    g_ge.psp_volume = psp_volume;
     pspexp_ge_ops(&g_ge, &ops);
     pspexp_audio_psp_ops(&ops);
     pspexp_fs_psp_ops(&ops);   /* the memory stick as a drive of the board's file manager */
@@ -693,6 +701,7 @@ int main(int argc, char *argv[])
     show_status_page();   /* GU init took the display; status page while idle */
 
     pspexp_runtime_default_config(&cfg, PSPEXP_EXECUTOR_PSP);
+    if (pspexpUsbVolume() >= 0) cfg.features |= PSPEXP_FEATURE_OSD_PSP;   /* (PRO's functions found: not in PPSSPP) */
     cfg.ram_budget = 12u * 1024u * 1024u;   /* a game's working set; the runtime itself is small */
     cfg.usb_chunk = PSPEXP_USB_CHUNK;
     cfg.in_capacity = 512u * 1024u;

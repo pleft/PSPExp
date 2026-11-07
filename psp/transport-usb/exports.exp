@@ -26,6 +26,7 @@ PSP_EXPORT_FUNC(pspexpUsbMute)
 PSP_EXPORT_FUNC(pspexpUsbBootDisc)
 PSP_EXPORT_FUNC(pspexpUsbRestart)
 PSP_EXPORT_FUNC(pspexpUsbHomePopup)
+PSP_EXPORT_FUNC(pspexpUsbVolume)
 PSP_EXPORT_END
 
 PSP_END_EXPORTS

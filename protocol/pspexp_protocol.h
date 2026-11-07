@@ -217,6 +217,7 @@ enum PspExpExecutorKind {
 #define PSPEXP_FEATURE_BOOT_DISC  0x00020000u  /* answers BOOT_DISC: a PSP game started natively (PRO's ISO driver; architecture §12c) */
 #define PSPEXP_FEATURE_OSD_HINT   0x00080000u  /* OSD_HINT: the PSP draws a hint bar ("HOME again to quit") over the frames */
 #define PSPEXP_FEATURE_THEME      0x00200000u  /* THEME: the PSP's own pictures (hint bar, volume bar, the card when the board goes) take the launcher's theme */
+#define PSPEXP_FEATURE_OSD_PSP    0x00400000u  /* OSD_VOLUME with PSPEXP_OSD_PSP_VOLUME: the bar shows the PSP's own volume */
 #define PSPEXP_FEATURE_HOME       0x00040000u  /* answers HOME_MODE: HOME can be the host's (PSPEXP_BUTTON_HOME in INPUT) */
 #define PSPEXP_FEATURE_CAPTURE    0x00010000u  /* answers CAPTURE_SET: Recording inside PSPExp (what the PSP shows and plays,
                                                   sent back as CAPTURE_DATA) */
@@ -365,8 +366,11 @@ PSPEXP_STATIC_ASSERT(sizeof(PspExpTextResult) == 4, text_result_size);
 /* Host -> PSP: show a volume bar over whatever is drawn, for 1.5 s from now
  * (the volume of a board's Bluetooth device, which only the board knows).
  * Drawn at each PRESENT meanwhile, so it shows in every program. */
+#define PSPEXP_OSD_PSP_VOLUME 127   /* percent: the PSP's own volume, which only the PSP knows: it reads
+                                       it at each frame (its sound on the PSP, the volume buttons pressed;
+                                       PSPEXP_FEATURE_OSD_PSP) */
 typedef struct PspExpOsdVolume {
-    int8_t   percent;           /* 0..100; < 0 hides it */
+    int8_t   percent;           /* 0..100, or PSPEXP_OSD_PSP_VOLUME; < 0 hides it */
     uint8_t  reserved[15];
 } PspExpOsdVolume;
 PSPEXP_STATIC_ASSERT(sizeof(PspExpOsdVolume) == 16, osd_volume_size);

@@ -132,7 +132,8 @@ int pspexp_audio_stream_reset(PspExpContext *ctx);
  * decodes it itself meanwhile. */
 int pspexp_audio_local(PspExpContext *ctx);
 /* the PSP's volume bar (PSPEXP_FEATURE_OSD), shown for 1.5 s; libpspexp sends it
- * itself after a volume button changed the Bluetooth volume */
+ * itself after a volume button changed the Bluetooth volume, and, the sound on the
+ * PSP, with PSPEXP_OSD_PSP_VOLUME: the PSP's own volume (PSPEXP_FEATURE_OSD_PSP) */
 int pspexp_osd_volume(PspExpContext *ctx, int percent);
 /* PSPExp on the PSP starts itself again (its loader booting the active slot: a runtime just put
  * in the spare one runs); only a runtime with PSPEXP_FEATURE_RESTART. The link goes and the PSP

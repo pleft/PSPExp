@@ -789,6 +789,7 @@ static void handle(PspExpContext *ctx, const PspExpMessage *m)
         ctx->have_input = 1;
         pspexp_la_buttons(&ctx->la, ctx->input.buttons, pspexp_time_us());   /* volume, while the sound is on Bluetooth */
         if (ctx->la.vol_report) { ctx->la.vol_report = 0; pspexp_osd_volume(ctx, ctx->la.vol_now); }   /* the PSP shows it over the frames */
+        if (ctx->la.own_report) { ctx->la.own_report = 0; pspexp_osd_volume(ctx, PSPEXP_OSD_PSP_VOLUME); }   /* its own, as it reads it */
         ctx->stats.inputs_received++;
         break;
     case PSPEXP_OP_RESOURCE_READY:
@@ -1151,9 +1152,10 @@ int pspexp_audio_local(PspExpContext *ctx)
 int pspexp_osd_volume(PspExpContext *ctx, int percent)
 {
     PspExpOsdVolume v;
-    if (!(ctx->hello.features & PSPEXP_FEATURE_OSD) || ctx->state != PSPEXP_LINK_CONNECTED) return -1;
+    int own = percent == PSPEXP_OSD_PSP_VOLUME;
+    if (!(ctx->hello.features & (own ? PSPEXP_FEATURE_OSD_PSP : PSPEXP_FEATURE_OSD)) || ctx->state != PSPEXP_LINK_CONNECTED) return -1;
     memset(&v, 0, sizeof(v));
-    v.percent = (int8_t)(percent > 100 ? 100 : percent);
+    v.percent = (int8_t)(own ? percent : percent > 100 ? 100 : percent);
     ctx->osd_until = percent < 0 ? 0 : pspexp_time_us() + 1500000u;
     return pspexp_send_raw(ctx, PSPEXP_CH_SYSTEM, PSPEXP_OP_OSD_VOLUME, &v, sizeof(v));
 }

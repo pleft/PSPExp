@@ -20,6 +20,7 @@ typedef struct PspExpLocalAudio {
     int vol_fd;             /* the running pspexp-bt volume's answer */
     int vol_now;            /* the device's volume, as it answered; -1 not known */
     int vol_report;         /* a new answer, for the PSP's volume bar */
+    int own_report;         /* the sound on the PSP, a volume button pressed (or held): the PSP's bar, its own volume */
 } PspExpLocalAudio;
 
 void pspexp_la_init(PspExpLocalAudio *la);
@@ -29,7 +30,8 @@ int  pspexp_la_active(PspExpLocalAudio *la, uint32_t rate, uint64_t now_us);
 int  pspexp_la_write(PspExpLocalAudio *la, const int16_t *stereo, uint32_t frames);
 void pspexp_la_reset(PspExpLocalAudio *la);
 /* each input sample: the volume buttons (PSPEXP_BUTTON_VOLUP / VOLDOWN) set the
- * Bluetooth device's volume while the sound goes there; held, they repeat */
+ * Bluetooth device's volume while the sound goes there; held, they repeat. While the
+ * sound is the PSP's, the PSP sets its own: own_report asks for its bar */
 void pspexp_la_buttons(PspExpLocalAudio *la, uint32_t buttons, uint64_t now_us);
 
 #endif

@@ -2336,7 +2336,13 @@ sound on the PSP, they set the PSP's own volume as always.
 from 2026-10-03): the PSP itself draws a bar for 1.5 s over whatever is on
 screen (a speaker, the bar, the number; at each `PRESENT`, so in games
 too). The console, whose views draw only on change, draws a frame when the
-bar comes and one when it goes. The launcher's top bar shows a headphones
+bar comes and one when it goes. With the sound on the PSP the same bar shows
+the PSP's own volume (2026-11-07): the PSP shows that only in its HOME menu,
+and HOME in PSPExp is the board's. libpspexp sends `OSD_VOLUME` with
+`PSPEXP_OSD_PSP_VOLUME` at each press (and while one is held), on runtimes
+with `PSPEXP_FEATURE_OSD_PSP`; the runtime reads the system's volume (0..30,
+`sceImposeGetParam` through the USB driver's `pspexpUsbVolume`) at each frame
+the bar is on, so it follows the buttons. The launcher's top bar shows a headphones
 icon and the volume among the board's indicators while the sound is on
 Bluetooth (`/tmp/pspexp-audio-volume-UID`, written by pspexp-bt). The control
 port's `volume-bar N` shows the bar (tests). Tried on the PSP-1000 from the Pi the same day:

@@ -72,9 +72,9 @@ whose cross takes you straight to the switch.
   backlight off; any button turns it back on.
 - **The clock.** Settings > PSP > PSP clock lets the board set the PSP's clock,
   handy when its clock battery has run flat.
-- **Volume.** The PSP's volume buttons work as always; with Bluetooth
-  headphones on the board, they set the headphones' volume instead, and a
-  bar on screen shows it.
+- **Volume.** The PSP's volume buttons work as always, and a bar at the top
+  of the screen shows the level; with Bluetooth headphones on the board,
+  they set the headphones' volume instead, and the bar shows that.
 
 ## The memory stick from the board
 

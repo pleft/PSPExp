@@ -2,6 +2,9 @@
 
 ## Since 1.4.0
 
+- **The PSP's volume buttons show the volume** on screen, with the same bar
+  as for Bluetooth headphones: the PSP shows it only in its HOME menu, and
+  HOME in PSPExp is PSPExp's. Needs Settings > Update PSP.
 - **Media > Music and Media > Videos** open the board's Music and Videos
   folders again after a media server: once you had browsed one, both opened
   in the server, with no way back to the board's folders.
