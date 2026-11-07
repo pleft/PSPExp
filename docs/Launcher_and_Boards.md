@@ -717,10 +717,11 @@ area (80..246) and the hints (246..272). Four categories (`NSEC`), each a
 root level and its children: Games (`CK_PLATS`, its platforms `tab`),
 Apps (Files, Packages, Terminal, System Monitor, then installed apps A to
 Z), Media (new, `CK_MEDIA`: Gallery, Now playing while music is loaded,
-Music, Videos; the last three open the Media app through
-`music_open_at`, at that place's folder, or on what plays; a media server
-being browsed is left, and a server's answer still to come dropped: until
-2026-11-07 Browse stayed in the server) and Settings
+Library; the last two open the Media app through `music_open_at`, on what
+plays or at its places, a media server being browsed left and a server's
+answer still to come dropped. Until 2026-11-07 Music and Videos were two
+entries, the same app at two of its places; Browse then stayed in a media
+server once one had been browsed, and a Pi's card had no ~/Music) and Settings
 (new levels: `CK_GROUPS`, the seven groups and Ready, each a `CK_SETTINGS`
 list; the "h:" headings went). `cat_parent` gives a level's parent: circle
 goes back one level (`level_back`, on the entry it came from), nothing at a

@@ -39,8 +39,8 @@ void music_stop(void);
 void music_set_back(int on);
 /* Media left (circle, HOME): the music goes on, a film waits, paused */
 void music_leave(void);
-/* the launcher's Media entries: the next opening on a place of the Library ("Music", "Videos": that
- * folder; one not there: the places), or (NULL) on what plays */
+/* the launcher's Media entries: the next opening on a place of the Library ("Music": that folder; ""
+ * or one not there: the places), or (NULL) on what plays */
 void music_open_at(const char *place);
 /* 1 while a track is loaded; its title (or file name) and whether it is paused */
 int  music_now(char *title, size_t n, int *paused);

@@ -155,7 +155,7 @@ static char g_np_title[160]; static int g_np_on, g_np_paused;   /* what Media pl
 static int is_builtin(const LEntry *e) { return e->type != LT_ACTION && !strncmp(e->id, "a:", 2); }
 static LEntry g_plats[48];    /* Games' platforms (id "f:<its name>"), each opening that platform's games */
 static LEntry g_groups[10];   /* Settings' groups (id "g:<its name>"), each opening its settings */
-static LEntry g_media[4];     /* Media's places (id "m:gallery", "m:now", "m:music", "m:videos") */
+static LEntry g_media[3];     /* Media's entries (id "m:gallery", "m:now", "m:library") */
 /* an entry that opens a level of the launcher's own (a platform, a settings group) */
 static int is_level_item(const LEntry *e) { return !strncmp(e->id, "f:", 2) || !strncmp(e->id, "g:", 2); }
 
@@ -354,17 +354,16 @@ static void cats_make(void)
         for (i = 0; i < L.n; i++) if (L.e[i].type == LT_APP || L.e[i].type == LT_TOOL) cat_push(c, &L.e[i]);
         if (c->n - first > 1) qsort(c->it + first, (size_t)(c->n - first), sizeof(c->it[0]), cmp_entry_title);
     }
-    /* Media: the Gallery, what plays (while something does), the Music and Videos folders (each the
-     * Media app opened there) */
+    /* Media: the Gallery, what plays (while something does), and the Library: the Media app at its
+     * places (Music and Videos were two entries until 2026-11-07, the same app at two of its places) */
     {
-        static const struct { const char *id, *title, *icon, *desc; } MEDIA[4] = {
+        static const struct { const char *id, *title, *icon, *desc; } MEDIA[3] = {
             { "m:gallery", "Gallery", "images", "Your screenshots, recordings and clips" },
             { "m:now", "Now playing", "circle-play", "" },
-            { "m:music", "Music", "music", "Music folder on %s" },
-            { "m:videos", "Videos", "clapperboard", "Videos folder on %s" },
+            { "m:library", "Library", "monitor-play", "Music and videos: %s, the PSP, media servers" },
         };
         c = cat_add("Media", "clapperboard", COL_MEDIA, CK_MEDIA, "item");
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < 3; i++) {
             LEntry *e = &g_media[i];
             if (i == 1 && !g_np_on) continue;
             memset(e, 0, sizeof(*e));
@@ -2067,11 +2066,11 @@ static void level_back(uint64_t now)
     show_cat(p, -1, now);
 }
 
-/* Media's places: the Gallery, or the Media app on what plays, or at its Music or Videos folder */
+/* Media's entries: the Gallery, or the Media app on what plays, or at its places (the Library) */
 static void media_open(const LEntry *e)
 {
     if (!strcmp(e->id, "m:gallery")) { snprintf(g_app_req, sizeof(g_app_req), "gallery"); return; }
-    music_open_at(!strcmp(e->id, "m:now") ? NULL : e->title);
+    music_open_at(!strcmp(e->id, "m:now") ? NULL : "");
     snprintf(g_app_req, sizeof(g_app_req), "music");
 }
 

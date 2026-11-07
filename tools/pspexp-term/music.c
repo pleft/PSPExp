@@ -511,11 +511,11 @@ static void browse_choose(void)
 
 /* ---- the app ------------------------------------------------------------------------------------ */
 
-static int g_open_req;            /* music_open_at: where the next opening goes */
+static int g_open_req;            /* music_open_at: where the next opening goes (1: on what plays, 2: a place) */
 static char g_open_place[48];
 void music_open_at(const char *place)
 {
-    g_open_req = 1;
+    g_open_req = place ? 2 : 1;
     snprintf(g_open_place, sizeof(g_open_place), "%s", place ? place : "");
 }
 
@@ -527,9 +527,10 @@ static void mu_open(void)
         g_view = g_at >= 0 && player_info(&pi) && !pi.paused && !pi.ended ? V_NOW : V_BROWSE;
     }
     if (g_view == V_BROWSE && !g_dir[0]) places_load();
-    if (g_open_req) {   /* from the launcher's Media: on what plays, or in a place's folder */
+    if (g_open_req) {   /* from the launcher's Media: on what plays, or at the places (or one's folder) */
+        int req = g_open_req;
         g_open_req = 0;
-        if (!g_open_place[0]) { if (g_at >= 0) g_view = V_NOW; return; }
+        if (req == 1) { if (g_at >= 0) g_view = V_NOW; return; }
         g_view = V_BROWSE;
         /* (out of a media server too: Browse showed it, the place asked for not, 2026-11-07) */
         g_up = UP_OFF; g_upd = 0; if (g_up_busy) g_up_drop = 1;

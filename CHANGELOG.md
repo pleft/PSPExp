@@ -2,18 +2,18 @@
 
 ## Since 1.4.0
 
-- **Media > Music and Media > Videos on a Raspberry Pi** open its Music and
-  Videos folders: the Pi's card had neither, so both opened on the other
-  places. The folders are made when missing.
+- **Media's Music and Videos are one entry, the Library:** the Media app on
+  its places, the board's Music and Videos first, then the Gallery, the PSP,
+  other drives and media servers. Music and Videos opened in a media server
+  once you had browsed one, and going back with circle did not reach the
+  board's folders either; on a Raspberry Pi, whose card had no Music and
+  Videos folders, they opened on the other places. The folders are now made
+  when missing.
 - **Song and file names with dashes, curly quotes, ″ or …** show them,
   where a "?" stood ("I Totally Miss You (7″ Mix)" showed "7?").
 - **The PSP's volume buttons show the volume** on screen, with the same bar
   as for Bluetooth headphones: the PSP shows it only in its HOME menu, and
   HOME in PSPExp is PSPExp's. Needs Settings > Update PSP.
-- **Media > Music and Media > Videos** open the board's Music and Videos
-  folders again after a media server: once you had browsed one, both opened
-  in the server, and going back with circle did not reach the board's
-  folders either.
 - **Recordings and screenshots of a game with a quote in its name** are
   saved: Knuckles' Chaotix's recording was lost ("ffmpeg could not make"),
   and the same went for Bonk's Adventure or Bomberman '93.
